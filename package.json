@@ -13,6 +13,7 @@
     "dev:server": "node --watch server/index.js",
     "dev:client": "vite --host 127.0.0.1",
     "build": "vite build",
+    "test": "node --test",
     "start": "node server/index.js",
     "db:migrate": "node server/migrate.js"
   },

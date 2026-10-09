@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { config } from './config.js';
+import { unicodeContains } from './sql.js';
+
+const latestSchemaVersion = 15;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -10,6 +13,7 @@ export const db = new Database(config.dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.pragma('busy_timeout = 5000');
+db.function('unicode_contains', unicodeContains);
 
 export function migrateDatabase(database = db) {
   database.exec(`
@@ -19,6 +23,9 @@ export function migrateDatabase(database = db) {
     );
   `);
   const current = database.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations').get().version;
+  if (current > latestSchemaVersion) {
+    throw new Error(`Database schema version ${current} is newer than this application supports (version ${latestSchemaVersion}).`);
+  }
   if (current < 1) {
     const migration = database.transaction(() => {
     database.exec(`
@@ -185,6 +192,229 @@ export function migrateDatabase(database = db) {
     });
     migration();
   }
+
+  if (current < 3) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE audit_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          actor_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+          actor_username TEXT NOT NULL,
+          action TEXT NOT NULL,
+          entity_type TEXT NOT NULL,
+          entity_id TEXT,
+          summary TEXT NOT NULL,
+          details_json TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE INDEX audit_logs_occurred ON audit_logs(occurred_at DESC, id DESC);
+        CREATE INDEX audit_logs_action ON audit_logs(action, occurred_at DESC);
+
+        CREATE TABLE system_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          level TEXT NOT NULL CHECK (level IN ('info', 'warn', 'error')),
+          source TEXT NOT NULL,
+          message TEXT NOT NULL,
+          details_json TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE INDEX system_logs_occurred ON system_logs(occurred_at DESC, id DESC);
+        CREATE INDEX system_logs_level ON system_logs(level, occurred_at DESC);
+        INSERT INTO schema_migrations (version) VALUES (3);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 4) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE lesson_reactions (
+          lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          reaction TEXT NOT NULL CHECK (reaction IN ('like', 'dislike')),
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (lesson_id, user_id)
+        );
+        CREATE INDEX lesson_reactions_lesson ON lesson_reactions(lesson_id, reaction);
+
+        CREATE TABLE lesson_comments (
+          id TEXT PRIMARY KEY,
+          lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          body TEXT NOT NULL CHECK (length(body) BETWEEN 1 AND 2000),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX lesson_comments_lesson_created ON lesson_comments(lesson_id, created_at DESC, id DESC);
+        INSERT INTO schema_migrations (version) VALUES (4);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 5) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE course_certificates (
+          id TEXT PRIMARY KEY,
+          certificate_code TEXT NOT NULL UNIQUE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          course_id TEXT REFERENCES courses(id) ON DELETE SET NULL,
+          recipient_name TEXT NOT NULL,
+          course_title TEXT NOT NULL,
+          platform_name TEXT NOT NULL,
+          issued_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id, course_id)
+        );
+        CREATE INDEX course_certificates_user_issued ON course_certificates(user_id, issued_at DESC);
+        INSERT INTO schema_migrations (version) VALUES (5);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 6) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS lesson_progress_lesson_user ON lesson_progress(lesson_id, user_id);
+        CREATE INDEX IF NOT EXISTS quiz_attempts_quiz_user_submitted ON quiz_attempts(quiz_id, user_id, submitted_at DESC);
+        INSERT INTO schema_migrations (version) VALUES (6);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 7) {
+    const migration = database.transaction(() => {
+      database.exec('ALTER TABLE sessions ADD COLUMN user_id TEXT');
+      const rowsAfter = database.prepare('SELECT rowid AS row_id, session_data FROM sessions WHERE rowid > ? ORDER BY rowid LIMIT ?');
+      const saveUserId = database.prepare('UPDATE sessions SET user_id = ? WHERE rowid = ?');
+      let lastRowId = 0;
+      while (true) {
+        const rows = rowsAfter.all(lastRowId, 500);
+        if (!rows.length) break;
+        for (const row of rows) {
+          let userId = null;
+          try {
+            const sessionData = JSON.parse(row.session_data);
+            if (sessionData && typeof sessionData === 'object' && !Array.isArray(sessionData) && typeof sessionData.userId === 'string') {
+              userId = sessionData.userId;
+            }
+          } catch {}
+          saveUserId.run(userId, row.row_id);
+          lastRowId = row.row_id;
+        }
+      }
+      database.exec(`
+        CREATE INDEX sessions_user_id ON sessions(user_id);
+        INSERT INTO schema_migrations (version) VALUES (7);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 8) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS courses_created_by ON courses(created_by);
+        CREATE INDEX IF NOT EXISTS courses_updated_by ON courses(updated_by);
+        CREATE INDEX IF NOT EXISTS media_files_course_id ON media_files(course_id);
+        CREATE INDEX IF NOT EXISTS lessons_media_id ON lessons(media_id);
+        CREATE INDEX IF NOT EXISTS course_grants_granted_by ON course_grants(granted_by);
+        CREATE INDEX IF NOT EXISTS audit_logs_actor_user ON audit_logs(actor_user_id);
+        CREATE INDEX IF NOT EXISTS lesson_reactions_user ON lesson_reactions(user_id);
+        CREATE INDEX IF NOT EXISTS lesson_comments_user ON lesson_comments(user_id);
+        CREATE INDEX IF NOT EXISTS course_certificates_course ON course_certificates(course_id);
+        INSERT INTO schema_migrations (version) VALUES (8);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 9) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS users_role ON users(role);
+        INSERT INTO schema_migrations (version) VALUES (9);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 10) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS users_role_username ON users(role, username COLLATE NOCASE);
+        DROP INDEX IF EXISTS users_role;
+        INSERT INTO schema_migrations (version) VALUES (10);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 11) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS users_management_order ON users(
+          CASE role WHEN 'admin' THEN 1 WHEN 'moderator' THEN 2 ELSE 3 END,
+          username COLLATE NOCASE
+        );
+        INSERT INTO schema_migrations (version) VALUES (11);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 12) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        ALTER TABLE lessons ADD COLUMN transcript TEXT NOT NULL DEFAULT '';
+        INSERT INTO schema_migrations (version) VALUES (12);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 13) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE lesson_captions (
+          id TEXT PRIMARY KEY,
+          lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+          language TEXT NOT NULL CHECK (length(language) BETWEEN 2 AND 35),
+          label TEXT NOT NULL CHECK (length(label) BETWEEN 1 AND 80),
+          file_name TEXT NOT NULL UNIQUE,
+          original_name TEXT NOT NULL,
+          byte_size INTEGER NOT NULL CHECK (byte_size BETWEEN 1 AND 5242880),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(lesson_id, language)
+        );
+        CREATE INDEX lesson_captions_lesson ON lesson_captions(lesson_id, language);
+        INSERT INTO schema_migrations (version) VALUES (13);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 14) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        DROP INDEX IF EXISTS lesson_captions_lesson;
+        INSERT INTO schema_migrations (version) VALUES (14);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 15) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        DROP INDEX IF EXISTS modules_course_position;
+        INSERT INTO schema_migrations (version) VALUES (15);
+      `);
+    });
+    migration();
+  }
 }
 
 export function setting(key) {
@@ -211,4 +441,3 @@ export function getCourseForLesson(lessonId) {
 }
 
 migrateDatabase();
-

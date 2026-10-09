@@ -47,16 +47,45 @@ export interface LessonResource {
   fileName: string | null;
 }
 
+export interface LessonCaption {
+  id: string;
+  language: string;
+  label: string;
+  url: string;
+  fileName: string;
+}
+
+export type LessonReaction = 'like' | 'dislike';
+
+export interface LessonComment {
+  id: string;
+  body: string;
+  username: string;
+  createdAt: string;
+}
+
+export interface LessonFeedback {
+  lessonId: string;
+  reaction: LessonReaction | null;
+  counts: Record<LessonReaction, number>;
+  comments: LessonComment[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface Lesson {
   id: string;
   title: string;
   description: string;
+  transcript: string;
   position: number;
   mediaId: string | null;
   mediaUrl: string | null;
   videoName: string | null;
   hasVideo: boolean;
   resources: LessonResource[];
+  captions: LessonCaption[];
   completed: boolean;
 }
 
@@ -88,6 +117,75 @@ export interface Course {
   modules?: CourseModule[];
 }
 
+export interface CourseCertificate {
+  id: string;
+  courseId: string | null;
+  certificateCode: string;
+  recipientName: string;
+  courseTitle: string;
+  platformName: string;
+  issuedAt: string;
+}
+
+export interface CourseAnalytics {
+  page: number;
+  pageSize: number;
+  course: Pick<Course, 'id' | 'title' | 'category' | 'status' | 'visibility'>;
+  summary: {
+    learnerCount: number;
+    disabledLearnerCount: number;
+    startedLearnerCount: number;
+    completedLearnerCount: number;
+    completionRate: number | null;
+    averageProgress: number | null;
+    lessonCount: number;
+    quizCount: number;
+    lessonCompletions: number;
+    quizAttempts: number;
+  };
+  lessonMetrics: Array<{ id: string; title: string; moduleTitle: string; completedCount: number; completionRate: number | null }>;
+  quizMetrics: Array<{
+    id: string;
+    title: string;
+    moduleTitle: string;
+    passMark: number;
+    attempts: number;
+    learnersAttempted: number;
+    learnersPassed: number;
+    participationRate: number | null;
+    passRate: number | null;
+    averageScore: number | null;
+  }>;
+  learners: Array<{
+    id: string;
+    username: string;
+    disabled: boolean;
+    enrolledAt: string | null;
+    assignedAt: string | null;
+    completedLessonCount: number;
+    lessonCount: number;
+    passedQuizCount: number;
+    quizCount: number;
+    progress: number;
+    completed: boolean;
+    started: boolean;
+    lastActivityAt: string | null;
+    lessonProgress: Array<{ id: string; title: string; moduleTitle: string; completedAt: string | null; completed: boolean }>;
+    quizProgress: Array<{
+      id: string;
+      title: string;
+      moduleTitle: string;
+      passMark: number;
+      attempts: number;
+      highestScore: number | null;
+      latestScore: number | null;
+      latestPassed: boolean | null;
+      passed: boolean;
+      latestSubmittedAt: string | null;
+    }>;
+  }>;
+}
+
 export interface CourseAccessUser {
   id: string;
   username: string;
@@ -96,4 +194,3 @@ export interface CourseAccessUser {
   grantedAt: string | null;
   grantedBy: string | null;
 }
-

@@ -1,9 +1,9 @@
 export const BRAND_PALETTES = [
   { id: 'violet', label: 'Violet', color: '#5424d8' },
   { id: 'ocean', label: 'Ocean', color: '#1b64d8' },
-  { id: 'forest', label: 'Forest', color: '#14804a' },
+  { id: 'forest', label: 'Forest', color: '#137846' },
   { id: 'rose', label: 'Rose', color: '#c03568' },
-  { id: 'amber', label: 'Amber', color: '#b36a0a' },
+  { id: 'amber', label: 'Amber', color: '#995900' },
 ] as const;
 
 export type BrandingPalette = (typeof BRAND_PALETTES)[number]['id'];

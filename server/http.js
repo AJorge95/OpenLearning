@@ -1,5 +1,6 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { db } from './db.js';
+import { writeSystemLog } from './log-store.js';
 
 export class ApiError extends Error {
   constructor(status, message, code = 'request_error') {
@@ -9,12 +10,48 @@ export class ApiError extends Error {
   }
 }
 
+const requestBodyErrors = new Map([
+  ['charset.unsupported', { status: 415, message: 'Request body uses an unsupported character set.', code: 'unsupported_charset' }],
+  ['encoding.unsupported', { status: 415, message: 'Request body uses an unsupported content encoding.', code: 'unsupported_content_encoding' }],
+  ['request.size.invalid', { status: 400, message: 'Request body length does not match Content-Length.', code: 'invalid_content_length' }],
+  ['request.aborted', { status: 400, message: 'Request body was interrupted before it was complete.', code: 'request_aborted' }],
+  ['parameters.too.many', { status: 413, message: 'Request body contains too many form fields.', code: 'too_many_parameters' }],
+]);
+
 export function fail(status, message, code) {
   throw new ApiError(status, message, code);
 }
 
+export function requireObjectBody(value, label = 'Request body') {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    fail(400, `${label} must be an object.`, 'validation_error');
+  }
+  return value;
+}
+
+export function pageQuery(value, maximum = 100_000) {
+  if (value !== undefined && typeof value !== 'string') {
+    fail(400, 'Page must be a single value.', 'validation_error');
+  }
+  const parsedPage = Number(value || 1);
+  return Number.isSafeInteger(parsedPage) && parsedPage > 0 ? Math.min(parsedPage, maximum) : 1;
+}
+
+export function enumQuery(value, label, values, fallback = 'all') {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'string' || !values.includes(value)) {
+    fail(400, `Choose a valid ${label}.`, 'validation_error');
+  }
+  return value;
+}
+
 export function requireAuth(req, _res, next) {
   if (!req.currentUser || req.currentUser.disabled) return next(new ApiError(401, 'Sign in to continue.', 'unauthorized'));
+  next();
+}
+
+export function noStoreApiResponses(req, res, next) {
+  if (req.path === '/api' || req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
   next();
 }
 
@@ -55,7 +92,14 @@ export function loadCurrentUser(req, _res, next) {
     }
     const user = db.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?').get(req.session.userId);
     if (!user || user.disabled) {
-      req.session.destroy(() => {});
+      const reason = user ? 'user_disabled' : 'user_missing';
+      req.session.destroy((error) => {
+        if (error) writeSystemLog('warn', 'sessions', 'Invalid session cleanup failed', {
+          reason,
+          errorName: String(error?.name || 'Error').slice(0, 100),
+          errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+        });
+      });
       req.currentUser = null;
       return next();
     }
@@ -96,16 +140,35 @@ export function requireCourseViewer(courseId, user) {
   return course;
 }
 
-export function errorHandler(error, _req, res, _next) {
-  if (res.headersSent) return;
+function recordUnhandledError(error, req) {
+  writeSystemLog('error', 'http', String(error?.message || 'Unhandled request error'), {
+    method: req.method,
+    path: String(req.originalUrl || req.path || '').split('?')[0],
+    errorName: String(error?.name || 'Error').slice(0, 100),
+    errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+  });
+}
+
+export function errorHandler(error, req, res, next) {
+  if (res.headersSent) {
+    recordUnhandledError(error, req);
+    return next(error);
+  }
   if (error instanceof ApiError) {
     return res.status(error.status).json({ error: error.message, code: error.code });
+  }
+  if (error?.name === 'URIError' && error?.status === 400) {
+    return res.status(400).json({ error: 'Request URL contains invalid encoding.', code: 'invalid_url_encoding' });
   }
   if (error?.type === 'entity.parse.failed') {
     return res.status(400).json({ error: 'Request body contains invalid JSON.', code: 'invalid_json' });
   }
   if (error?.type === 'entity.too.large') {
     return res.status(413).json({ error: 'Request body is too large.', code: 'payload_too_large' });
+  }
+  const requestBodyError = requestBodyErrors.get(error?.type);
+  if (requestBodyError) {
+    return res.status(requestBodyError.status).json({ error: requestBodyError.message, code: requestBodyError.code });
   }
   if (error?.name === 'MulterError') {
     const tooLarge = ['LIMIT_FILE_SIZE', 'LIMIT_FIELD_VALUE'].includes(error.code);
@@ -115,7 +178,7 @@ export function errorHandler(error, _req, res, _next) {
   if (error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
     return res.status(409).json({ error: 'That value is already in use.', code: 'conflict' });
   }
+  recordUnhandledError(error, req);
   console.error(error);
   return res.status(500).json({ error: 'Something went wrong. Please try again.', code: 'internal_error' });
 }
-

@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, getMe, getSetupStatus } from './api';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { ApiError, api, getMe, getSetupStatus } from './api';
 import { BRAND_PALETTES, DEFAULT_PALETTE } from './branding';
 import type { BrandingPalette, ConnectionProtocol, PlatformConfiguration } from './branding';
 import type { Role, User } from './types';
@@ -15,6 +15,8 @@ interface AuthContextValue {
   userLimit: number;
   configured: boolean;
   loading: boolean;
+  startupError: string | null;
+  retryStartup: () => Promise<void>;
   refresh: () => Promise<void>;
   signIn: (username: string, password: string) => Promise<void>;
   signUp: (username: string, password: string, confirmPassword: string) => Promise<void>;
@@ -37,9 +39,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userLimit, setUserLimitState] = useState(0);
   const [configured, setConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [startupError, setStartupError] = useState<string | null>(null);
+  const startupRequestId = useRef(0);
+  const authStateRevision = useRef(0);
+  const refreshRequestId = useRef(0);
+  const lastBrandTitle = useRef('OpenLearning');
 
   const refresh = useCallback(async () => {
+    const requestId = ++refreshRequestId.current;
+    const stateRevision = authStateRevision.current;
     const [setup, me] = await Promise.all([getSetupStatus(), getMe()]);
+    await api.refreshCsrf();
+    if (requestId !== refreshRequestId.current || stateRevision !== authStateRevision.current) return;
+    authStateRevision.current += 1;
     setConfigured(setup.configured);
     setPlatformNameState(me.platformName || setup.platformName || 'OpenLearning');
     setPlatformIconState(me.platformIcon ?? setup.platformIcon ?? null);
@@ -49,15 +61,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRegistrationAvailableState(me.registrationAvailable ?? setup.registrationAvailable ?? true);
     setUserLimitState(me.userLimit ?? setup.userLimit ?? 0);
     setUser(me.user);
-    await api.refreshCsrf();
   }, []);
+
+  const retryStartup = useCallback(async () => {
+    const requestId = ++startupRequestId.current;
+    setLoading(true);
+    setStartupError(null);
+    try {
+      await refresh();
+      if (requestId === startupRequestId.current) setStartupError(null);
+    } catch (cause) {
+      if (requestId === startupRequestId.current) {
+        setStartupError(cause instanceof ApiError ? cause.message : 'Could not reach the learning platform. Check your connection and try again.');
+      }
+    } finally {
+      if (requestId === startupRequestId.current) setLoading(false);
+    }
+  }, [refresh]);
 
   useEffect(() => {
     document.documentElement.dataset.palette = themePalette;
   }, [themePalette]);
 
   useEffect(() => {
-    document.title = platformName;
+    if (document.title === lastBrandTitle.current) document.title = platformName;
+    lastBrandTitle.current = platformName;
     const themeColor = BRAND_PALETTES.find((palette) => palette.id === themePalette)?.color ?? BRAND_PALETTES[0].color;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor);
     let favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
@@ -74,13 +102,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [platformIcon, platformName, themePalette]);
 
   useEffect(() => {
-    refresh().catch(() => undefined).finally(() => setLoading(false));
-  }, [refresh]);
+    void retryStartup();
+  }, [retryStartup]);
 
   const signIn = useCallback(async (username: string, password: string) => {
     const result = await api.post<{ user: User } & PlatformConfiguration>('/api/auth/login', { username, password });
+    authStateRevision.current += 1;
     api.clearCsrf();
-    await api.refreshCsrf();
     setUser(result.user);
     if (result.platformName) setPlatformNameState(result.platformName);
     setPlatformIconState(result.platformIcon ?? null);
@@ -93,8 +121,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = useCallback(async (username: string, password: string, confirmPassword: string) => {
     const result = await api.post<{ user: User; registrationAvailable: boolean }>('/api/auth/register', { username, password, confirmPassword });
+    authStateRevision.current += 1;
     api.clearCsrf();
-    await api.refreshCsrf();
     setUser(result.user);
     setRegistrationAvailableState(result.registrationAvailable);
   }, []);
@@ -103,8 +131,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const result = await api.post<{ user: User } & PlatformConfiguration>('/api/setup', {
       platformName: name, username, password, confirmPassword, ...configuration,
     });
+    authStateRevision.current += 1;
     api.clearCsrf();
-    await api.refreshCsrf();
     setUser(result.user);
     setConfigured(true);
     setPlatformNameState(result.platformName);
@@ -117,12 +145,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setBranding = useCallback((name: string, palette: BrandingPalette, icon: string | null) => {
+    authStateRevision.current += 1;
     setPlatformNameState(name);
     setThemePaletteState(palette);
     setPlatformIconState(icon);
   }, []);
 
   const setPlatformAccessSettings = useCallback((protocol: ConnectionProtocol, allowRegistration: boolean, isRegistrationAvailable: boolean, limit: number) => {
+    authStateRevision.current += 1;
     setConnectionProtocolState(protocol);
     setRegistrationEnabledState(allowRegistration);
     setRegistrationAvailableState(isRegistrationAvailable);
@@ -130,15 +160,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await api.post('/api/auth/logout');
+    try {
+      await api.post('/api/auth/logout');
+    } catch (cause) {
+      if (!(cause instanceof ApiError && cause.status === 401 && cause.code === 'unauthorized')) throw cause;
+    }
+    authStateRevision.current += 1;
     api.clearCsrf();
     setUser(null);
-    await api.refreshCsrf();
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
-    user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationAvailable, userLimit, configured, loading, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings,
-  }), [user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationAvailable, userLimit, configured, loading, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings]);
+    user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationAvailable, userLimit, configured, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings,
+  }), [user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationAvailable, userLimit, configured, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

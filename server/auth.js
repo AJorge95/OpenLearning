@@ -6,10 +6,12 @@ const scryptAsync = promisify(scrypt);
 const SCRYPT_COST = 16384;
 const SCRYPT_BLOCK_SIZE = 8;
 const SCRYPT_PARALLELIZATION = 1;
+const SALT_BYTES = 16;
 const HASH_BYTES = 64;
+let dummyPasswordHashPromise;
 
 export function normalizeUsername(username) {
-  return String(username || '').trim();
+  return typeof username === 'string' ? username.trim() : '';
 }
 
 export function validateCredentials(username, password) {
@@ -24,7 +26,7 @@ export function validateCredentials(username, password) {
 }
 
 export async function hashPassword(password) {
-  const salt = randomBytes(16);
+  const salt = randomBytes(SALT_BYTES);
   const derived = await scryptAsync(password, salt, HASH_BYTES, {
     N: SCRYPT_COST,
     r: SCRYPT_BLOCK_SIZE,
@@ -34,19 +36,43 @@ export async function hashPassword(password) {
   return `scrypt$${SCRYPT_COST}$${SCRYPT_BLOCK_SIZE}$${SCRYPT_PARALLELIZATION}$${salt.toString('hex')}$${Buffer.from(derived).toString('hex')}`;
 }
 
+function parsePasswordHash(encoded) {
+  if (typeof encoded !== 'string' || encoded.length > 256) return null;
+  const parts = encoded.split('$');
+  if (parts.length !== 6) return null;
+  const [algorithm, cost, blockSize, parallelization, saltHex, hashHex] = parts;
+  if (algorithm !== 'scrypt'
+    || cost !== String(SCRYPT_COST)
+    || blockSize !== String(SCRYPT_BLOCK_SIZE)
+    || parallelization !== String(SCRYPT_PARALLELIZATION)
+    || saltHex.length !== SALT_BYTES * 2
+    || hashHex.length !== HASH_BYTES * 2
+    || !/^[a-f0-9]+$/i.test(saltHex)
+    || !/^[a-f0-9]+$/i.test(hashHex)) return null;
+  return { salt: Buffer.from(saltHex, 'hex'), expected: Buffer.from(hashHex, 'hex') };
+}
+
 export async function verifyPassword(password, encoded) {
+  if (typeof password !== 'string' || password.length > 256) return false;
+  const parsed = parsePasswordHash(encoded);
+  if (!parsed) return false;
   try {
-    const [algorithm, cost, blockSize, parallelization, saltHex, hashHex] = String(encoded).split('$');
-    if (algorithm !== 'scrypt' || !cost || !blockSize || !parallelization || !saltHex || !hashHex) return false;
-    const salt = Buffer.from(saltHex, 'hex');
-    const expected = Buffer.from(hashHex, 'hex');
-    const actual = Buffer.from(await scryptAsync(password, salt, expected.length, {
-      N: Number(cost), r: Number(blockSize), p: Number(parallelization), maxmem: 64 * 1024 * 1024,
+    const actual = Buffer.from(await scryptAsync(password, parsed.salt, parsed.expected.length, {
+      N: SCRYPT_COST, r: SCRYPT_BLOCK_SIZE, p: SCRYPT_PARALLELIZATION, maxmem: 64 * 1024 * 1024,
     }));
-    return actual.length === expected.length && timingSafeEqual(actual, expected);
+    return actual.length === parsed.expected.length && timingSafeEqual(actual, parsed.expected);
   } catch {
     return false;
   }
+}
+
+export async function verifyLoginPassword(password, user) {
+  dummyPasswordHashPromise ??= hashPassword(randomBytes(32).toString('base64url'));
+  const dummyPasswordHash = await dummyPasswordHashPromise;
+  const usableAccount = Boolean(user && !user.disabled && parsePasswordHash(user.password_hash));
+  const hash = usableAccount ? user.password_hash : dummyPasswordHash;
+  const matches = await verifyPassword(password, hash);
+  return usableAccount && matches;
 }
 
 export function publicUser(user) {
