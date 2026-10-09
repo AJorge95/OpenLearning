@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, LockKeyhole, MoreVertical, Plus, Search, Settings2, Trash2, Upload } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
 import { Button, CourseStatus, EmptyState, PageHeading, PalettePicker, PlatformIconPicker, UserInitial, VisibilityLabel } from './components';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import { useAuth } from './auth-context';
-import type { Course, CourseAccessUser, CourseModule, QuizQuestion, Role, User } from './types';
+import type { Course, CourseAccessUser, CourseModule, Lesson, LessonResource, QuizQuestion, Role, User } from './types';
 
 type CourseListResponse = { courses: Course[] };
 
@@ -59,8 +59,8 @@ export function CourseManagementPage() {
   ];
   return <div className="management-page">
     <PageHeading title="Courses" action={<Link className="button button-primary" to="/manage/courses/new"><Plus size={18} />Create course</Link>} />
-    <div className="management-tabs" role="tablist" aria-label="Course status">
-      {tabs.map((tab) => <button type="button" key={tab.value} role="tab" aria-selected={status === tab.value} className={status === tab.value ? 'active' : ''} onClick={() => setStatus(tab.value)}>{tab.label}</button>)}
+    <div className="management-tabs" role="group" aria-label="Filter courses by status">
+      {tabs.map((tab) => <button type="button" key={tab.value} aria-pressed={status === tab.value} className={status === tab.value ? 'active' : ''} onClick={() => setStatus(tab.value)}>{tab.label}</button>)}
     </div>
     <form className="management-search" onSubmit={(event) => { event.preventDefault(); load(); }}><Search size={19} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses" aria-label="Search courses" /><button type="submit">Search</button></form>
     {error && <Notice>{error}</Notice>}
@@ -134,6 +134,122 @@ function QuizEditor({ module, onSaved, onError }: { module: CourseModule; onSave
   </div>;
 }
 
+function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClose, onError, onNotice }: {
+  lesson: Lesson;
+  courseId: string;
+  beforeChange: () => Promise<void>;
+  onChanged: () => Promise<void>;
+  onClose: () => void;
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  const [title, setTitle] = useState(lesson.title);
+  const [description, setDescription] = useState(lesson.description);
+  const [resources, setResources] = useState<LessonResource[]>(lesson.resources || []);
+  const [linkTitle, setLinkTitle] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+
+  useEffect(() => {
+    setTitle(lesson.title);
+    setDescription(lesson.description);
+    setResources(lesson.resources || []);
+  }, [lesson.id, lesson.title, lesson.description, lesson.resources]);
+
+  async function persistLessonDetails() {
+    const cleanTitle = title.trim();
+    if (!cleanTitle) throw new ApiError(400, 'Lesson title is required.');
+    await beforeChange();
+    await api.patch(`/api/manage/lessons/${lesson.id}`, { title: cleanTitle, description });
+    setTitle(cleanTitle);
+  }
+
+  async function saveDetails(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true); onError('');
+    try {
+      await persistLessonDetails();
+      await onChanged();
+      onNotice('Lesson details saved.');
+    } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Lesson details could not be saved.'); }
+    finally { setBusy(false); }
+  }
+
+  async function addLink(event: React.FormEvent) {
+    event.preventDefault();
+    if (!linkTitle.trim() || !linkUrl.trim()) return;
+    setBusy(true); onError('');
+    try {
+      await persistLessonDetails();
+      const { resource } = await api.post<{ resource: LessonResource }>(`/api/manage/lessons/${lesson.id}/resources`, { title: linkTitle.trim(), url: linkUrl.trim() });
+      setResources((current) => [...current, resource]);
+      await onChanged();
+      setLinkTitle(''); setLinkUrl('');
+      onNotice('Lesson link added.');
+    } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Lesson link could not be added.'); }
+    finally { setBusy(false); }
+  }
+
+  async function uploadDocument(file: File) {
+    setBusy(true); setUploadProgress(0); onError('');
+    try {
+      await persistLessonDetails();
+      const titleFromFile = (file.name.replace(/\.[^.]+$/, '').trim() || file.name).slice(0, 160);
+      const { resource } = await api.upload<{ resource: LessonResource }>(`/api/manage/courses/${courseId}/lesson-documents`, {
+        kind: 'document', lessonId: lesson.id, title: titleFromFile,
+      }, file, setUploadProgress);
+      setResources((current) => [...current, resource]);
+      await onChanged();
+      onNotice(`${file.name} attached to this lesson.`);
+    } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Document could not be uploaded.'); }
+    finally { setBusy(false); setUploadProgress(null); }
+  }
+
+  async function removeResource(resource: LessonResource) {
+    if (!window.confirm(`Remove “${resource.title}” from this lesson?`)) return;
+    setBusy(true); onError('');
+    try {
+      await persistLessonDetails();
+      await api.delete(`/api/manage/lessons/${lesson.id}/resources/${resource.id}`);
+      setResources((current) => current.filter((item) => item.id !== resource.id));
+      await onChanged();
+      onNotice('Lesson resource removed.');
+    } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Lesson resource could not be removed.'); }
+    finally { setBusy(false); }
+  }
+
+  return <div id={`lesson-details-${lesson.id}`} className="lesson-details-editor">
+    <div className="lesson-details-heading"><div><strong>Lesson details</strong><span>Set what learners will see for this lesson.</span></div><button type="button" className="text-action" onClick={onClose}>Close</button></div>
+    <form className="lesson-details-form" onSubmit={saveDetails}>
+      <div className="lesson-details-grid">
+        <label>Lesson title<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} required /></label>
+        <label>Lesson description<textarea value={description} maxLength={2000} rows={3} onChange={(event) => setDescription(event.target.value)} placeholder="Add context, learning goals, or notes for this lesson." /></label>
+      </div>
+      <div className="lesson-details-save"><Button type="submit" variant="secondary" disabled={busy}>{busy ? 'Saving…' : 'Save lesson details'}</Button></div>
+    </form>
+
+    <section className="lesson-resource-editor" aria-label="Lesson links and documents">
+      <div className="lesson-resource-heading"><div><strong>Links and documents</strong><span>These resources will be available to learners alongside the lesson.</span></div></div>
+      {resources.length ? <ul className="lesson-resource-list">{resources.map((resource) => <li className="lesson-resource-row" key={resource.id}>
+        {resource.kind === 'link' ? <Link2 size={16} /> : <FileText size={16} />}
+        <div><strong>{resource.title}</strong><small>{resource.kind === 'document' ? resource.fileName : resource.url}</small></div>
+        <button type="button" className="icon-button danger-icon" title={`Remove ${resource.title}`} aria-label={`Remove ${resource.title}`} disabled={busy} onClick={() => removeResource(resource)}><Trash2 size={15} /></button>
+      </li>)}</ul> : <p className="lesson-resource-empty">No resources added yet.</p>}
+      <form className="lesson-link-form" onSubmit={addLink}>
+        <label>Link title<input value={linkTitle} maxLength={160} onChange={(event) => setLinkTitle(event.target.value)} placeholder="e.g. Reference guide" required /></label>
+        <label>Link URL<input type="url" value={linkUrl} maxLength={2048} onChange={(event) => setLinkUrl(event.target.value)} placeholder="https://example.com/resource" required /></label>
+        <Button type="submit" variant="secondary" disabled={busy || !linkTitle.trim() || !linkUrl.trim()}><Link2 size={15} />Add link</Button>
+      </form>
+      <div className="lesson-document-upload">
+        <div><strong>Attach a document</strong><span>PDF, text, Word, PowerPoint, Excel, CSV/TSV, or OpenDocument.</span></div>
+        <label className="button button-secondary file-button"><Upload size={15} />Choose document<input type="file" accept=".pdf,.txt,.md,.rtf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.tsv,.odt,.odp,.ods" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadDocument(file); event.currentTarget.value = ''; }} /></label>
+        {uploadProgress !== null && <div className="upload-progress lesson-document-progress"><span style={{ width: `${uploadProgress}%` }} /><small>{uploadProgress}%</small></div>}
+      </div>
+    </section>
+  </div>;
+}
+
 export function CourseEditorPage() {
   const route = useParams();
   const navigate = useNavigate();
@@ -150,6 +266,7 @@ export function CourseEditorPage() {
   const [moduleTitle, setModuleTitle] = useState('');
   const [addingModule, setAddingModule] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [editingLessonId, setEditingLessonId] = useState('');
   const [uploading, setUploading] = useState<Record<string, number>>({});
   const [coverProgress, setCoverProgress] = useState<number | null>(null);
 
@@ -221,16 +338,9 @@ export function CourseEditorPage() {
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Module could not be removed.'); }
   }
 
-  async function editLesson(lessonId: string, currentTitle: string) {
-    const nextTitle = window.prompt('Lesson title', currentTitle);
-    if (!nextTitle?.trim() || nextTitle.trim() === currentTitle) return;
-    try { await saveCourseDetailsIfChanged(); await api.patch(`/api/manage/lessons/${lessonId}`, { title: nextTitle.trim() }); await load(); }
-    catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Lesson could not be updated.'); }
-  }
-
   async function deleteLesson(lessonId: string, currentTitle: string) {
-    if (!window.confirm(`Remove “${currentTitle}” and its uploaded video?`)) return;
-    try { await saveCourseDetailsIfChanged(); await api.delete(`/api/manage/lessons/${lessonId}`); await load(); }
+    if (!window.confirm(`Remove “${currentTitle}”, its video, and its lesson resources?`)) return;
+    try { await saveCourseDetailsIfChanged(); await api.delete(`/api/manage/lessons/${lessonId}`); setEditingLessonId(''); await load(); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Lesson could not be removed.'); }
   }
 
@@ -278,11 +388,14 @@ export function CourseEditorPage() {
         {course.modules?.map((module, moduleIndex) => <div className="module-editor" key={module.id}>
           <div className="module-editor-heading"><button type="button" className="module-disclosure" onClick={() => setExpanded({ ...expanded, [module.id]: !(expanded[module.id] ?? true) })} aria-label={`${expanded[module.id] ?? true ? 'Collapse' : 'Expand'} ${module.title}`}><ChevronDown className={(expanded[module.id] ?? true) ? '' : 'chevron-collapsed'} size={18} /></button><BookOpen size={18} /><button type="button" className="module-name-button" onClick={() => editModule(module)}>{module.title}</button><span className="module-item-count">{module.lessons.length + (module.quiz ? 1 : 0)} items</span><div className="module-tools"><button title="Move module up" disabled={moduleIndex === 0} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'up')}><ArrowUp size={16} /></button><button title="Move module down" disabled={moduleIndex === (course.modules?.length || 0) - 1} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'down')}><ArrowDown size={16} /></button><button title="Remove module" className="danger-icon" onClick={() => deleteModule(module)}><Trash2 size={16} /></button></div></div>
           {(expanded[module.id] ?? true) && <div className="module-editor-content">
-            {module.lessons.map((lesson, lessonIndex) => <div className="lesson-editor-row" key={lesson.id}>
-              <span className="lesson-grip"><FileText size={17} /></span><button className="lesson-name-button" onClick={() => editLesson(lesson.id, lesson.title)}>{lesson.title}</button>
-              {lesson.hasVideo ? <span className="video-file-label"><Check size={15} />{lesson.videoName}</span> : <label className="button button-upload-small file-button"><Upload size={15} />Upload video<input type="file" accept="video/mp4,.mp4" onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadVideo(lesson.id, file); event.currentTarget.value = ''; }} /></label>}
-              {uploading[lesson.id] !== undefined && <div className="upload-progress"><span style={{ width: `${uploading[lesson.id]}%` }} /><small>{uploading[lesson.id]}%</small></div>}
-              <div className="lesson-tools"><button title="Move lesson up" disabled={lessonIndex === 0} onClick={() => moveItem(`/api/manage/lessons/${lesson.id}/move`, 'up')}><ArrowUp size={15} /></button><button title="Move lesson down" disabled={lessonIndex === module.lessons.length - 1} onClick={() => moveItem(`/api/manage/lessons/${lesson.id}/move`, 'down')}><ArrowDown size={15} /></button><button title="Remove lesson" className="danger-icon" onClick={() => deleteLesson(lesson.id, lesson.title)}><Trash2 size={15} /></button></div>
+            {module.lessons.map((lesson, lessonIndex) => <div className="lesson-editor-item" key={lesson.id}>
+              <div className="lesson-editor-row">
+                <span className="lesson-grip"><FileText size={17} /></span><button type="button" className="lesson-name-button" aria-expanded={editingLessonId === lesson.id} aria-controls={editingLessonId === lesson.id ? `lesson-details-${lesson.id}` : undefined} onClick={() => setEditingLessonId(editingLessonId === lesson.id ? '' : lesson.id)}>{lesson.title}</button>
+                {lesson.hasVideo ? <span className="video-file-label"><Check size={15} />{lesson.videoName}</span> : <label className="button button-upload-small file-button"><Upload size={15} />Upload video<input type="file" accept="video/mp4,.mp4" onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadVideo(lesson.id, file); event.currentTarget.value = ''; }} /></label>}
+                {uploading[lesson.id] !== undefined && <div className="upload-progress"><span style={{ width: `${uploading[lesson.id]}%` }} /><small>{uploading[lesson.id]}%</small></div>}
+                <div className="lesson-tools"><button type="button" className="lesson-edit-action" title="Edit lesson details" aria-label={`Edit details for ${lesson.title}`} aria-expanded={editingLessonId === lesson.id} aria-controls={editingLessonId === lesson.id ? `lesson-details-${lesson.id}` : undefined} onClick={() => setEditingLessonId(editingLessonId === lesson.id ? '' : lesson.id)}><Pencil size={14} /><span>Details</span></button><button type="button" title="Move lesson up" disabled={lessonIndex === 0} onClick={() => moveItem(`/api/manage/lessons/${lesson.id}/move`, 'up')}><ArrowUp size={15} /></button><button type="button" title="Move lesson down" disabled={lessonIndex === module.lessons.length - 1} onClick={() => moveItem(`/api/manage/lessons/${lesson.id}/move`, 'down')}><ArrowDown size={15} /></button><button type="button" title="Remove lesson" className="danger-icon" onClick={() => deleteLesson(lesson.id, lesson.title)}><Trash2 size={15} /></button></div>
+              </div>
+              {editingLessonId === lesson.id && <LessonDetailsEditor lesson={lesson} courseId={courseId} beforeChange={saveCourseDetailsIfChanged} onChanged={load} onClose={() => setEditingLessonId('')} onError={setError} onNotice={setNotice} />}
             </div>)}
             <div className="module-add-actions"><button type="button" className="text-action" onClick={() => addLesson(module.id)}><Plus size={15} />Add lesson</button><span className="add-action-divider" /><button type="button" className="text-action" onClick={async () => {
               if (module.quiz) { setError('This module already has a quiz.'); return; }
@@ -353,6 +466,8 @@ export function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState('');
   const [resetUser, setResetUser] = useState<User | null>(null);
+  const resetDialogRef = useRef<HTMLElement | null>(null);
+  const resetTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [success, setSuccess] = useState('');
@@ -366,6 +481,46 @@ export function AdminUsersPage() {
     finally { setLoading(false); }
   }
   useEffect(() => { load(); }, [roleFilter]);
+
+  useEffect(() => {
+    if (!resetUser) return;
+    const dialog = resetDialogRef.current;
+    const previousFocus = resetTriggerRef.current;
+    const getFocusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+    ) ?? []);
+    dialog?.querySelector<HTMLElement>('[autofocus]')?.focus();
+
+    function handleDialogKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setResetUser(null);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = getFocusable();
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialog?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeyDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [resetUser]);
 
   async function updateUser(user: User, changes: { role?: Role; disabled?: boolean }) {
     setSavingId(user.id); setError(''); setSuccess('');
@@ -396,9 +551,9 @@ export function AdminUsersPage() {
       <td><label className="sr-only" htmlFor={`role-${user.id}`}>Role for {user.username}</label><select id={`role-${user.id}`} value={user.role} disabled={savingId === user.id} onChange={(event) => updateUser(user, { role: event.target.value as Role })}><option value="admin">Administrator</option><option value="moderator">Moderator</option><option value="learner">Learner</option></select></td>
       <td><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span></td>
       <td>{user.createdAt ? <DateText value={user.createdAt} /> : '—'}</td>
-      <td><div className="user-row-actions"><button className="text-action" onClick={() => setResetUser(user)}>Reset password</button><button className={user.disabled ? 'text-action' : 'text-action danger-text'} disabled={savingId === user.id} onClick={() => updateUser(user, { disabled: !user.disabled })}>{user.disabled ? 'Enable' : 'Disable'}</button></div></td>
+      <td><div className="user-row-actions"><button className="text-action" onClick={(event) => { resetTriggerRef.current = event.currentTarget; setResetUser(user); }}>Reset password</button><button className={user.disabled ? 'text-action' : 'text-action danger-text'} disabled={savingId === user.id} onClick={() => updateUser(user, { disabled: !user.disabled })}>{user.disabled ? 'Enable' : 'Disable'}</button></div></td>
     </tr>)}</tbody></table>{!users.length && <div className="access-empty">No users match this search.</div>}</div>}
-    {resetUser && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setResetUser(null); }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title"><button className="modal-close" type="button" onClick={() => setResetUser(null)} aria-label="Close">×</button><h2 id="reset-title">Reset password</h2><p>Set a temporary password for <strong>{resetUser.username}</strong>. Their active sessions will be signed out.</p><form className="form-stack" onSubmit={resetPassword}><label>New password<input autoFocus required minLength={12} maxLength={256} type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label><label>Confirm password<input required minLength={12} maxLength={256} type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>{error && <Notice>{error}</Notice>}<Button type="submit" disabled={savingId === resetUser.id}>{savingId === resetUser.id ? 'Saving…' : 'Reset password'}</Button></form></section></div>}
+    {resetUser && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setResetUser(null); }}><section ref={resetDialogRef} className="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title" aria-describedby="reset-description"><button className="modal-close" type="button" onClick={() => setResetUser(null)} aria-label="Close">×</button><h2 id="reset-title">Reset password</h2><p id="reset-description">Set a temporary password for <strong>{resetUser.username}</strong>. Their active sessions will be signed out.</p><form className="form-stack" onSubmit={resetPassword}><label>New password<input autoFocus required minLength={12} maxLength={256} type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label><label>Confirm password<input required minLength={12} maxLength={256} type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>{error && <Notice>{error}</Notice>}<Button type="submit" disabled={savingId === resetUser.id}>{savingId === resetUser.id ? 'Saving…' : 'Reset password'}</Button></form></section></div>}
   </div>;
 }
 

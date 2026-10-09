@@ -15,6 +15,23 @@ export const protectedMediaRouter = Router();
 const imageTypes = new Map([
   ['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.png', 'image/png'], ['.webp', 'image/webp'],
 ]);
+const documentTypes = new Map([
+  ['.pdf', ['application/pdf']],
+  ['.txt', ['text/plain']],
+  ['.md', ['text/markdown', 'text/plain']],
+  ['.rtf', ['application/rtf', 'text/rtf']],
+  ['.doc', ['application/msword']],
+  ['.docx', ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']],
+  ['.ppt', ['application/vnd.ms-powerpoint']],
+  ['.pptx', ['application/vnd.openxmlformats-officedocument.presentationml.presentation']],
+  ['.xls', ['application/vnd.ms-excel']],
+  ['.xlsx', ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']],
+  ['.csv', ['text/csv', 'application/vnd.ms-excel', 'text/plain']],
+  ['.tsv', ['text/tab-separated-values', 'text/plain']],
+  ['.odt', ['application/vnd.oasis.opendocument.text']],
+  ['.odp', ['application/vnd.oasis.opendocument.presentation']],
+  ['.ods', ['application/vnd.oasis.opendocument.spreadsheet']],
+]);
 
 function storedFilename(originalName, kind) {
   const ext = path.extname(originalName).toLowerCase();
@@ -35,16 +52,21 @@ const upload = multer({
       } catch (error) { callback(error); }
     },
     filename(req, file, callback) {
-      callback(null, storedFilename(file.originalname, req.body?.kind === 'cover' ? 'cover' : 'video'));
+      const kind = ['cover', 'document'].includes(req.body?.kind) ? req.body.kind : 'video';
+      callback(null, storedFilename(file.originalname, kind));
     },
   }),
   limits: { fileSize: config.maxUploadBytes, files: 1 },
   fileFilter(req, file, callback) {
-    const kind = req.body?.kind === 'cover' ? 'cover' : 'video';
+    const kind = ['cover', 'document'].includes(req.body?.kind) ? req.body.kind : 'video';
     const ext = path.extname(file.originalname).toLowerCase();
     if (kind === 'video' && ext === '.mp4' && file.mimetype === 'video/mp4') return callback(null, true);
     if (kind === 'cover' && imageTypes.get(ext) === file.mimetype) return callback(null, true);
-    return callback(new ApiError(400, kind === 'video' ? 'Upload an MP4 video file.' : 'Upload a JPG, PNG, or WebP course cover.', 'invalid_media_type'));
+    if (kind === 'document' && documentTypes.get(ext)?.includes(file.mimetype)) return callback(null, true);
+    const message = kind === 'video' ? 'Upload an MP4 video file.' : kind === 'cover'
+      ? 'Upload a JPG, PNG, or WebP course cover.'
+      : 'Upload a PDF, text, Word, PowerPoint, Excel, CSV, TSV, or OpenDocument file.';
+    return callback(new ApiError(400, message, 'invalid_media_type'));
   },
 });
 
@@ -96,6 +118,69 @@ mediaUploadRouter.post('/manage/courses/:courseId/media', requireAuth, authorize
     throw error;
   }
   res.status(201).json({ media: { id, url: `/media/${id}`, name: req.file.originalname, bytes: req.file.size, kind } });
+});
+
+mediaUploadRouter.post('/manage/courses/:courseId/lesson-documents', requireAuth, authorizeManagerParam, upload.single('file'), (req, res) => {
+  if (!req.file) fail(400, 'Choose a document to upload.', 'file_required');
+  const course = courseById(req.params.courseId);
+  const lessonId = String(req.body?.lessonId || '');
+  const lesson = lessonId && courseFromLesson(lessonId);
+  if (!lesson || lesson.id !== course.id) {
+    fs.rmSync(req.file.path, { force: true });
+    fail(400, 'Choose a lesson in this course before uploading a document.', 'invalid_lesson');
+  }
+
+  const originalName = path.basename(String(req.file.originalname).replaceAll('\\', '/'))
+    .replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 255) || 'Document';
+  const title = String(req.body?.title || '').trim() || path.parse(originalName).name || 'Attached document';
+  if (title.length > 160) {
+    fs.rmSync(req.file.path, { force: true });
+    fail(400, 'Resource title must be 160 characters or fewer.', 'validation_error');
+  }
+
+  const id = randomUUID();
+  const position = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM lesson_resources WHERE lesson_id = ?')
+    .get(lesson.lesson_id).next;
+  try {
+    const save = db.transaction(() => {
+      db.prepare(`INSERT INTO lesson_resources
+        (id, lesson_id, resource_type, title, file_name, original_name, mime_type, byte_size, position)
+        VALUES (?, ?, 'document', ?, ?, ?, ?, ?, ?)`)
+        .run(id, lesson.lesson_id, title, req.file.filename, originalName, req.file.mimetype, req.file.size, position);
+      db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(req.currentUser.id, course.id);
+    });
+    save();
+  } catch (error) {
+    fs.rmSync(req.file.path, { force: true });
+    throw error;
+  }
+  res.status(201).json({ resource: { id, kind: 'document', title, url: `/media/resources/${id}`, fileName: originalName } });
+});
+
+protectedMediaRouter.get('/resources/:resourceId', requireAuth, (req, res, next) => {
+  const resource = db.prepare(`
+    SELECT lr.*, c.id AS course_id FROM lesson_resources lr
+    JOIN lessons l ON l.id = lr.lesson_id
+    JOIN course_modules m ON m.id = l.module_id
+    JOIN courses c ON c.id = m.course_id
+    WHERE lr.id = ? AND lr.resource_type = 'document'
+  `).get(req.params.resourceId);
+  if (!resource) return res.status(404).json({ error: 'Document not found.', code: 'not_found' });
+  try { requireCourseViewer(resource.course_id, req.currentUser); }
+  catch (error) { return next(error); }
+  const base = path.resolve(config.mediaRoot, resource.course_id);
+  const filePath = path.resolve(base, resource.file_name);
+  if (!filePath.startsWith(`${base}${path.sep}`)) return res.status(404).json({ error: 'Document not found.', code: 'not_found' });
+  fs.stat(filePath, (statError, stats) => {
+    if (statError || !stats.isFile()) return res.status(404).json({ error: 'Document not found.', code: 'not_found' });
+    res.attachment(resource.original_name);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', stats.size);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (req.method === 'HEAD') return res.end();
+    fs.createReadStream(filePath).on('error', next).pipe(res);
+  });
 });
 
 protectedMediaRouter.get('/:mediaId', requireAuth, (req, res, next) => {

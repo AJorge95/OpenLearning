@@ -39,6 +39,14 @@ export interface Quiz {
   passed: boolean;
 }
 
+export interface LessonResource {
+  id: string;
+  kind: 'link' | 'document';
+  title: string;
+  url: string;
+  fileName: string | null;
+}
+
 export interface Lesson {
   id: string;
   title: string;
@@ -48,6 +56,7 @@ export interface Lesson {
   mediaUrl: string | null;
   videoName: string | null;
   hasVideo: boolean;
+  resources: LessonResource[];
   completed: boolean;
 }
 

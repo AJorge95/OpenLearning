@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronDown, CircleHelp, Clock3, Filter, Play, Search } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, Play, Search } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
 import { Button, CourseCard, CourseCover, CurriculumModule, EmptyState, PageHeading, ProgressBar } from './components';
@@ -133,6 +133,8 @@ export function CoursePlayerPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [railOpen, setRailOpen] = useState(true);
+  const [videoError, setVideoError] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   async function load() {
     setLoading(true); setError('');
@@ -141,6 +143,7 @@ export function CoursePlayerPage() {
     finally { setLoading(false); }
   }
   useEffect(() => { load(); }, [courseId]);
+  useEffect(() => { setVideoError(false); }, [lessonId]);
 
   const modules = course?.modules || [];
   const lessons = useMemo(() => orderedLessons(modules), [modules]);
@@ -160,6 +163,11 @@ export function CoursePlayerPage() {
     finally { setSaving(false); }
   }
 
+  function retryVideo() {
+    setVideoError(false);
+    videoRef.current?.load();
+  }
+
   if (loading) return <div className="page-loading">Loading lesson…</div>;
   if (!course || !current) return <div className="narrow-content">{error && <ErrorNotice message={error} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
 
@@ -169,14 +177,25 @@ export function CoursePlayerPage() {
       {error && <ErrorNotice message={error} />}
       <div className="player-heading"><div><p>{current.moduleTitle}</p><h1>{current.title}</h1></div><button className="rail-toggle" type="button" onClick={() => setRailOpen(!railOpen)} aria-label={railOpen ? 'Hide course content' : 'Show course content'}><ChevronDown size={18} /></button></div>
       <section className="video-stage">
-        {current.hasVideo && current.mediaUrl ? <video controls playsInline preload="metadata" src={current.mediaUrl} poster={course.coverUrl || undefined} aria-label={current.title} /> : <div className="video-missing"><Play size={36} /><span>Video not available</span></div>}
+        {current.hasVideo && current.mediaUrl ? <video ref={videoRef} controls playsInline preload="metadata" src={current.mediaUrl} poster={course.coverUrl || undefined} aria-label={current.title} onError={() => setVideoError(true)} /> : <div className="video-missing"><Play size={36} /><span>Video not available</span></div>}
       </section>
+      {videoError && <div className="player-video-error" role="alert"><p>The video could not be loaded. Retry, or contact your course administrator if it still will not play.</p><Button type="button" variant="secondary" onClick={retryVideo}>Retry video</Button></div>}
       <div className="player-controls-row">
         <button className="button button-secondary" type="button" disabled={!previous} onClick={() => previous && navigate(`/courses/${course.id}/learn/${previous.id}`)}><ArrowLeft size={17} />Previous lesson</button>
         <Button variant={current.completed ? 'secondary' : 'primary'} disabled={saving} onClick={toggleCompleted}>{current.completed ? <><Check size={17} />Completed</> : 'Mark lesson complete'}</Button>
         <button className="button button-secondary" type="button" disabled={!next} onClick={() => next && navigate(`/courses/${course.id}/learn/${next.id}`)}>Next lesson<ArrowRight size={17} /></button>
       </div>
       <section className="lesson-notes"><h2>About this lesson</h2><p>{current.description || 'Work through this lesson at your own pace. Mark it complete when you are ready to continue.'}</p></section>
+      {current.resources.length > 0 && <section className="learner-lesson-resources" aria-label="Lesson links and documents">
+        <h2>Links and documents</h2>
+        <ul>{current.resources.map((resource) => <li key={resource.id}>
+          {resource.kind === 'link' ? <Link2 size={17} /> : <FileText size={17} />}
+          <a href={resource.url} {...(resource.kind === 'link' ? { target: '_blank', rel: 'noopener noreferrer' } : { download: true })}>
+            <span><strong>{resource.title}</strong><small>{resource.kind === 'document' ? resource.fileName : resource.url}</small></span>
+            {resource.kind === 'link' ? <ExternalLink size={15} /> : <Download size={15} />}
+          </a>
+        </li>)}</ul>
+      </section>}
     </div>
     {railOpen && <aside className="course-rail"><div className="course-rail-head"><div><span>Course content</span><small>{course.progress}% complete</small></div><button aria-label="Hide course content" onClick={() => setRailOpen(false)}><ChevronDown size={18} /></button></div><ProgressBar value={course.progress} />
       {modules.map((module) => <CurriculumModule key={module.id} module={module} selectedLessonId={lessonId} courseId={course.id} compact />)}
@@ -232,7 +251,7 @@ export function QuizPage() {
             <Button type="submit" disabled={!allAnswered || saving}>{saving ? 'Checking answers…' : 'Submit answers'}<ArrowRight size={17} /></Button>
           </form>
         </> : <div className="quiz-results">
-          <div className={`score-panel ${result.passed ? 'score-pass' : 'score-retry'}`}><span className="score-icon">{result.passed ? <Check size={22} /> : <Clock3 size={22} />}</span><div><span className="score-label">{result.passed ? 'Quiz passed' : 'Keep practicing'}</span><strong>{result.score}%</strong><small>{result.passed ? `You reached the ${result.passMark}% pass mark.` : `You need ${result.passMark}% to pass.`}</small></div></div>
+          <div className={`score-panel ${result.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{result.passed ? <Check size={22} /> : <Clock3 size={22} />}</span><div><span className="score-label">{result.passed ? 'Quiz passed' : 'Keep practicing'}</span><strong>{result.score}%</strong><small>{result.passed ? `You reached the ${result.passMark}% pass mark.` : `You need ${result.passMark}% to pass.`}</small></div></div>
           <h2>Review your answers</h2>
           {questionsToShow.map((question, index) => {
             const attemptQuestion = question as NonNullable<QuizAttempt['questions']>[number];

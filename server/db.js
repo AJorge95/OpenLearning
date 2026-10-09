@@ -19,9 +19,8 @@ export function migrateDatabase(database = db) {
     );
   `);
   const current = database.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations').get().version;
-  if (current >= 1) return;
-
-  const migration = database.transaction(() => {
+  if (current < 1) {
+    const migration = database.transaction(() => {
     database.exec(`
       CREATE TABLE app_settings (
         key TEXT PRIMARY KEY,
@@ -156,8 +155,36 @@ export function migrateDatabase(database = db) {
 
       INSERT INTO schema_migrations (version) VALUES (1);
     `);
-  });
-  migration();
+    });
+    migration();
+  }
+
+  if (current < 2) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE lesson_resources (
+          id TEXT PRIMARY KEY,
+          lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+          resource_type TEXT NOT NULL CHECK (resource_type IN ('link', 'document')),
+          title TEXT NOT NULL,
+          href TEXT,
+          file_name TEXT,
+          original_name TEXT,
+          mime_type TEXT,
+          byte_size INTEGER,
+          position INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CHECK (
+            (resource_type = 'link' AND href IS NOT NULL AND file_name IS NULL) OR
+            (resource_type = 'document' AND href IS NULL AND file_name IS NOT NULL)
+          )
+        );
+        CREATE INDEX lesson_resources_lesson_position ON lesson_resources(lesson_id, position, id);
+        INSERT INTO schema_migrations (version) VALUES (2);
+      `);
+    });
+    migration();
+  }
 }
 
 export function setting(key) {
