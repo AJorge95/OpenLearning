@@ -1,4 +1,5 @@
 import type { Course, CourseAccessUser, User } from './types';
+import type { PlatformConfiguration } from './branding';
 
 let csrfToken: string | null = null;
 
@@ -84,11 +85,11 @@ export const api = {
 };
 
 export async function getSetupStatus() {
-  return api.get<{ configured: boolean; platformName: string }>('/api/setup/status');
+  return api.get<{ configured: boolean } & PlatformConfiguration>('/api/setup/status');
 }
 
 export async function getMe() {
-  return api.get<{ user: User | null; platformName: string }>('/api/auth/me');
+  return api.get<{ user: User | null } & PlatformConfiguration>('/api/auth/me');
 }
 
 export async function fetchCourse(courseId: string, managed = false) {

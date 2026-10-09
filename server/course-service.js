@@ -70,6 +70,16 @@ export function getCoursePayload(course, user, { includeAnswers = false } = {}) 
       mediaUrl: lesson.media_id ? `/media/${lesson.media_id}` : null,
       videoName: lesson.original_name,
       hasVideo: Boolean(lesson.media_id),
+      resources: db.prepare(`
+        SELECT id, resource_type, title, href, original_name
+        FROM lesson_resources WHERE lesson_id = ? ORDER BY position, id
+      `).all(lesson.id).map((resource) => ({
+        id: resource.id,
+        kind: resource.resource_type,
+        title: resource.title,
+        url: resource.resource_type === 'link' ? resource.href : `/media/resources/${resource.id}`,
+        fileName: resource.original_name,
+      })),
       completed: Boolean(user) && db.prepare('SELECT 1 FROM lesson_progress WHERE user_id = ? AND lesson_id = ?').get(user.id, lesson.id) !== undefined,
     }));
     const quiz = db.prepare('SELECT * FROM quizzes WHERE module_id = ?').get(module.id);
@@ -86,7 +96,7 @@ export function getCoursePayload(course, user, { includeAnswers = false } = {}) 
         })),
       }));
       const latestAttempt = user
-        ? db.prepare('SELECT id, score, passed, submitted_at FROM quiz_attempts WHERE quiz_id = ? AND user_id = ? ORDER BY submitted_at DESC LIMIT 1').get(quiz.id, user.id)
+        ? db.prepare('SELECT id, score, passed, submitted_at FROM quiz_attempts WHERE quiz_id = ? AND user_id = ? ORDER BY submitted_at DESC, rowid DESC LIMIT 1').get(quiz.id, user.id)
         : null;
       const anyPassed = user
         ? db.prepare('SELECT 1 FROM quiz_attempts WHERE quiz_id = ? AND user_id = ? AND passed = 1 LIMIT 1').get(quiz.id, user.id) !== undefined

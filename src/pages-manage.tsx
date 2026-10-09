@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, LockKeyhole, MoreVertical, Plus, Search, Settings2, Trash2, Upload } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
-import { Button, CourseStatus, EmptyState, PageHeading, UserInitial, VisibilityLabel } from './components';
+import { Button, CourseStatus, EmptyState, PageHeading, PalettePicker, PlatformIconPicker, UserInitial, VisibilityLabel } from './components';
+import type { BrandingPalette, ConnectionProtocol } from './branding';
 import { useAuth } from './auth-context';
 import type { Course, CourseAccessUser, CourseModule, QuizQuestion, Role, User } from './types';
 
@@ -402,22 +403,62 @@ export function AdminUsersPage() {
 }
 
 export function AdminSettingsPage() {
-  const { platformName, setPlatformName } = useAuth();
+  const { platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, userLimit, setBranding, setPlatformAccessSettings } = useAuth();
   const [name, setName] = useState(platformName);
+  const [icon, setIcon] = useState<string | null>(platformIcon);
+  const [iconEdited, setIconEdited] = useState(false);
+  const [palette, setPalette] = useState<BrandingPalette>(themePalette);
+  const [protocol, setProtocol] = useState<ConnectionProtocol>(connectionProtocol);
+  const [allowRegistration, setAllowRegistration] = useState(registrationEnabled);
+  const [userLimitValue, setUserLimitValue] = useState(String(userLimit));
+  const [registeredUserCount, setRegisteredUserCount] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
-  useEffect(() => setName(platformName), [platformName]);
+  useEffect(() => { setName(platformName); setIcon(platformIcon); setIconEdited(false); setPalette(themePalette); setProtocol(connectionProtocol); setAllowRegistration(registrationEnabled); setUserLimitValue(String(userLimit)); }, [platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, userLimit]);
+  useEffect(() => {
+    let active = true;
+    api.get<{ registeredUserCount: number }>('/api/admin/settings')
+      .then((result) => { if (active) setRegisteredUserCount(result.registeredUserCount); })
+      .catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.message : 'Account settings could not be loaded.'); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    document.documentElement.dataset.palette = palette;
+    return () => { document.documentElement.dataset.palette = themePalette; };
+  }, [palette, themePalette]);
+  function choosePalette(nextPalette: BrandingPalette) {
+    setPalette(nextPalette);
+    document.documentElement.dataset.palette = nextPalette;
+  }
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setError(''); setSuccess(''); setSaving(true);
     try {
-      const result = await api.put<{ platformName: string }>('/api/admin/settings', { platformName: name });
-      setName(result.platformName); setPlatformName(result.platformName); setSuccess('Platform settings saved.');
+      const result = await api.put<{ platformName: string; platformIcon: string | null; themePalette: BrandingPalette; connectionProtocol: ConnectionProtocol; registrationEnabled: boolean; registrationAvailable: boolean; userLimit: number; registeredUserCount: number }>('/api/admin/settings', {
+        platformName: name,
+        themePalette: palette,
+        connectionProtocol: protocol,
+        registrationEnabled: allowRegistration,
+        userLimit: Number(userLimitValue),
+        ...(iconEdited ? { platformIcon: icon } : {}),
+      });
+      setName(result.platformName); setBranding(result.platformName, result.themePalette, result.platformIcon); setPlatformAccessSettings(result.connectionProtocol, result.registrationEnabled, result.registrationAvailable, result.userLimit); setIconEdited(false); setRegisteredUserCount(result.registeredUserCount); setSuccess('Platform settings saved.');
     } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Settings could not be saved.'); }
     finally { setSaving(false); }
   }
-  return <div className="management-page settings-page"><PageHeading title="Settings" subtitle="Set the name shown to learners across your platform." />{error && <Notice>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
-    <form className="settings-card form-stack" onSubmit={submit}><div className="settings-card-heading"><span className="settings-icon"><Settings2 size={19} /></span><div><h2>Platform identity</h2><p>The name learners see in the navigation.</p></div></div><label>Platform name<input required minLength={2} maxLength={80} value={name} onChange={(event) => setName(event.target.value)} /></label><div className="settings-card-footer"><span>Storage and session settings are managed through the server environment.</span><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</Button></div></form>
+  return <div className="management-page settings-page"><PageHeading title="Settings" subtitle="Customize platform branding, connection security, and learner registration." />{error && <Notice>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
+    <form className="settings-card form-stack" onSubmit={submit}>
+      <div className="settings-card-heading"><span className="settings-icon"><Settings2 size={19} /></span><div><h2>Platform identity</h2><p>Choose the brand learners see throughout the platform.</p></div></div>
+      <label>Platform name<input required minLength={2} maxLength={80} value={name} onChange={(event) => setName(event.target.value)} /></label>
+      <PlatformIconPicker value={icon} onChange={(nextIcon) => { setIcon(nextIcon); setIconEdited(true); }} />
+      <div className="branding-choice-field"><span className="branding-choice-label">Color palette</span><small>Preview a palette and save to apply it for everyone.</small><PalettePicker value={palette} onChange={choosePalette} /></div>
+      <div className="settings-section-divider"><span>Connection and accounts</span></div>
+      <label>Public connection protocol<select value={protocol} onChange={(event) => setProtocol(event.target.value as ConnectionProtocol)}><option value="http">HTTP</option><option value="https">HTTPS</option></select></label>
+      <p className="protocol-help">This controls secure session cookies. HTTPS requires a TLS certificate on this server or a reverse proxy. For TLS behind a proxy, set <code>TRUST_PROXY=true</code>.</p>
+      <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={allowRegistration} onChange={(event) => setAllowRegistration(event.target.checked)} /></label>
+      <label>Maximum registered accounts<input className="user-limit-input" type="number" min={0} max={1000000} step={1} required value={userLimitValue} onChange={(event) => setUserLimitValue(event.target.value)} /><small>0 means no limit. The cap includes administrators, moderators, and learners. Registered accounts: {registeredUserCount ?? 'loading'}.</small></label>
+      <div className="settings-card-footer"><span>Database and media paths remain managed through the server environment.</span><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</Button></div>
+    </form>
   </div>;
 }
 

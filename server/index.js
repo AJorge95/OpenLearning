@@ -5,7 +5,7 @@ import session from 'express-session';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { config } from './config.js';
-import { db } from './db.js';
+import { db, setting } from './db.js';
 import { SQLiteSessionStore } from './session-store.js';
 import { csrfMiddleware, errorHandler, loadCurrentUser } from './http.js';
 import { authRouter, authRateLimitError } from './routes-auth.js';
@@ -50,6 +50,11 @@ app.use(session({
     path: '/',
   },
 }));
+app.use((req, _res, next) => {
+  const protocol = setting('connection_protocol');
+  req.session.cookie.secure = protocol === 'http' ? false : protocol === 'https' ? true : config.nodeEnv === 'production';
+  next();
+});
 app.use(loadCurrentUser);
 
 const authLimiter = rateLimit({

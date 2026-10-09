@@ -4,12 +4,13 @@ OpenLearning is a lightweight, self-hosted learning platform for a single organi
 
 ## Features
 
-- Required username-and-password sign-in, open learner registration, and a one-time first-run setup for the initial administrator.
+- Required username-and-password sign-in, configurable learner registration and account limits, and a one-time setup wizard for the initial administrator.
 - Administrator, moderator, and learner roles.
 - Public courses for signed-in learners and private courses available through individual access grants.
 - Courses organized into ordered modules, video lessons, and optional single-answer quizzes.
 - Manual lesson completion, saved quiz attempts, unlimited retries, and course completion tracking.
 - SQLite application data and local course media stored in a separate directory for each course.
+- Optional platform icon and selectable violet, ocean, forest, rose, and amber color palettes.
 - MP4 video upload with browser upload progress and authenticated byte-range delivery for seeking.
 - Native Node deployment: one Express process serves the API and production web client. Docker is not required.
 
@@ -40,7 +41,7 @@ npm run build
 npm start
 ```
 
-Open `http://localhost:3000`. On the first launch, the setup wizard asks for the platform name and the initial administrator username and password. Setup can only be completed once. After setup, users can register with a username and password; new accounts have the learner role.
+Open `http://localhost:3000`. On the first launch, the two-step setup wizard asks for the platform name, optional icon and color palette, initial administrator credentials, public connection protocol, and registration policy. Setup can only be completed once. When registration is enabled, new accounts receive the learner role. Administrators can update branding, protocol, registration access, and the account cap from **Settings**. A limit of `0` means unlimited accounts; a positive limit counts all accounts, including administrators and moderators.
 
 For local development, run the Vite client and API together:
 
@@ -73,11 +74,11 @@ Environment variables can be set in `.env` or in the process environment:
 | `SESSION_SECRET` | Development-only value | Session signing secret. Production requires at least 32 characters; use a random secret and keep it private. |
 | `TRUST_PROXY` | `false` | Set `true` only when the app is behind a trusted reverse proxy that sets forwarding headers. |
 
-The media upload accepts MP4 video and JPG, PNG, or WebP course covers. Videos are stored as uploaded; the server does not transcode them. Use MP4 with codecs supported by the browsers your learners use. Put the app behind HTTPS for production so secure session cookies are enabled.
+The media upload accepts MP4 video and JPG, PNG, or WebP course covers. Videos are stored as uploaded; the server does not transcode them. Use MP4 with codecs supported by the browsers your learners use. Select the public connection protocol in setup or **Settings**. Selecting HTTPS enables secure session cookies; it does not provision a TLS certificate. Terminate TLS on Node or a reverse proxy, and set `TRUST_PROXY=true` when a reverse proxy handles HTTPS.
 
 ## Back up and restore
 
-Back up both the SQLite database and the complete media root. SQLite uses write-ahead logging, so use SQLite's online backup command or stop the application and include any `-wal` and `-shm` files when making a raw file copy.
+Back up both the SQLite database and the complete media root. Platform identity, connection, and registration settings and the optional icon are stored in SQLite, so they are included in the database backup. SQLite uses write-ahead logging, so use SQLite's online backup command or stop the application and include any `-wal` and `-shm` files when making a raw file copy.
 
 Example online backup while the app is running:
 

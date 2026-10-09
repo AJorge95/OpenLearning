@@ -1,18 +1,79 @@
-import { BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, FileText, LockKeyhole, Play, Settings2, UserRound, UsersRound, LogOut } from 'lucide-react';
+import { BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, FileText, ImagePlus, LockKeyhole, Play, Settings2, UserRound, UsersRound, LogOut, X } from 'lucide-react';
+import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from './auth-context';
+import { BRAND_PALETTES, MAX_BRAND_ICON_BYTES } from './branding';
+import type { BrandingPalette } from './branding';
 import type { Course, CourseModule, Lesson } from './types';
 
 export function LoadingScreen({ label = 'Loading your learning space…' }: { label?: string }) {
   return <div className="loading-screen"><span className="loading-mark"><BookOpen size={22} /></span><span>{label}</span></div>;
 }
 
+export function PlatformBrand({ className, to = '/courses' }: { className: string; to?: string }) {
+  const { platformName, platformIcon } = useAuth();
+  return <Link className={className} to={to}>
+    <span className="brand-content">
+      {platformIcon ? <img className="brand-icon" src={platformIcon} alt="" /> : <span className="brand-icon brand-icon-fallback"><BookOpen size={18} /></span>}
+      <span className="brand-name">{platformName}</span>
+    </span>
+  </Link>;
+}
+
+export function PalettePicker({ value, onChange }: { value: BrandingPalette; onChange: (palette: BrandingPalette) => void }) {
+  return <div className="palette-picker" role="group" aria-label="Color palette">
+    {BRAND_PALETTES.map((palette) => <button key={palette.id} type="button" className={`palette-option ${value === palette.id ? 'selected' : ''}`} aria-pressed={value === palette.id} onClick={() => onChange(palette.id)}>
+      <span className="palette-swatch" style={{ backgroundColor: palette.color }} aria-hidden="true">{value === palette.id && <Check size={14} />}</span>
+      <span className="palette-option-label">{palette.label}</span>
+    </button>)}
+  </div>;
+}
+
+export function PlatformIconPicker({ value, onChange }: { value: string | null; onChange: (icon: string | null) => void }) {
+  const [error, setError] = useState('');
+
+  function selectFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setError('');
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setError('Choose a PNG, JPG, or WebP image.');
+      return;
+    }
+    if (file.size > MAX_BRAND_ICON_BYTES) {
+      setError('The icon must be 512 KB or smaller.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => setError('The selected image could not be read.');
+    reader.onload = () => {
+      if (typeof reader.result === 'string') onChange(reader.result);
+      else setError('The selected image could not be read.');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  return <div className="platform-icon-picker">
+    <div className="platform-icon-preview">{value ? <img src={value} alt="Platform icon preview" /> : <BookOpen size={23} />}</div>
+    <div className="platform-icon-controls">
+      <strong>Platform icon</strong>
+      <span className="muted">PNG, JPG, or WebP · up to 512 KB</span>
+      <div className="platform-icon-actions">
+        <label className="button button-secondary platform-icon-upload"><ImagePlus size={16} />Upload icon<input type="file" accept="image/png,image/jpeg,image/webp" onChange={selectFile} /></label>
+        {value && <button type="button" className="button button-quiet platform-icon-remove" onClick={() => { setError(''); onChange(null); }}><X size={15} />Remove</button>}
+      </div>
+      {error && <span className="form-error platform-icon-error" role="alert">{error}</span>}
+    </div>
+  </div>;
+}
+
 export function Header() {
-  const { user, platformName, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
   return (
     <header className="topbar">
-      <Link className="wordmark" to="/courses">{platformName}</Link>
+      <PlatformBrand className="wordmark" />
       <nav className="topnav" aria-label="Main navigation">
         <NavLink to="/courses" end>Browse courses</NavLink>
         <NavLink to="/my-learning">My learning</NavLink>
@@ -37,12 +98,12 @@ export function AppFrame() {
 }
 
 export function StaffFrame() {
-  const { platformName, user, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
   return (
     <div className="staff-layout">
       <aside className="staff-sidebar">
-        <Link className="staff-brand" to="/courses">{platformName}</Link>
+        <PlatformBrand className="staff-brand" />
         <nav aria-label="Management navigation">
           <NavLink to="/manage/courses"><BookOpen size={18} />Courses</NavLink>
           {user?.role === 'admin' && <NavLink to="/admin/users"><UsersRound size={18} />Users</NavLink>}

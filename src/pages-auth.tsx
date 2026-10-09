@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
-import { Button } from './components';
+import { Button, PalettePicker, PlatformBrand, PlatformIconPicker } from './components';
+import type { BrandingPalette, ConnectionProtocol } from './branding';
 
 function AuthPanel({ children, eyebrow }: { children: React.ReactNode; eyebrow?: string }) {
-  const { platformName } = useAuth();
   return (
     <main className="auth-page">
       <section className="auth-panel">
-        <Link className="auth-brand" to="/login">{platformName}</Link>
+        <PlatformBrand className="auth-brand" to="/login" />
         {eyebrow && <span className="auth-eyebrow">{eyebrow}</span>}
         {children}
       </section>
@@ -18,43 +18,83 @@ function AuthPanel({ children, eyebrow }: { children: React.ReactNode; eyebrow?:
 }
 
 export function SetupPage() {
-  const { completeSetup, configured, user } = useAuth();
+  const { completeSetup, configured, user, connectionProtocol: initialProtocol, registrationEnabled: initialRegistrationEnabled, userLimit: initialUserLimit } = useAuth();
   const navigate = useNavigate();
+  const [step, setStep] = useState<1 | 2>(1);
   const [platformName, setPlatformName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [platformIcon, setPlatformIcon] = useState<string | null>(null);
+  const [themePalette, setThemePalette] = useState<BrandingPalette>('violet');
+  const [connectionProtocol, setConnectionProtocol] = useState<ConnectionProtocol>(initialProtocol);
+  const [registrationEnabled, setRegistrationEnabled] = useState(initialRegistrationEnabled);
+  const [userLimit, setUserLimit] = useState(String(initialUserLimit));
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   if (configured) return <Navigate to={user ? '/courses' : '/login'} replace />;
+
+  function continueToAccessSettings(event: React.FormEvent) {
+    event.preventDefault();
+    setError('');
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setStep(2);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError('');
     setSaving(true);
     try {
-      await completeSetup(platformName, username, password, confirmPassword);
+      await completeSetup(platformName, username, password, confirmPassword, {
+        themePalette, platformIcon, connectionProtocol, registrationEnabled, userLimit: Number(userLimit),
+      });
       navigate('/courses');
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Setup could not be completed. Try again.');
     } finally { setSaving(false); }
   }
 
+  function choosePalette(palette: BrandingPalette) {
+    setThemePalette(palette);
+    document.documentElement.dataset.palette = palette;
+  }
+
   return (
     <main className="setup-page">
       <section className="setup-panel">
-        <span className="setup-mark"><BookOpenMark /></span>
-        <h1>Set up your learning platform</h1>
-        <p>Create the administrator account and choose a name for this installation.</p>
-        <form onSubmit={submit} className="form-stack">
-          <label>Platform name<input required minLength={2} maxLength={80} value={platformName} onChange={(event) => setPlatformName(event.target.value)} autoFocus /></label>
-          <label>Admin username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
-          <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} /><small>Use at least 12 characters.</small></label>
-          <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <Button type="submit" disabled={saving}>{saving ? 'Creating platform…' : 'Create platform'}</Button>
-        </form>
+        <span className="setup-mark">{platformIcon ? <img src={platformIcon} alt="Platform icon preview" /> : <BookOpenMark />}</span>
+        <div className="setup-step-label">Step {step} of 2</div>
+        {step === 1 ? <>
+          <h1>Set up your learning platform</h1>
+          <p>Create the administrator account and choose a name for this installation.</p>
+          <form onSubmit={continueToAccessSettings} className="form-stack">
+            <label>Platform name<input required minLength={2} maxLength={80} value={platformName} onChange={(event) => setPlatformName(event.target.value)} autoFocus /></label>
+            <PlatformIconPicker value={platformIcon} onChange={setPlatformIcon} />
+            <div className="branding-choice-field"><span className="branding-choice-label">Color palette</span><small>Choose the accent colors used across the platform.</small><PalettePicker value={themePalette} onChange={choosePalette} /></div>
+            <label>Admin username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+            <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} /><small>Use at least 12 characters.</small></label>
+            <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
+            {error && <p className="form-error" role="alert">{error}</p>}
+            <Button type="submit">Continue to access settings</Button>
+          </form>
+        </> : <>
+          <h1>Configure access</h1>
+          <p>Choose how people connect and whether new learner accounts can be created.</p>
+          <form onSubmit={submit} className="form-stack">
+            <label>Public connection protocol<select value={connectionProtocol} onChange={(event) => setConnectionProtocol(event.target.value as ConnectionProtocol)}><option value="http">HTTP</option><option value="https">HTTPS</option></select></label>
+            <p className="protocol-help">HTTPS requires a TLS certificate on this server or a reverse proxy. When a proxy handles TLS, set <code>TRUST_PROXY=true</code> in the server environment.</p>
+            <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={registrationEnabled} onChange={(event) => setRegistrationEnabled(event.target.checked)} /></label>
+            <label>Maximum registered accounts<input type="number" min={0} max={1000000} step={1} required value={userLimit} onChange={(event) => setUserLimit(event.target.value)} /><small>Set to 0 for no limit. The cap includes this administrator account, moderators, and learners.</small></label>
+            {error && <p className="form-error" role="alert">{error}</p>}
+            <div className="setup-step-actions"><Button type="button" variant="secondary" onClick={() => { setError(''); setStep(1); }}>Back</Button><Button type="submit" disabled={saving}>{saving ? 'Creating platform…' : 'Create platform'}</Button></div>
+          </form>
+        </>}
       </section>
     </main>
   );
@@ -65,7 +105,7 @@ function BookOpenMark() {
 }
 
 export function LoginPage() {
-  const { signIn, user, configured } = useAuth();
+  const { signIn, user, configured, registrationEnabled, registrationAvailable } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -88,12 +128,14 @@ export function LoginPage() {
       {error && <p className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving}>{saving ? 'Signing in…' : 'Sign in'}</Button>
     </form>
-    <p className="auth-footer">New to this platform? <Link to="/register">Create an account</Link></p>
+    {registrationEnabled && registrationAvailable
+      ? <p className="auth-footer">New to this platform? <Link to="/register">Create an account</Link></p>
+      : <p className="auth-footer">{registrationEnabled ? 'The registered-account limit has been reached.' : 'New account registration is currently disabled.'}</p>}
   </AuthPanel>;
 }
 
 export function RegisterPage() {
-  const { signUp, user, configured } = useAuth();
+  const { signUp, user, configured, registrationEnabled, registrationAvailable } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -102,6 +144,8 @@ export function RegisterPage() {
   const [saving, setSaving] = useState(false);
   if (configured && user) return <Navigate to="/courses" replace />;
   if (!configured) return <Navigate to="/setup" replace />;
+  if (!registrationEnabled) return <AuthPanel><h1>Registration is closed</h1><p className="auth-description">An administrator has disabled new account registrations.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
+  if (!registrationAvailable) return <AuthPanel><h1>Registration is closed</h1><p className="auth-description">The platform has reached its registered-account limit.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setError(''); setSaving(true);
