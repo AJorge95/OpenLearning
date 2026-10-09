@@ -53,12 +53,8 @@
 html { min-width: 320px; background: #fff; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: #fff; }
 button, input, textarea, select { font: inherit; }
-button, select { cursor: pointer; }
+button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .55; }
-select { appearance: none; -webkit-appearance: none; min-height: 42px; padding: 9px 39px 9px 12px; border: 1px solid var(--line-strong); border-radius: 8px; color: #222634; background-color: #fff; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%23565c6b' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 16px; transition: border-color .15s ease, box-shadow .15s ease; }
-select:hover:not(:disabled) { border-color: var(--purple-border-strong); }
-select:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; border-color: var(--purple); }
-select:disabled { cursor: not-allowed; opacity: .65; }
 .app-select { position: relative; width: 100%; min-width: 0; }
 .app-select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-width: 0; min-height: 44px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 8px; color: #222634; background: #fff; font-size: 14px; font-weight: 500; line-height: 1.35; text-align: left; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
 .app-select-trigger:hover:not(:disabled), .app-select-trigger[aria-expanded="true"] { border-color: var(--purple-border-strong); }
@@ -500,8 +496,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .editor-field-grid > label, .quiz-settings-row label { display: flex; flex-direction: column; gap: 8px; color: #292d3b; font-size: 13px; font-weight: 650; }
 .editor-field-grid .field-wide { grid-column: 1 / -1; }
 .editor-field-grid input, .editor-field-grid textarea, .quiz-settings-row input, .form-stack input, .settings-card input, .question-editor textarea, .question-editor input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 4px; color: #222634; background: #fff; font-size: 14px; font-weight: 450; resize: vertical; }
-.editor-field-grid select { width: 100%; }
-.editor-field-grid input:focus, .editor-field-grid textarea:focus, .form-stack input:focus, .settings-card input:focus, .quiz-settings-row input:focus, .quiz-settings-row select:focus, .question-editor textarea:focus, .question-editor input:focus { outline: 2px solid var(--purple); border-color: var(--purple); }
+.editor-field-grid input:focus, .editor-field-grid textarea:focus, .form-stack input:focus, .settings-card input:focus, .quiz-settings-row input:focus, .question-editor textarea:focus, .question-editor input:focus { outline: 2px solid var(--purple); border-color: var(--purple); }
 .editor-field-grid textarea { min-height: 90px; line-height: 1.55; }
 .visibility-field { display: flex; gap: 19px; align-items: center; border: 0; margin: 0; padding: 0; }
 .visibility-field legend { margin-bottom: 8px; color: #292d3b; font-size: 13px; font-weight: 650; }
