@@ -1,5 +1,6 @@
 import { Activity, BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, ClipboardList, FileText, ImagePlus, LockKeyhole, Play, Settings2, UserRound, UsersRound, LogOut, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError } from './api';
 import { useAuth } from './auth-context';
@@ -187,6 +188,153 @@ export function PageHeading({ title, subtitle, action }: { title: string; subtit
 
 export function Button({ children, variant = 'primary', className = '', type = 'button', ref, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'quiet' | 'danger'; ref?: React.Ref<HTMLButtonElement> }) {
   return <button ref={ref} type={type} className={`button button-${variant} ${className}`.trim()} {...props}>{children}</button>;
+}
+
+export type AppSelectOption<T extends string | number> = { value: T; label: string; disabled?: boolean };
+
+export function AppSelect<T extends string | number>({ value, options, onChange, ariaLabel, describedBy, className = '', disabled = false }: {
+  value: T;
+  options: AppSelectOption<T>[];
+  onChange: (value: T) => void;
+  ariaLabel: string;
+  describedBy?: string;
+  className?: string;
+  disabled?: boolean;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const typeaheadRef = useRef('');
+  const typeaheadTimerRef = useRef<number | null>(null);
+  const id = useId().replaceAll(':', '');
+  const menuId = `${id}-listbox`;
+  const [open, setOpen] = useState(false);
+  const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
+  const [activeIndex, setActiveIndex] = useState(selectedIndex);
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 220, maxHeight: 280 });
+  const selectedOption = options.find((option) => option.value === value) ?? options[0];
+
+  function findEnabledIndex(start: number, direction = 1) {
+    if (!options.length) return 0;
+    for (let offset = 0; offset < options.length; offset += 1) {
+      const index = ((start + offset * direction) % options.length + options.length) % options.length;
+      if (!options[index].disabled) return index;
+    }
+    return 0;
+  }
+
+  function focusIndex(index: number) {
+    const nextIndex = findEnabledIndex(index);
+    setActiveIndex(nextIndex);
+    menuRef.current?.querySelector<HTMLElement>(`#${menuId}-option-${nextIndex}`)?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function openMenu(startIndex = selectedIndex) {
+    if (disabled || !options.length) return;
+    const trigger = triggerRef.current;
+    if (trigger) {
+      const rect = trigger.getBoundingClientRect();
+      const margin = 12;
+      const maxWidth = Math.max(180, window.innerWidth - margin * 2);
+      const width = Math.min(Math.max(rect.width, 220), maxWidth);
+      const left = Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin));
+      const desiredHeight = Math.min(280, options.length * 40 + 12);
+      const roomBelow = window.innerHeight - rect.bottom - margin;
+      const roomAbove = rect.top - margin;
+      const openAbove = roomBelow < desiredHeight && roomAbove > roomBelow;
+      const maxHeight = Math.max(120, Math.min(280, openAbove ? roomAbove - 8 : roomBelow - 8));
+      const top = openAbove
+        ? Math.max(margin, rect.top - Math.min(desiredHeight, maxHeight) - 6)
+        : Math.min(rect.bottom + 6, window.innerHeight - Math.min(desiredHeight, maxHeight) - margin);
+      setPosition({ top, left, width, maxHeight });
+    }
+    setActiveIndex(findEnabledIndex(startIndex));
+    setOpen(true);
+  }
+
+  function choose(index: number) {
+    const option = options[index];
+    if (!option || option.disabled) return;
+    onChange(option.value);
+    setOpen(false);
+    triggerRef.current?.focus();
+  }
+
+  function findByPrefix(prefix: string) {
+    if (!prefix) return -1;
+    for (let offset = 0; offset < options.length; offset += 1) {
+      const index = (activeIndex + offset) % options.length;
+      if (!options[index].disabled && options[index].label.toLocaleLowerCase().startsWith(prefix)) return index;
+    }
+    return -1;
+  }
+
+  function searchByKey(key: string) {
+    const char = key.toLocaleLowerCase();
+    const nextPrefix = `${typeaheadRef.current}${char}`;
+    let match = findByPrefix(nextPrefix);
+    const prefix = match >= 0 ? nextPrefix : char;
+    if (match < 0) match = findByPrefix(prefix);
+    typeaheadRef.current = prefix;
+    if (typeaheadTimerRef.current !== null) window.clearTimeout(typeaheadTimerRef.current);
+    typeaheadTimerRef.current = window.setTimeout(() => { typeaheadRef.current = ''; }, 650);
+    if (match >= 0) {
+      setActiveIndex(match);
+      if (!open) openMenu(match);
+    }
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!open) openMenu();
+      else focusIndex(activeIndex + (event.key === 'ArrowDown' ? 1 : -1));
+      return;
+    }
+    if (event.key === 'Home' && open) { event.preventDefault(); focusIndex(0); return; }
+    if (event.key === 'End' && open) { event.preventDefault(); focusIndex(options.length - 1); return; }
+    if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(false); return; }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (open) choose(activeIndex);
+      else openMenu();
+      return;
+    }
+    if (event.key.length === 1 && event.key !== ' ') searchByKey(event.key);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function closeFromOutside(event: PointerEvent) {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
+    }
+    function closeForLayoutChange() { setOpen(false); }
+    document.addEventListener('pointerdown', closeFromOutside);
+    window.addEventListener('scroll', closeForLayoutChange, true);
+    window.addEventListener('resize', closeForLayoutChange);
+    return () => {
+      document.removeEventListener('pointerdown', closeFromOutside);
+      window.removeEventListener('scroll', closeForLayoutChange, true);
+      window.removeEventListener('resize', closeForLayoutChange);
+    };
+  }, [open]);
+
+  useEffect(() => () => {
+    if (typeaheadTimerRef.current !== null) window.clearTimeout(typeaheadTimerRef.current);
+  }, []);
+
+  return <div ref={rootRef} className={`app-select ${className}`.trim()}>
+    <button ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-describedby={describedBy} aria-haspopup="listbox" aria-expanded={open} aria-controls={menuId} aria-activedescendant={open ? `${menuId}-option-${activeIndex}` : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
+      <span className="app-select-value">{selectedOption?.label ?? 'Choose an option'}</span><ChevronDown className="app-select-chevron" size={16} aria-hidden="true" />
+    </button>
+    {open && createPortal(<div ref={menuRef} id={menuId} className="app-select-menu" role="listbox" aria-label={`${ariaLabel} options`} style={position}>
+      {options.map((option, index) => <div key={String(option.value)} id={`${menuId}-option-${index}`} className={`app-select-option${option.value === value ? ' selected' : ''}${index === activeIndex ? ' active' : ''}`} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined} onPointerEnter={() => !option.disabled && setActiveIndex(index)} onClick={() => choose(index)}>
+        <span className="app-select-option-indicator" aria-hidden="true">{option.value === value && <Check size={14} />}</span><span className="app-select-option-label">{option.label}</span>
+      </div>)}
+    </div>, document.body)}
+  </div>;
 }
 
 export function EmptyState({ icon = <BookOpen size={24} />, title, detail, action, headingLevel = 2 }: { icon?: React.ReactNode; title: string; detail: string; action?: React.ReactNode; headingLevel?: 2 | 3 }) {

@@ -77,7 +77,7 @@ Administrators can manually create learner, moderator, or administrator accounts
 
 ## Logs
 
-Administrators can open **Audit log** and **System log** from the management area. The audit log records sign-ins, account and platform changes, course and curriculum edits, media uploads, learner assignments, and private-course access grants. The system log records server startup and shutdown, failed sign-ins, authentication rate limits, and unhandled request errors. Log records are stored in SQLite and retained up to 10,000 audit entries and 5,000 system entries; the oldest entries are removed as new records arrive. Log tables are included in the regular database backup.
+Administrators can open **Audit log** and **System log** from the management area. The audit log records sign-ins, account and platform changes, course and curriculum edits, moderated learner-comment removals, media uploads, learner assignments, and private-course access grants. The system log records server startup and shutdown, failed sign-ins, authentication rate limits, and unhandled request errors. Log records are stored in SQLite and retained up to 10,000 audit entries and 5,000 system entries; the oldest entries are removed as new records arrive. Log tables are included in the regular database backup.
 
 ## Configuration
 

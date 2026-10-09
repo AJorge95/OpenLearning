@@ -1,5 +1,33 @@
 # Quality Improvement Tracker
 
+## 2026-10-09 — Clarify where moderated comments are logged
+
+- **Reviewed:** The admin-only audit-log access rule, moderator course-management permissions, the staff comment notice, and the audit-log page description.
+- **Improvement:** Tell moderators that removals appear in the administrator audit log, and mention comment removals in the administrator audit-log subtitle.
+- **Why it helps:** Moderators know who can inspect the audit record, and administrators can see comment moderation among the log's documented event types.
+- **Checked:** Rendered the populated moderator lesson and administrator audit page in the connected browser at the default viewport and 390 × 844. The text remained readable and the comment action stayed visible on mobile; no browser warnings or errors appeared. All 48 tests, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Recheck comment moderation in the connected browser
+
+- **Reviewed:** A published lesson with one learner comment as a moderator, the removal control's label and placement, the mobile comment header, and the admin audit page's responsive layout.
+- **Result:** No additional layout change. The moderator saw the labeled removal action; comment text wrapped cleanly at 390 pixels and the action remained visible beside the author and time.
+- **Why no change:** The existing layout handled the populated comment at desktop and mobile widths; API tests already cover authorization, cross-lesson IDs, audited removal, and audit-failure rollback.
+- **Checked:** Used a separate test account and database under the OS temp directory, leaving the existing draft editor untouched. The isolated server was stopped after the browser review. Browser console showed no warnings or errors.
+
+## 2026-10-09 — Document comment moderation in the audit-log guide
+
+- **Reviewed:** The README's audit-log event list, the new comment-removal audit action, and the administrator log endpoint's dynamic action filter.
+- **Improvement:** Include moderated learner-comment removals in the documented audit events.
+- **Why it helps:** Administrators know that comment removals are traceable in the audit log and can find them through the existing action filter.
+- **Checked:** Confirmed `course.comment_removed` is stored with a lesson-comment entity and that the log API loads available actions from stored audit rows; `git diff --check` passed.
+
+## 2026-10-09 — Let course managers moderate learner comments
+
+- **Reviewed:** Lesson feedback access, course-manager permissions, comment paging, learner-only reactions, audit retention, and the existing destructive-action confirmation pattern.
+- **Improvement:** Show published lesson comments to course managers, add a confirmed per-comment removal action, and write a body-free audit record in the same transaction as deletion. Staff feedback reads omit learner reaction data.
+- **Why it helps:** Admins and moderators can remove inappropriate comments in context, while course access is checked, learners keep their existing posting and reaction behavior, and a failed audit write leaves the comment intact.
+- **Checked:** Added isolated API coverage for staff/private-course viewing, learner access and posting restrictions, cross-lesson ID mismatch, successful audited removal, and audit-failure rollback. All 48 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Browser rendering and focus behavior remain unverified because no browser surface is connected.
+
 ## 2026-10-09 — Clear catalog filters from the no-results state
 
 - **Reviewed:** Applied versus draft search text, category/sort reload sequencing, the catalog empty state, retry snapshots, and focus behavior when the empty state disappears.

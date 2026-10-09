@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
-import { Button, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
+import { AppSelect, Button, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import { useAuth } from './auth-context';
 import { canonicalCaptionLanguageTag, captionFileSizeError, captionLanguageErrorMessage } from './caption-validation';
@@ -26,6 +28,94 @@ function truncateUtf16CodeUnits(value: string, limit: number) {
   let truncated = value.slice(0, limit);
   if (/[\uD800-\uDBFF]$/.test(truncated)) truncated = truncated.slice(0, -1);
   return truncated;
+}
+
+function CourseRowMenu({ course, busyAction, onStatusChange, onDelete }: {
+  course: Course;
+  busyAction: CourseRowAction | undefined;
+  onStatusChange: (course: Course, status: Course['status']) => void;
+  onDelete: (course: Course) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const id = useId().replaceAll(':', '');
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const focusMenuOnOpenRef = useRef(false);
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 196 });
+  const itemCount = 1 + Number(course.status === 'draft' || course.status === 'published') + Number(course.status !== 'archived');
+  const isBusy = Boolean(busyAction);
+
+  function openMenu(focusFirst = false) {
+    const trigger = triggerRef.current;
+    if (trigger) {
+      const rect = trigger.getBoundingClientRect();
+      const margin = 12;
+      const width = Math.min(196, window.innerWidth - margin * 2);
+      const height = itemCount * 38 + 16;
+      const roomBelow = window.innerHeight - rect.bottom - margin;
+      const roomAbove = rect.top - margin;
+      const openAbove = roomBelow < height && roomAbove > roomBelow;
+      const top = openAbove ? Math.max(margin, rect.top - height - 6) : Math.min(rect.bottom + 6, window.innerHeight - height - margin);
+      const left = Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin));
+      setPosition({ top, left, width });
+    }
+    focusMenuOnOpenRef.current = focusFirst;
+    setOpen(true);
+  }
+
+  function closeMenu(restoreFocus = false) {
+    setOpen(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    if (focusMenuOnOpenRef.current) {
+      menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus();
+      focusMenuOnOpenRef.current = false;
+    }
+    function closeFromOutside(event: PointerEvent) {
+      const target = event.target as Node;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
+    }
+    function closeWhenFocusLeaves(event: FocusEvent) {
+      const target = event.target as Node;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
+    }
+    function closeForLayoutChange() { setOpen(false); }
+    document.addEventListener('pointerdown', closeFromOutside);
+    document.addEventListener('focusin', closeWhenFocusLeaves);
+    window.addEventListener('scroll', closeForLayoutChange, true);
+    window.addEventListener('resize', closeForLayoutChange);
+    return () => {
+      document.removeEventListener('pointerdown', closeFromOutside);
+      document.removeEventListener('focusin', closeWhenFocusLeaves);
+      window.removeEventListener('scroll', closeForLayoutChange, true);
+      window.removeEventListener('resize', closeForLayoutChange);
+    };
+  }, [open]);
+
+  function handleMenuKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Escape') { event.preventDefault(); closeMenu(true); return; }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') || []);
+    if (!items.length) return;
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+    const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : currentIndex < 0 ? 0 : (currentIndex + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    items[nextIndex]?.focus();
+  }
+
+  return <div className="row-menu">
+    <button ref={triggerRef} type="button" className="row-menu-trigger" aria-label={`More actions for ${course.title}`} aria-haspopup="menu" aria-expanded={open} aria-controls={`${id}-menu`} onClick={(event) => open ? closeMenu() : openMenu(event.detail === 0)} onKeyDown={(event) => { if (event.key === 'ArrowDown' && !open) { event.preventDefault(); openMenu(true); } }}><MoreVertical size={18} /></button>
+    {open && createPortal(<div ref={menuRef} id={`${id}-menu`} className="row-menu-popover" role="menu" aria-label={`Actions for ${course.title}`} style={position} onKeyDown={handleMenuKeyDown}>
+      <Link to={`/manage/courses/${course.id}/access`} role="menuitem" onClick={() => closeMenu()}>Assign learners</Link>
+      {course.status === 'draft' && <button type="button" role="menuitem" onClick={() => { closeMenu(); onStatusChange(course, 'published'); }} disabled={isBusy} aria-busy={busyAction === 'publish'}>{busyAction === 'publish' ? 'Publishing…' : 'Publish'}</button>}
+      {course.status === 'published' && <button type="button" role="menuitem" onClick={() => { closeMenu(); onStatusChange(course, 'draft'); }} disabled={isBusy} aria-busy={busyAction === 'unpublish'}>{busyAction === 'unpublish' ? 'Unpublishing…' : 'Unpublish'}</button>}
+      {course.status !== 'archived' && <button type="button" role="menuitem" onClick={() => { closeMenu(); onStatusChange(course, 'archived'); }} disabled={isBusy} aria-busy={busyAction === 'archive'}>{busyAction === 'archive' ? 'Archiving…' : 'Archive'}</button>}
+      {course.status === 'archived' && <button type="button" role="menuitem" className="danger-menu-item" onClick={() => { closeMenu(); onDelete(course); }} disabled={isBusy} aria-busy={busyAction === 'delete'}>{busyAction === 'delete' ? 'Deleting…' : 'Delete permanently'}</button>}
+    </div>, document.body)}
+  </div>;
 }
 
 function defaultQuizTitle(moduleTitle: string) {
@@ -371,7 +461,7 @@ function QuizEditor({ module, onSaved, onError }: { module: CourseModule; onSave
     <div className="quiz-editor-head"><div><span className="editor-type"><CircleHelp size={15} />Module quiz</span><h4>{existing ? 'Edit quiz' : 'Add a quiz'}</h4></div>{existing && <button type="button" className="icon-button danger-icon" aria-label={busyAction === 'remove' ? 'Removing quiz' : 'Remove quiz'} disabled={busyAction !== null} onClick={remove}><Trash2 size={16} /></button>}</div>
     {textValidationIssue && <Notice>Enter text for every quiz question and answer choice before saving.</Notice>}
     <fieldset className="quiz-editor-fields" aria-label="Quiz fields" disabled={busyAction !== null}>
-    <div className="quiz-settings-row"><label>Quiz title<input value={title} maxLength={quizTitleLimit} onChange={(event) => setTitle(event.target.value)} /></label><label>Pass mark<select value={passMark} onChange={(event) => setPassMark(Number(event.target.value))}>{[50, 60, 70, 80, 90, 100].map((value) => <option key={value} value={value}>{value}%</option>)}</select></label></div>
+    <div className="quiz-settings-row"><label>Quiz title<input value={title} maxLength={quizTitleLimit} onChange={(event) => setTitle(event.target.value)} /></label><label>Pass mark<AppSelect<number> ariaLabel="Quiz pass mark" value={passMark} onChange={setPassMark} options={[50, 60, 70, 80, 90, 100].map((value) => ({ value, label: `${value}%` }))} /></label></div>
     {questions.map((question, questionIndex) => <div className="question-editor" key={question.id || question.editorKey || questionIndex}>
       <div className="question-editor-head"><span>Question {questionIndex + 1}</span><button type="button" className="text-action danger-text" aria-label={`Remove question ${questionIndex + 1}`} onClick={() => removeQuestion(questionIndex)}>Remove</button></div>
       <label className="sr-only" htmlFor={`question-${module.id}-${questionIndex}`}>Question {questionIndex + 1} text</label><textarea ref={(node) => { questionInputRefs.current[questionIndex] = node; }} id={`question-${module.id}-${questionIndex}`} rows={2} maxLength={1000} placeholder="Write a question" value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} aria-invalid={textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === undefined || undefined} aria-describedby={textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === undefined ? `quiz-question-error-${module.id}-${questionIndex}` : undefined} />
@@ -594,9 +684,11 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
       </li>)}</ul> : <p className="lesson-resource-empty">No resources added yet.</p>}
       <form className="lesson-link-form" onSubmit={addLink}>
         <label>Link title<input value={linkTitle} maxLength={160} onChange={(event) => setLinkTitle(event.target.value)} placeholder="e.g. Reference guide" required disabled={busy} /></label>
-        <label>Link URL<input ref={linkUrlInputRef} type="url" value={linkUrl} maxLength={2048} aria-invalid={linkUrlError ? true : undefined} aria-describedby={linkUrlError ? `lesson-link-url-help-${lesson.id} lesson-link-url-error-${lesson.id}` : `lesson-link-url-help-${lesson.id}`} onChange={(event) => { setLinkUrl(event.target.value); setLinkUrlError(''); }} placeholder="https://example.com/resource" required disabled={busy} /><small id={`lesson-link-url-help-${lesson.id}`} className="caption-language-help">Use HTTP or HTTPS without a username or password.</small>{linkUrlError && <div id={`lesson-link-url-error-${lesson.id}`} className="inline-notice caption-form-error" role="alert">{linkUrlError}</div>}</label>
+        <label>Link URL<input ref={linkUrlInputRef} type="url" value={linkUrl} maxLength={2048} aria-invalid={linkUrlError ? true : undefined} aria-describedby={linkUrlError ? `lesson-link-url-help-${lesson.id} lesson-link-url-error-${lesson.id}` : `lesson-link-url-help-${lesson.id}`} onChange={(event) => { setLinkUrl(event.target.value); setLinkUrlError(''); }} placeholder="https://example.com/resource" required disabled={busy} /></label>
         <Button type="submit" variant="secondary" disabled={busy || !linkTitle.trim() || !linkUrl.trim()}><Link2 size={15} />Add link</Button>
       </form>
+      <small id={`lesson-link-url-help-${lesson.id}`} className="caption-language-help lesson-link-help">Use HTTP or HTTPS without a username or password.</small>
+      {linkUrlError && <div id={`lesson-link-url-error-${lesson.id}`} className="inline-notice caption-form-error" role="alert">{linkUrlError}</div>}
       <div className="lesson-document-upload">
         <div><strong>Attach a document</strong><span>PDF, text, Word, PowerPoint, Excel, CSV/TSV, or OpenDocument.</span></div>
         <label className="button button-secondary file-button"><Upload size={15} />Choose document<input type="file" accept=".pdf,.txt,.md,.rtf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.tsv,.odt,.odp,.ods" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadDocument(file, event.currentTarget); event.currentTarget.value = ''; }} /></label>
@@ -611,9 +703,9 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
           <button type="button" className="icon-button danger-icon" title={`Remove ${caption.label} captions`} aria-label={`Remove ${caption.label} captions (${caption.language})`} disabled={busy} onClick={() => removeCaption(caption)}><Trash2 size={15} /></button>
         </li>)}</ul> : <p className="lesson-resource-empty">No caption tracks added yet.</p>}
         <form className="lesson-caption-form" onSubmit={uploadCaptions}>
-          <label>Language tag<input ref={captionLanguageInputRef} type="text" value={captionLanguage} maxLength={35} aria-invalid={captionLanguageError ? true : undefined} aria-describedby={captionLanguageError ? `caption-language-help-${lesson.id} caption-language-error-${lesson.id}` : `caption-language-help-${lesson.id}`} onChange={(event) => { setCaptionLanguage(event.target.value); setCaptionLanguageError(''); }} placeholder="en or en-GB" autoCapitalize="off" spellCheck={false} required disabled={busy} /><small id={`caption-language-help-${lesson.id}`} className="caption-language-help">Use a tag such as en or en-GB.</small></label>
+          <label>Language tag<input ref={captionLanguageInputRef} type="text" value={captionLanguage} maxLength={35} aria-invalid={captionLanguageError ? true : undefined} aria-describedby={captionLanguageError ? `caption-language-help-${lesson.id} caption-language-error-${lesson.id}` : `caption-language-help-${lesson.id}`} onChange={(event) => { setCaptionLanguage(event.target.value); setCaptionLanguageError(''); }} placeholder="en or en-GB" autoCapitalize="off" spellCheck={false} required disabled={busy} /></label>
           <label>Track label<input type="text" value={captionLabel} maxLength={80} onChange={(event) => setCaptionLabel(event.target.value)} placeholder="English" required disabled={busy} /></label>
-          <label className="caption-file-label">WebVTT file<input ref={captionInputRef} type="file" accept=".vtt,text/vtt" aria-invalid={captionFileError ? true : undefined} aria-describedby={captionFileError ? `caption-file-help-${lesson.id} caption-file-error-${lesson.id}` : `caption-file-help-${lesson.id}`} onChange={(event) => {
+          <label className="caption-file-label">WebVTT file<span className="caption-file-control"><span className="caption-file-button"><Upload size={14} aria-hidden="true" />Choose file</span><span className="caption-file-name" title={captionFile?.name || 'No file selected'}>{captionFile?.name || 'No file selected'}</span><input ref={captionInputRef} type="file" accept=".vtt,text/vtt" aria-invalid={captionFileError ? true : undefined} aria-describedby={captionFileError ? `caption-file-help-${lesson.id} caption-file-error-${lesson.id}` : `caption-file-help-${lesson.id}`} onChange={(event) => {
             const file = event.currentTarget.files?.[0] || null;
             const fileError = file ? captionFileSizeError(file.size) : null;
             if (fileError) {
@@ -624,9 +716,10 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
             }
             setCaptionFile(file);
             setCaptionFileError('');
-          }} required disabled={busy} /></label>
+          }} required disabled={busy} /></span></label>
           <Button type="submit" variant="secondary" disabled={busy || !captionFile || !captionLanguage.trim() || !captionLabel.trim()}><Upload size={15} />Upload captions</Button>
         </form>
+        <small id={`caption-language-help-${lesson.id}`} className="caption-language-help lesson-caption-language-help">Use a tag such as en or en-GB.</small>
         <p id={`caption-file-help-${lesson.id}`} className="caption-upload-hint">One track per language; uploading that language again replaces the existing file. Maximum size: 5 MB.</p>
         {captionLanguageError && <div id={`caption-language-error-${lesson.id}`} className="inline-notice caption-form-error" role="alert">{captionLanguageError}</div>}
         {captionFileError && <div id={`caption-file-error-${lesson.id}`} className="inline-notice caption-form-error" role="alert">{captionFileError}</div>}
@@ -1263,14 +1356,14 @@ export function AdminUsersPage() {
   }
 
   return <div className="management-page users-page"><PageHeading title="Users" subtitle="Create accounts, review learning activity, and manage roles and access." action={<Link className="button button-primary" to="/admin/users/new"><Plus size={17} />Create account</Link>} />
-    <div className="user-filter-row"><form className="management-search" onSubmit={(event) => { event.preventDefault(); load(1); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search users" aria-label="Search users" maxLength={100} /><button type="submit">Search</button></form><label className="select-wrap role-filter"><span className="sr-only">Filter by role</span><select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}><option value="all">All roles</option><option value="admin">Administrators</option><option value="moderator">Moderators</option><option value="learner">Learners</option></select><ChevronDown size={16} /></label></div>
+    <div className="user-filter-row"><form className="management-search" onSubmit={(event) => { event.preventDefault(); load(1); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search users" aria-label="Search users" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter"><AppSelect ariaLabel="Filter by role" value={roleFilter} onChange={setRoleFilter} options={[{ value: 'all', label: 'All roles' }, { value: 'admin', label: 'Administrators' }, { value: 'moderator', label: 'Moderators' }, { value: 'learner', label: 'Learners' }]} /></div></div>
     {error && !resetUser && (failedRequest
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest.query, failedRequest.roleFilter); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
     {success && <Notice kind="success">{success}</Notice>}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading accounts…</div> : failedRequest ? null : <div className="user-table-wrap" role="region" aria-label="Scrollable account list" tabIndex={0}><table className="user-table"><caption className="sr-only">Accounts</caption><thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Account</th><th scope="col">Created</th><th scope="col">Actions</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}>
       <td><Link className="owner-cell user-detail-link" to={`/admin/users/${user.id}`}><UserInitial username={user.username} /><strong>{user.username}</strong></Link></td>
-      <td><label className="sr-only" htmlFor={`role-${user.id}`}>Role for {user.username}</label><select id={`role-${user.id}`} value={user.role} disabled={savingIds.has(user.id)} onChange={(event) => updateUser(user, { role: event.target.value as Role })}><option value="admin">Administrator</option><option value="moderator">Moderator</option><option value="learner">Learner</option></select></td>
+      <td><AppSelect<Role> className="app-select--compact" ariaLabel={`Role for ${user.username}`} value={user.role} disabled={savingIds.has(user.id)} onChange={(role) => updateUser(user, { role })} options={[{ value: 'admin', label: 'Administrator' }, { value: 'moderator', label: 'Moderator' }, { value: 'learner', label: 'Learner' }]} /></td>
       <td><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span></td>
       <td>{user.createdAt ? <DateText value={user.createdAt} /> : '—'}</td>
       <td><div className="user-row-actions"><Link className="text-action" to={`/admin/users/${user.id}`} aria-label={`Details for ${user.username}`}>Details</Link><button type="button" className="text-action" aria-label={`Reset password for ${user.username}`} disabled={savingIds.has(user.id)} onClick={(event) => openPasswordReset(user, event.currentTarget)}>Reset password</button><button type="button" className={user.disabled ? 'text-action' : 'text-action danger-text'} aria-label={`${user.disabled ? 'Enable' : 'Disable'} account for ${user.username}`} disabled={savingIds.has(user.id)} onClick={() => updateUser(user, { disabled: !user.disabled })}>{user.disabled ? 'Enable' : 'Disable'}</button></div></td>
@@ -1304,7 +1397,7 @@ export function AdminUserCreatePage() {
     <PageHeading title="Create account" subtitle="Set up a sign-in account and assign its platform role." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} />Back to users</Link>} />
     <section className="account-form-card"><form className="form-stack" onSubmit={createAccount} aria-busy={saving}>
       <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>3–32 letters, numbers, dots, underscores, or hyphens.</small></label>
-      <label>Platform role<select value={role} onChange={(event) => setRole(event.target.value as Role)} disabled={saving}><option value="learner">Learner</option><option value="moderator">Moderator</option><option value="admin">Administrator</option></select><small>Choose administrator or moderator only when the person needs management access.</small></label>
+      <label>Platform role<AppSelect<Role> ariaLabel="Platform role" value={role} onChange={setRole} disabled={saving} options={[{ value: 'learner', label: 'Learner' }, { value: 'moderator', label: 'Moderator' }, { value: 'admin', label: 'Administrator' }]} /><small>Choose administrator or moderator only when the person needs management access.</small></label>
       <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /><small>Use at least 12 characters. You can reset it later from account details.</small></label>
       <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} /></label>
       {error && <Notice>{error}</Notice>}
@@ -1422,7 +1515,7 @@ export function AdminUserDetailsPage() {
     <section className="account-detail-grid">
       <article className="account-detail-card account-overview-card"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><small>Account overview</small></div></div><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span></div>
         <dl className="account-meta-list"><div><dt>User ID</dt><dd>{user.id}</dd></div><div><dt>Created</dt><dd><DateText value={user.createdAt} /></dd></div><div><dt>Last updated</dt><dd><DateText value={user.updatedAt} /></dd></div><div><dt>Courses assigned or enrolled</dt><dd>{account.total}</dd></div></dl>
-        <div className="account-control-row" aria-busy={savingAction === 'account'}><label>Platform role<select value={user.role} disabled={saving} onChange={(event) => updateAccount({ role: event.target.value as Role })}><option value="learner">Learner</option><option value="moderator">Moderator</option><option value="admin">Administrator</option></select></label><Button variant={user.disabled ? 'secondary' : 'danger'} onClick={() => updateAccount({ disabled: !user.disabled })} disabled={saving} aria-busy={savingAction === 'account'}>{savingAction === 'account' ? 'Saving account…' : user.disabled ? 'Enable account' : 'Disable account'}</Button>{savingAction === 'account' && <span className="sr-only" role="status" aria-live="polite">Saving account settings…</span>}</div>
+        <div className="account-control-row" aria-busy={savingAction === 'account'}><label>Platform role<AppSelect<Role> ariaLabel="Platform role" value={user.role} disabled={saving} onChange={(role) => updateAccount({ role })} options={[{ value: 'learner', label: 'Learner' }, { value: 'moderator', label: 'Moderator' }, { value: 'admin', label: 'Administrator' }]} /></label><Button variant={user.disabled ? 'secondary' : 'danger'} onClick={() => updateAccount({ disabled: !user.disabled })} disabled={saving} aria-busy={savingAction === 'account'}>{savingAction === 'account' ? 'Saving account…' : user.disabled ? 'Enable account' : 'Disable account'}</Button>{savingAction === 'account' && <span className="sr-only" role="status" aria-live="polite">Saving account settings…</span>}</div>
       </article>
       <article className="account-detail-card"><div className="account-detail-card-heading"><div><h2>Reset password</h2><p>Set a new password and sign out existing sessions.</p></div></div><form className="form-stack account-password-form" onSubmit={resetPassword} aria-busy={savingAction === 'password'}><label>New password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /></label><label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} /></label><Button type="submit" disabled={saving} aria-busy={savingAction === 'password'}>{savingAction === 'password' ? 'Saving…' : 'Reset password'}</Button></form></article>
     </section>
@@ -1499,6 +1592,11 @@ export function AdminSettingsPage() {
     } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Settings could not be saved.'); }
     finally { setSaving(false); }
   }
+  const parsedAccountLimit = Number(userLimitValue);
+  const accountLimit = Number.isFinite(parsedAccountLimit) && parsedAccountLimit > 0 ? Math.floor(parsedAccountLimit) : 0;
+  const accountUsagePercent = accountLimit > 0 && registeredUserCount !== null
+    ? Math.min(100, Math.round((registeredUserCount / accountLimit) * 100))
+    : 0;
   return <div className="management-page settings-page"><PageHeading title="Settings" subtitle="Customize platform branding, connection security, and learner registration." />{error && <Notice>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
     <form className="settings-card form-stack" onSubmit={submit} aria-busy={saving}>
       <fieldset className="settings-fields" aria-label="Platform settings" disabled={saving}>
@@ -1507,13 +1605,21 @@ export function AdminSettingsPage() {
       <PlatformIconPicker value={icon} onChange={(nextIcon) => { setIcon(nextIcon); setIconEdited(true); }} />
       <div className="branding-choice-field"><span className="branding-choice-label">Color palette</span><small>Preview a palette and save to apply it for everyone.</small><PalettePicker value={palette} onChange={choosePalette} /></div>
       <div className="settings-section-divider"><span>Connection and accounts</span></div>
-      <label>Public connection protocol<select aria-describedby="protocol-help" value={protocol} onChange={(event) => setProtocol(event.target.value as ConnectionProtocol)}><option value="http">HTTP</option><option value="https">HTTPS</option></select></label>
+      <label>Public connection protocol<AppSelect<ConnectionProtocol> ariaLabel="Public connection protocol" describedBy="protocol-help" value={protocol} onChange={setProtocol} options={[{ value: 'http', label: 'HTTP' }, { value: 'https', label: 'HTTPS' }]} /></label>
       <p id="protocol-help" className="protocol-help">This controls secure session cookies. HTTPS requires a TLS certificate on this server or a reverse proxy. For TLS behind a proxy, set <code>TRUST_PROXY=true</code>.{connectionProtocol === 'https' && protocol === 'http' && <span className="protocol-session-warning">If you then open the site over HTTP, browsers will not send the existing secure session cookie, so you will need to sign in again.</span>}</p>
       <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={allowRegistration} onChange={(event) => setAllowRegistration(event.target.checked)} /></label>
       <label>Maximum registered accounts<input className="user-limit-input" type="number" min={0} max={1000000} step={1} required value={userLimitValue} onChange={(event) => setUserLimitValue(event.target.value)} /><small>0 means no limit. The cap includes administrators, moderators, and learners.</small></label>
       {registeredUserCountError
         ? <div className="registered-count-recovery"><Notice>{registeredUserCountError}</Notice><Button type="button" variant="secondary" onClick={() => setRegisteredUserCountRetryVersion((version) => version + 1)}>Retry account count</Button></div>
-        : <p className="registered-count-status" role="status" aria-live="polite" aria-atomic="true">Registered accounts: {registeredUserCount ?? 'loading'}.</p>}
+        : <div className="registered-account-usage" role="status" aria-live="polite" aria-atomic="true">
+          <div className="registered-count-status">
+            <span>{registeredUserCount === null ? 'Loading registered accounts…' : accountLimit > 0 ? `${registeredUserCount} of ${accountLimit} accounts registered` : `${registeredUserCount} registered accounts · no account cap`}</span>
+            {accountLimit > 0 && registeredUserCount !== null && <strong>{accountUsagePercent}%</strong>}
+          </div>
+          {accountLimit > 0 && registeredUserCount !== null && <div className="account-usage-track" role="progressbar" aria-label="Registered account limit usage" aria-valuemin={0} aria-valuemax={accountLimit} aria-valuenow={Math.min(registeredUserCount, accountLimit)} aria-valuetext={`${registeredUserCount} of ${accountLimit} accounts registered`}>
+            <span style={{ width: `${accountUsagePercent}%` }} />
+          </div>}
+        </div>}
       <div className="settings-card-footer"><span>Database and media paths remain managed through the server environment.</span><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</Button></div>
       </fieldset>
     </form>
@@ -1546,10 +1652,15 @@ function LogTimestamp({ value }: { value: string }) {
   return <time dateTime={valid ? date.toISOString() : undefined}>{valid ? logTimestampFormatter.format(date) : value}</time>;
 }
 
-function LogDetails({ details, label }: { details: Record<string, unknown>; label: string }) {
+function LogDetailsDisclosure({ details, label, columnCount, children }: { details: Record<string, unknown>; label: string; columnCount: number; children: (toggle: ReactNode) => ReactNode }) {
+  const [expanded, setExpanded] = useState(false);
+  const contentId = useId();
   const rows = Object.entries(details || {});
-  if (!rows.length) return <span className="log-no-details">—</span>;
-  return <details className="log-details"><summary aria-label={`View details for ${(label.trim() || 'log entry').slice(0, 120)}`}>View details</summary><dl>{rows.map(([key, value]) => <div key={key}><dt>{key}</dt><dd><code>{typeof value === 'string' ? value : JSON.stringify(value)}</code></dd></div>)}</dl></details>;
+  const toggle = rows.length ? <button type="button" className="log-details-toggle" aria-expanded={expanded} aria-controls={contentId} aria-label={`${expanded ? 'Hide' : 'View'} details for ${(label.trim() || 'log entry').slice(0, 120)}`} onClick={() => setExpanded((current) => !current)}><ChevronDown size={14} aria-hidden="true" /><span>{expanded ? 'Hide details' : 'View details'}</span></button> : <span className="log-no-details">—</span>;
+  return <>
+    {children(toggle)}
+    {rows.length > 0 && <tr className="log-details-row" hidden={!expanded}><td colSpan={columnCount}><dl id={contentId} className="log-details-content">{rows.map(([key, value]) => <div key={key}><dt>{key}</dt><dd><code>{typeof value === 'string' ? value : JSON.stringify(value)}</code></dd></div>)}</dl></td></tr>}
+  </>;
 }
 
 function LogPagination({ page, pageSize, total, loading, onChange }: { page: number; pageSize: number; total: number; loading: boolean; onChange: (page: number) => void }) {
@@ -1592,11 +1703,11 @@ export function AdminAuditLogPage() {
     return () => { active = false; controller.abort(); };
   }, [appliedQuery, action, page, refreshVersion]);
 
-  return <div className="management-page logs-page"><PageHeading title="Audit log" subtitle="Review account, course, access, and platform changes." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
-    <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" aria-label="Search audit log" maxLength={100} /><button type="submit">Search</button></form><label className="select-wrap role-filter"><span className="sr-only">Filter by action</span><select value={action} onChange={(event) => { setAction(event.target.value); setPage(1); }}><option value="">All actions</option>{actions.map((item) => <option key={item.action} value={item.action}>{item.action.replaceAll('_', ' ')} ({item.count})</option>)}</select><ChevronDown size={16} /></label></div>
+  return <div className="management-page logs-page"><PageHeading title="Audit log" subtitle="Review account, course, and platform changes, including access and comment removals." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
+    <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" aria-label="Search audit log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter"><AppSelect ariaLabel="Filter by action" value={action} onChange={(value) => { setAction(value); setPage(1); }} options={[{ value: '', label: 'All actions' }, ...actions.map((item) => ({ value: item.action, label: `${item.action.replaceAll('_', ' ')} (${item.count})` }))]} /></div></div>
     {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable audit log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">Audit log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Change</th><th scope="col">Details</th></tr></thead><tbody>
-      {failedRequest ? <tr><td colSpan={5} className="log-empty">Audit entries are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <tr key={entry.id}><td><LogTimestamp value={entry.occurredAt} /></td><td>{entry.actorUsername}</td><td><span className="log-action">{entry.action.replaceAll('_', ' ')}</span></td><td><strong>{entry.summary}</strong><small>{entry.entityType}{entry.entityId ? ` · ${entry.entityId}` : ''}</small></td><td><LogDetails details={entry.details} label={entry.summary} /></td></tr>)}
+      {failedRequest ? <tr><td colSpan={5} className="log-empty">Audit entries are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} details={entry.details} label={entry.summary} columnCount={5}>{(toggle) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td>{entry.actorUsername}</td><td><span className="log-action">{entry.action.replaceAll('_', ' ')}</span></td><td><strong>{entry.summary}</strong><small>{entry.entityType}{entry.entityId ? ` · ${entry.entityId}` : ''}</small></td><td>{toggle}</td></tr>}</LogDetailsDisclosure>)}
       {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty">{appliedQuery || action ? 'No audit entries match these filters.' : 'No audit entries have been recorded yet.'}</td></tr>}
     </tbody></table>{loading && <div className="log-loading" role="status" aria-live="polite">Loading audit entries…</div>}</div>
     {!failedRequest && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
@@ -1636,10 +1747,10 @@ export function AdminSystemLogPage() {
   }, [appliedQuery, level, page, refreshVersion]);
 
   return <div className="management-page logs-page"><PageHeading title="System log" subtitle="Inspect server startup, runtime errors, and operational events." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
-    <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search system events" aria-label="Search system log" maxLength={100} /><button type="submit">Search</button></form><label className="select-wrap role-filter"><span className="sr-only">Filter by severity</span><select value={level} onChange={(event) => { setLevel(event.target.value); setPage(1); }}><option value="all">All levels</option><option value="error">Errors</option><option value="warn">Warnings</option><option value="info">Info</option></select><ChevronDown size={16} /></label></div>
+    <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search system events" aria-label="Search system log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter"><AppSelect ariaLabel="Filter by severity" value={level} onChange={(value) => { setLevel(value); setPage(1); }} options={[{ value: 'all', label: 'All levels' }, { value: 'error', label: 'Errors' }, { value: 'warn', label: 'Warnings' }, { value: 'info', label: 'Info' }]} /></div></div>
     {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable system log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">System log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Level</th><th scope="col">Source</th><th scope="col">Event</th><th scope="col">Details</th></tr></thead><tbody>
-      {failedRequest ? <tr><td colSpan={5} className="log-empty">System events are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <tr key={entry.id}><td><LogTimestamp value={entry.occurredAt} /></td><td><span className={`log-level log-level-${entry.level}`}>{entry.level}</span></td><td>{entry.source}</td><td><strong>{entry.message}</strong></td><td><LogDetails details={entry.details} label={entry.message} /></td></tr>)}
+      {failedRequest ? <tr><td colSpan={5} className="log-empty">System events are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} details={entry.details} label={entry.message} columnCount={5}>{(toggle) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td><span className={`log-level log-level-${entry.level}`}>{entry.level}</span></td><td>{entry.source}</td><td><strong>{entry.message}</strong></td><td>{toggle}</td></tr>}</LogDetailsDisclosure>)}
       {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty">{appliedQuery || level !== 'all' ? 'No system events match these filters.' : 'No system events have been recorded yet.'}</td></tr>}
     </tbody></table>{loading && <div className="log-loading" role="status" aria-live="polite">Loading system events…</div>}</div>
     {!failedRequest && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}

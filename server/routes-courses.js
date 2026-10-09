@@ -1033,24 +1033,25 @@ courseRouter.delete('/lessons/:lessonId/comments/:commentId', (req, res) => {
       .get(req.params.commentId, lesson.lesson_id);
     if (!comment) fail(404, 'Comment not found.', 'not_found');
     db.prepare('DELETE FROM lesson_comments WHERE id = ? AND lesson_id = ?').run(comment.id, lesson.lesson_id);
-    return { lesson, comment };
+    const auditId = writeAuditLog({
+      actor: req.currentUser,
+      action: 'course.comment_removed',
+      entityType: 'lesson_comment',
+      entityId: comment.id,
+      summary: `Removed a learner comment from "${lesson.lesson_title}"`,
+      details: {
+        courseId: lesson.id,
+        courseTitle: lesson.title,
+        lessonId: lesson.lesson_id,
+        lessonTitle: lesson.lesson_title,
+        commentAuthorId: comment.user_id,
+        commentAuthorUsername: comment.username,
+      },
+    });
+    if (!auditId) fail(500, 'The comment could not be removed because the audit log is unavailable.', 'audit_unavailable');
+    return { lesson };
   });
-  const { lesson, comment } = removeComment.immediate();
-  writeAuditLog({
-    actor: req.currentUser,
-    action: 'course.comment_removed',
-    entityType: 'lesson_comment',
-    entityId: comment.id,
-    summary: `Removed a learner comment from "${lesson.lesson_title}"`,
-    details: {
-      courseId: lesson.id,
-      courseTitle: lesson.title,
-      lessonId: lesson.lesson_id,
-      lessonTitle: lesson.lesson_title,
-      commentAuthorId: comment.user_id,
-      commentAuthorUsername: comment.username,
-    },
-  });
+  removeComment.immediate();
   res.status(204).end();
 });
 

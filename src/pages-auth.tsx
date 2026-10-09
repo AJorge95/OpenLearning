@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
-import { Button, PalettePicker, PlatformBrand, PlatformIconPicker } from './components';
+import { AppSelect, Button, PalettePicker, PlatformBrand, PlatformIconPicker } from './components';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 
 function AuthPanel({ children, eyebrow }: { children: React.ReactNode; eyebrow?: string }) {
@@ -102,7 +102,7 @@ export function SetupPage() {
           <h1 ref={stepHeadingRef} tabIndex={-1}>Configure access</h1>
           <p>Choose how people connect and whether new learner accounts can be created.</p>
           <form onSubmit={submit} className="form-stack" aria-busy={saving}>
-            <label>Public connection protocol<select aria-describedby="setup-protocol-help" value={connectionProtocol} onChange={(event) => setConnectionProtocol(event.target.value as ConnectionProtocol)} disabled={saving}><option value="http">HTTP</option><option value="https">HTTPS</option></select></label>
+            <label>Public connection protocol<AppSelect<ConnectionProtocol> ariaLabel="Public connection protocol" describedBy="setup-protocol-help" value={connectionProtocol} onChange={setConnectionProtocol} disabled={saving} options={[{ value: 'http', label: 'HTTP' }, { value: 'https', label: 'HTTPS' }]} /></label>
             <p id="setup-protocol-help" className="protocol-help">HTTPS requires a TLS certificate on this server or a reverse proxy. When a proxy handles TLS, set <code>TRUST_PROXY=true</code> in the server environment.</p>
             <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={registrationEnabled} onChange={(event) => setRegistrationEnabled(event.target.checked)} disabled={saving} /></label>
             <label>Maximum registered accounts<input type="number" min={0} max={1000000} step={1} required value={userLimit} onChange={(event) => setUserLimit(event.target.value)} disabled={saving} /><small>Set to 0 for no limit. The cap includes this administrator account, moderators, and learners.</small></label>
