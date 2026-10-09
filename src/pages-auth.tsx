@@ -3,7 +3,9 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
 import { AppSelect, Button, PalettePicker, PlatformBrand, PlatformIconPicker } from './components';
+import { findMissingRequiredRegistrationField } from './registration-fields';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
+import type { RegistrationField, RegistrationFieldValues } from './types';
 
 function AuthPanel({ children, eyebrow }: { children: React.ReactNode; eyebrow?: string }) {
   return (
@@ -17,6 +19,52 @@ function AuthPanel({ children, eyebrow }: { children: React.ReactNode; eyebrow?:
   );
 }
 
+function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onChange }: {
+  fields: RegistrationField[];
+  values: RegistrationFieldValues;
+  disabled: boolean;
+  invalidFieldId: string;
+  onChange: (id: string, value: string | boolean) => void;
+}) {
+  if (!fields.length) return null;
+  return <div className="registration-form-fields">
+    <div className="registration-form-fields-heading"><strong>About you</strong><span>Share the details requested by this learning space.</span></div>
+    {fields.map((field) => {
+      if (field.type === 'checkbox') return <label className="registration-checkbox-field" key={field.id}>
+        <input type="checkbox" required={field.required} checked={values[field.id] === true} onChange={(event) => onChange(field.id, event.target.checked)} disabled={disabled} />
+        <span>{field.label}{field.required && <small>Required</small>}</span>
+      </label>;
+      if (field.type === 'select') return <label className="registration-custom-field" key={field.id}>
+        <span>{field.label}{field.required && <small>Required</small>}</span>
+        <AppSelect<string>
+          controlId={`registration-field-${field.id}`}
+          ariaLabel={`${field.label}${field.required ? ', required' : ''}`}
+          describedBy={invalidFieldId === field.id ? 'registration-form-error' : undefined}
+          invalid={invalidFieldId === field.id}
+          value={typeof values[field.id] === 'string' ? values[field.id] as string : ''}
+          onChange={(value) => onChange(field.id, value)}
+          disabled={disabled}
+          options={[{ value: '', label: 'Choose an option' }, ...field.options.map((option) => ({ value: option, label: option }))]}
+        />
+      </label>;
+      return <label className="registration-custom-field" key={field.id}>
+        <span>{field.label}{field.required && <small>Required</small>}</span>
+        <input
+          id={`registration-field-${field.id}`}
+          type={field.type === 'date' ? 'date' : 'text'}
+          required={field.required}
+          maxLength={field.type === 'text' ? 2000 : undefined}
+          value={typeof values[field.id] === 'string' ? values[field.id] as string : ''}
+          aria-invalid={invalidFieldId === field.id || undefined}
+          aria-describedby={invalidFieldId === field.id ? 'registration-form-error' : undefined}
+          onChange={(event) => onChange(field.id, event.target.value)}
+          disabled={disabled}
+        />
+      </label>;
+    })}
+  </div>;
+}
+
 export function SetupPage() {
   const { completeSetup, configured, user, connectionProtocol: initialProtocol, registrationEnabled: initialRegistrationEnabled, userLimit: initialUserLimit } = useAuth();
   const navigate = useNavigate();
@@ -24,6 +72,7 @@ export function SetupPage() {
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousStepRef = useRef(step);
   const [platformName, setPlatformName] = useState('');
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -66,7 +115,7 @@ export function SetupPage() {
     setError('');
     setSaving(true);
     try {
-      await completeSetup(platformName, username, password, confirmPassword, {
+      await completeSetup(platformName, email, username, password, confirmPassword, {
         themePalette, platformIcon, connectionProtocol, registrationEnabled, userLimit: Number(userLimit),
       });
       navigate('/courses');
@@ -92,6 +141,7 @@ export function SetupPage() {
             <label>Platform name<input required minLength={2} maxLength={80} value={platformName} onChange={(event) => setPlatformName(event.target.value)} autoFocus /></label>
             <PlatformIconPicker value={platformIcon} onChange={setPlatformIcon} />
             <div className="branding-choice-field"><span className="branding-choice-label">Color palette</span><small>Choose the accent colors used across the platform.</small><PalettePicker value={themePalette} onChange={choosePalette} /></div>
+            <label>Admin email<input required type="email" maxLength={254} autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
             <label>Admin username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
             <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} /><small>Use at least 12 characters.</small></label>
             <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
@@ -152,30 +202,63 @@ export function LoginPage() {
 export function RegisterPage() {
   const { signUp, user, configured, registrationEnabled, registrationAvailable } = useAuth();
   const navigate = useNavigate();
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [registrationFields, setRegistrationFields] = useState<RegistrationField[]>([]);
+  const [registrationFieldValues, setRegistrationFieldValues] = useState<RegistrationFieldValues>({});
+  const [registrationFieldsLoading, setRegistrationFieldsLoading] = useState(true);
+  const [registrationFieldsError, setRegistrationFieldsError] = useState('');
+  const [registrationFieldsRetryVersion, setRegistrationFieldsRetryVersion] = useState(0);
+  const [invalidRegistrationFieldId, setInvalidRegistrationFieldId] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setRegistrationFieldsLoading(true);
+    setRegistrationFieldsError('');
+    api.get<{ fields: RegistrationField[] }>('/api/registration-fields')
+      .then((result) => {
+        if (!active) return;
+        setRegistrationFields(result.fields);
+        setRegistrationFieldValues(Object.fromEntries(result.fields.map((field) => [field.id, field.type === 'checkbox' ? false : ''])));
+      })
+      .catch((cause) => { if (active) setRegistrationFieldsError(cause instanceof ApiError ? cause.message : 'Registration details could not be loaded.'); })
+      .finally(() => { if (active) setRegistrationFieldsLoading(false); });
+    return () => { active = false; };
+  }, [registrationFieldsRetryVersion]);
   if (configured && user) return <Navigate to="/courses" replace />;
   if (!configured) return <Navigate to="/setup" replace />;
   if (!registrationEnabled) return <AuthPanel><h1>Registration is closed</h1><p className="auth-description">An administrator has disabled new account registrations.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
   if (!registrationAvailable) return <AuthPanel><h1>Registration is closed</h1><p className="auth-description">The platform has reached its registered-account limit.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
 
   async function submit(event: React.FormEvent) {
-    event.preventDefault(); setError(''); setSaving(true);
-    try { await signUp(username, password, confirmPassword); navigate('/courses'); }
+    event.preventDefault(); setError(''); setInvalidRegistrationFieldId('');
+    const missingField = findMissingRequiredRegistrationField(registrationFields, registrationFieldValues);
+    if (missingField) {
+      setError(`${missingField.label} is required.`);
+      setInvalidRegistrationFieldId(missingField.id);
+      window.requestAnimationFrame(() => document.getElementById(`registration-field-${missingField.id}`)?.focus());
+      return;
+    }
+    setSaving(true);
+    try { await signUp(email, username, password, confirmPassword, registrationFieldValues); navigate('/courses'); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Registration failed. Try again.'); }
     finally { setSaving(false); }
   }
 
   return <AuthPanel><h1>Create your account</h1><p className="auth-description">Join your learning space and explore available courses.</p>
     <form onSubmit={submit} className="form-stack" aria-busy={saving}>
-      <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoFocus value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>Letters, numbers, dots, underscores, and hyphens.</small></label>
+      <label>Email<input required type="email" maxLength={254} autoComplete="email" autoFocus value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} /></label>
+      <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>Letters, numbers, dots, underscores, and hyphens.</small></label>
+      {registrationFieldsLoading ? <p className="registration-fields-loading" role="status">Loading registration details…</p> : registrationFieldsError
+        ? <div className="registration-fields-load-error"><p className="form-error" role="alert">{registrationFieldsError}</p><Button type="button" variant="secondary" onClick={() => setRegistrationFieldsRetryVersion((version) => version + 1)}>Retry</Button></div>
+        : <RegistrationFieldsForm fields={registrationFields} values={registrationFieldValues} disabled={saving} invalidFieldId={invalidRegistrationFieldId} onChange={(id, value) => { setRegistrationFieldValues((current) => ({ ...current, [id]: value })); if (id === invalidRegistrationFieldId) { setInvalidRegistrationFieldId(''); setError(''); } }} />}
       <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /><small>Use at least 12 characters.</small></label>
       <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} /></label>
-      {error && <p className="form-error" role="alert">{error}</p>}
-      <Button type="submit" disabled={saving}>{saving ? 'Creating account…' : 'Create account'}</Button>
+      {error && <p id="registration-form-error" className="form-error" role="alert">{error}</p>}
+      <Button type="submit" disabled={saving || registrationFieldsLoading || Boolean(registrationFieldsError)}>{saving ? 'Creating account…' : 'Create account'}</Button>
     </form>
     <p className="auth-footer">Already have an account? <Link to="/login">Sign in</Link></p>
   </AuthPanel>;

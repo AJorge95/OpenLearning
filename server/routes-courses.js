@@ -481,11 +481,15 @@ courseRouter.post('/manage/courses', requireStaff, (req, res) => {
   const visibility = body.visibility === undefined ? 'public' : body.visibility;
   if (!['public', 'private'].includes(visibility)) fail(400, 'Visibility must be public or private.', 'validation_error');
   const id = randomUUID();
-  db.prepare(`INSERT INTO courses (id, title, description, category, visibility, status, created_by, updated_by)
-    VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)`)
-    .run(id, title, description, category, visibility, req.currentUser.id, req.currentUser.id);
-  writeAuditLog({ actor: req.currentUser, action: 'course.created', entityType: 'course', entityId: id,
-    summary: `Created course: ${title}`, details: { category, visibility, status: 'draft' } });
+  const createCourse = db.transaction(() => {
+    db.prepare(`INSERT INTO courses (id, title, description, category, visibility, status, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)`)
+      .run(id, title, description, category, visibility, req.currentUser.id, req.currentUser.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.created', entityType: 'course', entityId: id,
+      summary: `Created course: ${title}`, details: { category, visibility, status: 'draft' } });
+    if (!auditId) fail(500, 'Course could not be created because the audit log is unavailable.', 'audit_unavailable');
+  });
+  createCourse.immediate();
   res.status(201).json({ course: getCoursePayload(db.prepare('SELECT * FROM courses WHERE id = ?').get(id), req.currentUser, { includeAnswers: true }) });
 });
 
@@ -509,23 +513,29 @@ courseRouter.patch('/manage/courses/:courseId', requireStaff, (req, res) => {
           updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
         .run(title, description, category, visibility, status, req.currentUser.id, current.id);
       updated = db.prepare('SELECT * FROM courses WHERE id = ?').get(current.id);
+      const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.updated', entityType: 'course', entityId: current.id,
+        summary: `${status === 'archived' && current.status !== 'archived' ? 'Archived' : 'Updated'} course: ${title}`,
+        details: { changedFields, category, visibility, status } });
+      if (!auditId) fail(500, 'Course could not be updated because the audit log is unavailable.', 'audit_unavailable');
     }
     return { current, title, category, visibility, status, changedFields, updated };
   });
-  const { current, title, category, visibility, status, changedFields, updated } = saveCourse.immediate();
-  if (changedFields.length) {
-    writeAuditLog({ actor: req.currentUser, action: 'course.updated', entityType: 'course', entityId: current.id,
-      summary: `${status === 'archived' && current.status !== 'archived' ? 'Archived' : 'Updated'} course: ${title}`,
-      details: { changedFields, category, visibility, status } });
-  }
+  const { updated } = saveCourse.immediate();
   res.json({ course: getCoursePayload(updated, req.currentUser, { includeAnswers: true }) });
 });
 
 courseRouter.delete('/manage/courses/:courseId', requireStaff, async (req, res) => {
-  const course = requireCourseManager(req.params.courseId, req.currentUser);
-  if (course.status !== 'archived') fail(409, 'Archive this course before permanently deleting it.', 'archive_required');
-  const directory = courseFileDirectory(course.id);
-  db.prepare('DELETE FROM courses WHERE id = ?').run(course.id);
+  const deleteCourse = db.transaction(() => {
+    const course = requireCourseManager(req.params.courseId, req.currentUser);
+    if (course.status !== 'archived') fail(409, 'Archive this course before permanently deleting it.', 'archive_required');
+    const directory = courseFileDirectory(course.id);
+    db.prepare('DELETE FROM courses WHERE id = ?').run(course.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.deleted', entityType: 'course', entityId: course.id,
+      summary: `Permanently deleted course: ${course.title}` });
+    if (!auditId) fail(500, 'Course could not be deleted because the audit log is unavailable.', 'audit_unavailable');
+    return directory;
+  });
+  const directory = deleteCourse.immediate();
   try {
     await fs.promises.rm(directory, { recursive: true, force: true });
   } catch (error) {
@@ -535,23 +545,24 @@ courseRouter.delete('/manage/courses/:courseId', requireStaff, async (req, res) 
       errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
     });
   }
-  writeAuditLog({ actor: req.currentUser, action: 'course.deleted', entityType: 'course', entityId: course.id, summary: `Permanently deleted course: ${course.title}` });
   res.status(204).end();
 });
 
 courseRouter.post('/manage/courses/:courseId/modules', requireStaff, (req, res) => {
-  const course = requireCourseManager(req.params.courseId, req.currentUser);
   const title = textField(req.body?.title, 'Module title', 160, { required: true });
   const id = randomUUID();
   const createModule = db.transaction(() => {
+    const course = requireCourseManager(req.params.courseId, req.currentUser);
     const position = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM course_modules WHERE course_id = ?').get(course.id).next;
     db.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, ?)').run(id, course.id, title, position);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, course.id);
-    return position;
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.module_created', entityType: 'module', entityId: id,
+      summary: `Added module "${title}" to ${course.title}`, details: { courseId: course.id } });
+    if (!auditId) fail(500, 'Module could not be created because the audit log is unavailable.', 'audit_unavailable');
+    return { courseId: course.id, position };
   });
-  const position = createModule.immediate();
-  writeAuditLog({ actor: req.currentUser, action: 'course.module_created', entityType: 'module', entityId: id, summary: `Added module "${title}" to ${course.title}`, details: { courseId: course.id } });
-  res.status(201).json({ module: { id, courseId: course.id, title, position } });
+  const { courseId, position } = createModule.immediate();
+  res.status(201).json({ module: { id, courseId, title, position } });
 });
 
 courseRouter.patch('/manage/modules/:moduleId', requireStaff, (req, res) => {
@@ -574,27 +585,30 @@ courseRouter.patch('/manage/modules/:moduleId', requireStaff, (req, res) => {
 });
 
 courseRouter.delete('/manage/modules/:moduleId', requireStaff, async (req, res) => {
-  const module = moduleCourse(req.params.moduleId);
-  if (!module) fail(404, 'Module not found.', 'not_found');
-  requireCourseManager(module.id, req.currentUser);
-  const media = db.prepare(`SELECT mf.id, mf.file_name FROM media_files mf WHERE mf.course_id = ? AND mf.id IN (
-    SELECT l.media_id FROM lessons l WHERE l.module_id = ? AND l.media_id IS NOT NULL
-  )`).all(module.id, module.module_id);
-  const documents = db.prepare(`
-    SELECT lr.id, lr.file_name FROM lesson_resources lr JOIN lessons l ON l.id = lr.lesson_id
-    WHERE l.module_id = ? AND lr.resource_type = 'document'
-  `).all(module.module_id);
-  const captions = db.prepare(`
-    SELECT lc.id, lc.file_name FROM lesson_captions lc JOIN lessons l ON l.id = lc.lesson_id
-    WHERE l.module_id = ?
-  `).all(module.module_id);
   const deleteModule = db.transaction(() => {
+    const module = moduleCourse(req.params.moduleId);
+    if (!module) fail(404, 'Module not found.', 'not_found');
+    requireCourseManager(module.id, req.currentUser);
+    const media = db.prepare(`SELECT mf.id, mf.file_name FROM media_files mf WHERE mf.course_id = ? AND mf.id IN (
+      SELECT l.media_id FROM lessons l WHERE l.module_id = ? AND l.media_id IS NOT NULL
+    )`).all(module.id, module.module_id);
+    const documents = db.prepare(`
+      SELECT lr.id, lr.file_name FROM lesson_resources lr JOIN lessons l ON l.id = lr.lesson_id
+      WHERE l.module_id = ? AND lr.resource_type = 'document'
+    `).all(module.module_id);
+    const captions = db.prepare(`
+      SELECT lc.id, lc.file_name FROM lesson_captions lc JOIN lessons l ON l.id = lc.lesson_id
+      WHERE l.module_id = ?
+    `).all(module.module_id);
     db.prepare('DELETE FROM course_modules WHERE id = ?').run(module.module_id);
     for (const item of media) db.prepare('DELETE FROM media_files WHERE id = ?').run(item.id);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, module.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.module_deleted', entityType: 'module', entityId: module.module_id,
+      summary: `Deleted a module from ${module.title}` });
+    if (!auditId) fail(500, 'Module could not be deleted because the audit log is unavailable.', 'audit_unavailable');
+    return { module, media, documents, captions };
   });
-  deleteModule();
-  writeAuditLog({ actor: req.currentUser, action: 'course.module_deleted', entityType: 'module', entityId: module.module_id, summary: `Deleted a module from ${module.title}` });
+  const { module, media, documents, captions } = deleteModule.immediate();
   for (const item of media) {
     await removeCourseMediaFile(module.id, item.file_name, 'Module video cleanup failed after module deletion', {
       moduleId: module.module_id,
@@ -629,10 +643,12 @@ courseRouter.post('/manage/modules/:moduleId/lessons', requireStaff, (req, res) 
     const position = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM lessons WHERE module_id = ?').get(currentModule.module_id).next;
     db.prepare('INSERT INTO lessons (id, module_id, title, position) VALUES (?, ?, ?, ?)').run(id, currentModule.module_id, title, position);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, currentModule.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.lesson_created', entityType: 'lesson', entityId: id,
+      summary: `Added lesson "${title}"`, details: { courseId: currentModule.id, moduleId: currentModule.module_id } });
+    if (!auditId) fail(500, 'Lesson could not be created because the audit log is unavailable.', 'audit_unavailable');
     return { module: currentModule, position };
   });
   const { module: createdInModule, position } = createLesson.immediate();
-  writeAuditLog({ actor: req.currentUser, action: 'course.lesson_created', entityType: 'lesson', entityId: id, summary: `Added lesson "${title}"`, details: { courseId: createdInModule.id, moduleId: createdInModule.module_id } });
   res.status(201).json({ lesson: { id, moduleId: createdInModule.module_id, title, position, hasVideo: false } });
 });
 
@@ -659,13 +675,12 @@ courseRouter.patch('/manage/lessons/:lessonId', requireStaff, (req, res) => {
     if (!changedFields.length) return null;
     db.prepare('UPDATE lessons SET title = ?, description = ?, transcript = ? WHERE id = ?').run(title, description, transcript, current.lesson_id);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, current.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.lesson_updated', entityType: 'lesson', entityId: current.lesson_id,
+      summary: `Updated lesson: ${title}`, details: { courseId: current.id, changedFields } });
+    if (!auditId) fail(500, 'Lesson could not be updated because the audit log is unavailable.', 'audit_unavailable');
     return { lesson: current, title, changedFields };
   });
-  const changedLesson = updateLesson.immediate();
-  if (changedLesson) {
-    writeAuditLog({ actor: req.currentUser, action: 'course.lesson_updated', entityType: 'lesson', entityId: changedLesson.lesson.lesson_id,
-      summary: `Updated lesson: ${changedLesson.title}`, details: { courseId: changedLesson.lesson.id, changedFields: changedLesson.changedFields } });
-  }
+  updateLesson.immediate();
   res.json({ ok: true });
 });
 
@@ -707,6 +722,9 @@ courseRouter.delete('/manage/lessons/:lessonId/resources/:resourceId', requireSt
     if (!resource) fail(404, 'Lesson resource not found.', 'not_found');
     db.prepare('DELETE FROM lesson_resources WHERE id = ?').run(resource.id);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, lesson.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.resource_removed', entityType: 'lesson', entityId: lesson.lesson_id,
+      summary: `Removed a resource from ${lesson.lesson_title}`, details: { courseId: lesson.id, title: resource.title, resourceType: resource.resource_type } });
+    if (!auditId) fail(500, 'Resource could not be removed because the audit log is unavailable.', 'audit_unavailable');
     return { lesson, resource };
   });
   const { lesson, resource } = removeResource.immediate();
@@ -716,24 +734,26 @@ courseRouter.delete('/manage/lessons/:lessonId/resources/:resourceId', requireSt
       resourceId: resource.id,
     });
   }
-  writeAuditLog({ actor: req.currentUser, action: 'course.resource_removed', entityType: 'lesson', entityId: lesson.lesson_id, summary: `Removed a resource from ${lesson.lesson_title}`, details: { courseId: lesson.id, title: resource.title, resourceType: resource.resource_type } });
   res.status(204).end();
 });
 
 courseRouter.delete('/manage/lessons/:lessonId', requireStaff, async (req, res) => {
-  const lesson = courseFromLesson(req.params.lessonId);
-  if (!lesson) fail(404, 'Lesson not found.', 'not_found');
-  requireCourseManager(lesson.id, req.currentUser);
-  const media = lesson.media_id ? db.prepare('SELECT file_name FROM media_files WHERE id = ?').get(lesson.media_id) : null;
-  const documents = db.prepare("SELECT id, file_name FROM lesson_resources WHERE lesson_id = ? AND resource_type = 'document'").all(lesson.lesson_id);
-  const captions = db.prepare('SELECT id, file_name FROM lesson_captions WHERE lesson_id = ?').all(lesson.lesson_id);
   const removeLesson = db.transaction(() => {
+    const lesson = courseFromLesson(req.params.lessonId);
+    if (!lesson) fail(404, 'Lesson not found.', 'not_found');
+    requireCourseManager(lesson.id, req.currentUser);
+    const media = lesson.media_id ? db.prepare('SELECT file_name FROM media_files WHERE id = ?').get(lesson.media_id) : null;
+    const documents = db.prepare("SELECT id, file_name FROM lesson_resources WHERE lesson_id = ? AND resource_type = 'document'").all(lesson.lesson_id);
+    const captions = db.prepare('SELECT id, file_name FROM lesson_captions WHERE lesson_id = ?').all(lesson.lesson_id);
     db.prepare('DELETE FROM lessons WHERE id = ?').run(lesson.lesson_id);
     if (media) db.prepare('DELETE FROM media_files WHERE id = ?').run(lesson.media_id);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, lesson.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.lesson_deleted', entityType: 'lesson', entityId: lesson.lesson_id,
+      summary: `Deleted lesson: ${lesson.lesson_title}`, details: { courseId: lesson.id } });
+    if (!auditId) fail(500, 'Lesson could not be deleted because the audit log is unavailable.', 'audit_unavailable');
+    return { lesson, media, documents, captions };
   });
-  removeLesson();
-  writeAuditLog({ actor: req.currentUser, action: 'course.lesson_deleted', entityType: 'lesson', entityId: lesson.lesson_id, summary: `Deleted lesson: ${lesson.lesson_title}`, details: { courseId: lesson.id } });
+  const { lesson, media, documents, captions } = removeLesson.immediate();
   if (media) await removeCourseMediaFile(lesson.id, media.file_name, 'Lesson video cleanup failed after lesson deletion', {
     lessonId: lesson.lesson_id,
     mediaId: lesson.media_id,
@@ -865,7 +885,7 @@ courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
               && choice.choice_text === requested.choices[cIndex].text
               && Boolean(choice.is_correct) === requested.choices[cIndex].isCorrect);
         });
-      if (unchanged) return { id: existingQuiz.id, changed: false };
+      if (unchanged) return;
     }
     const quizId = existingQuiz?.id || randomUUID();
     db.prepare(`INSERT INTO quizzes (id, module_id, title, pass_mark) VALUES (?, ?, ?, ?)
@@ -882,10 +902,11 @@ courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
       });
     });
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, currentModule.id);
-    return { id: quizId, changed: true };
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.quiz_saved', entityType: 'quiz', entityId: quizId,
+      summary: `Saved quiz for ${currentModule.title}`, details: { courseId: currentModule.id, passMark, questionCount: normalizedQuestions.length } });
+    if (!auditId) fail(500, 'Quiz could not be saved because the audit log is unavailable.', 'audit_unavailable');
   });
-  const savedQuiz = saveQuiz.immediate();
-  if (savedQuiz.changed) writeAuditLog({ actor: req.currentUser, action: 'course.quiz_saved', entityType: 'quiz', entityId: savedQuiz.id, summary: `Saved quiz for ${module.title}`, details: { courseId: module.id, passMark, questionCount: normalizedQuestions.length } });
+  saveQuiz.immediate();
   const course = db.prepare('SELECT * FROM courses WHERE id = ?').get(module.id);
   res.json({ course: getCoursePayload(course, req.currentUser, { includeAnswers: true }) });
 });
@@ -897,10 +918,12 @@ courseRouter.delete('/manage/modules/:moduleId/quiz', requireStaff, (req, res) =
     requireCourseManager(module.id, req.currentUser);
     db.prepare('DELETE FROM quizzes WHERE module_id = ?').run(module.module_id);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, module.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.quiz_deleted', entityType: 'module', entityId: module.module_id,
+      summary: `Removed quiz from ${module.title}`, details: { courseId: module.id } });
+    if (!auditId) fail(500, 'Quiz could not be removed because the audit log is unavailable.', 'audit_unavailable');
     return module;
   });
-  const module = deleteQuiz.immediate();
-  writeAuditLog({ actor: req.currentUser, action: 'course.quiz_deleted', entityType: 'module', entityId: module.module_id, summary: `Removed quiz from ${module.title}`, details: { courseId: module.id } });
+  deleteQuiz.immediate();
   res.status(204).end();
 });
 
@@ -909,17 +932,20 @@ courseRouter.get('/manage/courses/:courseId/access', requireStaff, (req, res) =>
   const query = textField(req.query.q, 'Search', 100);
   const pageSize = 50;
   const requestedPage = pageQuery(req.query.page, MAX_COURSE_PAGE);
+  const search = query ? textSearchPredicate(['u.username', 'u.email'], query) : null;
+  const searchClause = search ? ` AND (${search.sql})` : '';
+  const searchParams = search?.params || [];
   const total = db.prepare(`SELECT COUNT(*) AS count FROM users u
-    WHERE u.role = 'learner' AND (? = '' OR u.username LIKE ? ESCAPE '!')`)
-    .get(query, likeContains(query)).count;
+    WHERE u.role = 'learner'${searchClause}`)
+    .get(...searchParams).count;
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
   const users = db.prepare(`
     SELECT u.id, u.username, u.role, u.disabled, g.id AS grant_id, g.granted_at, gu.username AS granted_by
     FROM users u LEFT JOIN course_grants g ON g.user_id = u.id AND g.course_id = ?
     LEFT JOIN users gu ON gu.id = g.granted_by
-    WHERE u.role = 'learner' AND (? = '' OR u.username LIKE ? ESCAPE '!')
+    WHERE u.role = 'learner'${searchClause}
     ORDER BY CASE WHEN g.id IS NULL THEN 1 ELSE 0 END, u.username COLLATE NOCASE, u.id ASC LIMIT ? OFFSET ?
-  `).all(course.id, query, likeContains(query), pageSize, (page - 1) * pageSize);
+  `).all(course.id, ...searchParams, pageSize, (page - 1) * pageSize);
   res.json({ users: users.map((user) => ({ id: user.id, username: user.username, disabled: Boolean(user.disabled), granted: Boolean(user.grant_id), grantedAt: user.granted_at, grantedBy: user.granted_by })), total, page, pageSize });
 });
 

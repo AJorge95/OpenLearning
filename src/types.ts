@@ -1,11 +1,32 @@
 export type Role = 'admin' | 'moderator' | 'learner';
 
+export type RegistrationFieldType = 'date' | 'text' | 'select' | 'checkbox';
+
+export interface RegistrationField {
+  id: string;
+  label: string;
+  type: RegistrationFieldType;
+  required: boolean;
+  options: string[];
+}
+
+export type RegistrationFieldValues = Record<string, string | boolean>;
+
+export interface SavedRegistrationFieldValue {
+  id: string;
+  label: string;
+  type: RegistrationFieldType;
+  value: string | boolean;
+}
+
 export interface User {
   id: string;
   username: string;
+  email?: string | null;
   role: Role;
   disabled: boolean;
   createdAt?: string;
+  lastLoginAt?: string | null;
 }
 
 export interface QuizChoice {

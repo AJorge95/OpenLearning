@@ -4,7 +4,7 @@ OpenLearning is a lightweight, self-hosted learning platform for a single organi
 
 ## Features
 
-- Required username-and-password sign-in, configurable learner registration and account limits, and a one-time setup wizard for the initial administrator.
+- Username-and-password sign-in, email addresses for new accounts, configurable learner registration fields and account limits, and a one-time setup wizard for the initial administrator.
 - Administrator, moderator, and learner roles.
 - Public courses for signed-in learners and private courses available through individual access grants.
 - Courses organized into ordered modules, described video lessons with optional text transcripts and WebVTT caption tracks, lesson links and documents, and optional single-answer quizzes.
@@ -73,7 +73,9 @@ The suite uses Node's built-in test runner, in-memory and isolated temporary SQL
 
 All course and lesson viewing requires sign-in. Assignments place a course in a learner's My learning list; private courses require an active assignment for access. Revoking a private-course assignment takes effect on the next API or media request.
 
-Administrators can manually create learner, moderator, or administrator accounts, change roles or account status, and reset passwords. Course dashboards are available to administrators and moderators and show completion rates, lesson completion, quiz participation and scores, plus per-learner progress and attempt details.
+Administrators can manually create learner, moderator, or administrator accounts, change roles or account status, and reset passwords. New accounts require a unique email address; sign-in still uses the username and password. Account details show the last successful login, and failed sign-in attempts do not update it. From **Settings** → **Registration fields**, administrators can add up to 30 text, date, select-list, or checkbox fields to public signup and choose which are required. Saved learner answers remain on the account if a field is later changed or removed, and administrators can review them on the account-details page. The account list and course-assignment list can search by username or email.
+
+Course dashboards are available to administrators and moderators and show completion rates, lesson completion, quiz participation and scores, plus per-learner progress and attempt details.
 
 ## Logs
 

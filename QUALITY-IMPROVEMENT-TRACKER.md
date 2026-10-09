@@ -1,5 +1,278 @@
 # Quality Improvement Tracker
 
+## 2026-10-09 — Keep account-role help outside the click target
+
+- **Reviewed:** The administrator create-account role label, its custom combobox and help text, and the existing bounded account-details role control.
+- **Improvement:** Use a non-interactive field wrapper with separate role text; keep the combobox's accessible name and associate the help text through `aria-describedby`.
+- **Why it helps:** Clicking the explanatory copy no longer activates the role menu, and assistive technology receives the same instruction from the combobox.
+- **Checked:** The create-account role control is no longer nested in a label and passes its help ID to `AppSelect`. The account-details role control is also a bounded non-label wrapper (240px maximum), though the supplied browser node path still reports a label. All 79 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Live admin-route interaction remains unverified because the connected browser is at `/login` and Playwright is not installed.
+
+## 2026-10-09 — Keep resource removal and audit history atomic
+
+- **Reviewed:** Resource lookup, row removal, course timestamp update, post-commit document cleanup, and the best-effort audit write.
+- **Improvement:** Remove the resource and require its audit event inside one immediate transaction, then clean up document files after commit.
+- **Why it helps:** Audit failure leaves both the document record and its file available, instead of silently completing an unaudited removal.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable`, retained the resource row and file, and wrote no audit row. After removing the trigger, retrying returned `204`, removed the row and file, and saved one audit event. All 79 `npm test` cases, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep lesson deletion and audit history atomic
+
+- **Reviewed:** Lesson revalidation, progress/resource/caption/media rows, course timestamp update, file cleanup, and the post-commit best-effort deletion audit.
+- **Improvement:** Gather current lesson cleanup metadata, delete its database rows and require the `course.lesson_deleted` event in one immediate transaction; remove files only after commit.
+- **Why it helps:** Audit failure no longer erases lesson content, learner progress, or attached files without a durable deletion record.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable`, retained the lesson, learner progress, attachments, and all three files, and wrote no audit row. After removing the trigger, retrying returned `204`, removed the data and files, and saved one event. All 78 `npm test` cases, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep quiz removal and audit history atomic
+
+- **Reviewed:** Module revalidation, quiz/question cascade deletion, course timestamp update, and the post-commit best-effort quiz-removal audit.
+- **Improvement:** Write and require the `course.quiz_deleted` audit event inside the immediate deletion transaction.
+- **Why it helps:** A failed audit write can no longer leave a quiz and its questions deleted without a durable history record.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable`, retained the quiz and questions, and wrote no audit row. After removing the trigger, retrying returned `204`, removed the assessment data, and saved one deletion event. All 77 `npm test` cases, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep quiz saves and audit history atomic
+
+- **Reviewed:** Quiz normalization, unchanged-save detection, question/choice replacement, course timestamp updates, and the post-commit best-effort audit write.
+- **Improvement:** Require the `course.quiz_saved` event inside the immediate transaction whenever quiz content changes; unchanged saves still skip writes and audit events.
+- **Why it helps:** An audit storage failure cannot leave a new or replaced assessment committed without a corresponding history record.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable`, retained the prior quiz and question count, and wrote no audit row. After removing the trigger, retrying returned `200`, saved the question, and recorded one event. All 76 `npm test` cases, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep lesson edits and audit history atomic
+
+- **Reviewed:** Lesson title, description, and transcript updates, the course timestamp write, no-op behavior, and the post-commit best-effort audit event.
+- **Improvement:** Require the `course.lesson_updated` event inside the immediate lesson/course transaction whenever lesson fields change.
+- **Why it helps:** A failed audit write can no longer leave the editor's content update committed without its history; unchanged saves remain no-ops.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable`, preserved the original title, and wrote no audit row. After removing the trigger, retrying returned `200` and saved one event. All 75 `npm test` cases, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep lesson creation and audit history atomic
+
+- **Reviewed:** Module revalidation, next lesson position, course timestamp update, and the post-commit best-effort lesson audit.
+- **Improvement:** Require the lesson-created audit row in the same immediate transaction as lesson insertion and the course timestamp update.
+- **Why it helps:** A failed lesson save no longer leaves curriculum behind without a corresponding audit record; successful retries keep position allocation and audit history aligned.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable`, retained the lesson count, and wrote no audit row. After removing the trigger, retrying returned `201` at the expected position and saved one audit event. All 74 `npm test` cases, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep module creation and audit history atomic
+
+- **Reviewed:** Module authorization, concurrent position allocation, course timestamp updates, and the post-transaction best-effort creation audit.
+- **Improvement:** Recheck the course inside the existing immediate transaction and require the `course.module_created` audit event before commit.
+- **Why it helps:** Audit failure cannot leave a new module behind after the editor reports a failed save, while concurrent creates remain serialized around position assignment.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable`, preserved the original module count, and wrote no audit row. After removing the trigger, retrying returned `201` at the expected position and saved one audit event. All 73 `npm test` cases, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep module deletion and audit history atomic
+
+- **Reviewed:** Module deletion's nested lesson/resource/caption/media rows, course timestamp update, file cleanup list, and post-commit best-effort audit write.
+- **Improvement:** Re-read and authorize the module, gather cleanup metadata, delete its database content, update the course, and require the audit event in one immediate transaction; remove files only after commit.
+- **Why it helps:** Audit failure no longer leaves an entire lesson subtree removed or its files cleaned up without a durable deletion record.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable` and retained the module, lesson, document, caption, video, and all three files. After removing the trigger, retrying returned `204`, removed the content and files, and saved one audit event. All 72 `npm test` cases, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep permanent course deletion and audit atomic
+
+- **Reviewed:** Course deletion's archive guard, cascading database removal, recursive media cleanup, and post-cleanup best-effort audit write.
+- **Improvement:** Recheck the course and archive status inside an immediate transaction, delete its database rows and require the audit event together, then remove media after commit.
+- **Why it helps:** If audit storage fails, the course remains available with its media; a successful delete has a durable audit record before cleanup starts.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable`, retained the archived course and media file, and wrote no audit row. After removing the trigger, retrying returned `204`, removed the course and media directory, and saved one audit event. All 71 `npm test` cases, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep course edits and audit history atomic
+
+- **Reviewed:** The staff course update transaction, publish/status changes, no-op behavior, and post-commit best-effort audit write.
+- **Improvement:** Require the `course.updated` audit event inside the immediate transaction whenever course fields change; failed audit persistence now rolls back edits and publication changes.
+- **Why it helps:** A course cannot be published, archived, or materially edited without the corresponding audit event, while no-op saves remain unaudited.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable`, retained the original title, and wrote no audit row. After removing the trigger, retrying returned `200` and saved one event. All 70 `npm test` cases, `npx tsc --noEmit`, `npm run build`, server syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep course creation and audit history atomic
+
+- **Reviewed:** The staff course-create route, course insert, and best-effort audit writer.
+- **Improvement:** Insert the course and require its audit event inside one immediate transaction; report `audit_unavailable` and roll back the draft if the audit row cannot be saved.
+- **Why it helps:** Staff no longer receive a failed create response while an unaudited draft remains in the course list.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable` and neither the draft nor a partial audit row remained. After removing the trigger, retrying returned `201` with one creation audit row. All 69 `npm test` cases, `npx tsc --noEmit`, `npm run build`, server syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep administrator account creation and audit atomic
+
+- **Reviewed:** Administrator account creation's immediate transaction, uniqueness and account-limit rechecks, and the subsequent best-effort audit write.
+- **Improvement:** Insert the audit event before committing account creation and roll back the new account if the audit row cannot be persisted.
+- **Why it helps:** A failed response can no longer leave behind an administrator-created account that has no creation record.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable` and created neither the user nor a partial audit row. After removing the trigger, retrying returned `201` and saved one audit entry. All 69 `npm test` cases, `npx tsc --noEmit`, `npm run build`, server syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Roll back unaudited platform settings changes
+
+- **Reviewed:** The platform settings update transaction, its best-effort audit writer, and the existing no-op settings behavior.
+- **Improvement:** Write the audit event inside the immediate settings transaction and reject the save if the audit writer reports failure.
+- **Why it helps:** Protocol, registration, user-limit, branding, or palette changes cannot commit while their audit event is missing.
+- **Checked:** An isolated SQLite trigger forced the audit insert to fail; the route returned `500 audit_unavailable` and both changed settings rolled back. After removing the trigger, a valid save returned `200` and created one audit row. All 65 `npm test` cases, `npx tsc --noEmit`, `npm run build`, server syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep account updates and session revocations atomic
+
+- **Reviewed:** The administrator account role/disabled update, session invalidation, and best-effort audit writer.
+- **Improvement:** Require the account-change audit row inside the same immediate transaction as the user update and session revocation.
+- **Why it helps:** A failed audit write no longer leaves an account disabled or its sessions revoked without a corresponding record.
+- **Checked:** An isolated SQLite trigger forced the audit insert to fail; the API returned `500 audit_unavailable`, retained the original account and session, and wrote no partial audit row. After removing the trigger, disabling the account returned `200`, revoked its session, and wrote one audit row. All 66 `npm test` cases, `npx tsc --noEmit`, `npm run build`, server syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep password resets and session revocations atomic
+
+- **Reviewed:** The administrator password-reset hash/update flow, target account recheck after hashing, session invalidation, and best-effort audit persistence.
+- **Improvement:** Re-read the target user and perform the password write, session revocation, and required audit insert in one immediate transaction. A missing user or failed audit now aborts the whole reset.
+- **Why it helps:** A reset cannot silently take effect without its audit record, and a failed reset keeps the learner's existing sessions valid.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable`, preserved the previous password hash and session, and wrote no partial audit row. After removing the trigger, the reset returned `204`, the new password verified, sessions were revoked, and one audit row was saved. All 67 `npm test` cases, `npx tsc --noEmit`, `npm run build`, server syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep administrator account creation and audit atomic
+
+- **Reviewed:** Administrator account creation's immediate transaction, uniqueness and account-limit rechecks, and the subsequent best-effort audit write.
+- **Improvement:** Insert the audit event before committing account creation and roll back the new account if the audit row cannot be persisted.
+- **Why it helps:** A failed response can no longer leave behind an administrator-created account that has no creation record.
+- **Checked:** An isolated SQLite trigger forced audit failure; the route returned `500 audit_unavailable` and created neither the user nor a partial audit row. After removing the trigger, retrying returned `201` and saved one audit entry. All 68 `npm test` cases, `npx tsc --noEmit`, `npm run build`, server syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Keep registration changes and audit records together
+
+- **Reviewed:** The admin registration-field save route, best-effort audit persistence, and the existing transaction-and-rollback pattern used for moderated comment removal.
+- **Improvement:** Save normalized registration fields and require the corresponding audit row in one immediate transaction. If audit persistence fails, return `audit_unavailable` and roll back the setting update.
+- **Why it helps:** The editor can no longer report a successful configuration change that the audit log failed to record.
+- **Checked:** An isolated SQLite trigger forced the audit insert to fail; the route returned `500 audit_unavailable`, the prior field configuration remained intact, and no partial audit row was kept. All 64 `npm test` cases, `npx tsc --noEmit`, `npm run build`, server syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Pause signup when saved registration settings are invalid
+
+- **Reviewed:** Stored registration-field parsing, the public field-read and account-creation routes, and the administrator editor's load and save recovery path.
+- **Improvement:** Detect invalid saved field data instead of silently treating it as an empty form. Public field reads and registration now return a structured `503`; the admin editor reports the invalid configuration and can replace or clear it.
+- **Why it helps:** Corrupt settings no longer make required signup questions disappear while account creation continues, and administrators have a direct recovery path.
+- **Checked:** An isolated Express/SQLite test confirmed malformed stored JSON returns `registration_fields_unavailable`, blocks account creation, appears as invalid in admin settings, and can be replaced through the admin endpoint. All 63 `npm test` cases, `npx tsc --noEmit`, `npm run build`, server syntax checks, and `git diff --check` passed. The signed-in admin editor was not rendered in the connected browser.
+
+## 2026-10-09 — Use singular counts across course summaries
+
+- **Reviewed:** Staff course-editor module headers, learner curriculum disclosures, course catalog and My Learning pagination, certificate pagination, and the shared count-label helper.
+- **Improvement:** Format lesson-plus-quiz totals and paginated course/certificate totals with the existing singular/plural helper.
+- **Why it helps:** Learners and course authors see accurate singular labels such as “1 item”, “1 course”, and “1 certificate” while scanning module content and result counts.
+- **Checked:** All 62 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The current browser session is at `/login`, so the authenticated course editor and learner pagination were not rendered for visual QA.
+
+## 2026-10-09 — Guide admins to invalid registration-field settings
+
+- **Reviewed:** The registration-field editor's label and select-option inputs, save flow, and matching server rules for trimmed unique labels and bounded unique options.
+- **Improvement:** Validate whitespace-only and duplicate labels plus select-option count, uniqueness, blank lines, and length before saving. Focus the offending control, mark it invalid, and associate it with the announced error while keeping server validation authoritative.
+- **Why it helps:** Administrators can fix the exact field that blocked a save without interpreting a page-level response or waiting for a request that the client could have rejected locally.
+- **Checked:** Seven targeted tests passed across the editor helper and existing registration API/schema tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The active local browser is at `/login`, so the authenticated editor interaction was not exercised.
+
+## 2026-10-09 — Focus invalid required registration answers
+
+- **Reviewed:** Required custom-field validation, the existing missing-select focus behavior, and the form's shared error announcement.
+- **Improvement:** Focus the first missing required custom field regardless of type; expose text/date invalid state with `aria-invalid`, associate invalid controls with the form alert, and show the existing danger color on invalid fields. Extract the missing-answer check and cover blank select/text/date, unchecked required checkbox, and optional values.
+- **Why it helps:** A whitespace-only required text answer no longer leaves keyboard users on the submit button; the learner lands on the field that needs attention and assistive technology can read its error.
+- **Checked:** Five targeted tests passed, including the new registration-field helper cases and existing server validation/snapshot tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The local `/register` page loaded, but this instance has no configured custom fields, so the rendered invalid-state interaction was not available to exercise; the Browser plugin and a Playwright package are not available in this workspace.
+
+## 2026-10-09 — Recheck role-selector adjacent click area
+
+- **Reviewed:** The reported account-details screenshot shows a wrapping `<label>` wider than its role selector. Current source uses a non-label control group capped to 240px on desktop, with a full-width mobile override.
+- **Result:** No duplicate code change. The adjacent-click fix and its desktop/mobile interaction check are already recorded in “Keep adjacent clicks outside the role selector” below.
+- **Why no change:** Reintroducing a wide label or wrapper would restore the click-through area; changing the selector width again would duplicate the existing constraint.
+- **Checked:** The new screenshot’s target path still names a `<label>`, while both the current source and served Vite module render a non-interactive `div.account-role-control`; the role control and selector are capped at 240px on desktop and full-width on mobile. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The active browser session is at `/login`, so I could not retest this signed-in page live. Reload the admin tab to load the current markup; the existing interaction check records adjacent clicks leaving the menu closed, trigger clicks opening it, and Escape closing it.
+
+## 2026-10-09 — Document account and registration behavior
+
+- **Reviewed:** The README account and registration descriptions against setup, public registration, administrator account creation, registration-field validation, account-detail display, and login-time writes.
+- **Improvement:** Clarify that new accounts require unique email addresses while sign-in remains username/password; document successful-login timestamps, custom signup fields, retained answers, and email-based staff search.
+- **Why it helps:** Administrators can discover the registration controls and understand how account identifiers, saved answers, and last-login data work before managing learners.
+- **Checked:** Cross-checked each statement against the current auth and admin routes, registration-field limits/types, account-details UI, and the failed-login regression test; `git diff --check` passed.
+
+## 2026-10-09 — Review shared select behavior after signup validation fix
+
+- **Reviewed:** Shared `AppSelect` use across signup, setup, course filters, account roles, settings, and log filters; selected-option opening, keyboard navigation, disabled choices, and close behavior.
+- **Result:** No additional code change. The remaining uses have explicit accessible names and valid selected values; no related interaction regression appeared.
+- **Why no change:** The inspected flows use the shared component’s existing keyboard and focus handling, and adding another validation or interaction layer would not address a distinct user problem.
+- **Checked:** Reviewed the current component and call sites after the signup interaction passed in an isolated browser; automated suite, typecheck, and build remain green.
+
+## 2026-10-09 — Guide learners to missing required signup choices
+
+- **Reviewed:** Required custom select validation on registration, the shared `AppSelect` combobox, and the error response for an unanswered field.
+- **Improvement:** Give registration comboboxes stable control IDs; when a required choice is missing, focus that combobox and mark it invalid for assistive technology. Selecting an option clears the error state.
+- **Why it helps:** Learners are taken directly to the missing answer and can identify and correct the invalid field without searching the form.
+- **Checked:** In an isolated local signup flow, submitting an empty required “Department” choice showed the field error, focused the combobox, and set `aria-invalid="true"`; selecting an option cleared the error and invalid state. All 58 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Mobile and browser console checks were not performed.
+
+## 2026-10-09 — Review remaining account lookup paths
+
+- **Reviewed:** Server routes that filter accounts by username, the admin account list, course learner assignment, and the associated search labels.
+- **Result:** No additional code change. Both staff account lookup flows now search by username or email; remaining server search helpers cover logs and course content.
+- **Why no change:** A source search found no other username-only account lookup path to fix without inventing a new workflow.
+- **Checked:** `rg` review of server account search predicates and UI prompts; the 58-case suite, typecheck, build, and browser QA from the preceding changes remain green.
+
+## 2026-10-09 — Find learners by email when assigning courses
+
+- **Reviewed:** The course-access learner search, count/list query alignment, and the existing learner assignment controls.
+- **Improvement:** Match learner usernames and email addresses with the shared parameterized search helper, and clarify the search prompt.
+- **Why it helps:** Staff can locate the correct learner by either account identifier before granting or removing course access; non-learner accounts remain excluded.
+- **Checked:** The isolated course-access route test matched an uppercase email and returned only the intended learner. On an isolated local assignment page, the email query displayed that learner and the correct “Not assigned” state. All 58 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Browser console and mobile viewport were not checked.
+
+## 2026-10-09 — Find administrator accounts by email
+
+- **Reviewed:** The account-list search, email-backed account creation, SQL text-search helpers, and the existing account table layout.
+- **Improvement:** Search both usernames and email addresses through the shared parameterized search helper, and label the field “Search username or email”. The table continues to show usernames only.
+- **Why it helps:** Administrators can locate an account when they know its sign-in email, while preserving literal wildcard handling and Unicode search behavior from the shared helper.
+- **Checked:** On an isolated local admin page with two accounts, an uppercase email query returned the matching account only; the rendered table showed `1–1 of 1`. Added a route assertion for email matching. All 57 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Browser console and mobile viewport were not checked.
+
+## 2026-10-09 — Keep adjacent clicks outside the role selector
+
+- **Reviewed:** The account-details role selector's 240px trigger, its flex row, and the wide wrapping `<label>` that extended beyond the control.
+- **Improvement:** Replace the wrapper with a non-interactive control group, constrain it to the selector width on desktop, and keep it full-width on mobile. The combobox retains its explicit accessible name.
+- **Why it helps:** Clicking the empty area beside the selector no longer activates it; the dropdown opens from the selector itself and the mobile layout stays full-width.
+- **Checked:** On an isolated account-details page, an adjacent gap click left `aria-expanded` false; the trigger opened the list and Escape closed it. The control widths matched at the default desktop size and 390 × 844. Browser warning/error logs were empty. `npm test` (57 cases), `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Protect configurable registration answers
+
+- **Reviewed:** The new registration-field schema, field and answer normalization, public account-creation transaction, saved answer snapshots, and the client-side required-field check.
+- **Improvement:** Add isolated regression coverage for duplicate/invalid field definitions, required and typed answers, invalid dates and choices, stale field IDs, rejected account creation, and stored answer snapshots. Extend the migration fixture through version 18, and narrow the client value before trimming it so checkbox booleans type-check correctly.
+- **Why it helps:** Registration data remains validated at the server boundary, existing answers retain the label and value learners submitted after fields are edited, and the signup UI builds with both text and checkbox values.
+- **Checked:** All 57 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Use singular labels for one-item counts
+
+- **Reviewed:** Course-card module totals, learner course and quiz summaries, feedback totals, and course analytics and account-course counts.
+- **Improvement:** Add a shared count-label formatter with explicit singular and plural words; apply it to visible learner and staff counts, including irregular “quiz/quizzes”.
+- **Why it helps:** A one-lesson course now reads “1 lesson” consistently, and other single-item totals no longer retain plural nouns.
+- **Checked:** Rendered a seeded local course at the default viewport and 390 × 844; verified “1 module · 1 lesson”, “1 question”, and the quiz status transitions from “0 of 1 question answered” to “All 1 question answered.” with submission enabled. No browser warnings or errors appeared. All 54 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Updated the isolated last-login fixture for the current email-required setup/registration routes and schema version 17.
+
+## 2026-10-09 — Review audit-log filtering at mobile width
+
+- **Reviewed:** The rendered administrator audit-log filter, dynamic action options, result table, and narrow-screen behavior.
+- **Result:** No additional UI change. Selecting `auth.signed in (1)` with the mouse showed only the matching row; the filter stacked above the table and the table remained in its labeled horizontal-scroll region at 390 × 844.
+- **Why no change:** The selected filter is visible, the single matching result is clear, and no clipping outside the intentional table scroll region or browser warnings appeared.
+- **Checked:** Codex in-app browser on `/admin/audit-log` at the default viewport and 390 × 844; page title/URL, accessible result state, screenshot, and warning/error log. Restored the original `/courses` view.
+
+## 2026-10-09 — Keep failed sign-ins out of last-login activity
+
+- **Reviewed:** The authentication branch that records login time only after password verification and the regression fixture for setup, registration, and successful sign-in.
+- **Improvement:** Assert that a rejected password leaves the account's prior `last_login_at` value unchanged before a successful sign-in advances it.
+- **Why it helps:** Failed access attempts cannot make an account appear to have been used successfully.
+- **Checked:** `node --test server/last-login.test.js` passed both isolated SQLite/Express cases, including a rejected login followed by a successful one.
+
+## 2026-10-09 — Exercise every last-login write path
+
+- **Reviewed:** Last-login writes during first setup, public registration, and sign-in; the prior regression fixture covered migration history and sign-in but not the other two route paths.
+- **Improvement:** Extend the isolated auth fixture to complete setup, register a learner, sign in as the administrator, and read the persisted value through the admin details API.
+- **Why it helps:** Each path that creates or authenticates an account is now checked against the same persisted timestamp contract.
+- **Checked:** `node --test server/last-login.test.js` passed both cases, including the migration backfill/idempotency case and setup-registration-sign-in/API flow.
+
+## 2026-10-09 — Check last-login details at mobile width
+
+- **Reviewed:** The in-progress administrator account-details view, including the new `Last login` value, neighboring account metadata, and account controls.
+- **Result:** No additional UI change. The timestamp remains readable beside the account metadata at desktop and stacks cleanly at 390 × 844.
+- **Why no change:** The date and time are present in the accessibility tree, the account card fits the narrow viewport, and no layout or console issue appeared.
+- **Checked:** Rendered the account-details page at the default browser size and 390 × 844; inspected the accessibility tree and browser warning/error log; restored the original `/courses` tab afterward.
+
+## 2026-10-09 — Protect last-login tracking and migration behavior
+
+- **Reviewed:** The in-progress schema migration, successful-authentication updates, and administrator account-details response for `lastLoginAt`; no focused test covered this field.
+- **Improvement:** Add isolated regression coverage for migration backfill from sign-in, registration, and setup audit events, null values for users without history, migration idempotency, successful login updates, and the admin API field.
+- **Why it helps:** Account activity metadata stays consistent for both existing databases and new sign-ins, and the administrator page receives the persisted timestamp in the expected shape.
+- **Checked:** `node --test server/last-login.test.js` passed both cases against temporary SQLite data and an isolated Express server.
+
+## 2026-10-09 — Keep custom select options clickable
+
+- **Reviewed:** The shared `AppSelect` focus and pointer handlers, plus the administrator user-role filter in the rendered app. Clicking “Administrators” or “Moderators” closed the portaled list without changing the value, while keyboard selection worked.
+- **Improvement:** Prevent pointer-down on a listbox option from moving focus away from the combobox trigger, so the option click can finish before the menu closes.
+- **Why it helps:** Mouse users can apply filters and use the other shared custom selects; the existing keyboard navigation and Escape dismissal remain available.
+- **Checked:** In the connected browser, reproduced the unchanged value before the fix; afterward mouse selection updated the filter to “Moderators” and “All roles,” keyboard ArrowDown + Enter selected “Administrators,” and Escape closed the menu. At 390 × 844, the role menu remained visible within the viewport. All 51 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Cover course analytics eligibility and metric boundaries
+
+- **Reviewed:** The analytics route's enrolled-or-assigned learner set, disabled-account handling, course-wide aggregates, per-learner progress, quiz weighting, and empty-data behavior; the current tree had no route-level analytics fixture.
+- **Improvement:** Add an isolated SQLite/Express fixture that checks summary and per-activity metrics, counts a learner enrolled and assigned only once, excludes non-eligible activity, includes disabled learners, verifies weighted attempt scores and latest activity, covers empty-course null rates, and confirms staff-only access.
+- **Why it helps:** Regression coverage protects the completion and assessment numbers staff use to evaluate courses, including edge cases that are easy to miscount in SQL.
+- **Checked:** All 51 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-09 — Clarify where moderated comments are logged
 
 - **Reviewed:** The admin-only audit-log access rule, moderator course-management permissions, the staff comment notice, and the audit-log page description.
