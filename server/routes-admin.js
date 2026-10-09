@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db, setting } from './db.js';
-import { hashPassword, validateCredentials } from './auth.js';
+import { hashPassword, normalizeEmail, validateCredentials, validateEmail } from './auth.js';
 import { enumQuery, fail, pageQuery, requireAdmin, requireObjectBody } from './http.js';
 import { invalidateUserSessions } from './session-store.js';
-import { likeContains, textSearchPredicate } from './sql.js';
+import { textSearchPredicate } from './sql.js';
 import { writeAuditLog } from './log-store.js';
 import { courseSummaries } from './course-service.js';
+import { readRegistrationFields, saveRegistrationFields } from './registration-fields.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -27,6 +28,21 @@ function parseLogDetails(value) {
     return details && typeof details === 'object' && !Array.isArray(details) ? details : {};
   } catch { return {}; }
 }
+
+adminRouter.get('/registration-fields', (_req, res) => {
+  res.json(readRegistrationFields());
+});
+
+adminRouter.put('/registration-fields', (req, res) => {
+  const fields = db.transaction(() => {
+    const savedFields = saveRegistrationFields(req.body?.fields);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'platform.registration_fields_updated', entityType: 'platform',
+      summary: 'Registration fields updated', details: { fieldCount: savedFields.length, fieldTypes: savedFields.map((field) => field.type) } });
+    if (!auditId) fail(500, 'Registration fields could not be saved because the audit log is unavailable.', 'audit_unavailable');
+    return savedFields;
+  }).immediate();
+  res.json({ fields });
+});
 
 function assertAccountCapacity() {
   const limit = Number(setting('user_limit') || 0);
@@ -100,7 +116,11 @@ adminRouter.get('/users', (req, res) => {
   const clauses = [];
   const params = [];
   if (role !== 'all') { clauses.push('role = ?'); params.push(role); }
-  if (query) { clauses.push("username LIKE ? ESCAPE '!'"); params.push(likeContains(query)); }
+  if (query) {
+    const search = textSearchPredicate(['username', 'email'], query);
+    clauses.push(`(${search.sql})`);
+    params.push(...search.params);
+  }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   const orderBy = role === 'all'
     ? "CASE role WHEN 'admin' THEN 1 WHEN 'moderator' THEN 2 ELSE 3 END, username COLLATE NOCASE"
@@ -125,36 +145,47 @@ adminRouter.get('/users', (req, res) => {
 
 adminRouter.post('/users', async (req, res) => {
   const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+  const email = normalizeEmail(req.body?.email);
   const { password, confirmPassword } = req.body || {};
   const role = req.body?.role === undefined ? 'learner' : req.body.role;
   const credentialError = validateCredentials(username, password);
   if (credentialError) fail(400, credentialError, 'invalid_credentials');
+  const emailError = validateEmail(email);
+  if (emailError) fail(400, emailError, 'invalid_email');
   if (password !== confirmPassword) fail(400, 'Passwords do not match.', 'password_mismatch');
   if (!['admin', 'moderator', 'learner'].includes(role)) fail(400, 'Choose a valid role.', 'validation_error');
   assertAccountCapacity();
   if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) fail(409, 'That username is already in use.', 'username_taken');
+  if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) fail(409, 'That email address is already in use.', 'email_taken');
   const passwordHash = await hashPassword(password);
   const id = randomUUID();
   const createAccount = db.transaction(() => {
     assertAccountCapacity();
     if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) fail(409, 'That username is already in use.', 'username_taken');
-    db.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)')
-      .run(id, username, passwordHash, role);
+    if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) fail(409, 'That email address is already in use.', 'email_taken');
+    db.prepare('INSERT INTO users (id, username, email, password_hash, role) VALUES (?, ?, ?, ?, ?)')
+      .run(id, username, email, passwordHash, role);
+    const user = db.prepare('SELECT id, username, email, role, disabled, created_at, updated_at FROM users WHERE id = ?').get(id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'account.created', entityType: 'user', entityId: id,
+      summary: `Created account for ${username}`, details: { username, role } });
+    if (!auditId) fail(500, 'Account could not be created because the audit log is unavailable.', 'audit_unavailable');
+    return user;
   });
+  let user;
   try {
-    createAccount.immediate();
+    user = createAccount.immediate();
   } catch (error) {
-    if (error?.code === 'SQLITE_CONSTRAINT_UNIQUE') fail(409, 'That username is already in use.', 'username_taken');
+    if (error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) fail(409, 'That email address is already in use.', 'email_taken');
+      if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) fail(409, 'That username is already in use.', 'username_taken');
+    }
     throw error;
   }
-  const user = db.prepare('SELECT id, username, role, disabled, created_at, updated_at FROM users WHERE id = ?').get(id);
-  writeAuditLog({ actor: req.currentUser, action: 'account.created', entityType: 'user', entityId: id,
-    summary: `Created account for ${username}`, details: { username, role } });
   res.status(201).json({ user: { ...user, disabled: Boolean(user.disabled), createdAt: user.created_at, updatedAt: user.updated_at } });
 });
 
 adminRouter.get('/users/:userId', (req, res) => {
-  const user = db.prepare('SELECT id, username, role, disabled, created_at, updated_at FROM users WHERE id = ?').get(req.params.userId);
+  const user = db.prepare('SELECT id, username, email, role, disabled, created_at, updated_at, last_login_at FROM users WHERE id = ?').get(req.params.userId);
   if (!user) fail(404, 'User not found.', 'not_found');
   const courseFilter = `EXISTS (SELECT 1 FROM enrollments e WHERE e.course_id = c.id AND e.user_id = ?)
        OR EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?)`;
@@ -173,8 +204,13 @@ adminRouter.get('/users/:userId', (req, res) => {
     LIMIT ? OFFSET ?
   `).all(user.id, user.id, user.id, user.id, pageSize, (page - 1) * pageSize);
   const summaries = new Map(courseSummaries(courses, user).map((course) => [course.id, course]));
+  const registrationFields = db.prepare(`SELECT field_id, field_label, field_type, field_value
+    FROM user_registration_field_values WHERE user_id = ? ORDER BY position, field_id`).all(user.id)
+    .map((field) => ({ id: field.field_id, label: field.field_label, type: field.field_type,
+      value: field.field_type === 'checkbox' ? field.field_value === 'true' : field.field_value }));
   res.json({
-    user: { ...user, disabled: Boolean(user.disabled), createdAt: user.created_at, updatedAt: user.updated_at, isCurrentUser: user.id === req.currentUser.id },
+    user: { ...user, disabled: Boolean(user.disabled), createdAt: user.created_at, updatedAt: user.updated_at, lastLoginAt: user.last_login_at, isCurrentUser: user.id === req.currentUser.id },
+    registrationFields,
     courses: courses.map((course) => ({
       ...summaries.get(course.id),
       quizCount: course.quiz_count,
@@ -206,16 +242,15 @@ adminRouter.patch('/users/:userId', (req, res) => {
     if (changed) {
       db.prepare('UPDATE users SET role = ?, disabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
         .run(nextRole, nextDisabled ? 1 : 0, user.id);
+      const auditId = writeAuditLog({ actor: req.currentUser, action: 'account.updated', entityType: 'user', entityId: user.id,
+        summary: `Updated account for ${user.username}`, details: { username: user.username, role: { from: user.role, to: nextRole }, disabled: { from: Boolean(user.disabled), to: nextDisabled } } });
+      if (!auditId) fail(500, 'Account could not be updated because the audit log is unavailable.', 'audit_unavailable');
     }
     if (nextDisabled) invalidateUserSessions(db, user.id);
     const updated = db.prepare('SELECT id, username, role, disabled, created_at, updated_at FROM users WHERE id = ?').get(user.id);
     return { user, nextRole, nextDisabled, updated, changed };
   });
-  const { user, nextRole, nextDisabled, updated, changed } = updateUser.immediate();
-  if (changed) {
-    writeAuditLog({ actor: req.currentUser, action: 'account.updated', entityType: 'user', entityId: user.id,
-      summary: `Updated account for ${user.username}`, details: { username: user.username, role: { from: user.role, to: nextRole }, disabled: { from: Boolean(user.disabled), to: nextDisabled } } });
-  }
+  const { updated } = updateUser.immediate();
   res.json({ user: { ...updated, disabled: Boolean(updated.disabled), createdAt: updated.created_at, updatedAt: updated.updated_at } });
 });
 
@@ -228,12 +263,15 @@ adminRouter.put('/users/:userId/password', async (req, res) => {
   if (credentialError && !credentialError.startsWith('Username')) fail(400, credentialError, 'invalid_password');
   const passwordHash = await hashPassword(password);
   const resetPassword = db.transaction(() => {
+    const currentUser = db.prepare('SELECT id, username FROM users WHERE id = ?').get(user.id);
+    if (!currentUser) fail(404, 'User not found.', 'not_found');
     db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(passwordHash, user.id);
-    invalidateUserSessions(db, user.id);
+      .run(passwordHash, currentUser.id);
+    invalidateUserSessions(db, currentUser.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'account.password_reset', entityType: 'user', entityId: currentUser.id,
+      summary: `Reset password for ${currentUser.username}`, details: { username: currentUser.username } });
+    if (!auditId) fail(500, 'Password could not be reset because the audit log is unavailable.', 'audit_unavailable');
   });
   resetPassword.immediate();
-  writeAuditLog({ actor: req.currentUser, action: 'account.password_reset', entityType: 'user', entityId: user.id,
-    summary: `Reset password for ${user.username}`, details: { username: user.username } });
   res.status(204).end();
 });

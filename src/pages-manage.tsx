@@ -1,17 +1,19 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload } from 'lucide-react';
+import { Activity, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, Filter, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload, UsersRound } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
 import { AppSelect, Button, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
+import { formatCountLabel } from './count-label';
+import { validateRegistrationFieldEditor } from './registration-fields';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import { useAuth } from './auth-context';
 import { canonicalCaptionLanguageTag, captionFileSizeError, captionLanguageErrorMessage } from './caption-validation';
 import { courseEditingNote } from './course-editing-note';
 import { firstQuizTextIssue } from './quiz-validation';
 import { lessonResourceUrlError } from './resource-validation';
-import type { Course, CourseAccessUser, CourseAnalytics, CourseModule, Lesson, LessonCaption, LessonResource, QuizQuestion, Role, User } from './types';
+import type { Course, CourseAccessUser, CourseAnalytics, CourseModule, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
 
 type CourseListResponse = { courses: Course[]; total: number; page: number; pageSize: number };
 type CourseRowAction = 'publish' | 'unpublish' | 'archive' | 'delete';
@@ -123,13 +125,18 @@ function defaultQuizTitle(moduleTitle: string) {
   return `${prefix}${defaultQuizTitleSuffix}`;
 }
 
-function Notice({ children, kind = 'error' }: { children: React.ReactNode; kind?: 'error' | 'success' }) {
-  return <div className={`inline-notice inline-notice-${kind}`} role={kind === 'error' ? 'alert' : 'status'}>{children}</div>;
+function Notice({ children, kind = 'error', id }: { children: React.ReactNode; kind?: 'error' | 'success'; id?: string }) {
+  return <div id={id} className={`inline-notice inline-notice-${kind}`} role={kind === 'error' ? 'alert' : 'status'}>{children}</div>;
 }
 
 function DateText({ value }: { value: string }) {
   const date = new Date(value.includes('Z') ? value : `${value.replace(' ', 'T')}Z`);
   return <span>{Number.isNaN(date.getTime()) ? '—' : courseDateFormatter.format(date)}</span>;
+}
+
+function DateTimeText({ value }: { value: string }) {
+  const date = new Date(value.includes('Z') ? value : `${value.replace(' ', 'T')}Z`);
+  return <span>{Number.isNaN(date.getTime()) ? '—' : logTimestampFormatter.format(date)}</span>;
 }
 
 export function CourseManagementPage() {
@@ -270,26 +277,26 @@ export function CourseAnalyticsPage() {
     <PageHeading title={data?.course.title || 'Course dashboard'} subtitle="Learner progress and assessment performance across this course." action={<div className="analytics-heading-actions"><Link className="button button-secondary" to={`/manage/courses/${courseId}/access`}>Assign learners</Link><Link className="button button-secondary" to={`/manage/courses/${courseId}/edit`}>Edit course</Link></div>} />
     {error && <><Notice>{error}</Notice><Button variant="secondary" onClick={() => setRefreshVersion((version) => version + 1)}>Try again</Button></>}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading course analytics…</div> : !failedPage && data && <>
-      <div className="analytics-course-context"><CourseStatus status={data.course.status} /><VisibilityLabel visibility={data.course.visibility} /><span>{data.course.category}</span><span>{data.summary.learnerCount} enrolled or assigned learners{data.summary.disabledLearnerCount ? ` · ${data.summary.disabledLearnerCount} disabled` : ''}</span></div>
+      <div className="analytics-course-context"><CourseStatus status={data.course.status} /><VisibilityLabel visibility={data.course.visibility} /><span>{data.course.category}</span><span>{formatCountLabel(data.summary.learnerCount, 'learner', 'learners')} enrolled or assigned{data.summary.disabledLearnerCount ? ` · ${formatCountLabel(data.summary.disabledLearnerCount, 'learner', 'learners')} disabled` : ''}</span></div>
       <section className="analytics-kpi-grid" aria-label="Course summary metrics">
-        <article className="analytics-kpi"><span>Completion rate</span><strong>{data.summary.completionRate === null ? '—' : `${data.summary.completionRate}%`}</strong><small>{data.summary.completedLearnerCount} of {data.summary.learnerCount} learners completed</small></article>
+        <article className="analytics-kpi"><span>Completion rate</span><strong>{data.summary.completionRate === null ? '—' : `${data.summary.completionRate}%`}</strong><small>{data.summary.completedLearnerCount} of {formatCountLabel(data.summary.learnerCount, 'learner', 'learners')} completed</small></article>
         <article className="analytics-kpi"><span>Average progress</span><strong>{data.summary.averageProgress === null ? '—' : `${data.summary.averageProgress}%`}</strong><small>Across enrolled and assigned learners</small></article>
         <article className="analytics-kpi"><span>Started learning</span><strong>{data.summary.startedLearnerCount}</strong><small>At least one lesson or quiz activity</small></article>
-        <article className="analytics-kpi"><span>Learning activity</span><strong>{data.summary.lessonCompletions + data.summary.quizAttempts}</strong><small>{data.summary.lessonCompletions} lesson completions · {data.summary.quizAttempts} quiz attempts</small></article>
+        <article className="analytics-kpi"><span>Learning activity</span><strong>{data.summary.lessonCompletions + data.summary.quizAttempts}</strong><small>{formatCountLabel(data.summary.lessonCompletions, 'lesson completion', 'lesson completions')} · {formatCountLabel(data.summary.quizAttempts, 'quiz attempt', 'quiz attempts')}</small></article>
       </section>
 
       <section className="analytics-section">
-        <div className="analytics-section-heading"><div><h2>Lesson completion</h2><p>Completion is measured against all enrolled and assigned learners.</p></div><span>{data.summary.lessonCount} lessons</span></div>
+        <div className="analytics-section-heading"><div><h2>Lesson completion</h2><p>Completion is measured against all enrolled and assigned learners.</p></div><span>{formatCountLabel(data.summary.lessonCount, 'lesson', 'lessons')}</span></div>
         {data.lessonMetrics.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable lesson completion metrics" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Lesson completion metrics</caption><thead><tr><th scope="col">Module</th><th scope="col">Lesson</th><th scope="col">Completed</th><th scope="col">Rate</th></tr></thead><tbody>{data.lessonMetrics.map((lesson) => <tr key={lesson.id}><td>{lesson.moduleTitle}</td><td><strong>{lesson.title}</strong></td><td>{lesson.completedCount} / {data.summary.learnerCount}</td><td>{lesson.completionRate === null ? '—' : <div className="analytics-rate-cell"><ProgressBar value={lesson.completionRate} label={`Completion rate for ${lesson.title}`} /><Percentage value={lesson.completionRate} /></div>}</td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No lessons yet" detail="Add lessons to the course curriculum to see completion metrics." />}
       </section>
 
       <section className="analytics-section">
-        <div className="analytics-section-heading"><div><h2>Quiz performance</h2><p>Pass rates use learners who attempted each quiz; average scores use all attempts.</p></div><span>{data.summary.quizCount} quizzes</span></div>
-        {data.quizMetrics.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable quiz performance metrics" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Quiz performance metrics</caption><thead><tr><th scope="col">Module</th><th scope="col">Quiz</th><th scope="col">Participation</th><th scope="col">Passed</th><th scope="col">Pass rate</th><th scope="col">Average score</th><th scope="col">Attempts</th></tr></thead><tbody>{data.quizMetrics.map((quiz) => <tr key={quiz.id}><td>{quiz.moduleTitle}</td><td><strong>{quiz.title}</strong><small>Pass mark {quiz.passMark}%</small></td><td>{quiz.learnersAttempted} learners · {quiz.participationRate === null ? '—' : `${quiz.participationRate}%`}</td><td>{quiz.learnersPassed} / {quiz.learnersAttempted}</td><td>{quiz.passRate === null ? '—' : <Percentage value={quiz.passRate} />}</td><td>{quiz.averageScore === null ? '—' : `${quiz.averageScore}%`}</td><td>{quiz.attempts}</td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No quizzes yet" detail="Add module quizzes to see participation and score metrics." />}
+        <div className="analytics-section-heading"><div><h2>Quiz performance</h2><p>Pass rates use learners who attempted each quiz; average scores use all attempts.</p></div><span>{formatCountLabel(data.summary.quizCount, 'quiz', 'quizzes')}</span></div>
+        {data.quizMetrics.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable quiz performance metrics" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Quiz performance metrics</caption><thead><tr><th scope="col">Module</th><th scope="col">Quiz</th><th scope="col">Participation</th><th scope="col">Passed</th><th scope="col">Pass rate</th><th scope="col">Average score</th><th scope="col">Attempts</th></tr></thead><tbody>{data.quizMetrics.map((quiz) => <tr key={quiz.id}><td>{quiz.moduleTitle}</td><td><strong>{quiz.title}</strong><small>Pass mark {quiz.passMark}%</small></td><td>{formatCountLabel(quiz.learnersAttempted, 'learner', 'learners')} · {quiz.participationRate === null ? '—' : `${quiz.participationRate}%`}</td><td>{quiz.learnersPassed} / {quiz.learnersAttempted}</td><td>{quiz.passRate === null ? '—' : <Percentage value={quiz.passRate} />}</td><td>{quiz.averageScore === null ? '—' : `${quiz.averageScore}%`}</td><td>{quiz.attempts}</td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No quizzes yet" detail="Add module quizzes to see participation and score metrics." />}
       </section>
 
       <section className="analytics-section analytics-learners-section">
-        <div className="analytics-section-heading"><div><h2>Learner progress</h2><p>Per-person lesson completion, quiz attempts, and course completion.</p></div><span>{data.summary.learnerCount} learners</span></div>
+        <div className="analytics-section-heading"><div><h2>Learner progress</h2><p>Per-person lesson completion, quiz attempts, and course completion.</p></div><span>{formatCountLabel(data.summary.learnerCount, 'learner', 'learners')}</span></div>
         {data.learners.length ? <div className="analytics-table-wrap analytics-learners-table-wrap" role="region" aria-label="Scrollable learner progress" tabIndex={0}><table className="analytics-table analytics-learners-table"><caption className="sr-only">Learner-level course progress</caption><thead><tr><th scope="col">Learner</th><th scope="col">Progress</th><th scope="col">Lessons</th><th scope="col">Quizzes passed</th><th scope="col">Last activity</th><th scope="col">Status</th></tr></thead><tbody>{data.learners.map((learner) => <tr key={learner.id}>
           <td>
             <strong>{learner.username}</strong>
@@ -1040,7 +1047,7 @@ export function CourseEditorPage() {
       {addingModule && <form id="add-module-form" className="inline-add-form" onSubmit={addModule}><input autoFocus value={moduleTitle} onChange={(event) => setModuleTitle(event.target.value)} placeholder="Module title" aria-label="Module title" maxLength={160} disabled={addingModuleBusy} /><Button type="submit" disabled={!moduleTitle.trim() || addingModuleBusy}>{addingModuleBusy ? 'Adding module…' : 'Add module'}</Button><button type="button" className="text-action" disabled={addingModuleBusy} onClick={() => { setAddingModule(false); addModuleInvokerRef.current?.focus(); }}>Cancel</button></form>}
       <div className="module-editor-list">
         {course.modules?.map((module, moduleIndex) => <div className="module-editor" key={module.id}>
-          <div className="module-editor-heading"><button type="button" className="module-disclosure" onClick={() => setExpanded({ ...expanded, [module.id]: !(expanded[module.id] ?? true) })} aria-label={`${expanded[module.id] ?? true ? 'Collapse' : 'Expand'} ${module.title}`} aria-expanded={expanded[module.id] ?? true}><ChevronDown className={(expanded[module.id] ?? true) ? '' : 'chevron-collapsed'} size={18} /></button><BookOpen size={18} /><h3 className="module-name-heading"><button type="button" className="module-name-button" onClick={() => editModule(module)}>{module.title}</button></h3><span className="module-item-count">{module.lessons.length + (module.quiz ? 1 : 0)} items</span><div className="module-tools"><button type="button" title={movingCurriculumItems.has(`module:${module.id}`) ? 'Moving module…' : 'Move module up'} aria-label={movingCurriculumItems.has(`module:${module.id}`) ? `Moving ${module.title}` : `Move ${module.title} up`} aria-busy={movingCurriculumItems.has(`module:${module.id}`)} disabled={moduleIndex === 0 || isMovingCurriculum} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'up', `module:${module.id}`)}><ArrowUp size={16} /></button><button type="button" title={movingCurriculumItems.has(`module:${module.id}`) ? 'Moving module…' : 'Move module down'} aria-label={movingCurriculumItems.has(`module:${module.id}`) ? `Moving ${module.title}` : `Move ${module.title} down`} aria-busy={movingCurriculumItems.has(`module:${module.id}`)} disabled={moduleIndex === (course.modules?.length || 0) - 1 || isMovingCurriculum} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'down', `module:${module.id}`)}><ArrowDown size={16} /></button><button type="button" title={deletingCurriculumItem === `module:${module.id}` ? 'Removing module…' : 'Remove module'} aria-label={deletingCurriculumItem === `module:${module.id}` ? `Removing module ${module.title}` : `Remove module ${module.title}`} aria-busy={deletingCurriculumItem === `module:${module.id}`} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} className="danger-icon" onClick={() => deleteModule(module)}><Trash2 size={16} /></button></div></div>
+          <div className="module-editor-heading"><button type="button" className="module-disclosure" onClick={() => setExpanded({ ...expanded, [module.id]: !(expanded[module.id] ?? true) })} aria-label={`${expanded[module.id] ?? true ? 'Collapse' : 'Expand'} ${module.title}`} aria-expanded={expanded[module.id] ?? true}><ChevronDown className={(expanded[module.id] ?? true) ? '' : 'chevron-collapsed'} size={18} /></button><BookOpen size={18} /><h3 className="module-name-heading"><button type="button" className="module-name-button" onClick={() => editModule(module)}>{module.title}</button></h3><span className="module-item-count">{formatCountLabel(module.lessons.length + (module.quiz ? 1 : 0), 'item', 'items')}</span><div className="module-tools"><button type="button" title={movingCurriculumItems.has(`module:${module.id}`) ? 'Moving module…' : 'Move module up'} aria-label={movingCurriculumItems.has(`module:${module.id}`) ? `Moving ${module.title}` : `Move ${module.title} up`} aria-busy={movingCurriculumItems.has(`module:${module.id}`)} disabled={moduleIndex === 0 || isMovingCurriculum} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'up', `module:${module.id}`)}><ArrowUp size={16} /></button><button type="button" title={movingCurriculumItems.has(`module:${module.id}`) ? 'Moving module…' : 'Move module down'} aria-label={movingCurriculumItems.has(`module:${module.id}`) ? `Moving ${module.title}` : `Move ${module.title} down`} aria-busy={movingCurriculumItems.has(`module:${module.id}`)} disabled={moduleIndex === (course.modules?.length || 0) - 1 || isMovingCurriculum} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'down', `module:${module.id}`)}><ArrowDown size={16} /></button><button type="button" title={deletingCurriculumItem === `module:${module.id}` ? 'Removing module…' : 'Remove module'} aria-label={deletingCurriculumItem === `module:${module.id}` ? `Removing module ${module.title}` : `Remove module ${module.title}`} aria-busy={deletingCurriculumItem === `module:${module.id}`} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} className="danger-icon" onClick={() => deleteModule(module)}><Trash2 size={16} /></button></div></div>
           {(expanded[module.id] ?? true) && <div className="module-editor-content">
             {module.lessons.map((lesson, lessonIndex) => <div className="lesson-editor-item" key={lesson.id}>
               <div className="lesson-editor-row">
@@ -1157,7 +1164,7 @@ export function CourseAccessPage() {
     {error && (failedRequest
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.query, failedRequest.page); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
-    <form className="access-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); setPage(1); load(search, 1); }}><Search size={18} /><input placeholder="Search learners by username" aria-label="Search learners" maxLength={100} value={query} onChange={(event) => setQuery(event.target.value)} /><Button variant="secondary" type="submit">Search</Button></form>
+    <form className="access-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); setPage(1); load(search, 1); }}><Search size={18} /><input placeholder="Search learners by username or email" aria-label="Search learners by username or email" maxLength={100} value={query} onChange={(event) => setQuery(event.target.value)} /><Button variant="secondary" type="submit">Search</Button></form>
     <div className="access-list">
       <div className="access-list-head"><span>Learner</span><span>Assignment</span><span>Action</span></div>
       {!failedRequest && users.length ? <ul className="access-rows" aria-label="Learner access">
@@ -1348,7 +1355,7 @@ export function AdminUsersPage() {
   }
 
   return <div className="management-page users-page"><PageHeading title="Users" subtitle="Create accounts, review learning activity, and manage roles and access." action={<Link className="button button-primary" to="/admin/users/new"><Plus size={17} />Create account</Link>} />
-    <div className="user-filter-row"><form className="management-search" onSubmit={(event) => { event.preventDefault(); load(1); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search users" aria-label="Search users" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter"><AppSelect ariaLabel="Filter by role" value={roleFilter} onChange={setRoleFilter} options={[{ value: 'all', label: 'All roles' }, { value: 'admin', label: 'Administrators' }, { value: 'moderator', label: 'Moderators' }, { value: 'learner', label: 'Learners' }]} /></div></div>
+    <div className="user-filter-row"><form className="management-search" onSubmit={(event) => { event.preventDefault(); load(1); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search username or email" aria-label="Search username or email" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter user-role-filter"><span className="catalog-filter-label">Role</span><AppSelect className="app-select--filter" ariaLabel="Filter by role" leadingIcon={<UsersRound size={16} />} value={roleFilter} onChange={setRoleFilter} options={[{ value: 'all', label: 'All roles' }, { value: 'admin', label: 'Administrators' }, { value: 'moderator', label: 'Moderators' }, { value: 'learner', label: 'Learners' }]} /></div></div>
     {error && !resetUser && (failedRequest
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest.query, failedRequest.roleFilter); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
@@ -1367,6 +1374,8 @@ export function AdminUsersPage() {
 
 export function AdminUserCreatePage() {
   const navigate = useNavigate();
+  const roleHelpId = useId();
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [role, setRole] = useState<Role>('learner');
   const [password, setPassword] = useState('');
@@ -1379,7 +1388,7 @@ export function AdminUserCreatePage() {
     if (saving) return;
     setSaving(true); setError('');
     try {
-      const response = await api.post<{ user: User }>('/api/admin/users', { username, role, password, confirmPassword });
+      const response = await api.post<{ user: User }>('/api/admin/users', { email, username, role, password, confirmPassword });
       navigate(`/admin/users/${response.user.id}`, { replace: true });
     } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'The account could not be created.'); }
     finally { setSaving(false); }
@@ -1388,8 +1397,9 @@ export function AdminUserCreatePage() {
   return <div className="management-page account-form-page"><div className="breadcrumbs"><Link to="/admin/users">Users</Link><span>/</span><span>Create account</span></div>
     <PageHeading title="Create account" subtitle="Set up a sign-in account and assign its platform role." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} />Back to users</Link>} />
     <section className="account-form-card"><form className="form-stack" onSubmit={createAccount} aria-busy={saving}>
+      <label>Email<input required type="email" maxLength={254} autoComplete="email" autoFocus value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} /></label>
       <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>3–32 letters, numbers, dots, underscores, or hyphens.</small></label>
-      <label>Platform role<AppSelect<Role> ariaLabel="Platform role" value={role} onChange={setRole} disabled={saving} options={[{ value: 'learner', label: 'Learner' }, { value: 'moderator', label: 'Moderator' }, { value: 'admin', label: 'Administrator' }]} /><small>Choose administrator or moderator only when the person needs management access.</small></label>
+      <div className="account-form-role-field"><span>Platform role</span><AppSelect<Role> ariaLabel="Platform role" describedBy={roleHelpId} value={role} onChange={setRole} disabled={saving} options={[{ value: 'learner', label: 'Learner' }, { value: 'moderator', label: 'Moderator' }, { value: 'admin', label: 'Administrator' }]} /><small id={roleHelpId}>Choose administrator or moderator only when the person needs management access.</small></div>
       <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /><small>Use at least 12 characters. You can reset it later from account details.</small></label>
       <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} /></label>
       {error && <Notice>{error}</Notice>}
@@ -1400,8 +1410,9 @@ export function AdminUserCreatePage() {
 
 type AdminAccountCourse = Course & { quizCount: number; enrolledAt: string | null; grantedAt: string | null };
 type AdminAccountDetails = {
-  user: User & { createdAt: string; updatedAt: string; isCurrentUser: boolean };
+  user: User & { createdAt: string; updatedAt: string; lastLoginAt: string | null; isCurrentUser: boolean };
   courses: AdminAccountCourse[];
+  registrationFields: SavedRegistrationFieldValue[];
   total: number;
   page: number;
   pageSize: number;
@@ -1499,19 +1510,20 @@ export function AdminUserDetailsPage() {
 
   if (loading || (account && account.user.id !== userId)) return <div className="management-page page-loading" role="status" aria-live="polite">Loading account details…</div>;
   if (!account) return <div className="management-page">{error && <div className="account-list-error"><Notice>{error}</Notice>{canRetryLoad && <Button type="button" variant="secondary" onClick={() => setLoadRetryVersion((version) => version + 1)}>Try again</Button>}</div>}<Link className="back-link" to="/admin/users"><ArrowLeft size={17} />Back to users</Link></div>;
-  const { user, courses } = account;
+  const { user, courses, registrationFields } = account;
   return <div className="management-page account-details-page">
     <div className="breadcrumbs"><Link to="/admin/users">Users</Link><span>/</span><span>{user.username}</span></div>
     <PageHeading title={user.username} subtitle="Account controls, enrolled courses, and learning activity." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} />Back to users</Link>} />
     {error && <Notice>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
     <section className="account-detail-grid">
       <article className="account-detail-card account-overview-card"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><small>Account overview</small></div></div><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span></div>
-        <dl className="account-meta-list"><div><dt>User ID</dt><dd>{user.id}</dd></div><div><dt>Created</dt><dd><DateText value={user.createdAt} /></dd></div><div><dt>Last updated</dt><dd><DateText value={user.updatedAt} /></dd></div><div><dt>Courses assigned or enrolled</dt><dd>{account.total}</dd></div></dl>
-        <div className="account-control-row" aria-busy={savingAction === 'account'}><label>Platform role<AppSelect<Role> ariaLabel="Platform role" value={user.role} disabled={saving} onChange={(role) => updateAccount({ role })} options={[{ value: 'learner', label: 'Learner' }, { value: 'moderator', label: 'Moderator' }, { value: 'admin', label: 'Administrator' }]} /></label><Button variant={user.disabled ? 'secondary' : 'danger'} onClick={() => updateAccount({ disabled: !user.disabled })} disabled={saving} aria-busy={savingAction === 'account'}>{savingAction === 'account' ? 'Saving account…' : user.disabled ? 'Enable account' : 'Disable account'}</Button>{savingAction === 'account' && <span className="sr-only" role="status" aria-live="polite">Saving account settings…</span>}</div>
+        <dl className="account-meta-list"><div><dt>Email</dt><dd>{user.email || 'Not provided'}</dd></div><div><dt>User ID</dt><dd>{user.id}</dd></div><div><dt>Created</dt><dd><DateText value={user.createdAt} /></dd></div><div><dt>Last login</dt><dd>{user.lastLoginAt ? <DateTimeText value={user.lastLoginAt} /> : 'Not recorded'}</dd></div><div><dt>Last updated</dt><dd><DateText value={user.updatedAt} /></dd></div><div><dt>Courses assigned or enrolled</dt><dd>{account.total}</dd></div></dl>
+        {registrationFields.length > 0 && <section className="account-registration-fields"><h3>Registration details</h3><dl>{registrationFields.map((field) => <div key={field.id}><dt>{field.label}</dt><dd>{typeof field.value === 'boolean' ? field.value ? 'Yes' : 'No' : field.value || 'Not provided'}</dd></div>)}</dl></section>}
+        <div className="account-control-row" aria-busy={savingAction === 'account'}><div className="account-role-control"><span>Platform role</span><AppSelect<Role> ariaLabel="Platform role" value={user.role} disabled={saving} onChange={(role) => updateAccount({ role })} options={[{ value: 'learner', label: 'Learner' }, { value: 'moderator', label: 'Moderator' }, { value: 'admin', label: 'Administrator' }]} /></div><Button variant={user.disabled ? 'secondary' : 'danger'} onClick={() => updateAccount({ disabled: !user.disabled })} disabled={saving} aria-busy={savingAction === 'account'}>{savingAction === 'account' ? 'Saving account…' : user.disabled ? 'Enable account' : 'Disable account'}</Button>{savingAction === 'account' && <span className="sr-only" role="status" aria-live="polite">Saving account settings…</span>}</div>
       </article>
       <article className="account-detail-card"><div className="account-detail-card-heading"><div><h2>Reset password</h2><p>Set a new password and sign out existing sessions.</p></div></div><form className="form-stack account-password-form" onSubmit={resetPassword} aria-busy={savingAction === 'password'}><label>New password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /></label><label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} /></label><Button type="submit" disabled={saving} aria-busy={savingAction === 'password'}>{savingAction === 'password' ? 'Saving…' : 'Reset password'}</Button></form></article>
     </section>
-    <section className="analytics-section account-courses-section"><div className="analytics-section-heading"><div><h2>Course activity</h2><p>Courses this account has enrolled in or been assigned.</p></div><span>{account.total} courses</span></div>
+    <section className="analytics-section account-courses-section"><div className="analytics-section-heading"><div><h2>Course activity</h2><p>Courses this account has enrolled in or been assigned.</p></div><span>{formatCountLabel(account.total, 'course', 'courses')}</span></div>
       {courses.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable course activity" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Account course activity</caption><thead><tr><th scope="col">Course</th><th scope="col">Assignment</th><th scope="col">Progress</th><th scope="col">Lessons</th><th scope="col">Quizzes</th><th scope="col">Completion</th><th scope="col">Dashboard</th></tr></thead><tbody>{courses.map((course) => <tr key={course.id}><td><strong>{course.title}</strong><small><CourseStatus status={course.status} /></small></td><td>{course.grantedAt ? 'Assigned' : course.visibility === 'private' ? 'Access revoked' : course.enrolledAt ? 'Enrolled' : '—'}</td><td>{course.progress}%</td><td>{course.completedLessons} / {course.lessonCount}</td><td>{course.quizCount}</td><td>{course.completed ? 'Completed' : course.progress ? 'In progress' : 'Not started'}</td><td><Link className="text-action" to={`/manage/courses/${course.id}/analytics`} aria-label={`Open dashboard for ${course.title}`}>Open dashboard</Link></td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No course activity" detail="This account has not enrolled in or been assigned a course." />}
       {account.total > 0 && <LogPagination page={account.page} pageSize={account.pageSize} total={account.total} loading={loading} onChange={setPage} />}
     </section>
@@ -1589,7 +1601,7 @@ export function AdminSettingsPage() {
   const accountUsagePercent = accountLimit > 0 && registeredUserCount !== null
     ? Math.min(100, Math.round((registeredUserCount / accountLimit) * 100))
     : 0;
-  return <div className="management-page settings-page"><PageHeading title="Settings" subtitle="Customize platform branding, connection security, and learner registration." />{error && <Notice>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
+  return <div className="management-page settings-page"><PageHeading title="Settings" subtitle="Customize platform branding, connection security, and learner registration." /><AdminSettingsTabs />{error && <Notice>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
     <form className="settings-card form-stack" onSubmit={submit} aria-busy={saving}>
       <fieldset className="settings-fields" aria-label="Platform settings" disabled={saving}>
       <div className="settings-card-heading"><span className="settings-icon"><Settings2 size={19} /></span><div><h2>Platform identity</h2><p>Choose the brand learners see throughout the platform.</p></div></div>
@@ -1615,6 +1627,99 @@ export function AdminSettingsPage() {
       <div className="settings-card-footer"><span>Database and media paths remain managed through the server environment.</span><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</Button></div>
       </fieldset>
     </form>
+  </div>;
+}
+
+function AdminSettingsTabs() {
+  return <nav className="settings-tabs" aria-label="Settings sections">
+    <NavLink to="/admin/settings" end className={({ isActive }) => isActive ? 'settings-tab active' : 'settings-tab'}>Platform</NavLink>
+    <NavLink to="/admin/settings/registration-fields" className={({ isActive }) => isActive ? 'settings-tab active' : 'settings-tab'}>Registration fields</NavLink>
+  </nav>;
+}
+
+const registrationFieldTypeOptions: Array<{ value: RegistrationFieldType; label: string }> = [
+  { value: 'text', label: 'Free text' },
+  { value: 'date', label: 'Date' },
+  { value: 'select', label: 'Select list' },
+  { value: 'checkbox', label: 'Checkbox' },
+];
+
+export function AdminRegistrationFieldsPage() {
+  const [fields, setFields] = useState<RegistrationField[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [configurationWarning, setConfigurationWarning] = useState('');
+  const [success, setSuccess] = useState('');
+  const [retryVersion, setRetryVersion] = useState(0);
+  const [invalidField, setInvalidField] = useState<ReturnType<typeof validateRegistrationFieldEditor>>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setLoadError('');
+    api.get<{ fields: RegistrationField[]; configurationValid: boolean }>('/api/admin/registration-fields')
+      .then((result) => { if (active) { setFields(result.fields); setConfigurationWarning(result.configurationValid ? '' : 'The saved registration form is invalid. Public signup is paused. Add replacement fields and save, or save with no fields to clear the custom questions.'); } })
+      .catch((cause) => { if (active) setLoadError(cause instanceof ApiError ? cause.message : 'Registration fields could not be loaded.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [retryVersion]);
+
+  function updateField(id: string, changes: Partial<RegistrationField>) {
+    setFields((current) => current.map((field) => field.id === id ? { ...field, ...changes } : field));
+    setError(''); setSuccess(''); setInvalidField(null);
+  }
+
+  function addField() {
+    setFields((current) => [...current, { id: crypto.randomUUID(), label: '', type: 'text', required: false, options: [] }]);
+    setError(''); setSuccess(''); setInvalidField(null);
+  }
+
+  async function saveFields(event: React.FormEvent) {
+    event.preventDefault();
+    if (saving) return;
+    setError(''); setSuccess('');
+    const issue = validateRegistrationFieldEditor(fields);
+    if (issue) {
+      setInvalidField(issue);
+      setError(issue.message);
+      window.requestAnimationFrame(() => document.getElementById(`registration-field-editor-${issue.fieldId}-${issue.target}`)?.focus());
+      return;
+    }
+    setInvalidField(null);
+    setSaving(true);
+    try {
+      const result = await api.put<{ fields: RegistrationField[] }>('/api/admin/registration-fields', { fields });
+      setFields(result.fields);
+      setConfigurationWarning('');
+      setSuccess('Registration fields saved. New and future signups will use this form.');
+    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Registration fields could not be saved.'); }
+    finally { setSaving(false); }
+  }
+
+  return <div className="management-page settings-page"><PageHeading title="Settings" subtitle="Customize platform branding, connection security, and learner registration." /><AdminSettingsTabs />
+    {loadError && !loading && <div className="registration-fields-page-notice"><Notice>{loadError}</Notice><Button type="button" variant="secondary" onClick={() => setRetryVersion((version) => version + 1)}>Try again</Button></div>}
+    {success && <Notice kind="success">{success}</Notice>}
+    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading registration fields…</div> : !loadError && <form className="settings-card form-stack registration-fields-card" onSubmit={saveFields} aria-busy={saving}>
+      <fieldset className="settings-fields" aria-label="Registration fields" disabled={saving}>
+        <div className="settings-card-heading"><span className="settings-icon"><UsersRound size={19} /></span><div><h2>Registration form</h2><p>Collect the information your organization needs when learners create an account.</p></div></div>
+        {configurationWarning && <Notice>{configurationWarning}</Notice>}
+        <p className="registration-fields-intro">These fields appear after email and username during public registration. Existing learner answers are kept if a field is changed or removed.</p>
+        {fields.length ? <div className="registration-field-editor-list">{fields.map((field, index) => <section className="registration-field-editor" key={field.id} aria-labelledby={`registration-field-title-${field.id}`}>
+          <div className="registration-field-editor-heading"><h3 id={`registration-field-title-${field.id}`}>Field {index + 1}</h3><Button type="button" variant="quiet" className="registration-field-remove" aria-label={`Remove ${field.label || `field ${index + 1}`}`} onClick={() => { setFields((current) => current.filter((item) => item.id !== field.id)); setError(''); setSuccess(''); setInvalidField(null); }}><Trash2 size={15} />Remove</Button></div>
+          <div className="registration-field-editor-grid">
+            <label>Field label<input id={`registration-field-editor-${field.id}-label`} required minLength={1} maxLength={80} value={field.label} aria-invalid={invalidField?.fieldId === field.id && invalidField.target === 'label' || undefined} aria-describedby={invalidField?.fieldId === field.id && invalidField.target === 'label' ? 'registration-fields-error' : undefined} onChange={(event) => updateField(field.id, { label: event.target.value })} placeholder="e.g. Department" /></label>
+            <label>Field type<AppSelect<RegistrationFieldType> ariaLabel={`Type for field ${index + 1}`} value={field.type} onChange={(type) => updateField(field.id, { type, options: type === 'select' ? (field.options.length >= 2 ? field.options : ['Option 1', 'Option 2']) : [] })} options={registrationFieldTypeOptions} /></label>
+            <label className="registration-required-toggle"><input type="checkbox" checked={field.required} onChange={(event) => updateField(field.id, { required: event.target.checked })} /><span>Required for signup</span></label>
+          </div>
+          {field.type === 'select' && <label className="registration-options-field">Options<textarea id={`registration-field-editor-${field.id}-options`} required rows={4} value={field.options.join('\n')} aria-invalid={invalidField?.fieldId === field.id && invalidField.target === 'options' || undefined} aria-describedby={invalidField?.fieldId === field.id && invalidField.target === 'options' ? 'registration-fields-error' : undefined} onChange={(event) => updateField(field.id, { options: event.target.value.split('\n') })} placeholder={'One option per line\nDepartment A\nDepartment B'} /><small>Enter one choice per line, with 2–30 unique choices.</small></label>}
+        </section>)}</div> : <EmptyState headingLevel={3} title="No custom fields yet" detail="Add fields such as department, date of birth, or an acknowledgement checkbox to the signup form." />}
+        <div className="registration-fields-actions"><Button type="button" variant="secondary" onClick={addField} disabled={fields.length >= 30}><Plus size={16} />Add field</Button><span>Choose from free text, date, select list, or checkbox. Up to 30 fields.</span></div>
+        {error && <Notice id="registration-fields-error">{error}</Notice>}
+        <div className="settings-card-footer"><span>Changes apply to new registrations. Saved learner responses stay on their account.</span><Button type="submit" disabled={saving}>{saving ? 'Saving fields…' : 'Save fields'}</Button></div>
+      </fieldset>
+    </form>}
   </div>;
 }
 
@@ -1696,7 +1801,7 @@ export function AdminAuditLogPage() {
   }, [appliedQuery, action, page, refreshVersion]);
 
   return <div className="management-page logs-page"><PageHeading title="Audit log" subtitle="Review account, course, and platform changes, including access and comment removals." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
-    <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" aria-label="Search audit log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter"><AppSelect ariaLabel="Filter by action" value={action} onChange={(value) => { setAction(value); setPage(1); }} options={[{ value: '', label: 'All actions' }, ...actions.map((item) => ({ value: item.action, label: `${item.action.replaceAll('_', ' ')} (${item.count})` }))]} /></div></div>
+    <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" aria-label="Search audit log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter log-role-filter"><span className="catalog-filter-label">Action</span><AppSelect className="app-select--filter" ariaLabel="Filter by action" leadingIcon={<Filter size={16} />} value={action} onChange={(value) => { setAction(value); setPage(1); }} options={[{ value: '', label: 'All actions' }, ...actions.map((item) => ({ value: item.action, label: `${item.action.replaceAll('_', ' ')} (${item.count})` }))]} /></div></div>
     {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable audit log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">Audit log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Change</th><th scope="col">Details</th></tr></thead><tbody>
       {failedRequest ? <tr><td colSpan={5} className="log-empty">Audit entries are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} details={entry.details} label={entry.summary} columnCount={5}>{(toggle) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td>{entry.actorUsername}</td><td><span className="log-action">{entry.action.replaceAll('_', ' ')}</span></td><td><strong>{entry.summary}</strong><small>{entry.entityType}{entry.entityId ? ` · ${entry.entityId}` : ''}</small></td><td>{toggle}</td></tr>}</LogDetailsDisclosure>)}
@@ -1739,7 +1844,7 @@ export function AdminSystemLogPage() {
   }, [appliedQuery, level, page, refreshVersion]);
 
   return <div className="management-page logs-page"><PageHeading title="System log" subtitle="Inspect server startup, runtime errors, and operational events." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
-    <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search system events" aria-label="Search system log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter"><AppSelect ariaLabel="Filter by severity" value={level} onChange={(value) => { setLevel(value); setPage(1); }} options={[{ value: 'all', label: 'All levels' }, { value: 'error', label: 'Errors' }, { value: 'warn', label: 'Warnings' }, { value: 'info', label: 'Info' }]} /></div></div>
+    <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search system events" aria-label="Search system log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter log-role-filter"><span className="catalog-filter-label">Severity</span><AppSelect className="app-select--filter" ariaLabel="Filter by severity" leadingIcon={<Activity size={16} />} value={level} onChange={(value) => { setLevel(value); setPage(1); }} options={[{ value: 'all', label: 'All levels' }, { value: 'error', label: 'Errors' }, { value: 'warn', label: 'Warnings' }, { value: 'info', label: 'Info' }]} /></div></div>
     {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable system log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">System log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Level</th><th scope="col">Source</th><th scope="col">Event</th><th scope="col">Details</th></tr></thead><tbody>
       {failedRequest ? <tr><td colSpan={5} className="log-empty">System events are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} details={entry.details} label={entry.message} columnCount={5}>{(toggle) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td><span className={`log-level log-level-${entry.level}`}>{entry.level}</span></td><td>{entry.source}</td><td><strong>{entry.message}</strong></td><td>{toggle}</td></tr>}</LogDetailsDisclosure>)}

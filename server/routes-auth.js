@@ -2,13 +2,18 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { db, setSetting, setting, setupComplete } from './db.js';
-import { createUser, hashPassword, normalizeUsername, publicUser, regenerateSession, validateCredentials, verifyLoginPassword, verifyPassword } from './auth.js';
+import { createUser, hashPassword, normalizeEmail, normalizeUsername, publicUser, regenerateSession, validateCredentials, validateEmail, verifyLoginPassword, verifyPassword } from './auth.js';
 import { ApiError, fail, newCsrfToken, requireAuth, requireAdmin } from './http.js';
 import { invalidateUserSessions } from './session-store.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
 import { passwordChangeLimiter } from './rate-limits.js';
+import { getRegistrationFields, normalizeRegistrationFieldValues, saveUserRegistrationFieldValues } from './registration-fields.js';
 
 export const authRouter = Router();
+
+function recordLastLogin(userId) {
+  db.prepare('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
+}
 
 const defaultPalette = 'violet';
 const paletteIds = new Set(['violet', 'ocean', 'forest', 'rose', 'amber']);
@@ -134,10 +139,17 @@ authRouter.get('/setup/status', (_req, res) => {
   res.json({ configured: setupComplete(), ...getPlatformConfiguration() });
 });
 
+authRouter.get('/registration-fields', (_req, res) => {
+  res.json({ fields: setting('registration_enabled') === '0' ? [] : getRegistrationFields() });
+});
+
 authRouter.post('/setup', async (req, res) => {
   if (setupComplete()) fail(409, 'This platform is already configured.', 'already_configured');
   const { platformName, username, password, confirmPassword } = req.body || {};
+  const email = normalizeEmail(req.body?.email);
   const name = parsePlatformName(platformName);
+  const emailError = validateEmail(email);
+  if (emailError) fail(400, emailError, 'invalid_email');
   if (password !== confirmPassword) fail(400, 'Passwords do not match.', 'password_mismatch');
   const credentialError = validateCredentials(username, password);
   if (credentialError) fail(400, credentialError, 'invalid_credentials');
@@ -153,8 +165,11 @@ authRouter.post('/setup', async (req, res) => {
     if (db.prepare("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").get()) {
       throw new ApiError(409, 'An administrator already exists. Use the sign-in page.', 'already_configured');
     }
-    db.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)')
-      .run(userId, normalizeUsername(username), passwordHash, 'admin');
+    if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) {
+      fail(409, 'That email address is already in use.', 'email_taken');
+    }
+    db.prepare('INSERT INTO users (id, username, email, password_hash, role) VALUES (?, ?, ?, ?, ?)')
+      .run(userId, normalizeUsername(username), email, passwordHash, 'admin');
     setSetting('platform_name', name);
     setSetting('theme_palette', themePalette);
     setSetting('connection_protocol', connectionProtocol);
@@ -168,6 +183,7 @@ authRouter.post('/setup', async (req, res) => {
   });
   configure.immediate();
   await regenerateSession(req, userId);
+  recordLastLogin(userId);
   writeAuditLog({ actor: { id: userId, username: normalizeUsername(username) }, action: 'platform.setup', entityType: 'platform',
     summary: 'Initial platform setup completed', details: { platformName: name, themePalette, connectionProtocol, registrationEnabled, userLimit } });
   writeSystemLog('info', 'setup', 'Initial platform setup completed');
@@ -178,19 +194,32 @@ authRouter.post('/auth/register', async (req, res) => {
   if (!setupComplete()) fail(409, 'Complete platform setup before registering.', 'setup_required');
   assertRegistrationAvailable();
   const { username, password, confirmPassword } = req.body || {};
+  const email = normalizeEmail(req.body?.email);
+  const emailError = validateEmail(email);
+  if (emailError) fail(400, emailError, 'invalid_email');
   if (password !== confirmPassword) fail(400, 'Passwords do not match.', 'password_mismatch');
   const credentialError = validateCredentials(username, password);
   if (credentialError) fail(400, credentialError, 'invalid_credentials');
   const normalized = normalizeUsername(username);
+  const submittedRegistrationFieldValues = req.body?.registrationFieldValues;
+  normalizeRegistrationFieldValues(submittedRegistrationFieldValues, getRegistrationFields());
   const passwordHash = await hashPassword(password);
   const user = db.transaction(() => {
     assertRegistrationAvailable();
     if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(normalized)) {
       fail(409, 'That username is already in use.', 'username_taken');
     }
-    return createUser({ username: normalized, passwordHash, role: 'learner' });
+    if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) {
+      fail(409, 'That email address is already in use.', 'email_taken');
+    }
+    const fields = getRegistrationFields();
+    const answers = normalizeRegistrationFieldValues(submittedRegistrationFieldValues, fields);
+    const createdUser = createUser({ username: normalized, email, passwordHash, role: 'learner' });
+    saveUserRegistrationFieldValues(createdUser.id, answers);
+    return createdUser;
   }).immediate();
   await regenerateSession(req, user.id);
+  recordLastLogin(user.id);
   writeAuditLog({ actor: user, action: 'account.registered', entityType: 'user', entityId: user.id, summary: `Learner account created: ${user.username}` });
   res.status(201).json({ user: publicUser(user), registrationAvailable: registrationAvailable() });
 });
@@ -212,6 +241,7 @@ authRouter.post('/auth/login', async (req, res) => {
     writeSystemLog('warn', 'auth', 'Sign-in attempt failed');
     fail(401, 'The username or password is incorrect.', 'login_failed');
   }
+  recordLastLogin(currentUser.id);
   writeAuditLog({ actor: currentUser, action: 'auth.signed_in', entityType: 'user', entityId: currentUser.id, summary: `${currentUser.username} signed in` });
   res.json({ user: publicUser(currentUser), ...getPlatformConfiguration() });
 });
@@ -297,13 +327,14 @@ authRouter.put('/admin/settings', requireAdmin, (req, res) => {
         db.prepare("DELETE FROM app_settings WHERE key IN ('platform_icon', 'platform_icon_version')").run();
       }
     }
+    if (changedFields.length) {
+      const auditId = writeAuditLog({ actor: req.currentUser, action: 'platform.settings_updated', entityType: 'platform', summary: 'Platform settings updated',
+        details: { changedFields, platformName, themePalette, connectionProtocol, registrationEnabled, userLimit, platformIconChanged: changedFields.includes('platformIcon') } });
+      if (!auditId) fail(500, 'Platform settings could not be saved because the audit log is unavailable.', 'audit_unavailable');
+    }
     return changedFields;
   });
   const changedFields = update.immediate();
-  if (changedFields.length) {
-    writeAuditLog({ actor: req.currentUser, action: 'platform.settings_updated', entityType: 'platform', summary: 'Platform settings updated',
-      details: { changedFields, platformName, themePalette, connectionProtocol, registrationEnabled, userLimit, platformIconChanged: changedFields.includes('platformIcon') } });
-  }
   const userCount = registeredUserCount();
   res.json({ ...getPlatformConfiguration(userCount), registeredUserCount: userCount });
 });

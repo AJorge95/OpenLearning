@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Award, BookOpen, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, MessageSquare, Play, Printer, Search, Send, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
+import { ArrowDownUp, ArrowLeft, ArrowRight, Award, BookOpen, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, MessageSquare, Play, Printer, Search, Send, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
 import { AppSelect, Button, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
+import { formatCountLabel } from './count-label';
 import { nextCourseActivity, nextCourseActivityAfterLesson } from './course-navigation';
 import { summarizeCourseProgress } from './course-progress';
 import { useAuth } from './auth-context';
@@ -146,8 +147,8 @@ export function CatalogPage() {
     <PageHeading title="Browse courses" subtitle="Find a course to build your skills." />
     <div className="catalog-tools">
       <div className="filter-controls">
-        <div className="select-wrap"><AppSelect className="app-select--filter" ariaLabel="Course category" value={category} onChange={setCategory} options={[{ value: 'All courses', label: 'All courses' }, ...categories.filter((item) => item !== 'All courses').map((item) => ({ value: item, label: item }))]} /></div>
-        <div className="select-wrap"><AppSelect className="app-select--filter" ariaLabel="Sort courses" value={sort} onChange={setSort} options={[{ value: 'recent', label: 'Recently updated' }, { value: 'title', label: 'Course title' }]} /></div>
+        <div className="select-wrap catalog-filter-control"><span className="catalog-filter-label">Category</span><AppSelect className="app-select--filter" ariaLabel="Course category" leadingIcon={<Filter size={16} />} value={category} onChange={setCategory} options={[{ value: 'All courses', label: 'All courses' }, ...categories.filter((item) => item !== 'All courses').map((item) => ({ value: item, label: item }))]} /></div>
+        <div className="select-wrap catalog-filter-control catalog-filter-control--sort"><span className="catalog-filter-label">Sort by</span><AppSelect className="app-select--filter" ariaLabel="Sort courses" leadingIcon={<ArrowDownUp size={16} />} value={sort} onChange={setSort} options={[{ value: 'recent', label: 'Recently updated' }, { value: 'title', label: 'Course title' }]} /></div>
       </div>
       <form className="search-field" onSubmit={(event) => { event.preventDefault(); load({ query: query.trim(), category, sort }); }}>
         <Search size={19} /><input ref={searchInputRef} aria-label="Search courses" placeholder="Search courses" maxLength={120} value={query} onChange={(event) => setQuery(event.target.value)} /><button type="submit" aria-label="Submit search"><ArrowRight size={17} /></button>
@@ -155,7 +156,7 @@ export function CatalogPage() {
     </div>
     {error && <ErrorNotice message={error} onRetry={loadMoreFailed ? loadMore : retryLoad} />}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading courses…</div> : courses.length ? <div className="course-grid">{courses.map((course, index) => <CourseCard key={course.id} course={course} coverLoading={index === 0 ? 'eager' : 'lazy'} />)}</div> : error ? null : <EmptyState icon={<Filter size={24} />} title={hasAppliedFilters ? 'No matching courses' : 'No courses are available yet'} detail={hasAppliedFilters ? 'Try a different search or category.' : 'When courses are published for your learning space, they will appear here.'} action={hasAppliedFilters && <Button variant="secondary" onClick={clearCatalogFilters}>Clear search and filters</Button>} />}
-    {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {total} courses</p>{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
+    {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {formatCountLabel(total, 'course', 'courses')}</p>{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
   </div>;
 }
 
@@ -289,10 +290,10 @@ export function MyLearningPage() {
     <PageHeading title="My learning" subtitle="Pick up where you left off." />
     {error && <ErrorNotice message={error} onRetry={courseLoadMoreFailed ? loadMore : load} />}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading your courses…</div> : courses.length ? <div className="course-grid">{courses.map((course, index) => <div className="my-learning-card" key={course.id}><CourseCard course={course} continueLabel coverLoading={index === 0 ? 'eager' : 'lazy'} />{user?.role === 'learner' && course.completed && <Link className="certificate-card-link" to={`/my-learning/certificates/${course.id}`}><Award size={16} />View certificate</Link>}</div>)}</div> : !error && !certificates.length && <EmptyState title="Your learning starts here" detail="Open a course from the catalog to add it to your learning list." action={<Link className="button button-primary" to="/courses">Browse courses</Link>} />}
-    {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {total} courses</p>{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
+    {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {formatCountLabel(total, 'course', 'courses')}</p>{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
     {!loading && certificates.length > 0 && <section className="certificate-history"><div className="certificate-history-heading"><h2>Your certificates</h2><p>Certificates remain available in your learning history.</p></div><div className="certificate-history-list">{certificates.map((certificate) => <article className="certificate-history-item" key={certificate.id}><span className="certificate-history-icon"><Award size={19} /></span><div className="certificate-history-copy"><h3>{certificate.courseTitle}</h3><p>Awarded {formatCertificateDate(certificate.issuedAt, certificateHistoryDateFormatter)} · {certificate.certificateCode}</p></div><Link className="button button-secondary" to={`/my-learning/certificates/${certificate.id}`}>View certificate</Link></article>)}</div>
       {certificateError && <ErrorNotice message={certificateError} onRetry={loadMoreCertificates} />}
-      <div className="catalog-pagination"><p ref={certificatePaginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {certificates.length} of {certificateTotal} certificates</p>{certificatesHasMore && <Button variant="secondary" disabled={loadingMoreCertificates} onClick={loadMoreCertificates}>{loadingMoreCertificates ? 'Loading more certificates…' : 'Load more certificates'}</Button>}</div>
+      <div className="catalog-pagination"><p ref={certificatePaginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {certificates.length} of {formatCountLabel(certificateTotal, 'certificate', 'certificates')}</p>{certificatesHasMore && <Button variant="secondary" disabled={loadingMoreCertificates} onClick={loadMoreCertificates}>{loadingMoreCertificates ? 'Loading more certificates…' : 'Load more certificates'}</Button>}</div>
     </section>}
   </div>;
 }
@@ -410,7 +411,7 @@ export function CourseOverviewPage() {
         <span className="category-label">{course.category}</span>
         <h1>{course.title}</h1>
         {course.description ? <p className="course-hero-description" aria-hidden="true">{course.description}</p> : null}
-        <div className="course-hero-meta"><span><BookOpen size={17} />{course.moduleCount} {course.moduleCount === 1 ? 'module' : 'modules'}</span><span><Play size={15} />{course.lessonCount} lessons</span></div>
+        <div className="course-hero-meta"><span><BookOpen size={17} />{formatCountLabel(course.moduleCount, 'module', 'modules')}</span><span><Play size={15} />{formatCountLabel(course.lessonCount, 'lesson', 'lessons')}</span></div>
         <div className="course-hero-actions">
           <Button onClick={startLearning} disabled={!nextActivity || starting}>{startButtonLabel}<ArrowRight size={17} /></Button>
           {user?.role === 'learner' && course.completed ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link> : course.progress > 0 && <span className="progress-caption">{course.progress}% complete</span>}
@@ -421,7 +422,7 @@ export function CourseOverviewPage() {
     <section className="course-overview-body">
       <div className="course-description-block"><h2>About this course</h2><p>{course.description || 'Explore the lessons and practical knowledge in this course.'}</p></div>
       <div className="course-curriculum-block">
-        <div className="section-heading-row"><div><h2>Course content</h2><p>{course.moduleCount} modules <span>·</span> {course.lessonCount} lessons</p></div>{course.progress > 0 && <div className="course-progress-summary"><span>{course.completedLessons} of {course.lessonCount} lessons complete</span><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /></div>}</div>
+        <div className="section-heading-row"><div><h2>Course content</h2><p>{formatCountLabel(course.moduleCount, 'module', 'modules')} <span>·</span> {formatCountLabel(course.lessonCount, 'lesson', 'lessons')}</p></div>{course.progress > 0 && <div className="course-progress-summary"><span>{course.completedLessons} of {formatCountLabel(course.lessonCount, 'lesson', 'lessons')} complete</span><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /></div>}</div>
         {course.modules?.map((module) => <CurriculumModule key={module.id} module={module} courseId={course.id} />)}
       </div>
     </section>
@@ -831,7 +832,7 @@ export function CoursePlayerPage() {
           <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
             {visibleFeedback.comments.length === visibleFeedback.total
               ? `Showing all ${visibleFeedback.total} ${visibleFeedback.total === 1 ? 'comment' : 'comments'}.`
-              : `Showing ${visibleFeedback.comments.length} of ${visibleFeedback.total} comments.`}
+              : `Showing ${visibleFeedback.comments.length} of ${formatCountLabel(visibleFeedback.total, 'comment', 'comments')}.`}
           </p>
           <div className="lesson-comments">
             {visibleFeedback.comments.map((comment) => {
@@ -994,7 +995,7 @@ export function QuizPage() {
     <div className="breadcrumbs"><Link to={`/courses/${course.id}`}>{course.title}</Link><span>/</span><span>{quiz.title}</span></div>
     <div className="quiz-layout">
       <div className="quiz-main">
-        <div className="quiz-topline"><span>{quiz.questions.length} questions</span><span>Pass mark {quiz.passMark}%</span></div>
+        <div className="quiz-topline"><span>{formatCountLabel(quiz.questions.length, 'question', 'questions')}</span><span>Pass mark {quiz.passMark}%</span></div>
         <h1>{quiz.title}</h1>
         {!currentResult ? <><p className="lead-copy">Choose one answer for each question. You can retry this quiz if you need another attempt.</p>
           {error && <ErrorNotice message={error} />}
@@ -1004,7 +1005,7 @@ export function QuizPage() {
               <div className="quiz-choices">{question.choices.map((choice, choiceIndex) => <label className={`quiz-choice ${answers[question.id || ''] === choice.id ? 'choice-selected' : ''}`} key={choice.id || choiceIndex}><input ref={index === 0 && choiceIndex === 0 ? firstAnswerRef : undefined} type="radio" name={question.id} value={choice.id} checked={answers[question.id || ''] === choice.id} onChange={() => setAnswers({ ...answers, [question.id || '']: choice.id || '' })} /><span className="choice-letter">{String.fromCharCode(65 + choiceIndex)}</span><span>{choice.text}</span></label>)}</div>
             </fieldset>)}
             {!quiz.questions.length && <EmptyState icon={<CircleHelp size={24} />} title="This quiz is being prepared" detail="Check back when your course moderator has added questions." />}
-            {quiz.questions.length > 0 && <p id="quiz-submit-hint" className="quiz-submit-hint" role="status" aria-live="polite" aria-atomic="true">{allAnswered ? `All ${quiz.questions.length} questions answered.` : `${answeredCount} of ${quiz.questions.length} questions answered. Answer the rest to enable submission.`}</p>}
+            {quiz.questions.length > 0 && <p id="quiz-submit-hint" className="quiz-submit-hint" role="status" aria-live="polite" aria-atomic="true">{allAnswered ? `All ${formatCountLabel(quiz.questions.length, 'question', 'questions')} answered.` : `${answeredCount} of ${formatCountLabel(quiz.questions.length, 'question', 'questions')} answered. Answer the rest to enable submission.`}</p>}
             <Button type="submit" aria-describedby={quiz.questions.length > 0 ? 'quiz-submit-hint' : undefined} disabled={!allAnswered || saving}>{saving ? 'Checking answers…' : 'Submit answers'}<ArrowRight size={17} /></Button>
           </form>
         </> : <div className="quiz-results">

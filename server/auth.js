@@ -14,6 +14,22 @@ export function normalizeUsername(username) {
   return typeof username === 'string' ? username.trim() : '';
 }
 
+export function normalizeEmail(email) {
+  return typeof email === 'string' ? email.trim() : '';
+}
+
+export function validateEmail(email) {
+  const normalized = normalizeEmail(email);
+  const separator = normalized.indexOf('@');
+  const domain = separator >= 0 ? normalized.slice(separator + 1) : '';
+  if (normalized.length > 254 || separator < 1 || separator !== normalized.lastIndexOf('@') || separator > 64
+    || !/^[^\s@]+$/.test(normalized.slice(0, separator)) || !domain.includes('.')
+    || domain.split('.').some((label) => !label || label.length > 63 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label))) {
+    return 'Enter a valid email address (up to 254 characters).';
+  }
+  return null;
+}
+
 export function validateCredentials(username, password) {
   const normalized = normalizeUsername(username);
   if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(normalized)) {
@@ -86,9 +102,9 @@ export async function regenerateSession(req, userId) {
   await new Promise((resolve, reject) => req.session.save((error) => error ? reject(error) : resolve()));
 }
 
-export function createUser({ username, passwordHash, role = 'learner' }) {
+export function createUser({ username, email = null, passwordHash, role = 'learner' }) {
   const id = randomUUID();
-  db.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)')
-    .run(id, username, passwordHash, role);
-  return db.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?').get(id);
+  db.prepare('INSERT INTO users (id, username, email, password_hash, role) VALUES (?, ?, ?, ?, ?)')
+    .run(id, username, email, passwordHash, role);
+  return db.prepare('SELECT id, username, email, role, disabled FROM users WHERE id = ?').get(id);
 }

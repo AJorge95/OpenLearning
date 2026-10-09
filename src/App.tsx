@@ -11,6 +11,7 @@ const CourseEditorPage = lazy(() => import('./pages-manage').then((pages) => ({ 
 const CourseManagementPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseManagementPage })));
 const AdminAuditLogPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminAuditLogPage })));
 const AdminSettingsPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminSettingsPage })));
+const AdminRegistrationFieldsPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminRegistrationFieldsPage })));
 const AdminSystemLogPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminSystemLogPage })));
 const AdminUserCreatePage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminUserCreatePage })));
 const AdminUserDetailsPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminUserDetailsPage })));
@@ -125,6 +126,7 @@ function fallbackPageTitle(pathname: string, configured: boolean) {
   if (pathname === '/admin/users/new') return 'Create account';
   if (/^\/admin\/users\/[^/]+$/.test(pathname)) return 'Account details';
   if (pathname === '/admin/settings') return 'Settings';
+  if (pathname === '/admin/settings/registration-fields') return 'Registration fields';
   if (pathname === '/admin/audit-log') return 'Audit log';
   if (pathname === '/admin/system-log') return 'System log';
   return 'OpenLearning';
@@ -205,6 +207,7 @@ function AuthRoutes() {
                 <Route path="/admin/users/new" element={<AdminUserCreatePage />} />
                 <Route path="/admin/users/:userId" element={<AdminUserDetailsPage />} />
                 <Route path="/admin/settings" element={<AdminSettingsPage />} />
+                <Route path="/admin/settings/registration-fields" element={<AdminRegistrationFieldsPage />} />
                 <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
                 <Route path="/admin/system-log" element={<AdminSystemLogPage />} />
               </Route>

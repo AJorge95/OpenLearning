@@ -6,6 +6,7 @@ import { ApiError } from './api';
 import { useAuth } from './auth-context';
 import { BRAND_PALETTES, MAX_BRAND_ICON_BYTES } from './branding';
 import type { BrandingPalette } from './branding';
+import { formatCountLabel } from './count-label';
 import type { Course, CourseModule, Lesson } from './types';
 
 export function LoadingScreen({ label = 'Loading your learning space…' }: { label?: string }) {
@@ -192,14 +193,17 @@ export function Button({ children, variant = 'primary', className = '', type = '
 
 export type AppSelectOption<T extends string | number> = { value: T; label: string; disabled?: boolean };
 
-export function AppSelect<T extends string | number>({ value, options, onChange, ariaLabel, describedBy, className = '', disabled = false }: {
+export function AppSelect<T extends string | number>({ value, options, onChange, ariaLabel, describedBy, controlId, invalid = false, className = '', disabled = false, leadingIcon }: {
   value: T;
   options: AppSelectOption<T>[];
   onChange: (value: T) => void;
   ariaLabel: string;
   describedBy?: string;
+  controlId?: string;
+  invalid?: boolean;
   className?: string;
   disabled?: boolean;
+  leadingIcon?: React.ReactNode;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -329,11 +333,11 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   }, []);
 
   return <div ref={rootRef} className={`app-select ${className}`.trim()}>
-    <button ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-describedby={describedBy} aria-haspopup="listbox" aria-expanded={open} aria-controls={menuId} aria-activedescendant={open ? `${menuId}-option-${activeIndex}` : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
-      <span className="app-select-value">{selectedOption?.label ?? 'Choose an option'}</span><ChevronDown className="app-select-chevron" size={16} aria-hidden="true" />
+    <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-haspopup="listbox" aria-expanded={open} aria-controls={menuId} aria-activedescendant={open ? `${menuId}-option-${activeIndex}` : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
+      {leadingIcon && <span className="app-select-leading" aria-hidden="true">{leadingIcon}</span>}<span className="app-select-value">{selectedOption?.label ?? 'Choose an option'}</span><ChevronDown className="app-select-chevron" size={16} aria-hidden="true" />
     </button>
     {open && createPortal(<div ref={menuRef} id={menuId} className="app-select-menu" role="listbox" aria-label={`${ariaLabel} options`} style={position}>
-      {options.map((option, index) => <div key={String(option.value)} id={`${menuId}-option-${index}`} className={`app-select-option${option.value === value ? ' selected' : ''}${index === activeIndex ? ' active' : ''}`} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined} onPointerEnter={() => !option.disabled && setActiveIndex(index)} onClick={() => choose(index)}>
+      {options.map((option, index) => <div key={String(option.value)} id={`${menuId}-option-${index}`} className={`app-select-option${option.value === value ? ' selected' : ''}${index === activeIndex ? ' active' : ''}`} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined} onPointerDown={(event) => event.preventDefault()} onPointerEnter={() => !option.disabled && setActiveIndex(index)} onClick={() => choose(index)}>
         <span className="app-select-option-indicator" aria-hidden="true">{option.value === value && <Check size={14} />}</span><span className="app-select-option-label">{option.label}</span>
       </div>)}
     </div>, document.body)}
@@ -361,7 +365,7 @@ export function CourseCard({ course, continueLabel = false, coverLoading = 'lazy
       <div className="course-card-copy">
         <h2>{course.title}</h2>
         <p className="course-author">{course.owner || 'OpenLearning course'}</p>
-        {continueLabel ? <><div className="card-progress-label"><span>{course.completed ? 'Completed' : `${course.progress}% complete`}</span><span>{course.moduleCount} modules</span></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /></> : <div className="card-meta"><BookOpen size={17} /><span>{course.moduleCount} {course.moduleCount === 1 ? 'module' : 'modules'}</span></div>}
+        {continueLabel ? <><div className="card-progress-label"><span>{course.completed ? 'Completed' : `${course.progress}% complete`}</span><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /></> : <div className="card-meta"><BookOpen size={17} /><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div>}
       </div>
     </Link>
   );
@@ -388,7 +392,7 @@ export function CurriculumModule({ module, selectedLessonId, courseId, compact =
 }) {
   return (
     <details className={`curriculum-module ${compact ? 'curriculum-module-compact' : ''}`} open>
-      <summary><span className="module-title">{module.title}</span><span className="module-count">{module.lessons.length + (module.quiz ? 1 : 0)} items</span><ChevronDown size={17} /></summary>
+      <summary><span className="module-title">{module.title}</span><span className="module-count">{formatCountLabel(module.lessons.length + (module.quiz ? 1 : 0), 'item', 'items')}</span><ChevronDown size={17} /></summary>
       <div className="curriculum-items">
         {module.lessons.map((lesson) => <CurriculumLesson key={lesson.id} lesson={lesson} selected={selectedLessonId === lesson.id} courseId={courseId} />)}
         {module.quiz && <Link className="curriculum-item quiz-item" to={`/courses/${courseId}/quiz/${module.quiz.id}`}><span className="curriculum-icon"><CircleHelp size={17} /></span><span className="curriculum-item-name">{module.quiz.title}</span>{module.quiz.passed && <Check className="completion-icon" size={16} />}</Link>}

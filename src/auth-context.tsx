@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { ApiError, api, getMe, getSetupStatus } from './api';
 import { BRAND_PALETTES, DEFAULT_PALETTE } from './branding';
 import type { BrandingPalette, ConnectionProtocol, PlatformConfiguration } from './branding';
-import type { Role, User } from './types';
+import type { RegistrationFieldValues, Role, User } from './types';
 
 interface AuthContextValue {
   user: User | null;
@@ -19,8 +19,8 @@ interface AuthContextValue {
   retryStartup: () => Promise<void>;
   refresh: () => Promise<void>;
   signIn: (username: string, password: string) => Promise<void>;
-  signUp: (username: string, password: string, confirmPassword: string) => Promise<void>;
-  completeSetup: (platformName: string, username: string, password: string, confirmPassword: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => Promise<void>;
+  signUp: (email: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => Promise<void>;
+  completeSetup: (platformName: string, email: string, username: string, password: string, confirmPassword: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => Promise<void>;
   signOut: () => Promise<void>;
   setBranding: (name: string, themePalette: BrandingPalette, platformIcon: string | null) => void;
   setPlatformAccessSettings: (connectionProtocol: ConnectionProtocol, registrationEnabled: boolean, registrationAvailable: boolean, userLimit: number) => void;
@@ -119,17 +119,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserLimitState(result.userLimit ?? 0);
   }, []);
 
-  const signUp = useCallback(async (username: string, password: string, confirmPassword: string) => {
-    const result = await api.post<{ user: User; registrationAvailable: boolean }>('/api/auth/register', { username, password, confirmPassword });
+  const signUp = useCallback(async (email: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => {
+    const result = await api.post<{ user: User; registrationAvailable: boolean }>('/api/auth/register', { email, username, password, confirmPassword, registrationFieldValues });
     authStateRevision.current += 1;
     api.clearCsrf();
     setUser(result.user);
     setRegistrationAvailableState(result.registrationAvailable);
   }, []);
 
-  const completeSetup = useCallback(async (name: string, username: string, password: string, confirmPassword: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => {
+  const completeSetup = useCallback(async (name: string, email: string, username: string, password: string, confirmPassword: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => {
     const result = await api.post<{ user: User } & PlatformConfiguration>('/api/setup', {
-      platformName: name, username, password, confirmPassword, ...configuration,
+      platformName: name, email, username, password, confirmPassword, ...configuration,
     });
     authStateRevision.current += 1;
     api.clearCsrf();

@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 
-const latestSchemaVersion = 15;
+const latestSchemaVersion = 18;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -411,6 +411,52 @@ export function migrateDatabase(database = db) {
       database.exec(`
         DROP INDEX IF EXISTS modules_course_position;
         INSERT INTO schema_migrations (version) VALUES (15);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 16) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        ALTER TABLE users ADD COLUMN last_login_at TEXT;
+        UPDATE users
+        SET last_login_at = (
+          SELECT MAX(occurred_at)
+          FROM audit_logs
+          WHERE actor_user_id = users.id AND action IN ('auth.signed_in', 'account.registered', 'platform.setup')
+        );
+        INSERT INTO schema_migrations (version) VALUES (16);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 17) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        ALTER TABLE users ADD COLUMN email TEXT;
+        CREATE UNIQUE INDEX users_email_unique ON users(email COLLATE NOCASE) WHERE email IS NOT NULL;
+        INSERT INTO schema_migrations (version) VALUES (17);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 18) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE user_registration_field_values (
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          field_id TEXT NOT NULL,
+          field_label TEXT NOT NULL,
+          field_type TEXT NOT NULL CHECK (field_type IN ('date', 'text', 'select', 'checkbox')),
+          field_value TEXT NOT NULL,
+          position INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (user_id, field_id)
+        );
+        CREATE INDEX user_registration_fields_order ON user_registration_field_values(user_id, position);
+        INSERT INTO schema_migrations (version) VALUES (18);
       `);
     });
     migration();
