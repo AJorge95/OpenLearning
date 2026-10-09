@@ -478,14 +478,13 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .table-actions { display: flex; align-items: center; justify-content: flex-end; gap: 11px; }
 .table-actions .text-action { font-size: 12px; }
 .row-menu { position: relative; }
-.row-menu summary { display: grid; place-items: center; width: 32px; height: 32px; list-style: none; cursor: pointer; color: #666c7c; border-radius: 4px; }
-.row-menu summary::-webkit-details-marker { display: none; }
-.row-menu summary:hover { background: var(--subtle); color: var(--ink); }
-.row-menu-popover { position: absolute; right: 0; top: 36px; z-index: 10; width: 176px; padding: 5px; border: 1px solid var(--line); background: #fff; box-shadow: var(--shadow); border-radius: 4px; }
-.row-menu-popover button { width: 100%; border: 0; background: #fff; border-radius: 3px; padding: 9px; color: #454a5a; text-align: left; font-size: 12px; }
-.row-menu-popover button:hover { color: var(--purple); background: var(--purple-soft); }
-.row-menu-popover a { display: block; border-radius: 3px; padding: 9px; color: #454a5a; font-size: 12px; text-decoration: none; }
-.row-menu-popover a:hover { color: var(--purple); background: var(--purple-soft); }
+.row-menu-trigger { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid transparent; border-radius: 8px; color: #666c7c; background: transparent; cursor: pointer; transition: border-color .15s ease, background .15s ease, color .15s ease; }
+.row-menu-trigger:hover, .row-menu-trigger[aria-expanded="true"] { border-color: var(--line); color: var(--purple); background: var(--subtle); }
+.row-menu-trigger:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+.row-menu-popover { position: fixed; z-index: 220; display: grid; gap: 3px; width: 196px; padding: 6px; border: 1px solid var(--line); background: #fff; box-shadow: 0 14px 36px rgba(20, 24, 36, .16); border-radius: 11px; }
+.row-menu-popover button, .row-menu-popover a { display: flex; align-items: center; width: 100%; min-height: 38px; border: 0; background: transparent; border-radius: 7px; padding: 8px 10px; color: #454a5a; text-align: left; font-size: 12px; font-weight: 550; text-decoration: none; overflow-wrap: anywhere; }
+.row-menu-popover button:hover, .row-menu-popover a:hover, .row-menu-popover [role="menuitem"]:focus-visible { outline: none; color: var(--purple-dark); background: var(--purple-hover-bg); }
+.row-menu-popover button:disabled { cursor: not-allowed; opacity: .55; }
 .row-menu-popover .danger-menu-item { color: var(--danger); }
 .management-page > .empty-state { border: 1px solid var(--line); border-radius: 4px; padding: 68px 26px; }
 
