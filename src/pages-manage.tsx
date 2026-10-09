@@ -42,7 +42,7 @@ function CourseRowMenu({ course, busyAction, onStatusChange, onDelete }: {
   const menuRef = useRef<HTMLDivElement>(null);
   const focusMenuOnOpenRef = useRef(false);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 196 });
-  const itemCount = 1 + Number(course.status === 'draft' || course.status === 'published') + Number(course.status !== 'archived');
+  const itemCount = course.status === 'archived' ? 2 : 3;
   const isBusy = Boolean(busyAction);
 
   function openMenu(focusFirst = false) {
@@ -233,14 +233,7 @@ export function CourseManagementPage() {
         <td><VisibilityLabel visibility={course.visibility} /></td>
         <td><CourseStatus status={course.status} /></td>
         <td><DateText value={course.updatedAt} /></td>
-        <td><div className="table-actions"><Link className="text-action" to={`/manage/courses/${course.id}/edit`}>Edit</Link><Link className="text-action" to={`/manage/courses/${course.id}/analytics`}>Analytics</Link>
-          <details className="row-menu"><summary aria-label={`More actions for ${course.title}`}><MoreVertical size={18} /></summary><div className="row-menu-popover">
-            <Link to={`/manage/courses/${course.id}/access`}>Assign learners</Link>
-            {course.status === 'draft' && <button type="button" onClick={() => changeStatus(course, 'published')} disabled={isBusy} aria-busy={busyAction === 'publish'}>{busyAction === 'publish' ? 'Publishing…' : 'Publish'}</button>}
-            {course.status === 'published' && <button type="button" onClick={() => changeStatus(course, 'draft')} disabled={isBusy} aria-busy={busyAction === 'unpublish'}>{busyAction === 'unpublish' ? 'Unpublishing…' : 'Unpublish'}</button>}
-            {course.status !== 'archived' && <button type="button" onClick={() => changeStatus(course, 'archived')} disabled={isBusy} aria-busy={busyAction === 'archive'}>{busyAction === 'archive' ? 'Archiving…' : 'Archive'}</button>}
-            {course.status === 'archived' && <button type="button" className="danger-menu-item" onClick={() => deleteCourse(course)} disabled={isBusy} aria-busy={busyAction === 'delete'}>{busyAction === 'delete' ? 'Deleting…' : 'Delete permanently'}</button>}
-      </div></details></div></td>
+        <td><div className="table-actions"><Link className="text-action" to={`/manage/courses/${course.id}/edit`}>Edit</Link><Link className="text-action" to={`/manage/courses/${course.id}/analytics`}>Analytics</Link><CourseRowMenu course={course} busyAction={busyAction} onStatusChange={changeStatus} onDelete={deleteCourse} /></div></td>
         </tr>;
       })}
     </tbody></table></div> : <EmptyState title={query ? 'No matching courses' : 'Your course catalog is ready'} detail={query ? 'Try another search term.' : 'Create a course, add modules and video lessons, then publish it for learners.'} action={!query && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} />Create course</Link>} />}
