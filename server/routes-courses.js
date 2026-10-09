@@ -5,7 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { config } from './config.js';
 import { fail, requireAuth, requireStaff, requireCourseManager, requireCourseViewer } from './http.js';
-import { assertPublishable, canLearnerAccess, courseFromLesson, courseSummary, enrollLearner, getCoursePayload, moduleCourse, quizCourse } from './course-service.js';
+import { assertPublishable, canLearnerAccess, courseFromLesson, courseSummaries, enrollLearner, getCoursePayload, moduleCourse, quizCourse } from './course-service.js';
+import { likeContains } from './sql.js';
 
 export const courseRouter = Router();
 courseRouter.use(requireAuth);
@@ -34,8 +35,8 @@ function accessiblePublishedCourses(user, filters = {}) {
   const clauses = ["c.status = 'published'"];
   const params = [];
   if (filters.query) {
-    clauses.push('(c.title LIKE ? OR c.description LIKE ? OR c.category LIKE ?)');
-    const query = `%${filters.query}%`;
+    clauses.push("(c.title LIKE ? ESCAPE '!' OR c.description LIKE ? ESCAPE '!' OR c.category LIKE ? ESCAPE '!')");
+    const query = likeContains(filters.query);
     params.push(query, query, query);
   }
   if (filters.category && filters.category !== 'All courses') {
@@ -63,7 +64,7 @@ courseRouter.get('/courses', (req, res) => {
       EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?)
     ) ORDER BY c.category COLLATE NOCASE
   `).all(req.currentUser.role, req.currentUser.id).map((row) => row.category);
-  res.json({ courses: courses.map((course) => courseSummary(course, req.currentUser)), categories });
+  res.json({ courses: courseSummaries(courses, req.currentUser), categories });
 });
 
 courseRouter.get('/my-learning', (req, res) => {
@@ -74,7 +75,7 @@ courseRouter.get('/my-learning', (req, res) => {
         EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?))
     ORDER BY e.enrolled_at DESC
   `).all(req.currentUser.id, req.currentUser.role, req.currentUser.id);
-  res.json({ courses: rows.map((course) => courseSummary(course, req.currentUser)) });
+  res.json({ courses: courseSummaries(rows, req.currentUser) });
 });
 
 courseRouter.get('/manage/courses', requireStaff, (req, res) => {
@@ -84,15 +85,15 @@ courseRouter.get('/manage/courses', requireStaff, (req, res) => {
   const params = [];
   if (status !== 'all') { clauses.push('c.status = ?'); params.push(status); }
   if (query) {
-    clauses.push('(c.title LIKE ? OR c.description LIKE ? OR c.category LIKE ?)');
-    const escaped = `%${query}%`;
+    clauses.push("(c.title LIKE ? ESCAPE '!' OR c.description LIKE ? ESCAPE '!' OR c.category LIKE ? ESCAPE '!')");
+    const escaped = likeContains(query);
     params.push(escaped, escaped, escaped);
   }
   const rows = db.prepare(`
     SELECT c.*, u.username AS owner FROM courses c JOIN users u ON u.id = c.created_by
     ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''} ORDER BY c.updated_at DESC LIMIT 200
   `).all(...params);
-  res.json({ courses: rows.map((course) => ({ ...courseSummary(course, req.currentUser), owner: course.owner })) });
+  res.json({ courses: courseSummaries(rows, req.currentUser) });
 });
 
 courseRouter.get('/courses/:courseId', (req, res) => {
@@ -178,11 +179,16 @@ courseRouter.delete('/manage/modules/:moduleId', requireStaff, (req, res) => {
   const media = db.prepare(`SELECT mf.id, mf.file_name FROM media_files mf WHERE mf.course_id = ? AND mf.id IN (
     SELECT l.media_id FROM lessons l WHERE l.module_id = ? AND l.media_id IS NOT NULL
   )`).all(module.id, module.module_id);
+  const documents = db.prepare(`
+    SELECT lr.file_name FROM lesson_resources lr JOIN lessons l ON l.id = lr.lesson_id
+    WHERE l.module_id = ? AND lr.resource_type = 'document'
+  `).all(module.module_id);
   db.prepare('DELETE FROM course_modules WHERE id = ?').run(module.module_id);
   for (const item of media) {
     db.prepare('DELETE FROM media_files WHERE id = ?').run(item.id);
     fs.rmSync(path.join(courseFileDirectory(module.id), item.file_name), { force: true });
   }
+  for (const item of documents) fs.rmSync(path.join(courseFileDirectory(module.id), item.file_name), { force: true });
   db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, module.id);
   res.status(204).end();
 });
@@ -210,16 +216,53 @@ courseRouter.patch('/manage/lessons/:lessonId', requireStaff, (req, res) => {
   res.json({ ok: true });
 });
 
+courseRouter.post('/manage/lessons/:lessonId/resources', requireStaff, (req, res) => {
+  const lesson = courseFromLesson(req.params.lessonId);
+  if (!lesson) fail(404, 'Lesson not found.', 'not_found');
+  requireCourseManager(lesson.id, req.currentUser);
+  const title = textField(req.body?.title, 'Resource title', 160, { required: true });
+  const rawUrl = textField(req.body?.url, 'Link URL', 2048, { required: true });
+  let url;
+  try { url = new URL(rawUrl); }
+  catch { fail(400, 'Enter a valid link URL.', 'validation_error'); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    fail(400, 'Links must use HTTP or HTTPS and cannot contain embedded credentials.', 'validation_error');
+  }
+  const position = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM lesson_resources WHERE lesson_id = ?').get(lesson.lesson_id).next;
+  const id = randomUUID();
+  db.prepare(`INSERT INTO lesson_resources (id, lesson_id, resource_type, title, href, position)
+    VALUES (?, ?, 'link', ?, ?, ?)`).run(id, lesson.lesson_id, title, url.href, position);
+  db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, lesson.id);
+  res.status(201).json({ resource: { id, kind: 'link', title, url: url.href, fileName: null } });
+});
+
+courseRouter.delete('/manage/lessons/:lessonId/resources/:resourceId', requireStaff, (req, res) => {
+  const lesson = courseFromLesson(req.params.lessonId);
+  if (!lesson) fail(404, 'Lesson not found.', 'not_found');
+  requireCourseManager(lesson.id, req.currentUser);
+  const resource = db.prepare('SELECT * FROM lesson_resources WHERE id = ? AND lesson_id = ?')
+    .get(req.params.resourceId, lesson.lesson_id);
+  if (!resource) fail(404, 'Lesson resource not found.', 'not_found');
+  db.prepare('DELETE FROM lesson_resources WHERE id = ?').run(resource.id);
+  if (resource.resource_type === 'document') {
+    fs.rmSync(path.join(courseFileDirectory(lesson.id), resource.file_name), { force: true });
+  }
+  db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, lesson.id);
+  res.status(204).end();
+});
+
 courseRouter.delete('/manage/lessons/:lessonId', requireStaff, (req, res) => {
   const lesson = courseFromLesson(req.params.lessonId);
   if (!lesson) fail(404, 'Lesson not found.', 'not_found');
   requireCourseManager(lesson.id, req.currentUser);
   const media = lesson.media_id ? db.prepare('SELECT file_name FROM media_files WHERE id = ?').get(lesson.media_id) : null;
+  const documents = db.prepare("SELECT file_name FROM lesson_resources WHERE lesson_id = ? AND resource_type = 'document'").all(lesson.lesson_id);
   db.prepare('DELETE FROM lessons WHERE id = ?').run(lesson.lesson_id);
   if (media) {
     db.prepare('DELETE FROM media_files WHERE id = ?').run(lesson.media_id);
     fs.rmSync(path.join(courseFileDirectory(lesson.id), media.file_name), { force: true });
   }
+  for (const item of documents) fs.rmSync(path.join(courseFileDirectory(lesson.id), item.file_name), { force: true });
   db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, lesson.id);
   res.status(204).end();
 });
@@ -270,8 +313,23 @@ courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
   requireCourseManager(module.id, req.currentUser);
   const title = textField(req.body?.title || 'Module quiz', 'Quiz title', 160, { required: true });
   const passMark = intField(req.body?.passMark ?? 70, 'Pass mark', 1, 100);
-  const questions = Array.isArray(req.body?.questions) ? req.body.questions : [];
+  const questions = req.body?.questions;
+  if (!Array.isArray(questions)) fail(400, 'Questions must be an array.', 'validation_error');
   if (questions.length > 50) fail(400, 'A quiz can contain up to 50 questions.', 'validation_error');
+  for (const question of questions) {
+    if (!question || typeof question !== 'object' || Array.isArray(question)) {
+      fail(400, 'Each quiz question must be an object.', 'validation_error');
+    }
+    if (!Array.isArray(question.choices)) fail(400, 'Each quiz question must include an answer-choice list.', 'validation_error');
+    for (const choice of question.choices) {
+      if (!choice || typeof choice !== 'object' || Array.isArray(choice)) {
+        fail(400, 'Each answer choice must be an object.', 'validation_error');
+      }
+      if (choice.isCorrect !== undefined && typeof choice.isCorrect !== 'boolean') {
+        fail(400, 'Correct-answer flags must be true or false.', 'validation_error');
+      }
+    }
+  }
   const quizId = db.prepare('SELECT id FROM quizzes WHERE module_id = ?').get(module.module_id)?.id || randomUUID();
   const saveQuiz = db.transaction(() => {
     db.prepare(`INSERT INTO quizzes (id, module_id, title, pass_mark) VALUES (?, ?, ?, ?)
@@ -282,7 +340,7 @@ courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
     questions.forEach((question, qIndex) => {
       const prompt = textField(question.prompt, 'Question', 1000, { required: true });
       const explanation = textField(question.explanation, 'Explanation', 1000);
-      const choices = Array.isArray(question.choices) ? question.choices : [];
+      const choices = question.choices;
       if (choices.length > 6) fail(400, 'A question can have up to six answer choices.', 'validation_error');
       const questionId = randomUUID();
       db.prepare('INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position) VALUES (?, ?, ?, ?, ?)')
@@ -290,7 +348,7 @@ courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
       choices.forEach((choice, cIndex) => {
         const choiceText = textField(choice.text, 'Answer choice', 500, { required: true });
         db.prepare('INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES (?, ?, ?, ?, ?)')
-          .run(randomUUID(), questionId, choiceText, choice.isCorrect ? 1 : 0, cIndex);
+          .run(randomUUID(), questionId, choiceText, choice.isCorrect === true ? 1 : 0, cIndex);
       });
     });
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, module.id);
@@ -317,9 +375,9 @@ courseRouter.get('/manage/courses/:courseId/access', requireStaff, (req, res) =>
     SELECT u.id, u.username, u.role, u.disabled, g.id AS grant_id, g.granted_at, gu.username AS granted_by
     FROM users u LEFT JOIN course_grants g ON g.user_id = u.id AND g.course_id = ?
     LEFT JOIN users gu ON gu.id = g.granted_by
-    WHERE u.role = 'learner' AND (? = '' OR u.username LIKE ?)
+    WHERE u.role = 'learner' AND (? = '' OR u.username LIKE ? ESCAPE '!')
     ORDER BY CASE WHEN g.id IS NULL THEN 1 ELSE 0 END, u.username COLLATE NOCASE LIMIT 200
-  `).all(course.id, query, `%${query}%`);
+  `).all(course.id, query, likeContains(query));
   res.json({ users: users.map((user) => ({ id: user.id, username: user.username, disabled: Boolean(user.disabled), granted: Boolean(user.grant_id), grantedAt: user.granted_at, grantedBy: user.granted_by })) });
 });
 
@@ -370,10 +428,21 @@ courseRouter.post('/quizzes/:quizId/attempts', (req, res) => {
   if (!answers || typeof answers !== 'object' || Array.isArray(answers)) fail(400, 'Choose an answer for every question.', 'answers_required');
   const answerIds = Object.keys(answers);
   if (answerIds.length !== questions.length) fail(400, 'Choose an answer for every question.', 'answers_required');
+  const questionIds = questions.map((question) => question.id);
+  const placeholders = questionIds.map(() => '?').join(', ');
+  const choicesByQuestion = new Map();
+  for (const choice of db.prepare(`
+    SELECT id, question_id, choice_text, is_correct FROM quiz_choices
+    WHERE question_id IN (${placeholders}) ORDER BY question_id, position, id
+  `).all(...questionIds)) {
+    const choices = choicesByQuestion.get(choice.question_id) ?? [];
+    choices.push(choice);
+    choicesByQuestion.set(choice.question_id, choices);
+  }
   let correct = 0;
   const snapshot = [];
   for (const question of questions) {
-    const choices = db.prepare('SELECT id, choice_text, is_correct FROM quiz_choices WHERE question_id = ? ORDER BY position').all(question.id);
+    const choices = choicesByQuestion.get(question.id) ?? [];
     const answerId = answers[question.id];
     const selected = choices.find((choice) => choice.id === answerId);
     if (!selected) fail(400, 'One of the selected answers is invalid.', 'invalid_answer');

@@ -7,7 +7,7 @@ OpenLearning is a lightweight, self-hosted learning platform for a single organi
 - Required username-and-password sign-in, configurable learner registration and account limits, and a one-time setup wizard for the initial administrator.
 - Administrator, moderator, and learner roles.
 - Public courses for signed-in learners and private courses available through individual access grants.
-- Courses organized into ordered modules, video lessons, and optional single-answer quizzes.
+- Courses organized into ordered modules, described video lessons, lesson links and documents, and optional single-answer quizzes.
 - Manual lesson completion, saved quiz attempts, unlimited retries, and course completion tracking.
 - SQLite application data and local course media stored in a separate directory for each course.
 - Optional platform icon and selectable violet, ocean, forest, rose, and amber color palettes.
@@ -70,11 +70,11 @@ Environment variables can be set in `.env` or in the process environment:
 | `DATA_DIR` | `./data` | Default location for application data. |
 | `DB_PATH` | `./data/openlearning.sqlite` | SQLite database file path. |
 | `MEDIA_ROOT` | `./data/course-media` | Root directory for course media; each course gets its own subdirectory. |
-| `MAX_UPLOAD_BYTES` | `2147483648` | Maximum size for a single uploaded media file, in bytes. |
+| `MAX_UPLOAD_BYTES` | `2147483648` | Maximum size for a single uploaded video, cover, or lesson document, in bytes. |
 | `SESSION_SECRET` | Development-only value | Session signing secret. Production requires at least 32 characters; use a random secret and keep it private. |
 | `TRUST_PROXY` | `false` | Set `true` only when the app is behind a trusted reverse proxy that sets forwarding headers. |
 
-The media upload accepts MP4 video and JPG, PNG, or WebP course covers. Videos are stored as uploaded; the server does not transcode them. Use MP4 with codecs supported by the browsers your learners use. Select the public connection protocol in setup or **Settings**. Selecting HTTPS enables secure session cookies; it does not provision a TLS certificate. Terminate TLS on Node or a reverse proxy, and set `TRUST_PROXY=true` when a reverse proxy handles HTTPS.
+The media upload accepts MP4 video and JPG, PNG, or WebP course covers. Lessons can also include HTTP(S) links and downloadable PDF, text, Markdown, RTF, Office, CSV/TSV, or OpenDocument attachments. Lesson documents are stored in that course's media folder and served only to users who can access the course. Videos are stored as uploaded; the server does not transcode them. Use MP4 with codecs supported by the browsers your learners use. Select the public connection protocol in setup or **Settings**. Selecting HTTPS enables secure session cookies; it does not provision a TLS certificate. Terminate TLS on Node or a reverse proxy, and set `TRUST_PROXY=true` when a reverse proxy handles HTTPS.
 
 ## Back up and restore
 

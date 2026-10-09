@@ -101,9 +101,16 @@ export function errorHandler(error, _req, res, _next) {
   if (error instanceof ApiError) {
     return res.status(error.status).json({ error: error.message, code: error.code });
   }
+  if (error?.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Request body contains invalid JSON.', code: 'invalid_json' });
+  }
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Request body is too large.', code: 'payload_too_large' });
+  }
   if (error?.name === 'MulterError') {
+    const tooLarge = ['LIMIT_FILE_SIZE', 'LIMIT_FIELD_VALUE'].includes(error.code);
     const message = error.code === 'LIMIT_FILE_SIZE' ? 'This file is larger than the configured upload limit.' : error.message;
-    return res.status(413).json({ error: message, code: error.code });
+    return res.status(tooLarge ? 413 : 400).json({ error: message, code: error.code });
   }
   if (error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
     return res.status(409).json({ error: 'That value is already in use.', code: 'conflict' });

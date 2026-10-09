@@ -13,6 +13,16 @@ export class ApiError extends Error {
   }
 }
 
+type ApiErrorPayload = { error?: string; code?: string };
+
+function parseJsonBody(body: string, status: number): unknown {
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new ApiError(status, 'The server returned an invalid response. Refresh and try again.', 'invalid_response');
+  }
+}
+
 async function refreshCsrf(): Promise<string> {
   const response = await fetch('/api/csrf', { credentials: 'same-origin' });
   if (!response.ok) throw new ApiError(response.status, 'Unable to start a secure session. Refresh and try again.');
@@ -33,7 +43,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { ...options, method, headers, credentials: 'same-origin' });
   if (response.status === 204) return undefined as T;
   const contentType = response.headers.get('content-type') || '';
-  const data = contentType.includes('application/json') ? await response.json() : null;
+  const data = contentType.includes('application/json')
+    ? parseJsonBody(await response.text(), response.status) as ApiErrorPayload
+    : null;
   if (!response.ok) {
     if (data?.code === 'csrf_invalid' || data?.code === 'csrf_missing') csrfToken = null;
     throw new ApiError(response.status, data?.error || `Request failed (${response.status}).`, data?.code);
@@ -54,34 +66,39 @@ export const api = {
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   refreshCsrf,
   clearCsrf: () => { csrfToken = null; },
-  upload: <T>(path: string, fields: Record<string, string>, file: File, onProgress: (value: number) => void) =>
-    new Promise<T>(async (resolve, reject) => {
-      try {
-        const token = await ensureCsrf();
-        const body = new FormData();
-        for (const [key, value] of Object.entries(fields)) body.append(key, value);
-        body.append('file', file);
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', path);
-        xhr.withCredentials = true;
-        xhr.setRequestHeader('X-CSRF-Token', token);
-        xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-        };
-        xhr.onerror = () => reject(new ApiError(0, 'Upload failed. Check your connection and try again.'));
-        xhr.onload = () => {
-          const contentType = xhr.getResponseHeader('content-type') || '';
-          const data = contentType.includes('application/json') ? JSON.parse(xhr.responseText) : null;
-          if (xhr.status < 200 || xhr.status >= 300) {
-            if (data?.code === 'csrf_invalid' || data?.code === 'csrf_missing') csrfToken = null;
-            reject(new ApiError(xhr.status, data?.error || `Upload failed (${xhr.status}).`, data?.code));
-            return;
-          }
-          resolve(data as T);
-        };
-        xhr.send(body);
-      } catch (error) { reject(error); }
-    }),
+  upload: async <T>(path: string, fields: Record<string, string>, file: File, onProgress: (value: number) => void): Promise<T> => {
+    const token = await ensureCsrf();
+    const body = new FormData();
+    for (const [key, value] of Object.entries(fields)) body.append(key, value);
+    body.append('file', file);
+    return new Promise<T>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', path);
+      xhr.withCredentials = true;
+      xhr.setRequestHeader('X-CSRF-Token', token);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+      };
+      xhr.onerror = () => reject(new ApiError(0, 'Upload failed. Check your connection and try again.'));
+      xhr.onload = () => {
+        const contentType = xhr.getResponseHeader('content-type') || '';
+        let data: ApiErrorPayload | null = null;
+        try {
+          if (contentType.includes('application/json')) data = parseJsonBody(xhr.responseText, xhr.status) as ApiErrorPayload;
+        } catch (error) {
+          reject(error);
+          return;
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          if (data?.code === 'csrf_invalid' || data?.code === 'csrf_missing') csrfToken = null;
+          reject(new ApiError(xhr.status, data?.error || `Upload failed (${xhr.status}).`, data?.code));
+          return;
+        }
+        resolve(data as T);
+      };
+      xhr.send(body);
+    });
+  },
 };
 
 export async function getSetupStatus() {

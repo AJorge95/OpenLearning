@@ -2,60 +2,118 @@ import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { fail, canViewCourse } from './http.js';
 
-export function courseSummary(course, user) {
-  const counts = db.prepare(`
-    SELECT
+export function courseSummaries(courses, user) {
+  if (!courses.length) return [];
+  const ids = courses.map((course) => course.id);
+  const placeholders = ids.map(() => '?').join(', ');
+  const countsByCourse = new Map(db.prepare(`
+    SELECT c.id,
       (SELECT COUNT(*) FROM course_modules m WHERE m.course_id = c.id) AS module_count,
       (SELECT COUNT(*) FROM lessons l JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = c.id) AS lesson_count,
       (SELECT username FROM users WHERE id = c.created_by) AS owner
-    FROM courses c WHERE c.id = ?
-  `).get(course.id);
-  let completedLessons = 0;
-  let passedQuizzes = 0;
-  let quizCount = 0;
+    FROM courses c WHERE c.id IN (${placeholders})
+  `).all(...ids).map((row) => [row.id, row]));
+  const completedLessonsByCourse = new Map();
+  const quizCountsByCourse = new Map();
   if (user) {
-    completedLessons = db.prepare(`
-      SELECT COUNT(*) AS count FROM lesson_progress p
+    for (const row of db.prepare(`
+      SELECT m.course_id, COUNT(*) AS count FROM lesson_progress p
       JOIN lessons l ON l.id = p.lesson_id
       JOIN course_modules m ON m.id = l.module_id
-      WHERE p.user_id = ? AND m.course_id = ?
-    `).get(user.id, course.id).count;
-    const quizCounts = db.prepare(`
-      SELECT COUNT(*) AS total,
+      WHERE p.user_id = ? AND m.course_id IN (${placeholders}) GROUP BY m.course_id
+    `).all(user.id, ...ids)) {
+      completedLessonsByCourse.set(row.course_id, row.count);
+    }
+    for (const row of db.prepare(`
+      SELECT m.course_id, COUNT(*) AS total,
         SUM(CASE WHEN EXISTS (
           SELECT 1 FROM quiz_attempts a WHERE a.quiz_id = q.id AND a.user_id = ? AND a.passed = 1
         ) THEN 1 ELSE 0 END) AS passed
-      FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?
-    `).get(user.id, course.id);
-    quizCount = quizCounts.total;
-    passedQuizzes = quizCounts.passed || 0;
+      FROM quizzes q JOIN course_modules m ON m.id = q.module_id
+      WHERE m.course_id IN (${placeholders}) GROUP BY m.course_id
+    `).all(user.id, ...ids)) {
+      quizCountsByCourse.set(row.course_id, row);
+    }
   }
-  const requiredItems = counts.lesson_count + quizCount;
-  const completedItems = completedLessons + passedQuizzes;
-  const progress = requiredItems > 0 ? Math.round((completedItems / requiredItems) * 100) : 0;
-  const completed = requiredItems > 0 && completedItems === requiredItems;
-  return {
-    id: course.id,
-    title: course.title,
-    description: course.description,
-    category: course.category,
-    visibility: course.visibility,
-    status: course.status,
-    coverMediaId: course.cover_media_id,
-    coverUrl: course.cover_media_id ? `/media/${course.cover_media_id}` : null,
-    createdBy: course.created_by,
-    owner: counts.owner,
-    updatedAt: course.updated_at,
-    moduleCount: counts.module_count,
-    lessonCount: counts.lesson_count,
-    completedLessons,
-    progress,
-    completed,
-  };
+  return courses.map((course) => {
+    const counts = countsByCourse.get(course.id);
+    const completedLessons = completedLessonsByCourse.get(course.id) ?? 0;
+    const quizCounts = quizCountsByCourse.get(course.id) ?? { total: 0, passed: 0 };
+    const quizCount = quizCounts.total;
+    const passedQuizzes = quizCounts.passed || 0;
+    const requiredItems = counts.lesson_count + quizCount;
+    const completedItems = completedLessons + passedQuizzes;
+    const progress = requiredItems > 0 ? Math.round((completedItems / requiredItems) * 100) : 0;
+    const completed = requiredItems > 0 && completedItems === requiredItems;
+    return {
+      id: course.id,
+      title: course.title,
+      description: course.description,
+      category: course.category,
+      visibility: course.visibility,
+      status: course.status,
+      coverMediaId: course.cover_media_id,
+      coverUrl: course.cover_media_id ? `/media/${course.cover_media_id}` : null,
+      createdBy: course.created_by,
+      owner: course.owner ?? counts.owner,
+      updatedAt: course.updated_at,
+      moduleCount: counts.module_count,
+      lessonCount: counts.lesson_count,
+      completedLessons,
+      progress,
+      completed,
+    };
+  });
+}
+
+export function courseSummary(course, user) {
+  return courseSummaries([course], user)[0];
 }
 
 export function getCoursePayload(course, user, { includeAnswers = false } = {}) {
   const summary = courseSummary(course, user);
+  const lessonResources = new Map();
+  for (const resource of db.prepare(`
+    SELECT lr.id, lr.lesson_id, lr.resource_type, lr.title, lr.href, lr.original_name
+    FROM lesson_resources lr
+    JOIN lessons l ON l.id = lr.lesson_id
+    JOIN course_modules m ON m.id = l.module_id
+    WHERE m.course_id = ?
+    ORDER BY lr.lesson_id, lr.position, lr.id
+  `).all(course.id)) {
+    const resources = lessonResources.get(resource.lesson_id) ?? [];
+    resources.push({
+      id: resource.id,
+      kind: resource.resource_type,
+      title: resource.title,
+      url: resource.resource_type === 'link' ? resource.href : `/media/resources/${resource.id}`,
+      fileName: resource.original_name,
+    });
+    lessonResources.set(resource.lesson_id, resources);
+  }
+  const completedLessonIds = user
+    ? new Set(db.prepare(`
+        SELECT lp.lesson_id
+        FROM lesson_progress lp
+        JOIN lessons l ON l.id = lp.lesson_id
+        JOIN course_modules m ON m.id = l.module_id
+        WHERE lp.user_id = ? AND m.course_id = ?
+      `).all(user.id, course.id).map((row) => row.lesson_id))
+    : new Set();
+  const quizChoicesByQuestion = new Map();
+  for (const choice of db.prepare(`
+    SELECT qc.id, qc.question_id, qc.choice_text, qc.is_correct
+    FROM quiz_choices qc
+    JOIN quiz_questions qq ON qq.id = qc.question_id
+    JOIN quizzes q ON q.id = qq.quiz_id
+    JOIN course_modules m ON m.id = q.module_id
+    WHERE m.course_id = ?
+    ORDER BY qq.position, qq.id, qc.position, qc.id
+  `).all(course.id)) {
+    const choices = quizChoicesByQuestion.get(choice.question_id) ?? [];
+    choices.push(choice);
+    quizChoicesByQuestion.set(choice.question_id, choices);
+  }
   const modules = db.prepare('SELECT * FROM course_modules WHERE course_id = ? ORDER BY position, id').all(course.id).map((module) => {
     const lessons = db.prepare(`
       SELECT l.*, mf.original_name, mf.mime_type
@@ -70,17 +128,8 @@ export function getCoursePayload(course, user, { includeAnswers = false } = {}) 
       mediaUrl: lesson.media_id ? `/media/${lesson.media_id}` : null,
       videoName: lesson.original_name,
       hasVideo: Boolean(lesson.media_id),
-      resources: db.prepare(`
-        SELECT id, resource_type, title, href, original_name
-        FROM lesson_resources WHERE lesson_id = ? ORDER BY position, id
-      `).all(lesson.id).map((resource) => ({
-        id: resource.id,
-        kind: resource.resource_type,
-        title: resource.title,
-        url: resource.resource_type === 'link' ? resource.href : `/media/resources/${resource.id}`,
-        fileName: resource.original_name,
-      })),
-      completed: Boolean(user) && db.prepare('SELECT 1 FROM lesson_progress WHERE user_id = ? AND lesson_id = ?').get(user.id, lesson.id) !== undefined,
+      resources: lessonResources.get(lesson.id) ?? [],
+      completed: completedLessonIds.has(lesson.id),
     }));
     const quiz = db.prepare('SELECT * FROM quizzes WHERE module_id = ?').get(module.id);
     let quizData = null;
@@ -89,7 +138,7 @@ export function getCoursePayload(course, user, { includeAnswers = false } = {}) 
         id: question.id,
         prompt: question.prompt,
         explanation: question.explanation,
-        choices: db.prepare('SELECT id, choice_text, is_correct, position FROM quiz_choices WHERE question_id = ? ORDER BY position, id').all(question.id).map((choice) => ({
+        choices: (quizChoicesByQuestion.get(question.id) ?? []).map((choice) => ({
           id: choice.id,
           text: choice.choice_text,
           ...(includeAnswers ? { isCorrect: Boolean(choice.is_correct) } : {}),

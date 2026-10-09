@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from './db.js';
 import { hashPassword, validateCredentials } from './auth.js';
 import { fail, requireAdmin } from './http.js';
+import { likeContains } from './sql.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -23,7 +24,7 @@ adminRouter.get('/users', (req, res) => {
   const clauses = [];
   const params = [];
   if (role !== 'all') { clauses.push('role = ?'); params.push(role); }
-  if (query) { clauses.push('username LIKE ?'); params.push(`%${query}%`); }
+  if (query) { clauses.push("username LIKE ? ESCAPE '!'"); params.push(likeContains(query)); }
   const users = db.prepare(`SELECT id, username, role, disabled, created_at FROM users
     ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
     ORDER BY CASE role WHEN 'admin' THEN 1 WHEN 'moderator' THEN 2 ELSE 3 END, username COLLATE NOCASE LIMIT 300`)
@@ -42,7 +43,10 @@ adminRouter.patch('/users/:userId', (req, res) => {
   const user = db.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?').get(req.params.userId);
   if (!user) fail(404, 'User not found.', 'not_found');
   const nextRole = req.body?.role === undefined ? user.role : req.body.role;
-  const nextDisabled = req.body?.disabled === undefined ? Boolean(user.disabled) : Boolean(req.body.disabled);
+  if (req.body?.disabled !== undefined && typeof req.body.disabled !== 'boolean') {
+    fail(400, 'Account disabled must be true or false.', 'validation_error');
+  }
+  const nextDisabled = req.body?.disabled === undefined ? Boolean(user.disabled) : req.body.disabled;
   if (!['admin', 'moderator', 'learner'].includes(nextRole)) fail(400, 'Choose a valid role.', 'validation_error');
   if (user.role === 'admin' && (!nextDisabled && nextRole === 'admin')) {
     // A no-op admin edit is allowed.
