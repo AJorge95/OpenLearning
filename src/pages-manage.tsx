@@ -226,7 +226,6 @@ export function CourseManagementPage() {
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading courses…</div> : failedRequest ? null : courses.length ? <div className="course-table-wrap" role="region" aria-label="Scrollable course list" tabIndex={0}><table className="course-table"><caption className="sr-only">Courses</caption><thead><tr><th scope="col">Course</th><th scope="col">Owner</th><th scope="col">Visibility</th><th scope="col">Status</th><th scope="col">Updated</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>
       {courses.map((course) => {
         const busyAction = busyActions[course.id];
-        const isBusy = Boolean(busyAction);
         return <tr key={course.id}>
         <td><div className="table-course"><span className="table-thumb"><ImageWithFallback src={course.coverUrl} className="table-cover-image" alt="" loading="lazy" decoding="async" fallback={<BookOpen size={20} />} /></span><div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category}</small></div></div></td>
         <td><span className="owner-cell"><UserInitial username={course.owner || ''} />{course.owner}</span></td>

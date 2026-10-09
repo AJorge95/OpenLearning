@@ -310,7 +310,10 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
       const target = event.target as Node;
       if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
     }
-    function closeForLayoutChange() { setOpen(false); }
+    function closeForLayoutChange(event: Event) {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      setOpen(false);
+    }
     document.addEventListener('pointerdown', closeFromOutside);
     window.addEventListener('scroll', closeForLayoutChange, true);
     window.addEventListener('resize', closeForLayoutChange);
