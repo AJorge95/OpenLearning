@@ -7,11 +7,13 @@ OpenLearning is a lightweight, self-hosted learning platform for a single organi
 - Required username-and-password sign-in, configurable learner registration and account limits, and a one-time setup wizard for the initial administrator.
 - Administrator, moderator, and learner roles.
 - Public courses for signed-in learners and private courses available through individual access grants.
-- Courses organized into ordered modules, described video lessons, lesson links and documents, and optional single-answer quizzes.
-- Manual lesson completion, saved quiz attempts, unlimited retries, and course completion tracking.
+- Courses organized into ordered modules, described video lessons with optional text transcripts and WebVTT caption tracks, lesson links and documents, and optional single-answer quizzes.
+- Lesson-level likes, dislikes, and learner comments, with reactions limited to one per learner per lesson.
+- Manual lesson completion, saved quiz attempts, unlimited retries, course completion tracking, and learner-specific certificates.
 - SQLite application data and local course media stored in a separate directory for each course.
 - Optional platform icon and selectable violet, ocean, forest, rose, and amber color palettes.
 - MP4 video upload with browser upload progress and authenticated byte-range delivery for seeking.
+- Administrator-only audit and system logs with search, filters, and pagination.
 - Native Node deployment: one Express process serves the API and production web client. Docker is not required.
 
 ## Requirements
@@ -43,6 +45,8 @@ npm start
 
 Open `http://localhost:3000`. On the first launch, the two-step setup wizard asks for the platform name, optional icon and color palette, initial administrator credentials, public connection protocol, and registration policy. Setup can only be completed once. When registration is enabled, new accounts receive the learner role. Administrators can update branding, protocol, registration access, and the account cap from **Settings**. A limit of `0` means unlimited accounts; a positive limit counts all accounts, including administrators and moderators.
 
+Service monitors can use `/healthz` to check that the HTTP process is responding and `/readyz` to check that the migrated SQLite schema and required setup-state row are available. Readiness returns HTTP 503 if either database check fails.
+
 For local development, run the Vite client and API together:
 
 ```sh
@@ -51,13 +55,29 @@ npm run dev
 
 The development client is available at `http://127.0.0.1:5173` and proxies API and media requests to the Express server on port 3000.
 
+## Checks
+
+Run the automated server utility and persistence checks with:
+
+```sh
+npm test
+```
+
+The suite uses Node's built-in test runner, in-memory and isolated temporary SQLite databases, and temporary filesystem fixtures. It does not start the application server or use the configured application data directory.
+
 ## Roles and permissions
 
-- **Administrator:** Manage settings, accounts, roles, courses, and private-course access grants.
-- **Moderator:** Create and manage all courses, including private-course access grants. Moderators cannot manage accounts, roles, or platform settings.
+- **Administrator:** Create and manage accounts, roles, passwords, and course activity; manage settings, courses, learner assignments, and access grants.
+- **Moderator:** Create and manage all courses, assign learners, and review course dashboards. Moderators cannot manage accounts, roles, or platform settings.
 - **Learner:** Browse and learn from published public courses, plus private courses for which they have an active grant.
 
-All course and lesson viewing requires sign-in. Revoking a private-course grant takes effect on the next API or media request.
+All course and lesson viewing requires sign-in. Assignments place a course in a learner's My learning list; private courses require an active assignment for access. Revoking a private-course assignment takes effect on the next API or media request.
+
+Administrators can manually create learner, moderator, or administrator accounts, change roles or account status, and reset passwords. Course dashboards are available to administrators and moderators and show completion rates, lesson completion, quiz participation and scores, plus per-learner progress and attempt details.
+
+## Logs
+
+Administrators can open **Audit log** and **System log** from the management area. The audit log records sign-ins, account and platform changes, course and curriculum edits, media uploads, learner assignments, and private-course access grants. The system log records server startup and shutdown, failed sign-ins, authentication rate limits, and unhandled request errors. Log records are stored in SQLite and retained up to 10,000 audit entries and 5,000 system entries; the oldest entries are removed as new records arrive. Log tables are included in the regular database backup.
 
 ## Configuration
 
@@ -65,16 +85,19 @@ Environment variables can be set in `.env` or in the process environment:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `NODE_ENV` | `development` | Set to `production` for deployment cookies and production security headers. |
-| `PORT` | `3000` | HTTP listen port. |
-| `DATA_DIR` | `./data` | Default location for application data. |
-| `DB_PATH` | `./data/openlearning.sqlite` | SQLite database file path. |
-| `MEDIA_ROOT` | `./data/course-media` | Root directory for course media; each course gets its own subdirectory. |
-| `MAX_UPLOAD_BYTES` | `2147483648` | Maximum size for a single uploaded video, cover, or lesson document, in bytes. |
+| `NODE_ENV` | `development` | Accepted values are `development`, `test`, and `production`. Set to `production` for deployment cookies and production security headers. |
+| `PORT` | `3000` | HTTP TCP port from 1 to 65535. Invalid values stop startup. |
+| `DATA_DIR` | `./data` | Parent directory used to derive database and media paths when their overrides are unset. |
+| `DB_PATH` | `./data/openlearning.sqlite` | SQLite database file path. If unset, defaults to `openlearning.sqlite` inside `DATA_DIR`. |
+| `MEDIA_ROOT` | `./data/course-media` | Root directory for course media; if unset, defaults to `course-media` inside `DATA_DIR`. Each course gets its own subdirectory. |
+| `MAX_UPLOAD_BYTES` | `2147483648` | Maximum size for a single uploaded video, cover, or lesson document, as a positive whole number of bytes. Invalid values stop startup. |
+| `REQUEST_TIMEOUT_MS` | `300000` | Maximum time in milliseconds for Node to receive an entire HTTP request, from 1 to 2147483647. Set a larger value for slower large uploads; invalid values stop startup. |
 | `SESSION_SECRET` | Development-only value | Session signing secret. Production requires at least 32 characters; use a random secret and keep it private. |
-| `TRUST_PROXY` | `false` | Set `true` only when the app is behind a trusted reverse proxy that sets forwarding headers. |
+| `TRUST_PROXY` | `false` | Accepts `true` or `false` (case-insensitive). Set `true` only behind a trusted reverse proxy that sets forwarding headers; other non-empty values stop startup. |
 
-The media upload accepts MP4 video and JPG, PNG, or WebP course covers. Lessons can also include HTTP(S) links and downloadable PDF, text, Markdown, RTF, Office, CSV/TSV, or OpenDocument attachments. Lesson documents are stored in that course's media folder and served only to users who can access the course. Videos are stored as uploaded; the server does not transcode them. Use MP4 with codecs supported by the browsers your learners use. Select the public connection protocol in setup or **Settings**. Selecting HTTPS enables secure session cookies; it does not provision a TLS certificate. Terminate TLS on Node or a reverse proxy, and set `TRUST_PROXY=true` when a reverse proxy handles HTTPS.
+`DB_PATH` and `MEDIA_ROOT` are independent overrides. The example leaves them unset so changing `DATA_DIR` moves the database and media together. Set either override explicitly when you need to store it elsewhere.
+
+The media upload accepts MP4 video, JPG, PNG, or WebP course covers, and WebVTT caption tracks up to 5 MB each. A lesson can have one caption track per language; learners can select tracks in the video controls. Lessons can also include HTTP(S) links and downloadable PDF, text, Markdown, RTF, Office, CSV/TSV, or OpenDocument attachments. Caption tracks and lesson documents are stored in that course's media folder and served only to users who can access the course. Videos are stored as uploaded; the server does not transcode them. Use MP4 with codecs supported by the browsers your learners use. Select the public connection protocol in setup or **Settings**. Selecting HTTPS enables secure session cookies; it does not provision a TLS certificate. Terminate TLS on Node or a reverse proxy, and set `TRUST_PROXY=true` when a reverse proxy handles HTTPS.
 
 ## Back up and restore
 

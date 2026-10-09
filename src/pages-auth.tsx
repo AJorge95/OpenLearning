@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
@@ -7,7 +7,7 @@ import type { BrandingPalette, ConnectionProtocol } from './branding';
 
 function AuthPanel({ children, eyebrow }: { children: React.ReactNode; eyebrow?: string }) {
   return (
-    <main className="auth-page">
+    <main id="main-content" tabIndex={-1} className="auth-page">
       <section className="auth-panel">
         <PlatformBrand className="auth-brand" to="/login" />
         {eyebrow && <span className="auth-eyebrow">{eyebrow}</span>}
@@ -21,6 +21,8 @@ export function SetupPage() {
   const { completeSetup, configured, user, connectionProtocol: initialProtocol, registrationEnabled: initialRegistrationEnabled, userLimit: initialUserLimit } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2>(1);
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const previousStepRef = useRef(step);
   const [platformName, setPlatformName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -33,17 +35,30 @@ export function SetupPage() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (previousStepRef.current === step) return;
+    previousStepRef.current = step;
+    stepHeadingRef.current?.focus();
+  }, [step]);
+
   if (configured) return <Navigate to={user ? '/courses' : '/login'} replace />;
 
   function continueToAccessSettings(event: React.FormEvent) {
     event.preventDefault();
     setError('');
+    const normalizedPlatformName = platformName.trim();
+    if (normalizedPlatformName.length < 2 || normalizedPlatformName.length > 80) {
+      setError('Platform name must be between 2 and 80 characters.');
+      return;
+    }
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
+    setPlatformName(normalizedPlatformName);
     setStep(2);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    window.scrollTo({ top: 0, behavior });
   }
 
   async function submit(event: React.FormEvent) {
@@ -66,12 +81,12 @@ export function SetupPage() {
   }
 
   return (
-    <main className="setup-page">
+    <main id="main-content" tabIndex={-1} className="setup-page">
       <section className="setup-panel">
         <span className="setup-mark">{platformIcon ? <img src={platformIcon} alt="Platform icon preview" /> : <BookOpenMark />}</span>
         <div className="setup-step-label">Step {step} of 2</div>
         {step === 1 ? <>
-          <h1>Set up your learning platform</h1>
+          <h1 ref={stepHeadingRef} tabIndex={-1}>Set up your learning platform</h1>
           <p>Create the administrator account and choose a name for this installation.</p>
           <form onSubmit={continueToAccessSettings} className="form-stack">
             <label>Platform name<input required minLength={2} maxLength={80} value={platformName} onChange={(event) => setPlatformName(event.target.value)} autoFocus /></label>
@@ -84,15 +99,15 @@ export function SetupPage() {
             <Button type="submit">Continue to access settings</Button>
           </form>
         </> : <>
-          <h1>Configure access</h1>
+          <h1 ref={stepHeadingRef} tabIndex={-1}>Configure access</h1>
           <p>Choose how people connect and whether new learner accounts can be created.</p>
-          <form onSubmit={submit} className="form-stack">
-            <label>Public connection protocol<select value={connectionProtocol} onChange={(event) => setConnectionProtocol(event.target.value as ConnectionProtocol)}><option value="http">HTTP</option><option value="https">HTTPS</option></select></label>
-            <p className="protocol-help">HTTPS requires a TLS certificate on this server or a reverse proxy. When a proxy handles TLS, set <code>TRUST_PROXY=true</code> in the server environment.</p>
-            <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={registrationEnabled} onChange={(event) => setRegistrationEnabled(event.target.checked)} /></label>
-            <label>Maximum registered accounts<input type="number" min={0} max={1000000} step={1} required value={userLimit} onChange={(event) => setUserLimit(event.target.value)} /><small>Set to 0 for no limit. The cap includes this administrator account, moderators, and learners.</small></label>
+          <form onSubmit={submit} className="form-stack" aria-busy={saving}>
+            <label>Public connection protocol<select aria-describedby="setup-protocol-help" value={connectionProtocol} onChange={(event) => setConnectionProtocol(event.target.value as ConnectionProtocol)} disabled={saving}><option value="http">HTTP</option><option value="https">HTTPS</option></select></label>
+            <p id="setup-protocol-help" className="protocol-help">HTTPS requires a TLS certificate on this server or a reverse proxy. When a proxy handles TLS, set <code>TRUST_PROXY=true</code> in the server environment.</p>
+            <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={registrationEnabled} onChange={(event) => setRegistrationEnabled(event.target.checked)} disabled={saving} /></label>
+            <label>Maximum registered accounts<input type="number" min={0} max={1000000} step={1} required value={userLimit} onChange={(event) => setUserLimit(event.target.value)} disabled={saving} /><small>Set to 0 for no limit. The cap includes this administrator account, moderators, and learners.</small></label>
             {error && <p className="form-error" role="alert">{error}</p>}
-            <div className="setup-step-actions"><Button type="button" variant="secondary" onClick={() => { setError(''); setStep(1); }}>Back</Button><Button type="submit" disabled={saving}>{saving ? 'Creating platform…' : 'Create platform'}</Button></div>
+            <div className="setup-step-actions"><Button type="button" variant="secondary" disabled={saving} onClick={() => { setError(''); setStep(1); }}>Back</Button><Button type="submit" disabled={saving}>{saving ? 'Creating platform…' : 'Create platform'}</Button></div>
           </form>
         </>}
       </section>
@@ -122,9 +137,9 @@ export function LoginPage() {
   }
 
   return <AuthPanel><h1>Welcome back</h1><p className="auth-description">Sign in to continue learning.</p>
-    <form onSubmit={submit} className="form-stack">
-      <label>Username<input required autoComplete="username" autoFocus value={username} onChange={(event) => setUsername(event.target.value)} /></label>
-      <label>Password<input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+    <form onSubmit={submit} className="form-stack" aria-busy={saving}>
+      <label>Username<input required maxLength={32} autoComplete="username" autoFocus value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /></label>
+      <label>Password<input required maxLength={256} type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving}>{saving ? 'Signing in…' : 'Sign in'}</Button>
     </form>
@@ -155,10 +170,10 @@ export function RegisterPage() {
   }
 
   return <AuthPanel><h1>Create your account</h1><p className="auth-description">Join your learning space and explore available courses.</p>
-    <form onSubmit={submit} className="form-stack">
-      <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoFocus value={username} onChange={(event) => setUsername(event.target.value)} /><small>Letters, numbers, dots, underscores, and hyphens.</small></label>
-      <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} /><small>Use at least 12 characters.</small></label>
-      <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
+    <form onSubmit={submit} className="form-stack" aria-busy={saving}>
+      <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoFocus value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>Letters, numbers, dots, underscores, and hyphens.</small></label>
+      <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /><small>Use at least 12 characters.</small></label>
+      <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving}>{saving ? 'Creating account…' : 'Create account'}</Button>
     </form>
@@ -167,6 +182,7 @@ export function RegisterPage() {
 }
 
 export function AccountSecurityPage() {
+  const { refresh } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -177,18 +193,25 @@ export function AccountSecurityPage() {
     event.preventDefault(); setError(''); setMessage(''); setSaving(true);
     try {
       await api.put('/api/auth/password', { currentPassword, password, confirmPassword });
-      setCurrentPassword(''); setPassword(''); setConfirmPassword(''); setMessage('Your password has been updated.');
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Password could not be updated.'); }
+      setCurrentPassword(''); setPassword(''); setConfirmPassword(''); setMessage('Your password has been updated. Other active sessions have been signed out.');
+    } catch (cause) {
+      let authRefreshFailed = false;
+      if (cause instanceof ApiError && (cause.status === 401 || cause.code === 'password_changed')) {
+        setCurrentPassword(''); setPassword(''); setConfirmPassword('');
+        try { await refresh(); } catch { authRefreshFailed = true; }
+      }
+      const message = cause instanceof ApiError ? cause.message : 'Password could not be updated.';
+      setError(authRefreshFailed ? `${message} Your sign-in status could not be refreshed. Reload before continuing.` : message);
+    }
     finally { setSaving(false); }
   }
-  return <div className="narrow-content"><div className="breadcrumbs"><Link to="/courses">Browse courses</Link><span>/</span><span>Account security</span></div><h1>Change password</h1><p className="lead-copy">Choose a new password for your account.</p>
-    <form className="surface-form form-stack" onSubmit={submit}>
-      <label>Current password<input type="password" required autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
-      <label>New password<input type="password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} /><small>Use at least 12 characters.</small></label>
-      <label>Confirm new password<input type="password" required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
+  return <div className="narrow-content"><div className="breadcrumbs"><Link to="/courses">Browse courses</Link><span>/</span><span>Account security</span></div><h1>Change password</h1><p className="lead-copy">Choose a new password. Other signed-in devices will be signed out after you save.</p>
+    <form className="surface-form form-stack" onSubmit={submit} aria-busy={saving}>
+      <label>Current password<input type="password" required maxLength={256} autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} disabled={saving} /></label>
+      <label>New password<input type="password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /><small>Use at least 12 characters.</small></label>
+      <label>Confirm new password<input type="password" required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} /></label>
       {message && <p className="form-success" role="status">{message}</p>}{error && <p className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Update password'}</Button>
     </form>
   </div>;
 }
-

@@ -2,12 +2,36 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
-import { Button, CourseStatus, EmptyState, PageHeading, PalettePicker, PlatformIconPicker, UserInitial, VisibilityLabel } from './components';
+import { Button, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import { useAuth } from './auth-context';
-import type { Course, CourseAccessUser, CourseModule, Lesson, LessonResource, QuizQuestion, Role, User } from './types';
+import { canonicalCaptionLanguageTag, captionFileSizeError, captionLanguageErrorMessage } from './caption-validation';
+import { courseEditingNote } from './course-editing-note';
+import { firstQuizTextIssue } from './quiz-validation';
+import { lessonResourceUrlError } from './resource-validation';
+import type { Course, CourseAccessUser, CourseAnalytics, CourseModule, Lesson, LessonCaption, LessonResource, QuizQuestion, Role, User } from './types';
 
-type CourseListResponse = { courses: Course[] };
+type CourseListResponse = { courses: Course[]; total: number; page: number; pageSize: number };
+type CourseRowAction = 'publish' | 'unpublish' | 'archive' | 'delete';
+type FailedCourseListRequest = { page: number; query: string; status: string };
+
+const courseDateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+const logTimestampFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const quizTitleLimit = 160;
+const defaultQuizTitleSuffix = ' quiz';
+type EditableQuizChoice = QuizQuestion['choices'][number] & { editorKey?: string };
+type EditableQuizQuestion = Omit<QuizQuestion, 'choices'> & { editorKey?: string; choices: EditableQuizChoice[] };
+
+function truncateUtf16CodeUnits(value: string, limit: number) {
+  let truncated = value.slice(0, limit);
+  if (/[\uD800-\uDBFF]$/.test(truncated)) truncated = truncated.slice(0, -1);
+  return truncated;
+}
+
+function defaultQuizTitle(moduleTitle: string) {
+  const prefix = truncateUtf16CodeUnits(moduleTitle, quizTitleLimit - defaultQuizTitleSuffix.length);
+  return `${prefix}${defaultQuizTitleSuffix}`;
+}
 
 function Notice({ children, kind = 'error' }: { children: React.ReactNode; kind?: 'error' | 'success' }) {
   return <div className={`inline-notice inline-notice-${kind}`} role={kind === 'error' ? 'alert' : 'status'}>{children}</div>;
@@ -15,42 +39,85 @@ function Notice({ children, kind = 'error' }: { children: React.ReactNode; kind?
 
 function DateText({ value }: { value: string }) {
   const date = new Date(value.includes('Z') ? value : `${value.replace(' ', 'T')}Z`);
-  return <span>{Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date)}</span>;
+  return <span>{Number.isNaN(date.getTime()) ? '—' : courseDateFormatter.format(date)}</span>;
 }
 
 export function CourseManagementPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [total, setTotal] = useState(0);
+  const loadSequenceRef = useRef(0);
+  const loadControllerRef = useRef<AbortController | null>(null);
+  const filtersRef = useRef({ query, status });
+  filtersRef.current = { query, status };
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState('');
+  const [failedRequest, setFailedRequest] = useState<FailedCourseListRequest | null>(null);
+  const [busyActions, setBusyActions] = useState<Record<string, CourseRowAction>>({});
+  const busyActionsRef = useRef(busyActions);
 
-  async function load() {
-    setLoading(true); setError('');
+  function markCourseAction(courseId: string, action: CourseRowAction | null) {
+    const next = { ...busyActionsRef.current };
+    if (action) next[courseId] = action;
+    else delete next[courseId];
+    busyActionsRef.current = next;
+    setBusyActions(next);
+  }
+
+  async function load(requestedPage = page, requestedFilters = filtersRef.current) {
+    const requestSequence = ++loadSequenceRef.current;
+    loadControllerRef.current?.abort();
+    const requestController = new AbortController();
+    loadControllerRef.current = requestController;
+    const currentFilters = { ...requestedFilters };
+    setLoading(true); setError(''); setFailedRequest(null);
     try {
       const params = new URLSearchParams();
-      if (status !== 'all') params.set('status', status);
-      if (query.trim()) params.set('q', query.trim());
-      setCourses((await api.get<CourseListResponse>(`/api/manage/courses?${params}`)).courses);
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Courses could not be loaded.'); }
-    finally { setLoading(false); }
+      if (currentFilters.status !== 'all') params.set('status', currentFilters.status);
+      if (currentFilters.query.trim()) params.set('q', currentFilters.query.trim());
+      params.set('page', String(requestedPage));
+      const response = await api.get<CourseListResponse>(`/api/manage/courses?${params}`, { signal: requestController.signal });
+      if (requestSequence === loadSequenceRef.current) {
+        setCourses(response.courses); setTotal(response.total); setPage(response.page); setPageSize(response.pageSize);
+      }
+    } catch (cause) {
+      if (requestSequence === loadSequenceRef.current) {
+        setError(cause instanceof ApiError ? cause.message : 'Courses could not be loaded.');
+        setFailedRequest({ page: requestedPage, ...currentFilters });
+      }
+    } finally {
+      if (loadControllerRef.current === requestController) loadControllerRef.current = null;
+      if (requestSequence === loadSequenceRef.current) setLoading(false);
+    }
   }
-  useEffect(() => { load(); }, [status]);
+  useEffect(() => {
+    load(1);
+    return () => {
+      loadSequenceRef.current += 1;
+      loadControllerRef.current?.abort();
+      loadControllerRef.current = null;
+    };
+  }, [status]);
 
   async function changeStatus(course: Course, nextStatus: Course['status']) {
-    setBusyId(course.id); setError('');
+    if (busyActionsRef.current[course.id]) return;
+    const action: CourseRowAction = nextStatus === 'published' ? 'publish' : nextStatus === 'draft' ? 'unpublish' : 'archive';
+    markCourseAction(course.id, action); setError('');
     try { await api.patch(`/api/manage/courses/${course.id}`, { status: nextStatus }); await load(); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Course status could not be changed.'); }
-    finally { setBusyId(''); }
+    finally { markCourseAction(course.id, null); }
   }
 
   async function deleteCourse(course: Course) {
+    if (busyActionsRef.current[course.id]) return;
     if (!window.confirm(`Permanently delete “${course.title}” and its uploaded media? This cannot be undone.`)) return;
-    setBusyId(course.id); setError('');
+    markCourseAction(course.id, 'delete'); setError('');
     try { await api.delete(`/api/manage/courses/${course.id}`); await load(); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Course could not be deleted.'); }
-    finally { setBusyId(''); }
+    finally { markCourseAction(course.id, null); }
   }
 
   const tabs = [
@@ -62,24 +129,124 @@ export function CourseManagementPage() {
     <div className="management-tabs" role="group" aria-label="Filter courses by status">
       {tabs.map((tab) => <button type="button" key={tab.value} aria-pressed={status === tab.value} className={status === tab.value ? 'active' : ''} onClick={() => setStatus(tab.value)}>{tab.label}</button>)}
     </div>
-    <form className="management-search" onSubmit={(event) => { event.preventDefault(); load(); }}><Search size={19} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses" aria-label="Search courses" /><button type="submit">Search</button></form>
-    {error && <Notice>{error}</Notice>}
-    {loading ? <div className="page-loading">Loading courses…</div> : courses.length ? <div className="course-table-wrap"><table className="course-table"><thead><tr><th>Course</th><th>Owner</th><th>Visibility</th><th>Status</th><th>Updated</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>
-      {courses.map((course) => <tr key={course.id}>
-        <td><div className="table-course"><span className="table-thumb">{course.coverUrl ? <img src={course.coverUrl} alt="" /> : <BookOpen size={20} />}</span><div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category}</small></div></div></td>
+    <form className="management-search" onSubmit={(event) => { event.preventDefault(); load(1); }}><Search size={19} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses" aria-label="Search courses" maxLength={120} /><button type="submit">Search</button></form>
+    {error && (failedRequest
+      ? <div className="course-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest); }}>Try again</Button></div>
+      : <Notice>{error}</Notice>)}
+    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading courses…</div> : failedRequest ? null : courses.length ? <div className="course-table-wrap" role="region" aria-label="Scrollable course list" tabIndex={0}><table className="course-table"><caption className="sr-only">Courses</caption><thead><tr><th scope="col">Course</th><th scope="col">Owner</th><th scope="col">Visibility</th><th scope="col">Status</th><th scope="col">Updated</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>
+      {courses.map((course) => {
+        const busyAction = busyActions[course.id];
+        const isBusy = Boolean(busyAction);
+        return <tr key={course.id}>
+        <td><div className="table-course"><span className="table-thumb"><ImageWithFallback src={course.coverUrl} className="table-cover-image" alt="" loading="lazy" decoding="async" fallback={<BookOpen size={20} />} /></span><div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category}</small></div></div></td>
         <td><span className="owner-cell"><UserInitial username={course.owner || ''} />{course.owner}</span></td>
         <td><VisibilityLabel visibility={course.visibility} /></td>
         <td><CourseStatus status={course.status} /></td>
         <td><DateText value={course.updatedAt} /></td>
-        <td><div className="table-actions"><Link className="text-action" to={`/manage/courses/${course.id}/edit`}>Edit</Link>{course.visibility === 'private' && <Link className="text-action" to={`/manage/courses/${course.id}/access`}>Manage access</Link>}
+        <td><div className="table-actions"><Link className="text-action" to={`/manage/courses/${course.id}/edit`}>Edit</Link><Link className="text-action" to={`/manage/courses/${course.id}/analytics`}>Analytics</Link>
           <details className="row-menu"><summary aria-label={`More actions for ${course.title}`}><MoreVertical size={18} /></summary><div className="row-menu-popover">
-            {course.status === 'draft' && <button onClick={() => changeStatus(course, 'published')} disabled={busyId === course.id}>Publish</button>}
-            {course.status === 'published' && <button onClick={() => changeStatus(course, 'draft')} disabled={busyId === course.id}>Unpublish</button>}
-            {course.status !== 'archived' && <button onClick={() => changeStatus(course, 'archived')} disabled={busyId === course.id}>Archive</button>}
-            {course.status === 'archived' && <button className="danger-menu-item" onClick={() => deleteCourse(course)} disabled={busyId === course.id}>Delete permanently</button>}
-          </div></details></div></td>
-      </tr>)}
+            <Link to={`/manage/courses/${course.id}/access`}>Assign learners</Link>
+            {course.status === 'draft' && <button type="button" onClick={() => changeStatus(course, 'published')} disabled={isBusy} aria-busy={busyAction === 'publish'}>{busyAction === 'publish' ? 'Publishing…' : 'Publish'}</button>}
+            {course.status === 'published' && <button type="button" onClick={() => changeStatus(course, 'draft')} disabled={isBusy} aria-busy={busyAction === 'unpublish'}>{busyAction === 'unpublish' ? 'Unpublishing…' : 'Unpublish'}</button>}
+            {course.status !== 'archived' && <button type="button" onClick={() => changeStatus(course, 'archived')} disabled={isBusy} aria-busy={busyAction === 'archive'}>{busyAction === 'archive' ? 'Archiving…' : 'Archive'}</button>}
+            {course.status === 'archived' && <button type="button" className="danger-menu-item" onClick={() => deleteCourse(course)} disabled={isBusy} aria-busy={busyAction === 'delete'}>{busyAction === 'delete' ? 'Deleting…' : 'Delete permanently'}</button>}
+      </div></details></div></td>
+        </tr>;
+      })}
     </tbody></table></div> : <EmptyState title={query ? 'No matching courses' : 'Your course catalog is ready'} detail={query ? 'Try another search term.' : 'Create a course, add modules and video lessons, then publish it for learners.'} action={!query && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} />Create course</Link>} />}
+    {!loading && !failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
+  </div>;
+}
+
+function Percentage({ value }: { value: number }) {
+  return <span className="analytics-percentage">{value}%</span>;
+}
+
+export function CourseAnalyticsPage() {
+  const { courseId = '' } = useParams();
+  const [data, setData] = useState<CourseAnalytics | null>(null);
+  const [page, setPage] = useState(1);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [failedPage, setFailedPage] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    setData(null); setError(''); setFailedPage(null); setLoading(true);
+    api.get<CourseAnalytics>(`/api/manage/courses/${courseId}/analytics?page=${page}`, { signal: controller.signal })
+      .then((result) => { if (active) { setData(result); setPage(result.page); } })
+      .catch((cause) => { if (active) { setError(cause instanceof ApiError ? cause.message : 'Course analytics could not be loaded.'); setFailedPage(page); } })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [courseId, page, refreshVersion]);
+
+  if (data && data.course.id !== courseId) return <div className="management-page page-loading" role="status" aria-live="polite">Loading course analytics…</div>;
+
+  return <div className="management-page analytics-page">
+    <div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>Course dashboard</span></div>
+    <PageHeading title={data?.course.title || 'Course dashboard'} subtitle="Learner progress and assessment performance across this course." action={<div className="analytics-heading-actions"><Link className="button button-secondary" to={`/manage/courses/${courseId}/access`}>Assign learners</Link><Link className="button button-secondary" to={`/manage/courses/${courseId}/edit`}>Edit course</Link></div>} />
+    {error && <><Notice>{error}</Notice><Button variant="secondary" onClick={() => setRefreshVersion((version) => version + 1)}>Try again</Button></>}
+    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading course analytics…</div> : !failedPage && data && <>
+      <div className="analytics-course-context"><CourseStatus status={data.course.status} /><VisibilityLabel visibility={data.course.visibility} /><span>{data.course.category}</span><span>{data.summary.learnerCount} enrolled or assigned learners{data.summary.disabledLearnerCount ? ` · ${data.summary.disabledLearnerCount} disabled` : ''}</span></div>
+      <section className="analytics-kpi-grid" aria-label="Course summary metrics">
+        <article className="analytics-kpi"><span>Completion rate</span><strong>{data.summary.completionRate === null ? '—' : `${data.summary.completionRate}%`}</strong><small>{data.summary.completedLearnerCount} of {data.summary.learnerCount} learners completed</small></article>
+        <article className="analytics-kpi"><span>Average progress</span><strong>{data.summary.averageProgress === null ? '—' : `${data.summary.averageProgress}%`}</strong><small>Across enrolled and assigned learners</small></article>
+        <article className="analytics-kpi"><span>Started learning</span><strong>{data.summary.startedLearnerCount}</strong><small>At least one lesson or quiz activity</small></article>
+        <article className="analytics-kpi"><span>Learning activity</span><strong>{data.summary.lessonCompletions + data.summary.quizAttempts}</strong><small>{data.summary.lessonCompletions} lesson completions · {data.summary.quizAttempts} quiz attempts</small></article>
+      </section>
+
+      <section className="analytics-section">
+        <div className="analytics-section-heading"><div><h2>Lesson completion</h2><p>Completion is measured against all enrolled and assigned learners.</p></div><span>{data.summary.lessonCount} lessons</span></div>
+        {data.lessonMetrics.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable lesson completion metrics" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Lesson completion metrics</caption><thead><tr><th scope="col">Module</th><th scope="col">Lesson</th><th scope="col">Completed</th><th scope="col">Rate</th></tr></thead><tbody>{data.lessonMetrics.map((lesson) => <tr key={lesson.id}><td>{lesson.moduleTitle}</td><td><strong>{lesson.title}</strong></td><td>{lesson.completedCount} / {data.summary.learnerCount}</td><td>{lesson.completionRate === null ? '—' : <div className="analytics-rate-cell"><ProgressBar value={lesson.completionRate} label={`Completion rate for ${lesson.title}`} /><Percentage value={lesson.completionRate} /></div>}</td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No lessons yet" detail="Add lessons to the course curriculum to see completion metrics." />}
+      </section>
+
+      <section className="analytics-section">
+        <div className="analytics-section-heading"><div><h2>Quiz performance</h2><p>Pass rates use learners who attempted each quiz; average scores use all attempts.</p></div><span>{data.summary.quizCount} quizzes</span></div>
+        {data.quizMetrics.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable quiz performance metrics" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Quiz performance metrics</caption><thead><tr><th scope="col">Module</th><th scope="col">Quiz</th><th scope="col">Participation</th><th scope="col">Passed</th><th scope="col">Pass rate</th><th scope="col">Average score</th><th scope="col">Attempts</th></tr></thead><tbody>{data.quizMetrics.map((quiz) => <tr key={quiz.id}><td>{quiz.moduleTitle}</td><td><strong>{quiz.title}</strong><small>Pass mark {quiz.passMark}%</small></td><td>{quiz.learnersAttempted} learners · {quiz.participationRate === null ? '—' : `${quiz.participationRate}%`}</td><td>{quiz.learnersPassed} / {quiz.learnersAttempted}</td><td>{quiz.passRate === null ? '—' : <Percentage value={quiz.passRate} />}</td><td>{quiz.averageScore === null ? '—' : `${quiz.averageScore}%`}</td><td>{quiz.attempts}</td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No quizzes yet" detail="Add module quizzes to see participation and score metrics." />}
+      </section>
+
+      <section className="analytics-section analytics-learners-section">
+        <div className="analytics-section-heading"><div><h2>Learner progress</h2><p>Per-person lesson completion, quiz attempts, and course completion.</p></div><span>{data.summary.learnerCount} learners</span></div>
+        {data.learners.length ? <div className="analytics-table-wrap analytics-learners-table-wrap" role="region" aria-label="Scrollable learner progress" tabIndex={0}><table className="analytics-table analytics-learners-table"><caption className="sr-only">Learner-level course progress</caption><thead><tr><th scope="col">Learner</th><th scope="col">Progress</th><th scope="col">Lessons</th><th scope="col">Quizzes passed</th><th scope="col">Last activity</th><th scope="col">Status</th></tr></thead><tbody>{data.learners.map((learner) => <tr key={learner.id}>
+          <td>
+            <strong>{learner.username}</strong>
+            {learner.disabled && <small className="analytics-disabled-label">Disabled account</small>}
+            <details className="analytics-learner-details">
+              <summary aria-label={`View activity details for ${learner.username}`}>View activity details</summary>
+              <div className="analytics-detail-grid">
+                <section>
+                  <h3 id={`learner-${learner.id}-lesson-progress`}>Lesson progress</h3>
+                  <ul tabIndex={0} aria-labelledby={`learner-${learner.id}-lesson-progress`}>
+                    {learner.lessonProgress.map((lesson) => <li key={lesson.id}>
+                      <span className={lesson.completed ? 'analytics-item-complete' : ''}>{lesson.completed ? 'Complete' : 'Not complete'}</span>
+                      <strong>{lesson.moduleTitle}: {lesson.title}</strong>
+                      {lesson.completedAt && <small><DateText value={lesson.completedAt} /></small>}
+                    </li>)}
+                  </ul>
+                </section>
+                <section>
+                  <h3 id={`learner-${learner.id}-quiz-attempts`}>Quiz attempts</h3>
+                  {learner.quizProgress.length ? <ul tabIndex={0} aria-labelledby={`learner-${learner.id}-quiz-attempts`}>
+                    {learner.quizProgress.map((quiz) => <li key={quiz.id}>
+                      <span className={quiz.passed ? 'analytics-item-complete' : ''}>{quiz.attempts ? `${quiz.attempts} attempt${quiz.attempts === 1 ? '' : 's'}` : 'Not attempted'}</span>
+                      <strong>{quiz.moduleTitle}: {quiz.title}</strong>
+                      <small>{quiz.attempts ? `Latest ${quiz.latestScore}% · Best ${quiz.highestScore}% · Pass mark ${quiz.passMark}%` : `Pass mark ${quiz.passMark}%`}</small>
+                    </li>)}
+                  </ul> : <p>This course has no quizzes.</p>}
+                </section>
+              </div>
+            </details>
+          </td>
+          <td><div className="analytics-rate-cell"><ProgressBar value={learner.progress} label={`Course progress for ${learner.username}`} /><Percentage value={learner.progress} /></div></td>
+          <td>{learner.completedLessonCount} / {learner.lessonCount}</td>
+          <td>{learner.passedQuizCount} / {learner.quizCount}</td>
+          <td>{learner.lastActivityAt ? <DateText value={learner.lastActivityAt} /> : '—'}</td>
+          <td><span className={`analytics-learner-state ${learner.completed ? 'is-complete' : learner.started ? 'is-started' : ''}`}>{learner.completed ? 'Completed' : learner.started ? 'In progress' : 'Not started'}</span></td>
+        </tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No learners assigned or enrolled" detail="Assign learners to this course or wait for learners to open it." action={<Link className="button button-primary" to={`/manage/courses/${courseId}/access`}>Assign learners</Link>} />}
+        {data.summary.learnerCount > 0 && <LogPagination page={data.page} pageSize={data.pageSize} total={data.summary.learnerCount} loading={loading} onChange={setPage} />}
+      </section>
+    </>}
   </div>;
 }
 
@@ -87,8 +254,19 @@ function QuizEditor({ module, onSaved, onError }: { module: CourseModule; onSave
   const existing = module.quiz;
   const [title, setTitle] = useState(existing?.title || `${module.title} quiz`);
   const [passMark, setPassMark] = useState(existing?.passMark ?? 70);
-  const [questions, setQuestions] = useState<QuizQuestion[]>(existing?.questions || []);
-  const [saving, setSaving] = useState(false);
+  const [questions, setQuestions] = useState<EditableQuizQuestion[]>(existing?.questions || []);
+  const [busyAction, setBusyAction] = useState<'save' | 'remove' | null>(null);
+  const [focusTarget, setFocusTarget] = useState<{ questionIndex: number; choiceIndex?: number } | null>(null);
+  const [showTextValidation, setShowTextValidation] = useState(false);
+  const editorKeySequenceRef = useRef(0);
+  const questionInputRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
+  const choiceInputRefs = useRef<Array<Array<HTMLInputElement | null>>>([]);
+  const addQuestionButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  function nextEditorKey(kind: 'question' | 'choice') {
+    editorKeySequenceRef.current += 1;
+    return `quiz-editor-${kind}-${editorKeySequenceRef.current}`;
+  }
 
   useEffect(() => {
     setTitle(existing?.title || `${module.title} quiz`);
@@ -96,41 +274,121 @@ function QuizEditor({ module, onSaved, onError }: { module: CourseModule; onSave
     setQuestions(existing?.questions || []);
   }, [module.id, module.title, existing?.id]);
 
+  const normalizedQuestions = (items: EditableQuizQuestion[]) => JSON.stringify(items.map((question) => ({
+    prompt: question.prompt.trim(),
+    explanation: (question.explanation || '').trim(),
+    choices: question.choices.map((choice) => ({ text: choice.text.trim(), isCorrect: choice.isCorrect === true })),
+  })));
+  const hasChanges = !existing
+    || title.trim() !== existing.title.trim()
+    || Number(passMark) !== existing.passMark
+    || normalizedQuestions(questions) !== normalizedQuestions(existing.questions);
+  const textValidationIssue = showTextValidation ? firstQuizTextIssue(questions) : null;
+
+  useEffect(() => {
+    if (!focusTarget) return;
+    if (focusTarget.choiceIndex !== undefined) {
+      const choices = questions[focusTarget.questionIndex]?.choices;
+      if (choices?.length) {
+        choiceInputRefs.current[focusTarget.questionIndex]?.[Math.min(focusTarget.choiceIndex, choices.length - 1)]?.focus();
+      }
+    } else {
+      const questionIndex = Math.min(focusTarget.questionIndex, questions.length - 1);
+      if (questionIndex >= 0) questionInputRefs.current[questionIndex]?.focus();
+      else addQuestionButtonRef.current?.focus();
+    }
+    setFocusTarget(null);
+  }, [focusTarget, questions]);
+
   function updateQuestion(index: number, patch: Partial<QuizQuestion>) {
+    setShowTextValidation(false);
     setQuestions((current) => current.map((question, itemIndex) => itemIndex === index ? { ...question, ...patch } : question));
   }
   function updateChoice(questionIndex: number, choiceIndex: number, patch: { text?: string; isCorrect?: boolean }) {
+    setShowTextValidation(false);
     setQuestions((current) => current.map((question, itemIndex) => {
       if (itemIndex !== questionIndex) return question;
       return { ...question, choices: question.choices.map((choice, itemChoice) => ({ ...choice, ...(itemChoice === choiceIndex ? patch : {}), ...(patch.isCorrect && itemChoice !== choiceIndex ? { isCorrect: false } : {}) })) };
     }));
   }
+  function addQuestion() {
+    const questionIndex = questions.length;
+    const question: EditableQuizQuestion = {
+      editorKey: nextEditorKey('question'),
+      prompt: '',
+      choices: [
+        { editorKey: nextEditorKey('choice'), text: '', isCorrect: true },
+        { editorKey: nextEditorKey('choice'), text: '', isCorrect: false },
+      ],
+    };
+    setShowTextValidation(false);
+    setQuestions((current) => [...current, question]);
+    setFocusTarget({ questionIndex });
+  }
+  function addChoice(questionIndex: number) {
+    const choiceIndex = questions[questionIndex].choices.length;
+    updateQuestion(questionIndex, { choices: [...questions[questionIndex].choices, { editorKey: nextEditorKey('choice'), text: '', isCorrect: false }] });
+    setFocusTarget({ questionIndex, choiceIndex });
+  }
+  function removeQuestion(index: number) {
+    setShowTextValidation(false);
+    setQuestions((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setFocusTarget({ questionIndex: index });
+  }
+  function removeChoice(questionIndex: number, choiceIndex: number) {
+    updateQuestion(questionIndex, { choices: questions[questionIndex].choices.filter((_, index) => index !== choiceIndex) });
+    setFocusTarget({ questionIndex, choiceIndex });
+  }
   async function save() {
-    setSaving(true);
+    if (busyAction || !hasChanges) return;
+    const missingText = firstQuizTextIssue(questions);
+    if (missingText) {
+      setShowTextValidation(true);
+      setFocusTarget(missingText);
+      return;
+    }
+    setBusyAction('save');
     try {
-      await api.put(`/api/manage/modules/${module.id}/quiz`, { title, passMark: Number(passMark), questions });
+      const savedQuestions = questions.map(({ prompt, explanation, choices }) => ({
+        prompt,
+        explanation,
+        choices: choices.map(({ text, isCorrect }) => ({ text, isCorrect })),
+      }));
+      await api.put(`/api/manage/modules/${module.id}/quiz`, { title, passMark: Number(passMark), questions: savedQuestions });
       await onSaved();
     } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Quiz could not be saved.'); }
-    finally { setSaving(false); }
+    finally { setBusyAction(null); }
   }
   async function remove() {
-    if (!existing || !window.confirm('Remove this quiz from the module? Saved attempts will also be removed.')) return;
+    if (!existing || busyAction || !window.confirm('Remove this quiz from the module? Saved attempts will also be removed.')) return;
+    setBusyAction('remove');
     try { await api.delete(`/api/manage/modules/${module.id}/quiz`); await onSaved(); }
     catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Quiz could not be removed.'); }
+    finally { setBusyAction(null); }
   }
 
-  return <div className="quiz-editor">
-    <div className="quiz-editor-head"><div><span className="editor-type"><CircleHelp size={15} />Module quiz</span><h4>{existing ? 'Edit quiz' : 'Add a quiz'}</h4></div>{existing && <button type="button" className="icon-button danger-icon" aria-label="Remove quiz" onClick={remove}><Trash2 size={16} /></button>}</div>
-    <div className="quiz-settings-row"><label>Quiz title<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} /></label><label>Pass mark<select value={passMark} onChange={(event) => setPassMark(Number(event.target.value))}>{[50, 60, 70, 80, 90, 100].map((value) => <option key={value} value={value}>{value}%</option>)}</select></label></div>
-    {questions.map((question, questionIndex) => <div className="question-editor" key={question.id || questionIndex}>
-      <div className="question-editor-head"><span>Question {questionIndex + 1}</span><button type="button" className="text-action danger-text" onClick={() => setQuestions(questions.filter((_, index) => index !== questionIndex))}>Remove</button></div>
-      <label className="sr-only" htmlFor={`question-${module.id}-${questionIndex}`}>Question text</label><textarea id={`question-${module.id}-${questionIndex}`} rows={2} placeholder="Write a question" value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} />
-      <p className="form-hint">Select the radio button beside the correct answer.</p>
-      {question.choices.map((choice, choiceIndex) => <div className="choice-editor-row" key={choice.id || choiceIndex}><input type="radio" name={`correct-${module.id}-${questionIndex}`} checked={Boolean(choice.isCorrect)} onChange={() => updateChoice(questionIndex, choiceIndex, { isCorrect: true })} aria-label={`Mark answer ${choiceIndex + 1} correct`} /><input value={choice.text} maxLength={500} onChange={(event) => updateChoice(questionIndex, choiceIndex, { text: event.target.value })} aria-label={`Answer choice ${choiceIndex + 1}`} placeholder={`Answer ${choiceIndex + 1}`} /><button type="button" className="icon-button danger-icon" aria-label="Remove answer choice" onClick={() => updateQuestion(questionIndex, { choices: question.choices.filter((_, index) => index !== choiceIndex) })}><Trash2 size={15} /></button></div>)}
-      {question.choices.length < 6 && <button className="text-action add-choice" type="button" onClick={() => updateQuestion(questionIndex, { choices: [...question.choices, { text: '', isCorrect: false }] })}><Plus size={15} />Add answer choice</button>}
+  return <div className="quiz-editor" aria-busy={busyAction !== null}>
+    <div className="quiz-editor-head"><div><span className="editor-type"><CircleHelp size={15} />Module quiz</span><h4>{existing ? 'Edit quiz' : 'Add a quiz'}</h4></div>{existing && <button type="button" className="icon-button danger-icon" aria-label={busyAction === 'remove' ? 'Removing quiz' : 'Remove quiz'} disabled={busyAction !== null} onClick={remove}><Trash2 size={16} /></button>}</div>
+    {textValidationIssue && <Notice>Enter text for every quiz question and answer choice before saving.</Notice>}
+    <fieldset className="quiz-editor-fields" aria-label="Quiz fields" disabled={busyAction !== null}>
+    <div className="quiz-settings-row"><label>Quiz title<input value={title} maxLength={quizTitleLimit} onChange={(event) => setTitle(event.target.value)} /></label><label>Pass mark<select value={passMark} onChange={(event) => setPassMark(Number(event.target.value))}>{[50, 60, 70, 80, 90, 100].map((value) => <option key={value} value={value}>{value}%</option>)}</select></label></div>
+    {questions.map((question, questionIndex) => <div className="question-editor" key={question.id || question.editorKey || questionIndex}>
+      <div className="question-editor-head"><span>Question {questionIndex + 1}</span><button type="button" className="text-action danger-text" aria-label={`Remove question ${questionIndex + 1}`} onClick={() => removeQuestion(questionIndex)}>Remove</button></div>
+      <label className="sr-only" htmlFor={`question-${module.id}-${questionIndex}`}>Question {questionIndex + 1} text</label><textarea ref={(node) => { questionInputRefs.current[questionIndex] = node; }} id={`question-${module.id}-${questionIndex}`} rows={2} maxLength={1000} placeholder="Write a question" value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} aria-invalid={textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === undefined || undefined} aria-describedby={textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === undefined ? `quiz-question-error-${module.id}-${questionIndex}` : undefined} />
+      {textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === undefined && <span className="sr-only" id={`quiz-question-error-${module.id}-${questionIndex}`}>Enter text for question {questionIndex + 1}.</span>}
+      <fieldset className="quiz-answer-fieldset" aria-describedby={`correct-answer-hint-${module.id}-${questionIndex}`}>
+        <legend className="sr-only">Correct answer for question {questionIndex + 1}</legend>
+        <p className="form-hint" id={`correct-answer-hint-${module.id}-${questionIndex}`}>Select one correct answer. Each question needs two to six answer choices.</p>
+        {question.choices.map((choice, choiceIndex) => <div className="choice-editor-row" key={choice.id || choice.editorKey || choiceIndex}><input type="radio" name={`correct-${module.id}-${questionIndex}`} checked={Boolean(choice.isCorrect)} onChange={() => updateChoice(questionIndex, choiceIndex, { isCorrect: true })} aria-label={`Mark answer ${choiceIndex + 1} correct for question ${questionIndex + 1}`} /><input ref={(node) => { choiceInputRefs.current[questionIndex] ??= []; choiceInputRefs.current[questionIndex][choiceIndex] = node; }} value={choice.text} maxLength={500} onChange={(event) => updateChoice(questionIndex, choiceIndex, { text: event.target.value })} aria-label={`Answer choice ${choiceIndex + 1} for question ${questionIndex + 1}`} placeholder={`Answer ${choiceIndex + 1}`} aria-invalid={textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === choiceIndex || undefined} aria-describedby={textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === choiceIndex ? `quiz-choice-error-${module.id}-${questionIndex}-${choiceIndex}` : undefined} /><button type="button" className="icon-button danger-icon" aria-label={`Remove answer choice ${choiceIndex + 1} from question ${questionIndex + 1}`} disabled={question.choices.length <= 2} onClick={() => removeChoice(questionIndex, choiceIndex)}><Trash2 size={15} /></button>{textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === choiceIndex && <span className="sr-only" id={`quiz-choice-error-${module.id}-${questionIndex}-${choiceIndex}`}>Enter text for answer choice {choiceIndex + 1}.</span>}</div>)}
+      </fieldset>
+      {question.choices.length < 6 && <button className="text-action add-choice" type="button" onClick={() => addChoice(questionIndex)}><Plus size={15} />Add answer choice</button>}
       <label className="explanation-label">Explanation (optional)<input value={question.explanation || ''} maxLength={1000} onChange={(event) => updateQuestion(questionIndex, { explanation: event.target.value })} /></label>
     </div>)}
-    <div className="quiz-editor-actions"><button className="text-action" type="button" onClick={() => setQuestions([...questions, { prompt: '', choices: [{ text: '', isCorrect: true }, { text: '', isCorrect: false }] }])}><Plus size={16} />Add question</button><Button variant="secondary" type="button" disabled={saving} onClick={save}>{saving ? 'Saving quiz…' : 'Save quiz'}</Button></div>
+    <div className="quiz-editor-actions">
+      <button ref={addQuestionButtonRef} className="text-action" type="button" disabled={busyAction !== null || questions.length >= 50} onClick={addQuestion}><Plus size={16} />{questions.length >= 50 ? 'Question limit reached' : 'Add question'}</button>
+      <Button variant="secondary" type="button" disabled={busyAction !== null || !hasChanges} onClick={save}>{busyAction === 'save' ? 'Saving quiz…' : hasChanges ? 'Save quiz' : 'No changes'}</Button>
+    </div>
+    </fieldset>
   </div>;
 }
 
@@ -145,23 +403,39 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
 }) {
   const [title, setTitle] = useState(lesson.title);
   const [description, setDescription] = useState(lesson.description);
+  const [transcript, setTranscript] = useState(lesson.transcript);
   const [resources, setResources] = useState<LessonResource[]>(lesson.resources || []);
+  const [captions, setCaptions] = useState<LessonCaption[]>(lesson.captions || []);
   const [linkTitle, setLinkTitle] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
+  const [linkUrlError, setLinkUrlError] = useState('');
+  const [captionLanguage, setCaptionLanguage] = useState('');
+  const [captionLanguageError, setCaptionLanguageError] = useState('');
+  const [captionLabel, setCaptionLabel] = useState('');
+  const [captionFile, setCaptionFile] = useState<File | null>(null);
+  const [captionFileError, setCaptionFileError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [uploadKind, setUploadKind] = useState<'document' | 'captions' | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const uploadControllerRef = useRef<{ controller: AbortController; input: HTMLInputElement; cancelledByUser: boolean } | null>(null);
+  const linkUrlInputRef = useRef<HTMLInputElement>(null);
+  const captionInputRef = useRef<HTMLInputElement>(null);
+  const captionLanguageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setTitle(lesson.title);
     setDescription(lesson.description);
+    setTranscript(lesson.transcript);
     setResources(lesson.resources || []);
-  }, [lesson.id, lesson.title, lesson.description, lesson.resources]);
+    setCaptions(lesson.captions || []);
+  }, [lesson.id, lesson.title, lesson.description, lesson.transcript, lesson.resources, lesson.captions]);
+  useEffect(() => () => { uploadControllerRef.current?.controller.abort(); }, [lesson.id]);
 
   async function persistLessonDetails() {
     const cleanTitle = title.trim();
     if (!cleanTitle) throw new ApiError(400, 'Lesson title is required.');
     await beforeChange();
-    await api.patch(`/api/manage/lessons/${lesson.id}`, { title: cleanTitle, description });
+    await api.patch(`/api/manage/lessons/${lesson.id}`, { title: cleanTitle, description, transcript });
     setTitle(cleanTitle);
   }
 
@@ -179,6 +453,13 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
   async function addLink(event: React.FormEvent) {
     event.preventDefault();
     if (!linkTitle.trim() || !linkUrl.trim()) return;
+    const urlError = lessonResourceUrlError(linkUrl);
+    if (urlError) {
+      setLinkUrlError(urlError);
+      linkUrlInputRef.current?.focus();
+      return;
+    }
+    setLinkUrlError('');
     setBusy(true); onError('');
     try {
       await persistLessonDetails();
@@ -191,19 +472,80 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
     finally { setBusy(false); }
   }
 
-  async function uploadDocument(file: File) {
-    setBusy(true); setUploadProgress(0); onError('');
+  async function uploadDocument(file: File, input: HTMLInputElement) {
+    const upload = { controller: new AbortController(), input, cancelledByUser: false };
+    uploadControllerRef.current = upload;
+    setBusy(true); setUploadKind('document'); setUploadProgress(0); onError('');
     try {
       await persistLessonDetails();
-      const titleFromFile = (file.name.replace(/\.[^.]+$/, '').trim() || file.name).slice(0, 160);
+      if (upload.controller.signal.aborted) return;
+      const titleFromFile = truncateUtf16CodeUnits(file.name.replace(/\.[^.]+$/, '').trim() || file.name, quizTitleLimit);
       const { resource } = await api.upload<{ resource: LessonResource }>(`/api/manage/courses/${courseId}/lesson-documents`, {
         kind: 'document', lessonId: lesson.id, title: titleFromFile,
-      }, file, setUploadProgress);
+      }, file, setUploadProgress, { signal: upload.controller.signal });
+      if (upload.controller.signal.aborted) return;
       setResources((current) => [...current, resource]);
       await onChanged();
-      onNotice(`${file.name} attached to this lesson.`);
-    } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Document could not be uploaded.'); }
-    finally { setBusy(false); setUploadProgress(null); }
+      if (!upload.controller.signal.aborted) onNotice(`${file.name} attached to this lesson.`);
+    } catch (cause) {
+      if (!upload.controller.signal.aborted) onError(cause instanceof ApiError ? cause.message : 'Document could not be uploaded.');
+    } finally {
+      if (uploadControllerRef.current === upload) uploadControllerRef.current = null;
+      setBusy(false); setUploadKind(null); setUploadProgress(null);
+      if (upload.cancelledByUser) requestAnimationFrame(() => { if (upload.input.isConnected) upload.input.focus(); });
+    }
+  }
+
+  function cancelUpload() {
+    const upload = uploadControllerRef.current;
+    if (!upload) return;
+    upload.cancelledByUser = true;
+    upload.controller.abort();
+  }
+
+  async function uploadCaptions(event: React.FormEvent) {
+    event.preventDefault();
+    if (!captionFile || !captionLanguage.trim() || !captionLabel.trim()) return;
+    const language = canonicalCaptionLanguageTag(captionLanguage);
+    if (!language) {
+      setCaptionLanguageError(captionLanguageErrorMessage);
+      captionLanguageInputRef.current?.focus();
+      return;
+    }
+    const fileError = captionFileSizeError(captionFile.size);
+    if (fileError) {
+      setCaptionFileError(fileError);
+      captionInputRef.current?.focus();
+      return;
+    }
+    const input = captionInputRef.current;
+    if (!input) return;
+    const upload = { controller: new AbortController(), input, cancelledByUser: false };
+    uploadControllerRef.current = upload;
+    setCaptionLanguageError('');
+    setBusy(true); setUploadKind('captions'); setUploadProgress(0); onError('');
+    try {
+      await persistLessonDetails();
+      if (upload.controller.signal.aborted) return;
+      const { caption } = await api.upload<{ caption: LessonCaption }>(`/api/manage/courses/${courseId}/lesson-captions`, {
+        lessonId: lesson.id, language, label: captionLabel.trim(),
+      }, captionFile, setUploadProgress, { signal: upload.controller.signal });
+      if (upload.controller.signal.aborted) return;
+      setCaptions((current) => [...current.filter((item) => item.language.toLowerCase() !== caption.language.toLowerCase()), caption]
+        .sort((a, b) => a.language.localeCompare(b.language)));
+      await onChanged();
+      if (!upload.controller.signal.aborted) onNotice(`${caption.label} captions uploaded.`);
+      setCaptionFile(null);
+      setCaptionLanguage('');
+      setCaptionLabel('');
+      if (input) input.value = '';
+    } catch (cause) {
+      if (!upload.controller.signal.aborted) onError(cause instanceof ApiError ? cause.message : 'Captions could not be uploaded.');
+    } finally {
+      if (uploadControllerRef.current === upload) uploadControllerRef.current = null;
+      setBusy(false); setUploadKind(null); setUploadProgress(null);
+      if (upload.cancelledByUser) requestAnimationFrame(() => { if (upload.input.isConnected) upload.input.focus(); });
+    }
   }
 
   async function removeResource(resource: LessonResource) {
@@ -219,40 +561,90 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
     finally { setBusy(false); }
   }
 
-  return <div id={`lesson-details-${lesson.id}`} className="lesson-details-editor">
-    <div className="lesson-details-heading"><div><strong>Lesson details</strong><span>Set what learners will see for this lesson.</span></div><button type="button" className="text-action" onClick={onClose}>Close</button></div>
+  async function removeCaption(caption: LessonCaption) {
+    if (!window.confirm(`Remove “${caption.label}” captions (${caption.language}) from this lesson?`)) return;
+    setBusy(true); onError('');
+    try {
+      await persistLessonDetails();
+      await api.delete(`/api/manage/lessons/${lesson.id}/captions/${caption.id}`);
+      setCaptions((current) => current.filter((item) => item.id !== caption.id));
+      await onChanged();
+      onNotice('Caption track removed.');
+    } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Caption track could not be removed.'); }
+    finally { setBusy(false); }
+  }
+
+  return <section id={`lesson-details-${lesson.id}`} className="lesson-details-editor" aria-labelledby={`lesson-details-heading-${lesson.id}`} aria-busy={busy}>
+    <div className="lesson-details-heading"><div><h3 id={`lesson-details-heading-${lesson.id}`}>Lesson details</h3><span>Set what learners will see for this lesson.</span></div><button type="button" className="text-action" onClick={onClose} disabled={busy}>Close</button></div>
     <form className="lesson-details-form" onSubmit={saveDetails}>
       <div className="lesson-details-grid">
-        <label>Lesson title<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} required /></label>
-        <label>Lesson description<textarea value={description} maxLength={2000} rows={3} onChange={(event) => setDescription(event.target.value)} placeholder="Add context, learning goals, or notes for this lesson." /></label>
+        <label>Lesson title<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} required disabled={busy} /></label>
+        <label>Lesson description<textarea value={description} maxLength={2000} rows={3} onChange={(event) => setDescription(event.target.value)} placeholder="Add context, learning goals, or notes for this lesson." disabled={busy} /></label>
+        <label className="lesson-transcript-field">Lesson transcript<textarea value={transcript} maxLength={50000} rows={7} aria-describedby={`lesson-transcript-help-${lesson.id}`} onChange={(event) => setTranscript(event.target.value)} placeholder="Paste the spoken words and meaningful audio cues from this lesson." disabled={busy} /><small id={`lesson-transcript-help-${lesson.id}`}>Optional plain text that learners can expand in the lesson player. {transcript.length}/50,000 characters.</small></label>
       </div>
       <div className="lesson-details-save"><Button type="submit" variant="secondary" disabled={busy}>{busy ? 'Saving…' : 'Save lesson details'}</Button></div>
     </form>
 
-    <section className="lesson-resource-editor" aria-label="Lesson links and documents">
-      <div className="lesson-resource-heading"><div><strong>Links and documents</strong><span>These resources will be available to learners alongside the lesson.</span></div></div>
+    <section className="lesson-resource-editor" aria-labelledby={`lesson-resource-heading-${lesson.id}`}>
+      <div className="lesson-resource-heading"><div><h4 id={`lesson-resource-heading-${lesson.id}`}>Links and documents</h4><span>These resources will be available to learners alongside the lesson.</span></div></div>
       {resources.length ? <ul className="lesson-resource-list">{resources.map((resource) => <li className="lesson-resource-row" key={resource.id}>
         {resource.kind === 'link' ? <Link2 size={16} /> : <FileText size={16} />}
         <div><strong>{resource.title}</strong><small>{resource.kind === 'document' ? resource.fileName : resource.url}</small></div>
         <button type="button" className="icon-button danger-icon" title={`Remove ${resource.title}`} aria-label={`Remove ${resource.title}`} disabled={busy} onClick={() => removeResource(resource)}><Trash2 size={15} /></button>
       </li>)}</ul> : <p className="lesson-resource-empty">No resources added yet.</p>}
       <form className="lesson-link-form" onSubmit={addLink}>
-        <label>Link title<input value={linkTitle} maxLength={160} onChange={(event) => setLinkTitle(event.target.value)} placeholder="e.g. Reference guide" required /></label>
-        <label>Link URL<input type="url" value={linkUrl} maxLength={2048} onChange={(event) => setLinkUrl(event.target.value)} placeholder="https://example.com/resource" required /></label>
+        <label>Link title<input value={linkTitle} maxLength={160} onChange={(event) => setLinkTitle(event.target.value)} placeholder="e.g. Reference guide" required disabled={busy} /></label>
+        <label>Link URL<input ref={linkUrlInputRef} type="url" value={linkUrl} maxLength={2048} aria-invalid={linkUrlError ? true : undefined} aria-describedby={linkUrlError ? `lesson-link-url-help-${lesson.id} lesson-link-url-error-${lesson.id}` : `lesson-link-url-help-${lesson.id}`} onChange={(event) => { setLinkUrl(event.target.value); setLinkUrlError(''); }} placeholder="https://example.com/resource" required disabled={busy} /><small id={`lesson-link-url-help-${lesson.id}`} className="caption-language-help">Use HTTP or HTTPS without a username or password.</small>{linkUrlError && <div id={`lesson-link-url-error-${lesson.id}`} className="inline-notice caption-form-error" role="alert">{linkUrlError}</div>}</label>
         <Button type="submit" variant="secondary" disabled={busy || !linkTitle.trim() || !linkUrl.trim()}><Link2 size={15} />Add link</Button>
       </form>
       <div className="lesson-document-upload">
         <div><strong>Attach a document</strong><span>PDF, text, Word, PowerPoint, Excel, CSV/TSV, or OpenDocument.</span></div>
-        <label className="button button-secondary file-button"><Upload size={15} />Choose document<input type="file" accept=".pdf,.txt,.md,.rtf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.tsv,.odt,.odp,.ods" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadDocument(file); event.currentTarget.value = ''; }} /></label>
-        {uploadProgress !== null && <div className="upload-progress lesson-document-progress"><span style={{ width: `${uploadProgress}%` }} /><small>{uploadProgress}%</small></div>}
+        <label className="button button-secondary file-button"><Upload size={15} />Choose document<input type="file" accept=".pdf,.txt,.md,.rtf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.tsv,.odt,.odp,.ods" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadDocument(file, event.currentTarget); event.currentTarget.value = ''; }} /></label>
+        {uploadKind === 'document' && uploadProgress !== null && (uploadProgress >= 100 ? <div className="upload-progress upload-progress-saving lesson-document-progress" role="status">Saving document…</div> : <div className="upload-progress lesson-document-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress} aria-label="Lesson document upload progress"><span style={{ width: `${uploadProgress}%` }} /><small>{uploadProgress}%</small></div>)}
+        {uploadKind === 'document' && uploadProgress !== null && uploadProgress < 100 && <button type="button" className="text-action upload-cancel-action" aria-label="Cancel document upload" onClick={cancelUpload}>Cancel upload</button>}
       </div>
+      <section className="lesson-caption-editor" aria-labelledby={`lesson-caption-heading-${lesson.id}`}>
+        <div className="lesson-resource-heading"><div><h4 id={`lesson-caption-heading-${lesson.id}`}>Video captions</h4><span>Upload WebVTT subtitle tracks. Learners can choose a language in the video controls.</span></div></div>
+        {captions.length ? <ul className="lesson-resource-list">{captions.map((caption) => <li className="lesson-resource-row" key={caption.id}>
+          <FileText size={16} />
+          <div><strong>{caption.label} <span className="caption-language">({caption.language})</span></strong><small>{caption.fileName}</small></div>
+          <button type="button" className="icon-button danger-icon" title={`Remove ${caption.label} captions`} aria-label={`Remove ${caption.label} captions (${caption.language})`} disabled={busy} onClick={() => removeCaption(caption)}><Trash2 size={15} /></button>
+        </li>)}</ul> : <p className="lesson-resource-empty">No caption tracks added yet.</p>}
+        <form className="lesson-caption-form" onSubmit={uploadCaptions}>
+          <label>Language tag<input ref={captionLanguageInputRef} type="text" value={captionLanguage} maxLength={35} aria-invalid={captionLanguageError ? true : undefined} aria-describedby={captionLanguageError ? `caption-language-help-${lesson.id} caption-language-error-${lesson.id}` : `caption-language-help-${lesson.id}`} onChange={(event) => { setCaptionLanguage(event.target.value); setCaptionLanguageError(''); }} placeholder="en or en-GB" autoCapitalize="off" spellCheck={false} required disabled={busy} /><small id={`caption-language-help-${lesson.id}`} className="caption-language-help">Use a tag such as en or en-GB.</small></label>
+          <label>Track label<input type="text" value={captionLabel} maxLength={80} onChange={(event) => setCaptionLabel(event.target.value)} placeholder="English" required disabled={busy} /></label>
+          <label className="caption-file-label">WebVTT file<input ref={captionInputRef} type="file" accept=".vtt,text/vtt" aria-invalid={captionFileError ? true : undefined} aria-describedby={captionFileError ? `caption-file-help-${lesson.id} caption-file-error-${lesson.id}` : `caption-file-help-${lesson.id}`} onChange={(event) => {
+            const file = event.currentTarget.files?.[0] || null;
+            const fileError = file ? captionFileSizeError(file.size) : null;
+            if (fileError) {
+              setCaptionFile(null);
+              setCaptionFileError(fileError);
+              event.currentTarget.value = '';
+              return;
+            }
+            setCaptionFile(file);
+            setCaptionFileError('');
+          }} required disabled={busy} /></label>
+          <Button type="submit" variant="secondary" disabled={busy || !captionFile || !captionLanguage.trim() || !captionLabel.trim()}><Upload size={15} />Upload captions</Button>
+        </form>
+        <p id={`caption-file-help-${lesson.id}`} className="caption-upload-hint">One track per language; uploading that language again replaces the existing file. Maximum size: 5 MB.</p>
+        {captionLanguageError && <div id={`caption-language-error-${lesson.id}`} className="inline-notice caption-form-error" role="alert">{captionLanguageError}</div>}
+        {captionFileError && <div id={`caption-file-error-${lesson.id}`} className="inline-notice caption-form-error" role="alert">{captionFileError}</div>}
+        {uploadKind === 'captions' && uploadProgress !== null && (uploadProgress >= 100 ? <div className="upload-progress upload-progress-saving lesson-caption-progress" role="status">Saving captions…</div> : <div className="upload-progress lesson-caption-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress} aria-label="Caption upload progress"><span style={{ width: `${uploadProgress}%` }} /><small>{uploadProgress}%</small></div>)}
+        {uploadKind === 'captions' && uploadProgress !== null && uploadProgress < 100 && <button type="button" className="text-action upload-cancel-action" aria-label="Cancel captions upload" onClick={cancelUpload}>Cancel upload</button>}
+      </section>
     </section>
-  </div>;
+  </section>;
 }
 
 export function CourseEditorPage() {
   const route = useParams();
   const navigate = useNavigate();
+  const createCourseRequestRef = useRef<Promise<{ course: Course }> | null>(null);
+  const courseLoadSequenceRef = useRef(0);
+  const courseLoadControllerRef = useRef<AbortController | null>(null);
+  const routeCourseIdRef = useRef(route.courseId || '');
+  routeCourseIdRef.current = route.courseId || '';
   const [courseId, setCourseId] = useState(route.courseId || '');
   const [course, setCourse] = useState<Course | null>(null);
   const [title, setTitle] = useState('Untitled course');
@@ -262,44 +654,127 @@ export function CourseEditorPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingStatus, setSavingStatus] = useState<'draft' | 'published' | null>(null);
+  const saving = savingStatus !== null;
+  const deleteCourseRequestRef = useRef(false);
+  const [deletingCourse, setDeletingCourse] = useState(false);
+  const deleteCurriculumItemRef = useRef('');
+  const [deletingCurriculumItem, setDeletingCurriculumItem] = useState('');
+  const [movingCurriculumItems, setMovingCurriculumItems] = useState<Set<string>>(() => new Set());
+  const movingCurriculumItemsRef = useRef(movingCurriculumItems);
+  const isMovingCurriculum = movingCurriculumItems.size > 0;
   const [moduleTitle, setModuleTitle] = useState('');
   const [addingModule, setAddingModule] = useState(false);
+  const [addingModuleBusy, setAddingModuleBusy] = useState(false);
+  const addingModuleRequestRef = useRef(false);
+  const addModuleButtonRef = useRef<HTMLButtonElement>(null);
+  const addModuleInvokerRef = useRef<HTMLButtonElement | null>(null);
+  const [addingLessonModuleIds, setAddingLessonModuleIds] = useState<Set<string>>(() => new Set());
+  const addingLessonModuleIdsRef = useRef(addingLessonModuleIds);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [editingLessonId, setEditingLessonId] = useState('');
   const [uploading, setUploading] = useState<Record<string, number>>({});
+  const uploadingLessonIdsRef = useRef<Set<string>>(new Set());
   const [coverProgress, setCoverProgress] = useState<number | null>(null);
+  const coverUploadRef = useRef(false);
+  const uploadControllersRef = useRef(new Map<string, { controller: AbortController; input: HTMLInputElement; cancelledByUser: boolean }>());
+  const courseDetailsChanged = Boolean(course && (
+    title.trim() !== course.title
+    || description.trim() !== course.description
+    || category.trim() !== course.category
+    || visibility !== course.visibility
+  ));
+
+  function abortActiveUploads() {
+    for (const upload of uploadControllersRef.current.values()) upload.controller.abort();
+    uploadControllersRef.current.clear();
+  }
+
+  function cancelUpload(key: string) {
+    const upload = uploadControllersRef.current.get(key);
+    if (!upload) return;
+    upload.cancelledByUser = true;
+    upload.controller.abort();
+  }
 
   async function load(id = courseId) {
     if (!id) return;
+    const previousCourse = course;
+    const requestSequence = ++courseLoadSequenceRef.current;
+    courseLoadControllerRef.current?.abort();
+    const controller = new AbortController();
+    courseLoadControllerRef.current = controller;
+    const isCurrentRequest = () => requestSequence === courseLoadSequenceRef.current && routeCourseIdRef.current === id;
     try {
-      const response = await fetchCourse(id, true);
-      setCourse(response.course); setTitle(response.course.title); setDescription(response.course.description); setCategory(response.course.category); setVisibility(response.course.visibility);
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Course could not be loaded.'); }
-    finally { setLoading(false); }
+      const response = await fetchCourse(id, true, { signal: controller.signal });
+      if (!isCurrentRequest()) return;
+      setCourse(response.course);
+      if (!previousCourse) {
+        setTitle(response.course.title); setDescription(response.course.description); setCategory(response.course.category); setVisibility(response.course.visibility);
+      } else {
+        setTitle((current) => current === previousCourse.title ? response.course.title : current);
+        setDescription((current) => current === previousCourse.description ? response.course.description : current);
+        setCategory((current) => current === previousCourse.category ? response.course.category : current);
+        setVisibility((current) => current === previousCourse.visibility ? response.course.visibility : current);
+      }
+    } catch (cause) {
+      if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'Course could not be loaded.');
+    } finally {
+      if (isCurrentRequest()) {
+        courseLoadControllerRef.current = null;
+        setLoading(false);
+      }
+    }
   }
 
   useEffect(() => {
     let active = true;
-    if (route.courseId) { setCourseId(route.courseId); load(route.courseId); return () => { active = false; }; }
-    api.post<{ course: Course }>('/api/manage/courses', { title: 'Untitled course', description: '', category: 'General', visibility: 'public' })
+    if (route.courseId) {
+      uploadingLessonIdsRef.current = new Set(); setUploading({});
+      coverUploadRef.current = false; setCoverProgress(null);
+      createCourseRequestRef.current = null;
+      setCourseId(route.courseId);
+      setCourse(null);
+      setError(''); setNotice(''); setSavingStatus(null);
+      setLoading(true);
+      load(route.courseId);
+      return () => { active = false; courseLoadSequenceRef.current += 1; courseLoadControllerRef.current?.abort(); abortActiveUploads(); };
+    }
+    setCourse(null);
+    setError('');
+    setLoading(true);
+    const createRequest = createCourseRequestRef.current ?? api.post<{ course: Course }>('/api/manage/courses', { title: 'Untitled course', description: '', category: 'General', visibility: 'public' });
+    createCourseRequestRef.current = createRequest;
+    createRequest
       .then((response) => {
         if (!active) return;
         setCourseId(response.course.id);
         navigate(`/manage/courses/${response.course.id}/edit`, { replace: true });
         setCourse(response.course); setTitle(response.course.title); setDescription(response.course.description); setCategory(response.course.category); setVisibility(response.course.visibility);
-      }).catch((cause) => setError(cause instanceof ApiError ? cause.message : 'Course could not be created.')).finally(() => setLoading(false));
-    return () => { active = false; };
+      }).catch((cause) => {
+        if (active) setError(cause instanceof ApiError ? cause.message : 'Course could not be created.');
+      }).finally(() => {
+        if (createCourseRequestRef.current === createRequest) createCourseRequestRef.current = null;
+        if (active) setLoading(false);
+      });
+    return () => { active = false; courseLoadSequenceRef.current += 1; courseLoadControllerRef.current?.abort(); abortActiveUploads(); };
   }, [route.courseId]);
 
-  async function saveCourse(status?: Course['status']) {
+  async function saveCourse(status: 'draft' | 'published') {
     if (!courseId) return;
-    setSaving(true); setError(''); setNotice('');
+    const requestedCourseId = courseId;
+    const requestSequence = ++courseLoadSequenceRef.current;
+    courseLoadControllerRef.current?.abort();
+    setSavingStatus(status); setError(''); setNotice('');
     try {
-      const response = await api.patch<{ course: Course }>(`/api/manage/courses/${courseId}`, { title, description, category, visibility, ...(status ? { status } : {}) });
+      const response = await api.patch<{ course: Course }>(`/api/manage/courses/${requestedCourseId}`, { title, description, category, visibility, ...(status ? { status } : {}) });
+      if (routeCourseIdRef.current !== requestedCourseId || requestSequence !== courseLoadSequenceRef.current) return;
       setCourse(response.course); setNotice(status === 'published' ? 'Course published for learners.' : status === 'draft' ? 'Draft saved.' : 'Course details saved.');
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Course could not be saved.'); }
-    finally { setSaving(false); }
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId && requestSequence === courseLoadSequenceRef.current) setError(cause instanceof ApiError ? cause.message : 'Course could not be saved.');
+    } finally {
+      if (routeCourseIdRef.current === requestedCourseId) setSavingStatus(null);
+    }
   }
 
   async function saveCourseDetailsIfChanged() {
@@ -309,97 +784,192 @@ export function CourseEditorPage() {
     setCourse(response.course);
   }
 
+  async function deleteArchivedCourse() {
+    if (deleteCourseRequestRef.current || deleteCurriculumItemRef.current || saving || !course || course.status !== 'archived') return;
+    if (!window.confirm(`Permanently delete “${course.title}” and its uploaded media?`)) return;
+    deleteCourseRequestRef.current = true;
+    setDeletingCourse(true);
+    setError('');
+    try {
+      await api.delete(`/api/manage/courses/${course.id}`);
+      navigate('/manage/courses');
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'Course could not be deleted.');
+    } finally {
+      deleteCourseRequestRef.current = false;
+      setDeletingCourse(false);
+    }
+  }
+
   async function addModule(event: React.FormEvent) {
-    event.preventDefault(); if (!moduleTitle.trim() || !courseId) return;
+    event.preventDefault();
+    if (addingModuleRequestRef.current || !moduleTitle.trim() || !courseId) return;
+    addingModuleRequestRef.current = true; setAddingModuleBusy(true);
     setError('');
     try {
       await saveCourseDetailsIfChanged();
       await api.post(`/api/manage/courses/${courseId}/modules`, { title: moduleTitle.trim() });
-      setModuleTitle(''); setAddingModule(false); await load();
+      setModuleTitle(''); setAddingModule(false); addModuleButtonRef.current?.focus(); await load();
     } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Module could not be added.'); }
+    finally { addingModuleRequestRef.current = false; setAddingModuleBusy(false); }
   }
 
   async function addLesson(moduleId: string) {
+    if (addingLessonModuleIdsRef.current.has(moduleId)) return;
+    const pending = new Set(addingLessonModuleIdsRef.current);
+    pending.add(moduleId); addingLessonModuleIdsRef.current = pending; setAddingLessonModuleIds(pending);
     setError('');
     try { await saveCourseDetailsIfChanged(); await api.post(`/api/manage/modules/${moduleId}/lessons`, { title: 'New lesson' }); await load(); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Lesson could not be added.'); }
+    finally {
+      const nextPending = new Set(addingLessonModuleIdsRef.current);
+      nextPending.delete(moduleId); addingLessonModuleIdsRef.current = nextPending; setAddingLessonModuleIds(nextPending);
+    }
   }
 
   async function editModule(module: CourseModule) {
     const nextTitle = window.prompt('Module title', module.title);
-    if (!nextTitle?.trim() || nextTitle.trim() === module.title) return;
-    try { await saveCourseDetailsIfChanged(); await api.patch(`/api/manage/modules/${module.id}`, { title: nextTitle.trim() }); await load(); }
+    const normalizedTitle = nextTitle?.trim();
+    if (!normalizedTitle || normalizedTitle === module.title) return;
+    setError('');
+    if (normalizedTitle.length > 160) { setError('Module title must be 160 characters or fewer.'); return; }
+    try { await saveCourseDetailsIfChanged(); await api.patch(`/api/manage/modules/${module.id}`, { title: normalizedTitle }); await load(); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Module could not be updated.'); }
   }
 
   async function deleteModule(module: CourseModule) {
+    if (deleteCurriculumItemRef.current || deleteCourseRequestRef.current || saving) return;
     if (!window.confirm(`Remove “${module.title}” and all of its lessons and quiz?`)) return;
+    const target = `module:${module.id}`;
+    deleteCurriculumItemRef.current = target; setDeletingCurriculumItem(target); setError('');
     try { await saveCourseDetailsIfChanged(); await api.delete(`/api/manage/modules/${module.id}`); await load(); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Module could not be removed.'); }
+    finally { deleteCurriculumItemRef.current = ''; setDeletingCurriculumItem(''); }
   }
 
   async function deleteLesson(lessonId: string, currentTitle: string) {
+    if (deleteCurriculumItemRef.current || deleteCourseRequestRef.current || saving) return;
     if (!window.confirm(`Remove “${currentTitle}”, its video, and its lesson resources?`)) return;
+    const target = `lesson:${lessonId}`;
+    deleteCurriculumItemRef.current = target; setDeletingCurriculumItem(target); setError('');
     try { await saveCourseDetailsIfChanged(); await api.delete(`/api/manage/lessons/${lessonId}`); setEditingLessonId(''); await load(); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Lesson could not be removed.'); }
+    finally { deleteCurriculumItemRef.current = ''; setDeletingCurriculumItem(''); }
   }
 
-  async function moveItem(path: string, direction: 'up' | 'down') {
+  function markCurriculumItemMoving(itemKey: string, moving: boolean) {
+    const next = new Set(movingCurriculumItemsRef.current);
+    if (moving) next.add(itemKey);
+    else next.delete(itemKey);
+    movingCurriculumItemsRef.current = next;
+    setMovingCurriculumItems(next);
+  }
+
+  async function moveItem(path: string, direction: 'up' | 'down', itemKey: string) {
+    if (movingCurriculumItemsRef.current.size > 0) return;
+    markCurriculumItemMoving(itemKey, true);
+    setError('');
     try { await saveCourseDetailsIfChanged(); await api.post(path, { direction }); await load(); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Order could not be updated.'); }
+    finally { markCurriculumItemMoving(itemKey, false); }
   }
 
-  async function uploadVideo(lessonId: string, file: File) {
+  async function uploadVideo(lessonId: string, file: File, input: HTMLInputElement) {
+    if (uploadingLessonIdsRef.current.has(lessonId)) return;
+    const requestedCourseId = courseId;
+    const uploadKey = `video:${lessonId}`;
+    const upload = { controller: new AbortController(), input, cancelledByUser: false };
+    uploadControllersRef.current.set(uploadKey, upload);
+    const pending = new Set(uploadingLessonIdsRef.current);
+    pending.add(lessonId); uploadingLessonIdsRef.current = pending;
     setError(''); setUploading((current) => ({ ...current, [lessonId]: 0 }));
     try {
       await saveCourseDetailsIfChanged();
-      await api.upload(`/api/manage/courses/${courseId}/media`, { kind: 'video', lessonId }, file, (progress) => setUploading((current) => ({ ...current, [lessonId]: progress })));
-      await load(); setNotice(`${file.name} uploaded.`);
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Video could not be uploaded.'); }
-    finally { setUploading((current) => { const next = { ...current }; delete next[lessonId]; return next; }); }
+      if (upload.controller.signal.aborted || routeCourseIdRef.current !== requestedCourseId) return;
+      await api.upload(`/api/manage/courses/${requestedCourseId}/media`, { kind: 'video', lessonId }, file, (progress) => {
+        if (!upload.controller.signal.aborted && routeCourseIdRef.current === requestedCourseId) setUploading((current) => ({ ...current, [lessonId]: progress }));
+      }, { signal: upload.controller.signal });
+      if (upload.controller.signal.aborted || routeCourseIdRef.current !== requestedCourseId) return;
+      await load(requestedCourseId);
+      if (!upload.controller.signal.aborted && routeCourseIdRef.current === requestedCourseId) setNotice(`${file.name} uploaded.`);
+    } catch (cause) {
+      if (!upload.controller.signal.aborted && routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Video could not be uploaded.');
+    }
+    finally {
+      if (uploadControllersRef.current.get(uploadKey) === upload) uploadControllersRef.current.delete(uploadKey);
+      if (routeCourseIdRef.current === requestedCourseId) {
+        const nextPending = new Set(uploadingLessonIdsRef.current);
+        nextPending.delete(lessonId); uploadingLessonIdsRef.current = nextPending;
+        setUploading((current) => { const next = { ...current }; delete next[lessonId]; return next; });
+        if (upload.cancelledByUser) requestAnimationFrame(() => { if (routeCourseIdRef.current === requestedCourseId && upload.input.isConnected) upload.input.focus(); });
+      }
+    }
   }
 
-  async function uploadCover(file: File) {
+  async function uploadCover(file: File, input: HTMLInputElement) {
+    if (coverUploadRef.current) return;
+    const requestedCourseId = courseId;
+    const upload = { controller: new AbortController(), input, cancelledByUser: false };
+    uploadControllersRef.current.set('cover', upload);
+    coverUploadRef.current = true;
     setError(''); setCoverProgress(0);
-    try { await saveCourseDetailsIfChanged(); await api.upload(`/api/manage/courses/${courseId}/media`, { kind: 'cover' }, file, setCoverProgress); await load(); setNotice('Course cover uploaded.'); }
-    catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Course cover could not be uploaded.'); }
-    finally { setCoverProgress(null); }
+    try {
+      await saveCourseDetailsIfChanged();
+      if (upload.controller.signal.aborted || routeCourseIdRef.current !== requestedCourseId) return;
+      await api.upload(`/api/manage/courses/${requestedCourseId}/media`, { kind: 'cover' }, file, (progress) => {
+        if (!upload.controller.signal.aborted && routeCourseIdRef.current === requestedCourseId) setCoverProgress(progress);
+      }, { signal: upload.controller.signal });
+      if (upload.controller.signal.aborted || routeCourseIdRef.current !== requestedCourseId) return;
+      await load(requestedCourseId);
+      if (!upload.controller.signal.aborted && routeCourseIdRef.current === requestedCourseId) setNotice('Course cover uploaded.');
+    } catch (cause) {
+      if (!upload.controller.signal.aborted && routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Course cover could not be uploaded.');
+    }
+    finally {
+      if (uploadControllersRef.current.get('cover') === upload) uploadControllersRef.current.delete('cover');
+      if (routeCourseIdRef.current === requestedCourseId) {
+        coverUploadRef.current = false; setCoverProgress(null);
+        if (upload.cancelledByUser) requestAnimationFrame(() => { if (routeCourseIdRef.current === requestedCourseId && upload.input.isConnected) upload.input.focus(); });
+      }
+    }
   }
 
-  if (loading) return <div className="page-loading">Loading course editor…</div>;
+  if (loading || (course && (!route.courseId || route.courseId !== course.id))) return <div className="page-loading" role="status" aria-live="polite">Loading course editor…</div>;
   if (!course) return <div className="management-page">{error && <Notice>{error}</Notice>}<Link className="back-link" to="/manage/courses"><ArrowLeft size={17} />Back to courses</Link></div>;
 
   return <div className="editor-page">
-    <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>Edit course</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Button variant="secondary" onClick={() => saveCourse('draft')} disabled={saving}>Save draft</Button><Button onClick={() => saveCourse('published')} disabled={saving}>Publish course</Button></div></div>
+    <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>Edit course</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
     {error && <Notice>{error}</Notice>}{notice && <Notice kind="success">{notice}</Notice>}
-    <p className="published-edit-note">Changes to a published course are visible to learners as you save them.</p>
+    <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{movingCurriculumItems.size ? 'Updating course content order…' : ''}</p>
+    <p className="course-editing-note">{courseEditingNote(course.status, course.visibility)}</p>
     <section className="editor-section course-details-form">
-      <div className="editor-field-grid"><label className="field-wide">Course title<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} placeholder="Give your course a clear title" /></label>
-        <label>Category<input value={category} maxLength={100} onChange={(event) => setCategory(event.target.value)} placeholder="e.g. Professional development" /></label>
-        <fieldset className="visibility-field"><legend>Visibility</legend><label><input type="radio" name="visibility" checked={visibility === 'public'} onChange={() => setVisibility('public')} />Public</label><label><input type="radio" name="visibility" checked={visibility === 'private'} onChange={() => setVisibility('private')} />Private</label></fieldset>
-        <label className="field-wide">Description<textarea rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What will learners understand or be able to do after this course?" /></label>
+      <div className="editor-field-grid"><label className="field-wide">Course title<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} placeholder="Give your course a clear title" disabled={saving} /></label>
+        <label>Category<input value={category} maxLength={100} onChange={(event) => setCategory(event.target.value)} placeholder="e.g. Professional development" disabled={saving} /></label>
+        <fieldset className="visibility-field" disabled={saving}><legend>Visibility</legend><label><input type="radio" name="visibility" checked={visibility === 'public'} onChange={() => setVisibility('public')} />Public</label><label><input type="radio" name="visibility" checked={visibility === 'private'} onChange={() => setVisibility('private')} />Private</label></fieldset>
+        <label className="field-wide">Description<textarea rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What will learners understand or be able to do after this course?" disabled={saving} /></label>
       </div>
-      <div className="cover-upload-row"><div>{course.coverUrl ? <img src={course.coverUrl} alt="Course cover preview" /> : <span className="cover-preview-empty"><BookOpen size={22} /></span>}<div><strong>Course cover</strong><small>JPG, PNG, or WebP</small></div></div><label className="button button-secondary file-button"><Upload size={16} />{course.coverUrl ? 'Replace cover' : 'Upload cover'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCover(file); event.currentTarget.value = ''; }} /></label>{coverProgress !== null && <span className="upload-percent">{coverProgress}%</span>}</div>
+      <div className="cover-upload-row"><div><ImageWithFallback src={course.coverUrl} className="course-cover-image" alt="Course cover preview" fallback={<span className="cover-preview-empty"><BookOpen size={22} /></span>} /><div><strong>Course cover</strong><small>JPG, PNG, or WebP</small></div></div><label className={`button button-secondary file-button ${coverProgress !== null || saving ? 'file-button-busy' : ''}`} aria-disabled={coverProgress !== null || saving}><Upload size={16} />{coverProgress === null ? course.coverUrl ? 'Replace cover' : 'Upload cover' : coverProgress >= 100 ? 'Saving cover…' : 'Uploading cover…'}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={coverProgress !== null || saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCover(file, event.currentTarget); event.currentTarget.value = ''; }} /></label>{coverProgress !== null && (coverProgress >= 100 ? <span className="upload-percent upload-progress-saving-compact" role="status">Saving cover…</span> : <span className="upload-percent" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverProgress} aria-label="Course cover upload progress">{coverProgress}%</span>)}{coverProgress !== null && coverProgress < 100 && <button type="button" className="text-action upload-cancel-action" aria-label="Cancel cover upload" onClick={() => cancelUpload('cover')}>Cancel upload</button>}</div>
     </section>
     <section className="editor-section curriculum-editor-section">
-      <div className="curriculum-editor-title"><div><h2>Course curriculum</h2><p>Organize lessons into modules and add a quiz when you are ready.</p></div><div className="curriculum-editor-actions"><Button variant="secondary" onClick={() => setAddingModule(!addingModule)}><Plus size={17} />Add module</Button></div></div>
-      {addingModule && <form className="inline-add-form" onSubmit={addModule}><input autoFocus value={moduleTitle} onChange={(event) => setModuleTitle(event.target.value)} placeholder="Module title" aria-label="Module title" maxLength={160} /><Button type="submit" disabled={!moduleTitle.trim()}>Add module</Button><button type="button" className="text-action" onClick={() => setAddingModule(false)}>Cancel</button></form>}
+      <div className="curriculum-editor-title"><div><h2>Course curriculum</h2><p>Organize lessons into modules and add a quiz when you are ready.</p></div><div className="curriculum-editor-actions"><Button ref={addModuleButtonRef} variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} onClick={(event) => { if (addingModule) setAddingModule(false); else { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); } }}><Plus size={17} />Add module</Button></div></div>
+      {addingModule && <form id="add-module-form" className="inline-add-form" onSubmit={addModule}><input autoFocus value={moduleTitle} onChange={(event) => setModuleTitle(event.target.value)} placeholder="Module title" aria-label="Module title" maxLength={160} disabled={addingModuleBusy} /><Button type="submit" disabled={!moduleTitle.trim() || addingModuleBusy}>{addingModuleBusy ? 'Adding module…' : 'Add module'}</Button><button type="button" className="text-action" disabled={addingModuleBusy} onClick={() => { setAddingModule(false); addModuleInvokerRef.current?.focus(); }}>Cancel</button></form>}
       <div className="module-editor-list">
         {course.modules?.map((module, moduleIndex) => <div className="module-editor" key={module.id}>
-          <div className="module-editor-heading"><button type="button" className="module-disclosure" onClick={() => setExpanded({ ...expanded, [module.id]: !(expanded[module.id] ?? true) })} aria-label={`${expanded[module.id] ?? true ? 'Collapse' : 'Expand'} ${module.title}`}><ChevronDown className={(expanded[module.id] ?? true) ? '' : 'chevron-collapsed'} size={18} /></button><BookOpen size={18} /><button type="button" className="module-name-button" onClick={() => editModule(module)}>{module.title}</button><span className="module-item-count">{module.lessons.length + (module.quiz ? 1 : 0)} items</span><div className="module-tools"><button title="Move module up" disabled={moduleIndex === 0} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'up')}><ArrowUp size={16} /></button><button title="Move module down" disabled={moduleIndex === (course.modules?.length || 0) - 1} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'down')}><ArrowDown size={16} /></button><button title="Remove module" className="danger-icon" onClick={() => deleteModule(module)}><Trash2 size={16} /></button></div></div>
+          <div className="module-editor-heading"><button type="button" className="module-disclosure" onClick={() => setExpanded({ ...expanded, [module.id]: !(expanded[module.id] ?? true) })} aria-label={`${expanded[module.id] ?? true ? 'Collapse' : 'Expand'} ${module.title}`} aria-expanded={expanded[module.id] ?? true}><ChevronDown className={(expanded[module.id] ?? true) ? '' : 'chevron-collapsed'} size={18} /></button><BookOpen size={18} /><h3 className="module-name-heading"><button type="button" className="module-name-button" onClick={() => editModule(module)}>{module.title}</button></h3><span className="module-item-count">{module.lessons.length + (module.quiz ? 1 : 0)} items</span><div className="module-tools"><button type="button" title={movingCurriculumItems.has(`module:${module.id}`) ? 'Moving module…' : 'Move module up'} aria-label={movingCurriculumItems.has(`module:${module.id}`) ? `Moving ${module.title}` : `Move ${module.title} up`} aria-busy={movingCurriculumItems.has(`module:${module.id}`)} disabled={moduleIndex === 0 || isMovingCurriculum} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'up', `module:${module.id}`)}><ArrowUp size={16} /></button><button type="button" title={movingCurriculumItems.has(`module:${module.id}`) ? 'Moving module…' : 'Move module down'} aria-label={movingCurriculumItems.has(`module:${module.id}`) ? `Moving ${module.title}` : `Move ${module.title} down`} aria-busy={movingCurriculumItems.has(`module:${module.id}`)} disabled={moduleIndex === (course.modules?.length || 0) - 1 || isMovingCurriculum} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'down', `module:${module.id}`)}><ArrowDown size={16} /></button><button type="button" title={deletingCurriculumItem === `module:${module.id}` ? 'Removing module…' : 'Remove module'} aria-label={deletingCurriculumItem === `module:${module.id}` ? `Removing module ${module.title}` : `Remove module ${module.title}`} aria-busy={deletingCurriculumItem === `module:${module.id}`} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} className="danger-icon" onClick={() => deleteModule(module)}><Trash2 size={16} /></button></div></div>
           {(expanded[module.id] ?? true) && <div className="module-editor-content">
             {module.lessons.map((lesson, lessonIndex) => <div className="lesson-editor-item" key={lesson.id}>
               <div className="lesson-editor-row">
                 <span className="lesson-grip"><FileText size={17} /></span><button type="button" className="lesson-name-button" aria-expanded={editingLessonId === lesson.id} aria-controls={editingLessonId === lesson.id ? `lesson-details-${lesson.id}` : undefined} onClick={() => setEditingLessonId(editingLessonId === lesson.id ? '' : lesson.id)}>{lesson.title}</button>
-                {lesson.hasVideo ? <span className="video-file-label"><Check size={15} />{lesson.videoName}</span> : <label className="button button-upload-small file-button"><Upload size={15} />Upload video<input type="file" accept="video/mp4,.mp4" onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadVideo(lesson.id, file); event.currentTarget.value = ''; }} /></label>}
-                {uploading[lesson.id] !== undefined && <div className="upload-progress"><span style={{ width: `${uploading[lesson.id]}%` }} /><small>{uploading[lesson.id]}%</small></div>}
-                <div className="lesson-tools"><button type="button" className="lesson-edit-action" title="Edit lesson details" aria-label={`Edit details for ${lesson.title}`} aria-expanded={editingLessonId === lesson.id} aria-controls={editingLessonId === lesson.id ? `lesson-details-${lesson.id}` : undefined} onClick={() => setEditingLessonId(editingLessonId === lesson.id ? '' : lesson.id)}><Pencil size={14} /><span>Details</span></button><button type="button" title="Move lesson up" disabled={lessonIndex === 0} onClick={() => moveItem(`/api/manage/lessons/${lesson.id}/move`, 'up')}><ArrowUp size={15} /></button><button type="button" title="Move lesson down" disabled={lessonIndex === module.lessons.length - 1} onClick={() => moveItem(`/api/manage/lessons/${lesson.id}/move`, 'down')}><ArrowDown size={15} /></button><button type="button" title="Remove lesson" className="danger-icon" onClick={() => deleteLesson(lesson.id, lesson.title)}><Trash2 size={15} /></button></div>
+                {lesson.hasVideo ? <span className="video-file-label"><Check size={15} />{lesson.videoName}</span> : <label className={`button button-upload-small file-button ${uploading[lesson.id] !== undefined ? 'file-button-busy' : ''}`} aria-disabled={uploading[lesson.id] !== undefined}><Upload size={15} />{uploading[lesson.id] === undefined ? 'Upload video' : uploading[lesson.id] >= 100 ? 'Saving video…' : 'Uploading video…'}<input type="file" accept="video/mp4,.mp4" disabled={uploading[lesson.id] !== undefined} onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadVideo(lesson.id, file, event.currentTarget); event.currentTarget.value = ''; }} /></label>}
+                {uploading[lesson.id] !== undefined && (uploading[lesson.id] >= 100 ? <div className="upload-progress upload-progress-saving" role="status">Saving video…</div> : <div className="upload-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploading[lesson.id]} aria-label={`Video upload progress for ${lesson.title}`}><span style={{ width: `${uploading[lesson.id]}%` }} /><small>{uploading[lesson.id]}%</small></div>)}
+                {uploading[lesson.id] !== undefined && uploading[lesson.id] < 100 && <button type="button" className="text-action upload-cancel-action" aria-label={`Cancel video upload for ${lesson.title}`} onClick={() => cancelUpload(`video:${lesson.id}`)}>Cancel upload</button>}
+                <div className="lesson-tools"><button type="button" className="lesson-edit-action" title="Edit lesson details" aria-label={`Edit details for ${lesson.title}`} aria-expanded={editingLessonId === lesson.id} aria-controls={editingLessonId === lesson.id ? `lesson-details-${lesson.id}` : undefined} onClick={() => setEditingLessonId(editingLessonId === lesson.id ? '' : lesson.id)}><Pencil size={14} /><span>Details</span></button><button type="button" title={movingCurriculumItems.has(`lesson:${lesson.id}`) ? 'Moving lesson…' : 'Move lesson up'} aria-label={movingCurriculumItems.has(`lesson:${lesson.id}`) ? `Moving ${lesson.title}` : `Move ${lesson.title} up`} aria-busy={movingCurriculumItems.has(`lesson:${lesson.id}`)} disabled={lessonIndex === 0 || isMovingCurriculum} onClick={() => moveItem(`/api/manage/lessons/${lesson.id}/move`, 'up', `lesson:${lesson.id}`)}><ArrowUp size={15} /></button><button type="button" title={movingCurriculumItems.has(`lesson:${lesson.id}`) ? 'Moving lesson…' : 'Move lesson down'} aria-label={movingCurriculumItems.has(`lesson:${lesson.id}`) ? `Moving ${lesson.title}` : `Move ${lesson.title} down`} aria-busy={movingCurriculumItems.has(`lesson:${lesson.id}`)} disabled={lessonIndex === module.lessons.length - 1 || isMovingCurriculum} onClick={() => moveItem(`/api/manage/lessons/${lesson.id}/move`, 'down', `lesson:${lesson.id}`)}><ArrowDown size={15} /></button><button type="button" title={deletingCurriculumItem === `lesson:${lesson.id}` ? 'Removing lesson…' : 'Remove lesson'} aria-label={deletingCurriculumItem === `lesson:${lesson.id}` ? `Removing lesson ${lesson.title}` : `Remove lesson ${lesson.title}`} aria-busy={deletingCurriculumItem === `lesson:${lesson.id}`} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} className="danger-icon" onClick={() => deleteLesson(lesson.id, lesson.title)}><Trash2 size={15} /></button></div>
               </div>
               {editingLessonId === lesson.id && <LessonDetailsEditor lesson={lesson} courseId={courseId} beforeChange={saveCourseDetailsIfChanged} onChanged={load} onClose={() => setEditingLessonId('')} onError={setError} onNotice={setNotice} />}
             </div>)}
-            <div className="module-add-actions"><button type="button" className="text-action" onClick={() => addLesson(module.id)}><Plus size={15} />Add lesson</button><span className="add-action-divider" /><button type="button" className="text-action" onClick={async () => {
+            <div className="module-add-actions"><button type="button" className="text-action" disabled={addingLessonModuleIds.has(module.id)} onClick={() => addLesson(module.id)}><Plus size={15} />{addingLessonModuleIds.has(module.id) ? 'Adding lesson…' : 'Add lesson'}</button><span className="add-action-divider" /><button type="button" className="text-action" onClick={async () => {
               if (module.quiz) { setError('This module already has a quiz.'); return; }
-              try { await saveCourseDetailsIfChanged(); await api.put(`/api/manage/modules/${module.id}/quiz`, { title: `${module.title} quiz`, passMark: 70, questions: [] }); await load(); }
+              try { await saveCourseDetailsIfChanged(); await api.put(`/api/manage/modules/${module.id}/quiz`, { title: defaultQuizTitle(module.title), passMark: 70, questions: [] }); await load(); }
               catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Quiz could not be added.'); }
             }} disabled={Boolean(module.quiz)}><CircleHelp size={15} />{module.quiz ? 'Quiz added' : 'Add module quiz'}</button></div>
             {module.quiz && <QuizEditor module={module} onSaved={async () => {
@@ -408,79 +978,199 @@ export function CourseEditorPage() {
             }} onError={setError} />}
           </div>}
         </div>)}
-        {!course.modules?.length && <EmptyState icon={<BookOpen size={22} />} title="Start with a module" detail="Modules organize the video lessons in your course." action={<Button variant="secondary" onClick={() => setAddingModule(true)}><Plus size={16} />Add module</Button>} />}
+        {!course.modules?.length && <EmptyState headingLevel={3} icon={<BookOpen size={22} />} title="Start with a module" detail="Modules organize the video lessons in your course." action={<Button variant="secondary" onClick={(event) => { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); }}><Plus size={16} />Add module</Button>} />}
       </div>
     </section>
-    {course.status === 'archived' && <div className="delete-course-row"><div><strong>Delete this course permanently</strong><span>This also removes its uploaded media and cannot be undone.</span></div><Button variant="danger" onClick={async () => {
-      if (!window.confirm(`Permanently delete “${course.title}” and its uploaded media?`)) return;
-      try { await api.delete(`/api/manage/courses/${course.id}`); navigate('/manage/courses'); }
-      catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Course could not be deleted.'); }
-    }}><Trash2 size={16} />Delete course</Button></div>}
+    {course.status === 'archived' && <div className="delete-course-row"><div><strong>Delete this course permanently</strong><span>This also removes its uploaded media and cannot be undone.</span></div><Button variant="danger" onClick={deleteArchivedCourse} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} aria-busy={deletingCourse}><Trash2 size={16} />{deletingCourse ? 'Deleting course…' : 'Delete course'}</Button></div>}
   </div>;
 }
 
 export function CourseAccessPage() {
   const { courseId = '' } = useParams();
+  const { user } = useAuth();
+  const loadSequenceRef = useRef(0);
+  const loadControllerRef = useRef<AbortController | null>(null);
+  const routeCourseIdRef = useRef(courseId);
+  routeCourseIdRef.current = courseId;
   const [course, setCourse] = useState<Course | null>(null);
   const [users, setUsers] = useState<CourseAccessUser[]>([]);
   const [query, setQuery] = useState('');
+  const [appliedQuery, setAppliedQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState('');
+  const [failedRequest, setFailedRequest] = useState<{ query: string; page: number } | null>(null);
+  const [savingIds, setSavingIds] = useState<Set<string>>(() => new Set());
+  const savingIdsRef = useRef(savingIds);
 
-  async function load(search = query) {
-    setError('');
-    try {
-      const [courseResponse, accessResponse] = await Promise.all([fetchCourse(courseId, true), fetchAccess(courseId, search.trim())]);
-      setCourse(courseResponse.course); setUsers(accessResponse.users);
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Access list could not be loaded.'); }
-    finally { setLoading(false); }
+  function markSaving(userId: string, saving: boolean) {
+    const next = new Set(savingIdsRef.current);
+    if (saving) next.add(userId);
+    else next.delete(userId);
+    savingIdsRef.current = next;
+    setSavingIds(next);
   }
-  useEffect(() => { load(''); }, [courseId]);
+
+  async function load(search = appliedQuery, requestedPage = page, failureMessage = 'Access list could not be loaded.') {
+    const requestSequence = ++loadSequenceRef.current;
+    loadControllerRef.current?.abort();
+    const controller = new AbortController();
+    loadControllerRef.current = controller;
+    const requestedCourseId = courseId;
+    const isCurrentRequest = () => requestSequence === loadSequenceRef.current && routeCourseIdRef.current === requestedCourseId;
+    setLoading(true);
+    setError('');
+    setFailedRequest(null);
+    try {
+      const courseRequest = course?.id === requestedCourseId ? Promise.resolve({ course }) : fetchCourse(requestedCourseId, true, { signal: controller.signal });
+      const [courseResponse, accessResponse] = await Promise.all([courseRequest, fetchAccess(requestedCourseId, search.trim(), requestedPage, { signal: controller.signal })]);
+      if (!isCurrentRequest()) return;
+      setCourse(courseResponse.course); setUsers(accessResponse.users); setTotal(accessResponse.total); setPage(accessResponse.page); setPageSize(accessResponse.pageSize);
+    } catch (cause) {
+      if (isCurrentRequest()) {
+        controller.abort();
+        const detail = cause instanceof ApiError ? cause.message : '';
+        setError(failureMessage === 'Access list could not be loaded.' ? detail || failureMessage : `${failureMessage}${detail ? ` ${detail}` : ''}`);
+        setFailedRequest({ query: search, page: requestedPage });
+      }
+    } finally {
+      if (isCurrentRequest()) {
+        loadControllerRef.current = null;
+        setLoading(false);
+      }
+    }
+  }
+  useEffect(() => {
+    setCourse(null); setUsers([]); setQuery(''); setAppliedQuery(''); setPage(1); setTotal(0);
+    savingIdsRef.current = new Set(); setSavingIds(savingIdsRef.current);
+    load('', 1);
+    return () => { loadSequenceRef.current += 1; loadControllerRef.current?.abort(); };
+  }, [courseId]);
 
   async function toggle(user: CourseAccessUser) {
-    setSavingId(user.id); setError('');
+    if (savingIdsRef.current.has(user.id)) return;
+    const requestedCourseId = courseId;
+    markSaving(user.id, true); setError('');
     try {
-      if (user.granted) await api.delete(`/api/manage/courses/${courseId}/access/${user.id}`);
-      else await api.put(`/api/manage/courses/${courseId}/access/${user.id}`);
-      setUsers((current) => current.map((row) => row.id === user.id ? { ...row, granted: !user.granted } : row));
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Access could not be changed.'); }
-    finally { setSavingId(''); }
+      if (user.granted) await api.delete(`/api/manage/courses/${requestedCourseId}/access/${user.id}`);
+      else await api.put(`/api/manage/courses/${requestedCourseId}/access/${user.id}`);
+      if (routeCourseIdRef.current === requestedCourseId) {
+        await load(appliedQuery, page, 'Access changed, but the learner list could not be refreshed.');
+      }
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Access could not be changed.');
+    } finally {
+      if (routeCourseIdRef.current === requestedCourseId) markSaving(user.id, false);
+    }
   }
 
-  if (loading) return <div className="page-loading">Loading course access…</div>;
-  return <div className="access-page"><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><Link to={`/manage/courses/${courseId}/edit`}>{course?.title || 'Course'}</Link><span>/</span><span>Manage access</span></div>
-    <PageHeading title="Manage access" subtitle={`Control which learners can access ${course?.title || 'this private course'}.`} action={<Link className="button button-secondary" to={`/manage/courses/${courseId}/edit`}><ArrowLeft size={16} />Back to course</Link>} />
-    {error && <Notice>{error}</Notice>}
-    <form className="access-search" onSubmit={(event) => { event.preventDefault(); load(query); }}><Search size={18} /><input placeholder="Search learners by username" aria-label="Search learners" value={query} onChange={(event) => setQuery(event.target.value)} /><Button variant="secondary" type="submit">Search</Button></form>
-    <div className="access-list"><div className="access-list-head"><span>Learner</span><span>Access</span><span>Action</span></div>{users.map((learner) => <div className="access-row" key={learner.id}><div className="access-user"><UserInitial username={learner.username} /><div><strong>{learner.username}</strong>{learner.granted && learner.grantedAt && <small>Granted <DateText value={learner.grantedAt} />{learner.grantedBy ? ` by ${learner.grantedBy}` : ''}</small>}</div></div><span className={learner.granted ? 'access-state access-state-granted' : 'access-state'}>{learner.granted ? 'Has access' : 'No access'}</span><div>{learner.disabled ? <span className="muted">Account disabled</span> : <button className={learner.granted ? 'text-action danger-text' : 'text-action'} disabled={savingId === learner.id} onClick={() => toggle(learner)}>{learner.granted ? 'Revoke access' : 'Grant access'}</button>}</div></div>)}{!users.length && <div className="access-empty">{query ? 'No learners match that search.' : 'Learners who register will appear here.'}</div>}</div>
-    <p className="access-footnote"><LockKeyhole size={15} />Private course videos are protected by these access grants. Existing progress stays saved if access is revoked.</p>
+  if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading course access…</div>;
+  return <div className="access-page"><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><Link to={`/manage/courses/${courseId}/edit`}>{course?.title || 'Course'}</Link><span>/</span><span>Assign learners</span></div>
+    <PageHeading title="Assign learners" subtitle={`Choose which learners should see ${course?.title || 'this course'} in My learning.`} action={<Link className="button button-secondary" to={`/manage/courses/${courseId}/edit`}><ArrowLeft size={16} />Back to course</Link>} />
+    {error && (failedRequest
+      ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.query, failedRequest.page); }}>Try again</Button></div>
+      : <Notice>{error}</Notice>)}
+    <form className="access-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); setPage(1); load(search, 1); }}><Search size={18} /><input placeholder="Search learners by username" aria-label="Search learners" maxLength={100} value={query} onChange={(event) => setQuery(event.target.value)} /><Button variant="secondary" type="submit">Search</Button></form>
+    <div className="access-list">
+      <div className="access-list-head"><span>Learner</span><span>Assignment</span><span>Action</span></div>
+      {!failedRequest && users.length ? <ul className="access-rows" aria-label="Learner access">
+        {users.map((learner) => <li className="access-row" key={learner.id}>
+          <div className="access-user"><UserInitial username={learner.username} /><div><strong>{learner.username}</strong>{learner.granted && learner.grantedAt && <small>Assigned <DateText value={learner.grantedAt} />{learner.grantedBy ? ` by ${learner.grantedBy}` : ''}</small>}</div></div>
+          <span className={learner.granted ? 'access-state access-state-granted' : 'access-state'}>{learner.granted ? 'Assigned' : 'Not assigned'}</span>
+          <div>{learner.disabled ? <span className="muted">Account disabled</span> : <button type="button" className={learner.granted ? 'text-action danger-text' : 'text-action'} aria-label={learner.granted ? `Unassign ${learner.username} from ${course?.title || 'this course'}` : `Assign ${learner.username} to ${course?.title || 'this course'}`} disabled={savingIds.has(learner.id)} onClick={() => toggle(learner)}>{learner.granted ? 'Unassign' : 'Assign course'}</button>}</div>
+        </li>)}
+      </ul> : !failedRequest && <div className="access-empty">{appliedQuery ? 'No learners match that search.' : user?.role === 'admin' ? <>No learner accounts are available. <Link className="text-action" to="/admin/users/new">Create a learner account.</Link></> : 'No learner accounts are available. Registered learners and accounts created by an administrator will appear here.'}</div>}
+    </div>
+    {!failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(appliedQuery, nextPage)} />}
+    <p className="access-footnote"><LockKeyhole size={15} />Assigned learners will find this course in My learning. Public courses remain available in the catalog; private courses require an active assignment. Removing an assignment does not erase learning progress.</p>
   </div>;
 }
 
 export function AdminUsersPage() {
+  const { user: signedInUser, refresh } = useAuth();
+  const loadSequenceRef = useRef(0);
+  const loadControllerRef = useRef<AbortController | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState('');
+  const [failedRequest, setFailedRequest] = useState<{ page: number; query: string; roleFilter: string } | null>(null);
+  const [savingIds, setSavingIds] = useState<Set<string>>(() => new Set());
+  const savingIdsRef = useRef(savingIds);
   const [resetUser, setResetUser] = useState<User | null>(null);
+  const resetUserRef = useRef<User | null>(null);
   const resetDialogRef = useRef<HTMLElement | null>(null);
   const resetTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [success, setSuccess] = useState('');
 
-  async function load() {
-    setLoading(true); setError('');
-    try {
-      const params = new URLSearchParams(); if (query.trim()) params.set('q', query.trim()); if (roleFilter !== 'all') params.set('role', roleFilter);
-      setUsers((await api.get<{ users: User[] }>(`/api/admin/users?${params}`)).users);
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Users could not be loaded.'); }
-    finally { setLoading(false); }
+  function markSaving(userId: string, saving: boolean) {
+    const next = new Set(savingIdsRef.current);
+    if (saving) next.add(userId);
+    else next.delete(userId);
+    savingIdsRef.current = next;
+    setSavingIds(next);
   }
-  useEffect(() => { load(); }, [roleFilter]);
+
+  function openPasswordReset(user: User, trigger: HTMLButtonElement) {
+    resetUserRef.current = user;
+    resetTriggerRef.current = trigger;
+    setNewPassword('');
+    setConfirmPassword('');
+    setError('');
+    setSuccess('');
+    setResetUser(user);
+  }
+
+  function closePasswordReset(expectedUserId?: string) {
+    if (expectedUserId && resetUserRef.current?.id !== expectedUserId) return;
+    if (resetUserRef.current && savingIdsRef.current.has(resetUserRef.current.id)) return;
+    resetUserRef.current = null;
+    setResetUser(null);
+    setNewPassword('');
+    setConfirmPassword('');
+    setError('');
+  }
+
+  async function load(requestedPage = page, requestedQuery = query, requestedRoleFilter = roleFilter): Promise<boolean> {
+    const requestSequence = ++loadSequenceRef.current;
+    loadControllerRef.current?.abort();
+    const controller = new AbortController();
+    loadControllerRef.current = controller;
+    setLoading(true); setError(''); setFailedRequest(null);
+    try {
+      const params = new URLSearchParams(); if (requestedQuery.trim()) params.set('q', requestedQuery.trim()); if (requestedRoleFilter !== 'all') params.set('role', requestedRoleFilter);
+      params.set('page', String(requestedPage));
+      const response = await api.get<{ users: User[]; total: number; page: number; pageSize: number }>(`/api/admin/users?${params}`, { signal: controller.signal });
+      if (requestSequence === loadSequenceRef.current) {
+        setUsers(response.users); setTotal(response.total); setPage(response.page); setPageSize(response.pageSize);
+        return true;
+      }
+      return false;
+    } catch (cause) {
+      if (requestSequence === loadSequenceRef.current) {
+        setError(cause instanceof ApiError ? cause.message : 'Users could not be loaded.');
+        setFailedRequest({ page: requestedPage, query: requestedQuery, roleFilter: requestedRoleFilter });
+      }
+      return false;
+    } finally {
+      if (requestSequence === loadSequenceRef.current) {
+        loadControllerRef.current = null;
+        setLoading(false);
+      }
+    }
+  }
+  useEffect(() => {
+    load(1);
+    return () => { loadSequenceRef.current += 1; loadControllerRef.current?.abort(); };
+  }, [roleFilter]);
 
   useEffect(() => {
     if (!resetUser) return;
@@ -494,7 +1184,7 @@ export function AdminUsersPage() {
     function handleDialogKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault();
-        setResetUser(null);
+        closePasswordReset();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -506,10 +1196,10 @@ export function AdminUsersPage() {
       }
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (event.shiftKey && (document.activeElement === first || !dialog?.contains(document.activeElement))) {
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog || !dialog?.contains(document.activeElement))) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && (document.activeElement === last || !dialog?.contains(document.activeElement))) {
+      } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog || !dialog?.contains(document.activeElement))) {
         event.preventDefault();
         first.focus();
       }
@@ -523,37 +1213,223 @@ export function AdminUsersPage() {
   }, [resetUser]);
 
   async function updateUser(user: User, changes: { role?: Role; disabled?: boolean }) {
-    setSavingId(user.id); setError(''); setSuccess('');
+    if (savingIdsRef.current.has(user.id)) return;
+    markSaving(user.id, true); setError(''); setSuccess('');
     try {
       const response = await api.patch<{ user: User }>(`/api/admin/users/${user.id}`, changes);
-      setUsers((current) => current.map((row) => row.id === user.id ? { ...row, ...response.user } : row));
+      const selfAccessChanged = signedInUser?.id === response.user.id
+        && (signedInUser.role !== response.user.role || signedInUser.disabled !== response.user.disabled);
+      if (selfAccessChanged) {
+        try { await refresh(); }
+        catch {
+          setError('Account updated, but your access could not be refreshed. Reload this page to apply the change.');
+          return;
+        }
+      } else if (changes.role !== undefined) {
+        if (!(await load(page))) return;
+      } else {
+        setUsers((current) => current.map((row) => row.id === user.id ? { ...row, ...response.user } : row));
+      }
       setSuccess(`${user.username}'s account was updated.`);
     } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'User could not be updated.'); }
-    finally { setSavingId(''); }
+    finally { markSaving(user.id, false); }
   }
 
   async function resetPassword(event: React.FormEvent) {
-    event.preventDefault(); if (!resetUser) return;
-    setError(''); setSuccess(''); setSavingId(resetUser.id);
+    event.preventDefault();
+    const user = resetUser;
+    if (!user || savingIdsRef.current.has(user.id)) return;
+    markSaving(user.id, true); setError(''); setSuccess('');
     try {
-      await api.put(`/api/admin/users/${resetUser.id}/password`, { password: newPassword, confirmPassword });
-      setSuccess(`Password reset for ${resetUser.username}. They will need to sign in again.`);
-      setResetUser(null); setNewPassword(''); setConfirmPassword('');
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Password could not be reset.'); }
-    finally { setSavingId(''); }
+      await api.put(`/api/admin/users/${user.id}/password`, { password: newPassword, confirmPassword });
+      markSaving(user.id, false);
+      if (signedInUser?.id === user.id) {
+        if (resetUserRef.current?.id === user.id) closePasswordReset(user.id);
+        try { await refresh(); }
+        catch { setError('Password reset, but your access could not be refreshed. Reload this page to sign in again.'); }
+        return;
+      }
+      const activeDialogUserId = resetUserRef.current?.id;
+      if (!activeDialogUserId || activeDialogUserId === user.id) {
+        setSuccess(`Password reset for ${user.username}. They will need to sign in again.`);
+        if (activeDialogUserId === user.id) closePasswordReset(user.id);
+      }
+    } catch (cause) {
+      if (!resetUserRef.current || resetUserRef.current.id === user.id) {
+        setError(cause instanceof ApiError ? cause.message : 'Password could not be reset.');
+      }
+    }
+    finally { markSaving(user.id, false); }
   }
 
-  return <div className="management-page users-page"><PageHeading title="Users" subtitle="Manage accounts and assign platform roles." />
-    <div className="user-filter-row"><form className="management-search" onSubmit={(event) => { event.preventDefault(); load(); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search users" aria-label="Search users" /><button type="submit">Search</button></form><label className="select-wrap role-filter"><span className="sr-only">Filter by role</span><select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}><option value="all">All roles</option><option value="admin">Administrators</option><option value="moderator">Moderators</option><option value="learner">Learners</option></select><ChevronDown size={16} /></label></div>
-    {error && <Notice>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
-    {loading ? <div className="page-loading">Loading accounts…</div> : <div className="user-table-wrap"><table className="user-table"><thead><tr><th>User</th><th>Role</th><th>Account</th><th>Created</th><th>Actions</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}>
-      <td><span className="owner-cell"><UserInitial username={user.username} /><strong>{user.username}</strong></span></td>
-      <td><label className="sr-only" htmlFor={`role-${user.id}`}>Role for {user.username}</label><select id={`role-${user.id}`} value={user.role} disabled={savingId === user.id} onChange={(event) => updateUser(user, { role: event.target.value as Role })}><option value="admin">Administrator</option><option value="moderator">Moderator</option><option value="learner">Learner</option></select></td>
+  return <div className="management-page users-page"><PageHeading title="Users" subtitle="Create accounts, review learning activity, and manage roles and access." action={<Link className="button button-primary" to="/admin/users/new"><Plus size={17} />Create account</Link>} />
+    <div className="user-filter-row"><form className="management-search" onSubmit={(event) => { event.preventDefault(); load(1); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search users" aria-label="Search users" maxLength={100} /><button type="submit">Search</button></form><label className="select-wrap role-filter"><span className="sr-only">Filter by role</span><select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}><option value="all">All roles</option><option value="admin">Administrators</option><option value="moderator">Moderators</option><option value="learner">Learners</option></select><ChevronDown size={16} /></label></div>
+    {error && !resetUser && (failedRequest
+      ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest.query, failedRequest.roleFilter); }}>Try again</Button></div>
+      : <Notice>{error}</Notice>)}
+    {success && <Notice kind="success">{success}</Notice>}
+    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading accounts…</div> : failedRequest ? null : <div className="user-table-wrap" role="region" aria-label="Scrollable account list" tabIndex={0}><table className="user-table"><caption className="sr-only">Accounts</caption><thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Account</th><th scope="col">Created</th><th scope="col">Actions</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}>
+      <td><Link className="owner-cell user-detail-link" to={`/admin/users/${user.id}`}><UserInitial username={user.username} /><strong>{user.username}</strong></Link></td>
+      <td><label className="sr-only" htmlFor={`role-${user.id}`}>Role for {user.username}</label><select id={`role-${user.id}`} value={user.role} disabled={savingIds.has(user.id)} onChange={(event) => updateUser(user, { role: event.target.value as Role })}><option value="admin">Administrator</option><option value="moderator">Moderator</option><option value="learner">Learner</option></select></td>
       <td><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span></td>
       <td>{user.createdAt ? <DateText value={user.createdAt} /> : '—'}</td>
-      <td><div className="user-row-actions"><button className="text-action" onClick={(event) => { resetTriggerRef.current = event.currentTarget; setResetUser(user); }}>Reset password</button><button className={user.disabled ? 'text-action' : 'text-action danger-text'} disabled={savingId === user.id} onClick={() => updateUser(user, { disabled: !user.disabled })}>{user.disabled ? 'Enable' : 'Disable'}</button></div></td>
+      <td><div className="user-row-actions"><Link className="text-action" to={`/admin/users/${user.id}`} aria-label={`Details for ${user.username}`}>Details</Link><button type="button" className="text-action" aria-label={`Reset password for ${user.username}`} disabled={savingIds.has(user.id)} onClick={(event) => openPasswordReset(user, event.currentTarget)}>Reset password</button><button type="button" className={user.disabled ? 'text-action' : 'text-action danger-text'} aria-label={`${user.disabled ? 'Enable' : 'Disable'} account for ${user.username}`} disabled={savingIds.has(user.id)} onClick={() => updateUser(user, { disabled: !user.disabled })}>{user.disabled ? 'Enable' : 'Disable'}</button></div></td>
     </tr>)}</tbody></table>{!users.length && <div className="access-empty">No users match this search.</div>}</div>}
-    {resetUser && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setResetUser(null); }}><section ref={resetDialogRef} className="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title" aria-describedby="reset-description"><button className="modal-close" type="button" onClick={() => setResetUser(null)} aria-label="Close">×</button><h2 id="reset-title">Reset password</h2><p id="reset-description">Set a temporary password for <strong>{resetUser.username}</strong>. Their active sessions will be signed out.</p><form className="form-stack" onSubmit={resetPassword}><label>New password<input autoFocus required minLength={12} maxLength={256} type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label><label>Confirm password<input required minLength={12} maxLength={256} type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>{error && <Notice>{error}</Notice>}<Button type="submit" disabled={savingId === resetUser.id}>{savingId === resetUser.id ? 'Saving…' : 'Reset password'}</Button></form></section></div>}
+    {!loading && !failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
+    {resetUser && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePasswordReset(); }}><section ref={resetDialogRef} className="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title" aria-describedby="reset-description" tabIndex={-1}><button className="modal-close" type="button" onClick={() => closePasswordReset()} aria-label="Close" disabled={savingIds.has(resetUser.id)}>×</button><h2 id="reset-title">Reset password</h2><p id="reset-description">Set a temporary password for <strong>{resetUser.username}</strong>. Their active sessions will be signed out.</p><form className="form-stack" onSubmit={resetPassword} aria-busy={savingIds.has(resetUser.id)}><label>New password<input autoFocus required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} disabled={savingIds.has(resetUser.id)} /></label><label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={savingIds.has(resetUser.id)} /></label>{error && <Notice>{error}</Notice>}<Button type="submit" disabled={savingIds.has(resetUser.id)}>{savingIds.has(resetUser.id) ? 'Saving…' : 'Reset password'}</Button></form></section></div>}
+  </div>;
+}
+
+export function AdminUserCreatePage() {
+  const navigate = useNavigate();
+  const [username, setUsername] = useState('');
+  const [role, setRole] = useState<Role>('learner');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function createAccount(event: React.FormEvent) {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true); setError('');
+    try {
+      const response = await api.post<{ user: User }>('/api/admin/users', { username, role, password, confirmPassword });
+      navigate(`/admin/users/${response.user.id}`, { replace: true });
+    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'The account could not be created.'); }
+    finally { setSaving(false); }
+  }
+
+  return <div className="management-page account-form-page"><div className="breadcrumbs"><Link to="/admin/users">Users</Link><span>/</span><span>Create account</span></div>
+    <PageHeading title="Create account" subtitle="Set up a sign-in account and assign its platform role." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} />Back to users</Link>} />
+    <section className="account-form-card"><form className="form-stack" onSubmit={createAccount} aria-busy={saving}>
+      <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>3–32 letters, numbers, dots, underscores, or hyphens.</small></label>
+      <label>Platform role<select value={role} onChange={(event) => setRole(event.target.value as Role)} disabled={saving}><option value="learner">Learner</option><option value="moderator">Moderator</option><option value="admin">Administrator</option></select><small>Choose administrator or moderator only when the person needs management access.</small></label>
+      <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /><small>Use at least 12 characters. You can reset it later from account details.</small></label>
+      <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} /></label>
+      {error && <Notice>{error}</Notice>}
+      <div className="account-form-actions"><Button type="submit" disabled={saving}>{saving ? 'Creating account…' : 'Create account'}</Button><span>Manual accounts can be created while public registration is closed. The account limit still applies; no email invitation is sent.</span></div>
+    </form></section>
+  </div>;
+}
+
+type AdminAccountCourse = Course & { quizCount: number; enrolledAt: string | null; grantedAt: string | null };
+type AdminAccountDetails = {
+  user: User & { createdAt: string; updatedAt: string; isCurrentUser: boolean };
+  courses: AdminAccountCourse[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export function AdminUserDetailsPage() {
+  const { userId = '' } = useParams();
+  const { user: signedInUser, refresh } = useAuth();
+  const routeUserIdRef = useRef(userId);
+  const actionSequenceRef = useRef(0);
+  if (routeUserIdRef.current !== userId) {
+    routeUserIdRef.current = userId;
+    actionSequenceRef.current += 1;
+  }
+  const [account, setAccount] = useState<AdminAccountDetails | null>(null);
+  const [page, setPage] = useState(1);
+  const [loadRetryVersion, setLoadRetryVersion] = useState(0);
+  const [canRetryLoad, setCanRetryLoad] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [savingAction, setSavingAction] = useState<'account' | 'password' | null>(null);
+  const saving = savingAction !== null;
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    setAccount(null); setError(''); setCanRetryLoad(false); setLoading(true);
+    api.get<AdminAccountDetails>(`/api/admin/users/${userId}?page=${page}`, { signal: controller.signal })
+      .then((result) => { if (active) { setAccount(result); setPage(result.page); } })
+      .catch((cause) => {
+        if (active) {
+          setError(cause instanceof ApiError ? cause.message : 'Account details could not be loaded.');
+          setCanRetryLoad(!(cause instanceof ApiError) || [408, 429].includes(cause.status) || cause.status >= 500);
+        }
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [userId, page, loadRetryVersion]);
+  useEffect(() => {
+    setError(''); setSuccess(''); setSavingAction(null); setPassword(''); setConfirmPassword('');
+  }, [userId]);
+
+  async function updateAccount(changes: { role?: Role; disabled?: boolean }) {
+    if (!account || saving) return;
+    const requestedUserId = account.user.id;
+    const actionSequence = ++actionSequenceRef.current;
+    const isCurrentAction = () => actionSequenceRef.current === actionSequence && routeUserIdRef.current === requestedUserId;
+    setSavingAction('account'); setError(''); setSuccess('');
+    try {
+      const response = await api.patch<{ user: User & { createdAt?: string; updatedAt?: string; isCurrentUser?: boolean } }>(`/api/admin/users/${requestedUserId}`, changes);
+      if (!isCurrentAction()) return;
+      setAccount((current) => current?.user.id === requestedUserId ? { ...current, user: {
+        ...current.user,
+        ...response.user,
+        createdAt: current.user.createdAt,
+        updatedAt: response.user.updatedAt ?? current.user.updatedAt,
+        isCurrentUser: current.user.isCurrentUser,
+      } } : current);
+      if (signedInUser?.id === response.user.id && (signedInUser.role !== response.user.role || signedInUser.disabled !== response.user.disabled)) {
+        try { await refresh(); }
+        catch {
+          if (isCurrentAction()) setError('Account updated, but your access could not be refreshed. Reload this page to apply the change.');
+          return;
+        }
+      }
+      if (isCurrentAction()) setSuccess('Account settings were updated.');
+    } catch (cause) { if (isCurrentAction()) setError(cause instanceof ApiError ? cause.message : 'Account settings could not be updated.'); }
+    finally { if (isCurrentAction()) setSavingAction(null); }
+  }
+
+  async function resetPassword(event: React.FormEvent) {
+    event.preventDefault();
+    if (!account || saving) return;
+    const requestedUserId = account.user.id;
+    const requestedUsername = account.user.username;
+    const actionSequence = ++actionSequenceRef.current;
+    const isCurrentAction = () => actionSequenceRef.current === actionSequence && routeUserIdRef.current === requestedUserId;
+    setSavingAction('password'); setError(''); setSuccess('');
+    try {
+      await api.put(`/api/admin/users/${requestedUserId}/password`, { password, confirmPassword });
+      if (!isCurrentAction()) return;
+      setPassword(''); setConfirmPassword('');
+      if (signedInUser?.id === requestedUserId) {
+        try { await refresh(); }
+        catch { if (isCurrentAction()) setError('Password reset, but your access could not be refreshed. Reload this page to sign in again.'); }
+        return;
+      }
+      if (isCurrentAction()) setSuccess(`Password reset for ${requestedUsername}. Their active sessions will be signed out.`);
+    } catch (cause) { if (isCurrentAction()) setError(cause instanceof ApiError ? cause.message : 'Password could not be reset.'); }
+    finally { if (isCurrentAction()) setSavingAction(null); }
+  }
+
+  if (loading || (account && account.user.id !== userId)) return <div className="management-page page-loading" role="status" aria-live="polite">Loading account details…</div>;
+  if (!account) return <div className="management-page">{error && <div className="account-list-error"><Notice>{error}</Notice>{canRetryLoad && <Button type="button" variant="secondary" onClick={() => setLoadRetryVersion((version) => version + 1)}>Try again</Button>}</div>}<Link className="back-link" to="/admin/users"><ArrowLeft size={17} />Back to users</Link></div>;
+  const { user, courses } = account;
+  return <div className="management-page account-details-page">
+    <div className="breadcrumbs"><Link to="/admin/users">Users</Link><span>/</span><span>{user.username}</span></div>
+    <PageHeading title={user.username} subtitle="Account controls, enrolled courses, and learning activity." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} />Back to users</Link>} />
+    {error && <Notice>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
+    <section className="account-detail-grid">
+      <article className="account-detail-card account-overview-card"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><small>Account overview</small></div></div><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span></div>
+        <dl className="account-meta-list"><div><dt>User ID</dt><dd>{user.id}</dd></div><div><dt>Created</dt><dd><DateText value={user.createdAt} /></dd></div><div><dt>Last updated</dt><dd><DateText value={user.updatedAt} /></dd></div><div><dt>Courses assigned or enrolled</dt><dd>{account.total}</dd></div></dl>
+        <div className="account-control-row" aria-busy={savingAction === 'account'}><label>Platform role<select value={user.role} disabled={saving} onChange={(event) => updateAccount({ role: event.target.value as Role })}><option value="learner">Learner</option><option value="moderator">Moderator</option><option value="admin">Administrator</option></select></label><Button variant={user.disabled ? 'secondary' : 'danger'} onClick={() => updateAccount({ disabled: !user.disabled })} disabled={saving} aria-busy={savingAction === 'account'}>{savingAction === 'account' ? 'Saving account…' : user.disabled ? 'Enable account' : 'Disable account'}</Button>{savingAction === 'account' && <span className="sr-only" role="status" aria-live="polite">Saving account settings…</span>}</div>
+      </article>
+      <article className="account-detail-card"><div className="account-detail-card-heading"><div><h2>Reset password</h2><p>Set a new password and sign out existing sessions.</p></div></div><form className="form-stack account-password-form" onSubmit={resetPassword} aria-busy={savingAction === 'password'}><label>New password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /></label><label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} /></label><Button type="submit" disabled={saving} aria-busy={savingAction === 'password'}>{savingAction === 'password' ? 'Saving…' : 'Reset password'}</Button></form></article>
+    </section>
+    <section className="analytics-section account-courses-section"><div className="analytics-section-heading"><div><h2>Course activity</h2><p>Courses this account has enrolled in or been assigned.</p></div><span>{account.total} courses</span></div>
+      {courses.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable course activity" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Account course activity</caption><thead><tr><th scope="col">Course</th><th scope="col">Assignment</th><th scope="col">Progress</th><th scope="col">Lessons</th><th scope="col">Quizzes</th><th scope="col">Completion</th><th scope="col">Dashboard</th></tr></thead><tbody>{courses.map((course) => <tr key={course.id}><td><strong>{course.title}</strong><small><CourseStatus status={course.status} /></small></td><td>{course.grantedAt ? 'Assigned' : course.visibility === 'private' ? 'Access revoked' : course.enrolledAt ? 'Enrolled' : '—'}</td><td>{course.progress}%</td><td>{course.completedLessons} / {course.lessonCount}</td><td>{course.quizCount}</td><td>{course.completed ? 'Completed' : course.progress ? 'In progress' : 'Not started'}</td><td><Link className="text-action" to={`/manage/courses/${course.id}/analytics`} aria-label={`Open dashboard for ${course.title}`}>Open dashboard</Link></td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No course activity" detail="This account has not enrolled in or been assigned a course." />}
+      {account.total > 0 && <LogPagination page={account.page} pageSize={account.pageSize} total={account.total} loading={loading} onChange={setPage} />}
+    </section>
   </div>;
 }
 
@@ -567,17 +1443,30 @@ export function AdminSettingsPage() {
   const [allowRegistration, setAllowRegistration] = useState(registrationEnabled);
   const [userLimitValue, setUserLimitValue] = useState(String(userLimit));
   const [registeredUserCount, setRegisteredUserCount] = useState<number | null>(null);
+  const [registeredUserCountError, setRegisteredUserCountError] = useState('');
+  const [registeredUserCountRetryVersion, setRegisteredUserCountRetryVersion] = useState(0);
+  const registeredUserCountRevisionRef = useRef(0);
+  const registeredUserCountControllerRef = useRef<AbortController | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
   useEffect(() => { setName(platformName); setIcon(platformIcon); setIconEdited(false); setPalette(themePalette); setProtocol(connectionProtocol); setAllowRegistration(registrationEnabled); setUserLimitValue(String(userLimit)); }, [platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, userLimit]);
   useEffect(() => {
     let active = true;
-    api.get<{ registeredUserCount: number }>('/api/admin/settings')
-      .then((result) => { if (active) setRegisteredUserCount(result.registeredUserCount); })
-      .catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.message : 'Account settings could not be loaded.'); });
-    return () => { active = false; };
-  }, []);
+    const revision = registeredUserCountRevisionRef.current;
+    const controller = new AbortController();
+    setRegisteredUserCountError('');
+    registeredUserCountControllerRef.current = controller;
+    api.get<{ registeredUserCount: number }>('/api/admin/settings', { signal: controller.signal })
+      .then((result) => { if (active && revision === registeredUserCountRevisionRef.current) setRegisteredUserCount(result.registeredUserCount); })
+      .catch((cause) => { if (active && revision === registeredUserCountRevisionRef.current) setRegisteredUserCountError(cause instanceof ApiError ? cause.message : 'Registered account count could not be loaded.'); })
+      .finally(() => { if (registeredUserCountControllerRef.current === controller) registeredUserCountControllerRef.current = null; });
+    return () => {
+      active = false;
+      controller.abort();
+      if (registeredUserCountControllerRef.current === controller) registeredUserCountControllerRef.current = null;
+    };
+  }, [registeredUserCountRetryVersion]);
   useEffect(() => {
     document.documentElement.dataset.palette = palette;
     return () => { document.documentElement.dataset.palette = themePalette; };
@@ -587,33 +1476,172 @@ export function AdminSettingsPage() {
     document.documentElement.dataset.palette = nextPalette;
   }
   async function submit(event: React.FormEvent) {
-    event.preventDefault(); setError(''); setSuccess(''); setSaving(true);
+    event.preventDefault();
+    const normalizedName = name.trim();
+    if (normalizedName.length < 2 || normalizedName.length > 80) {
+      setError('Platform name must be between 2 and 80 characters.'); setSuccess('');
+      return;
+    }
+    setError(''); setSuccess(''); setSaving(true);
     try {
       const result = await api.put<{ platformName: string; platformIcon: string | null; themePalette: BrandingPalette; connectionProtocol: ConnectionProtocol; registrationEnabled: boolean; registrationAvailable: boolean; userLimit: number; registeredUserCount: number }>('/api/admin/settings', {
-        platformName: name,
+        platformName: normalizedName,
         themePalette: palette,
         connectionProtocol: protocol,
         registrationEnabled: allowRegistration,
         userLimit: Number(userLimitValue),
         ...(iconEdited ? { platformIcon: icon } : {}),
       });
-      setName(result.platformName); setBranding(result.platformName, result.themePalette, result.platformIcon); setPlatformAccessSettings(result.connectionProtocol, result.registrationEnabled, result.registrationAvailable, result.userLimit); setIconEdited(false); setRegisteredUserCount(result.registeredUserCount); setSuccess('Platform settings saved.');
+      registeredUserCountRevisionRef.current += 1;
+      registeredUserCountControllerRef.current?.abort();
+      registeredUserCountControllerRef.current = null;
+      setError(''); setRegisteredUserCountError(''); setName(result.platformName); setBranding(result.platformName, result.themePalette, result.platformIcon); setPlatformAccessSettings(result.connectionProtocol, result.registrationEnabled, result.registrationAvailable, result.userLimit); setIconEdited(false); setRegisteredUserCount(result.registeredUserCount); setSuccess('Platform settings saved.');
     } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Settings could not be saved.'); }
     finally { setSaving(false); }
   }
   return <div className="management-page settings-page"><PageHeading title="Settings" subtitle="Customize platform branding, connection security, and learner registration." />{error && <Notice>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
-    <form className="settings-card form-stack" onSubmit={submit}>
+    <form className="settings-card form-stack" onSubmit={submit} aria-busy={saving}>
+      <fieldset className="settings-fields" aria-label="Platform settings" disabled={saving}>
       <div className="settings-card-heading"><span className="settings-icon"><Settings2 size={19} /></span><div><h2>Platform identity</h2><p>Choose the brand learners see throughout the platform.</p></div></div>
       <label>Platform name<input required minLength={2} maxLength={80} value={name} onChange={(event) => setName(event.target.value)} /></label>
       <PlatformIconPicker value={icon} onChange={(nextIcon) => { setIcon(nextIcon); setIconEdited(true); }} />
       <div className="branding-choice-field"><span className="branding-choice-label">Color palette</span><small>Preview a palette and save to apply it for everyone.</small><PalettePicker value={palette} onChange={choosePalette} /></div>
       <div className="settings-section-divider"><span>Connection and accounts</span></div>
-      <label>Public connection protocol<select value={protocol} onChange={(event) => setProtocol(event.target.value as ConnectionProtocol)}><option value="http">HTTP</option><option value="https">HTTPS</option></select></label>
-      <p className="protocol-help">This controls secure session cookies. HTTPS requires a TLS certificate on this server or a reverse proxy. For TLS behind a proxy, set <code>TRUST_PROXY=true</code>.</p>
+      <label>Public connection protocol<select aria-describedby="protocol-help" value={protocol} onChange={(event) => setProtocol(event.target.value as ConnectionProtocol)}><option value="http">HTTP</option><option value="https">HTTPS</option></select></label>
+      <p id="protocol-help" className="protocol-help">This controls secure session cookies. HTTPS requires a TLS certificate on this server or a reverse proxy. For TLS behind a proxy, set <code>TRUST_PROXY=true</code>.{connectionProtocol === 'https' && protocol === 'http' && <span className="protocol-session-warning">If you then open the site over HTTP, browsers will not send the existing secure session cookie, so you will need to sign in again.</span>}</p>
       <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={allowRegistration} onChange={(event) => setAllowRegistration(event.target.checked)} /></label>
-      <label>Maximum registered accounts<input className="user-limit-input" type="number" min={0} max={1000000} step={1} required value={userLimitValue} onChange={(event) => setUserLimitValue(event.target.value)} /><small>0 means no limit. The cap includes administrators, moderators, and learners. Registered accounts: {registeredUserCount ?? 'loading'}.</small></label>
+      <label>Maximum registered accounts<input className="user-limit-input" type="number" min={0} max={1000000} step={1} required value={userLimitValue} onChange={(event) => setUserLimitValue(event.target.value)} /><small>0 means no limit. The cap includes administrators, moderators, and learners.</small></label>
+      {registeredUserCountError
+        ? <div className="registered-count-recovery"><Notice>{registeredUserCountError}</Notice><Button type="button" variant="secondary" onClick={() => setRegisteredUserCountRetryVersion((version) => version + 1)}>Retry account count</Button></div>
+        : <p className="registered-count-status" role="status" aria-live="polite" aria-atomic="true">Registered accounts: {registeredUserCount ?? 'loading'}.</p>}
       <div className="settings-card-footer"><span>Database and media paths remain managed through the server environment.</span><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</Button></div>
+      </fieldset>
     </form>
   </div>;
 }
 
+type AuditLogEntry = {
+  id: number;
+  occurredAt: string;
+  actorUsername: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  summary: string;
+  details: Record<string, unknown>;
+};
+
+type SystemLogEntry = {
+  id: number;
+  occurredAt: string;
+  level: 'info' | 'warn' | 'error';
+  source: string;
+  message: string;
+  details: Record<string, unknown>;
+};
+
+function LogTimestamp({ value }: { value: string }) {
+  const date = new Date(value.includes('Z') ? value : `${value.replace(' ', 'T')}Z`);
+  const valid = !Number.isNaN(date.getTime());
+  return <time dateTime={valid ? date.toISOString() : undefined}>{valid ? logTimestampFormatter.format(date) : value}</time>;
+}
+
+function LogDetails({ details, label }: { details: Record<string, unknown>; label: string }) {
+  const rows = Object.entries(details || {});
+  if (!rows.length) return <span className="log-no-details">—</span>;
+  return <details className="log-details"><summary aria-label={`View details for ${(label.trim() || 'log entry').slice(0, 120)}`}>View details</summary><dl>{rows.map(([key, value]) => <div key={key}><dt>{key}</dt><dd><code>{typeof value === 'string' ? value : JSON.stringify(value)}</code></dd></div>)}</dl></details>;
+}
+
+function LogPagination({ page, pageSize, total, loading, onChange }: { page: number; pageSize: number; total: number; loading: boolean; onChange: (page: number) => void }) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const first = total ? (page - 1) * pageSize + 1 : 0;
+  const last = Math.min(page * pageSize, total);
+  return <div className="log-pagination"><span role="status" aria-live="polite" aria-atomic="true">Showing {first}–{last} of {total}</span><div><Button variant="secondary" disabled={loading || page <= 1} onClick={() => onChange(page - 1)}>Previous</Button><span>Page {page} of {totalPages}</span><Button variant="secondary" disabled={loading || page >= totalPages} onClick={() => onChange(page + 1)}>Next</Button></div></div>;
+}
+
+export function AdminAuditLogPage() {
+  const requestSequenceRef = useRef(0);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
+  const [actions, setActions] = useState<{ action: string; count: number }[]>([]);
+  const [query, setQuery] = useState('');
+  const [appliedQuery, setAppliedQuery] = useState('');
+  const [action, setAction] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [failedRequest, setFailedRequest] = useState<{ page: number; query: string; action: string } | null>(null);
+
+  useEffect(() => {
+    const requestSequence = ++requestSequenceRef.current;
+    const controller = new AbortController();
+    let active = true;
+    setLoading(true); setError(''); setFailedRequest(null);
+    const params = new URLSearchParams({ page: String(page) });
+    if (appliedQuery) params.set('q', appliedQuery);
+    if (action) params.set('action', action);
+    api.get<{ entries: AuditLogEntry[]; actions: { action: string; count: number }[]; total: number; page: number; pageSize: number }>(`/api/admin/audit-logs?${params}`, { signal: controller.signal })
+      .then((result) => {
+        if (!active || requestSequence !== requestSequenceRef.current) return;
+        setEntries(result.entries); setActions(result.actions); setTotal(result.total); setPageSize(result.pageSize); setPage(result.page);
+      })
+      .catch((cause) => { if (active && requestSequence === requestSequenceRef.current) { setError(cause instanceof ApiError ? cause.message : 'The audit log could not be loaded.'); setFailedRequest({ page, query: appliedQuery, action }); } })
+      .finally(() => { if (active && requestSequence === requestSequenceRef.current) setLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [appliedQuery, action, page, refreshVersion]);
+
+  return <div className="management-page logs-page"><PageHeading title="Audit log" subtitle="Review account, course, access, and platform changes." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
+    <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" aria-label="Search audit log" maxLength={100} /><button type="submit">Search</button></form><label className="select-wrap role-filter"><span className="sr-only">Filter by action</span><select value={action} onChange={(event) => { setAction(event.target.value); setPage(1); }}><option value="">All actions</option>{actions.map((item) => <option key={item.action} value={item.action}>{item.action.replaceAll('_', ' ')} ({item.count})</option>)}</select><ChevronDown size={16} /></label></div>
+    {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
+    <div className="log-table-wrap" role="region" aria-label="Scrollable audit log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">Audit log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Change</th><th scope="col">Details</th></tr></thead><tbody>
+      {failedRequest ? <tr><td colSpan={5} className="log-empty">Audit entries are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <tr key={entry.id}><td><LogTimestamp value={entry.occurredAt} /></td><td>{entry.actorUsername}</td><td><span className="log-action">{entry.action.replaceAll('_', ' ')}</span></td><td><strong>{entry.summary}</strong><small>{entry.entityType}{entry.entityId ? ` · ${entry.entityId}` : ''}</small></td><td><LogDetails details={entry.details} label={entry.summary} /></td></tr>)}
+      {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty">{appliedQuery || action ? 'No audit entries match these filters.' : 'No audit entries have been recorded yet.'}</td></tr>}
+    </tbody></table>{loading && <div className="log-loading" role="status" aria-live="polite">Loading audit entries…</div>}</div>
+    {!failedRequest && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
+  </div>;
+}
+
+export function AdminSystemLogPage() {
+  const requestSequenceRef = useRef(0);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [entries, setEntries] = useState<SystemLogEntry[]>([]);
+  const [query, setQuery] = useState('');
+  const [appliedQuery, setAppliedQuery] = useState('');
+  const [level, setLevel] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [failedRequest, setFailedRequest] = useState<{ page: number; query: string; level: string } | null>(null);
+
+  useEffect(() => {
+    const requestSequence = ++requestSequenceRef.current;
+    const controller = new AbortController();
+    let active = true;
+    setLoading(true); setError(''); setFailedRequest(null);
+    const params = new URLSearchParams({ page: String(page) });
+    if (appliedQuery) params.set('q', appliedQuery);
+    if (level !== 'all') params.set('level', level);
+    api.get<{ entries: SystemLogEntry[]; total: number; page: number; pageSize: number }>(`/api/admin/system-logs?${params}`, { signal: controller.signal })
+      .then((result) => {
+        if (!active || requestSequence !== requestSequenceRef.current) return;
+        setEntries(result.entries); setTotal(result.total); setPageSize(result.pageSize); setPage(result.page);
+      })
+      .catch((cause) => { if (active && requestSequence === requestSequenceRef.current) { setError(cause instanceof ApiError ? cause.message : 'The system log could not be loaded.'); setFailedRequest({ page, query: appliedQuery, level }); } })
+      .finally(() => { if (active && requestSequence === requestSequenceRef.current) setLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [appliedQuery, level, page, refreshVersion]);
+
+  return <div className="management-page logs-page"><PageHeading title="System log" subtitle="Inspect server startup, runtime errors, and operational events." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
+    <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search system events" aria-label="Search system log" maxLength={100} /><button type="submit">Search</button></form><label className="select-wrap role-filter"><span className="sr-only">Filter by severity</span><select value={level} onChange={(event) => { setLevel(event.target.value); setPage(1); }}><option value="all">All levels</option><option value="error">Errors</option><option value="warn">Warnings</option><option value="info">Info</option></select><ChevronDown size={16} /></label></div>
+    {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
+    <div className="log-table-wrap" role="region" aria-label="Scrollable system log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">System log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Level</th><th scope="col">Source</th><th scope="col">Event</th><th scope="col">Details</th></tr></thead><tbody>
+      {failedRequest ? <tr><td colSpan={5} className="log-empty">System events are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <tr key={entry.id}><td><LogTimestamp value={entry.occurredAt} /></td><td><span className={`log-level log-level-${entry.level}`}>{entry.level}</span></td><td>{entry.source}</td><td><strong>{entry.message}</strong></td><td><LogDetails details={entry.details} label={entry.message} /></td></tr>)}
+      {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty">{appliedQuery || level !== 'all' ? 'No system events match these filters.' : 'No system events have been recorded yet.'}</td></tr>}
+    </tbody></table>{loading && <div className="log-loading" role="status" aria-live="polite">Loading system events…</div>}</div>
+    {!failedRequest && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
+  </div>;
+}

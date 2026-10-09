@@ -1,39 +1,146 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, Play, Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Award, BookOpen, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, MessageSquare, Play, Printer, Search, Send, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
-import { Button, CourseCard, CourseCover, CurriculumModule, EmptyState, PageHeading, ProgressBar } from './components';
+import { Button, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
+import { nextCourseActivity, nextCourseActivityAfterLesson } from './course-navigation';
+import { summarizeCourseProgress } from './course-progress';
 import { useAuth } from './auth-context';
-import type { Course, CourseModule, QuizAttempt } from './types';
+import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt } from './types';
 
-type CourseListResponse = { courses: Course[]; categories?: string[] };
+type CourseListResponse = { courses: Course[]; categories?: string[]; certificates?: CourseCertificate[]; certificatesTotal?: number; certificatesPage?: number; certificatesPageSize?: number; certificatesHasMore?: boolean; total?: number; page?: number; pageSize?: number; hasMore?: boolean };
+type CertificateListResponse = { certificates: CourseCertificate[]; total: number; page: number; pageSize: number; hasMore: boolean };
 
-function ErrorNotice({ message }: { message: string }) {
-  return <div className="error-notice" role="alert">{message}</div>;
+function coursePageHasDrift(currentCourses: Course[], response: CourseListResponse, expectedTotal: number, expectedPage: number) {
+  if (response.total !== undefined && response.total !== expectedTotal) return true;
+  if (response.page !== undefined && response.page !== expectedPage) return true;
+  const currentIds = new Set(currentCourses.map((course) => course.id));
+  return response.courses.some((course) => currentIds.has(course.id));
+}
+
+const certificateHistoryDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' });
+const certificateIssueDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeZone: 'UTC' });
+const lessonCommentDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+
+function formatCertificateDate(value: string, formatter: Intl.DateTimeFormat) {
+  const date = new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`);
+  return Number.isNaN(date.getTime()) ? value : formatter.format(date);
+}
+
+function catalogParams(filters: { query: string; category: string; sort: string }, page: number) {
+  const params = new URLSearchParams();
+  if (filters.query) params.set('q', filters.query);
+  if (filters.category !== 'All courses') params.set('category', filters.category);
+  if (filters.sort === 'title') params.set('sort', filters.sort);
+  params.set('page', String(page));
+  return params;
+}
+
+function ErrorNotice({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return <div className={`error-notice${onRetry ? ' error-notice-actionable' : ''}`} role="alert"><span>{message}</span>{onRetry && <Button variant="secondary" onClick={onRetry}>Try again</Button>}</div>;
 }
 
 export function CatalogPage() {
+  const loadSequenceRef = useRef(0);
+  const requestControllerRef = useRef<AbortController | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const filtersRef = useRef({ query: '', category: 'All courses', sort: 'recent' });
+  const pageRef = useRef(1);
+  const paginationStatusRef = useRef<HTMLParagraphElement>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All courses');
   const [sort, setSort] = useState('recent');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
 
-  async function load() {
-    setLoading(true); setError('');
+  async function load(appliedFilters = { ...filtersRef.current, category, sort }) {
+    const requestSequence = ++loadSequenceRef.current;
+    requestControllerRef.current?.abort();
+    const requestController = new AbortController();
+    requestControllerRef.current = requestController;
+    const filters = { ...appliedFilters };
+    filtersRef.current = filters;
+    pageRef.current = 1;
+    setLoading(true); setError(''); setLoadMoreFailed(false);
+    setLoadingMore(false); setHasMore(false); setCourses([]); setTotal(0);
     try {
-      const params = new URLSearchParams();
-      if (query.trim()) params.set('q', query.trim());
-      if (category !== 'All courses') params.set('category', category);
-      if (sort === 'title') params.set('sort', sort);
-      const result = await api.get<CourseListResponse>(`/api/courses?${params.toString()}`);
-      setCourses(result.courses); setCategories(result.categories || []);
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Courses could not be loaded.'); }
-    finally { setLoading(false); }
+      const params = catalogParams(filters, 1);
+      const result = await api.get<CourseListResponse>(`/api/courses?${params.toString()}`, { signal: requestController.signal });
+      if (requestSequence === loadSequenceRef.current) {
+        setCourses(result.courses); setCategories(result.categories || []);
+        setTotal(result.total ?? result.courses.length); setHasMore(result.hasMore ?? false);
+        pageRef.current = result.page ?? 1;
+      }
+    } catch (cause) {
+      if (requestSequence === loadSequenceRef.current) setError(cause instanceof ApiError ? cause.message : 'Courses could not be loaded.');
+    } finally {
+      if (requestSequence === loadSequenceRef.current) { setLoading(false); requestControllerRef.current = null; }
+    }
   }
-  useEffect(() => { load(); }, [category, sort]);
+
+  function retryLoad() {
+    return load(filtersRef.current);
+  }
+
+  function clearCatalogFilters() {
+    const defaults = { query: '', category: 'All courses', sort: 'recent' };
+    filtersRef.current = defaults;
+    setQuery('');
+    searchInputRef.current?.focus();
+    if (category === defaults.category && sort === defaults.sort) {
+      void load(defaults);
+      return;
+    }
+    setCategory(defaults.category);
+    setSort(defaults.sort);
+  }
+
+  async function loadMore() {
+    if (!hasMore || loading || loadingMore) return;
+    const requestSequence = ++loadSequenceRef.current;
+    requestControllerRef.current?.abort();
+    const requestController = new AbortController();
+    requestControllerRef.current = requestController;
+    const requestedPage = pageRef.current + 1;
+    setLoadingMore(true); setError(''); setLoadMoreFailed(false);
+    try {
+      const params = catalogParams(filtersRef.current, requestedPage);
+      const result = await api.get<CourseListResponse>(`/api/courses?${params.toString()}`, { signal: requestController.signal });
+      if (requestSequence === loadSequenceRef.current) {
+        if (coursePageHasDrift(courses, result, total, requestedPage)) {
+          await load(filtersRef.current);
+          return;
+        }
+        setCourses((current) => {
+          const existingIds = new Set(current.map((course) => course.id));
+          return [...current, ...result.courses.filter((course) => !existingIds.has(course.id))];
+        });
+        setTotal(result.total ?? total); setHasMore(result.hasMore ?? false);
+        pageRef.current = result.page ?? requestedPage;
+        if (!(result.hasMore ?? false)) requestAnimationFrame(() => paginationStatusRef.current?.focus());
+      }
+    } catch (cause) {
+      if (requestSequence === loadSequenceRef.current) { setError(cause instanceof ApiError ? cause.message : 'More courses could not be loaded.'); setLoadMoreFailed(true); }
+    } finally {
+      if (requestSequence === loadSequenceRef.current) { setLoadingMore(false); requestControllerRef.current = null; }
+    }
+  }
+  useEffect(() => {
+    load();
+    return () => {
+      loadSequenceRef.current += 1;
+      requestControllerRef.current?.abort();
+      requestControllerRef.current = null;
+    };
+  }, [category, sort]);
+
+  const hasAppliedFilters = Boolean(filtersRef.current.query) || filtersRef.current.category !== 'All courses';
 
   return <div className="catalog-page">
     <PageHeading title="Browse courses" subtitle="Find a course to build your skills." />
@@ -42,28 +149,193 @@ export function CatalogPage() {
         <label className="select-wrap"><span className="sr-only">Course category</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>All courses</option>{categories.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={16} /></label>
         <label className="select-wrap"><span className="sr-only">Sort courses</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="recent">Recently updated</option><option value="title">Course title</option></select><ChevronDown size={16} /></label>
       </div>
-      <form className="search-field" onSubmit={(event) => { event.preventDefault(); load(); }}>
-        <Search size={19} /><input aria-label="Search courses" placeholder="Search courses" value={query} onChange={(event) => setQuery(event.target.value)} /><button type="submit" aria-label="Submit search"><ArrowRight size={17} /></button>
+      <form className="search-field" onSubmit={(event) => { event.preventDefault(); load({ query: query.trim(), category, sort }); }}>
+        <Search size={19} /><input ref={searchInputRef} aria-label="Search courses" placeholder="Search courses" maxLength={120} value={query} onChange={(event) => setQuery(event.target.value)} /><button type="submit" aria-label="Submit search"><ArrowRight size={17} /></button>
       </form>
     </div>
-    {error && <ErrorNotice message={error} />}
-    {loading ? <div className="page-loading">Loading courses…</div> : courses.length ? <div className="course-grid">{courses.map((course) => <CourseCard key={course.id} course={course} />)}</div> : <EmptyState icon={<Filter size={24} />} title={query || category !== 'All courses' ? 'No matching courses' : 'No courses are available yet'} detail={query || category !== 'All courses' ? 'Try a different search or category.' : 'When courses are published for your learning space, they will appear here.'} />}
+    {error && <ErrorNotice message={error} onRetry={loadMoreFailed ? loadMore : retryLoad} />}
+    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading courses…</div> : courses.length ? <div className="course-grid">{courses.map((course, index) => <CourseCard key={course.id} course={course} coverLoading={index === 0 ? 'eager' : 'lazy'} />)}</div> : error ? null : <EmptyState icon={<Filter size={24} />} title={hasAppliedFilters ? 'No matching courses' : 'No courses are available yet'} detail={hasAppliedFilters ? 'Try a different search or category.' : 'When courses are published for your learning space, they will appear here.'} action={hasAppliedFilters && <Button variant="secondary" onClick={clearCatalogFilters}>Clear search and filters</Button>} />}
+    {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {total} courses</p>{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
   </div>;
 }
 
 export function MyLearningPage() {
+  const { user } = useAuth();
+  const loadSequenceRef = useRef(0);
+  const certificateLoadSequenceRef = useRef(0);
+  const courseRequestControllerRef = useRef<AbortController | null>(null);
+  const certificateRequestControllerRef = useRef<AbortController | null>(null);
+  const pageRef = useRef(1);
+  const paginationStatusRef = useRef<HTMLParagraphElement>(null);
+  const certificatePaginationStatusRef = useRef<HTMLParagraphElement>(null);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [certificates, setCertificates] = useState<CourseCertificate[]>([]);
+  const [certificateTotal, setCertificateTotal] = useState(0);
+  const [certificatePage, setCertificatePage] = useState(1);
+  const [certificatesHasMore, setCertificatesHasMore] = useState(false);
+  const [loadingMoreCertificates, setLoadingMoreCertificates] = useState(false);
+  const [certificateError, setCertificateError] = useState('');
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [courseLoadMoreFailed, setCourseLoadMoreFailed] = useState(false);
+  async function load() {
+    const requestSequence = ++loadSequenceRef.current;
+    certificateLoadSequenceRef.current += 1;
+    courseRequestControllerRef.current?.abort();
+    certificateRequestControllerRef.current?.abort();
+    certificateRequestControllerRef.current = null;
+    const requestController = new AbortController();
+    courseRequestControllerRef.current = requestController;
+    pageRef.current = 1;
+    setLoading(true); setError(''); setCertificateError(''); setCourseLoadMoreFailed(false);
+    setCourses([]); setCertificates([]);
+    setLoadingMore(false); setLoadingMoreCertificates(false); setHasMore(false); setCertificatesHasMore(false); setTotal(0); setCertificateTotal(0);
+    try {
+      const result = await api.get<CourseListResponse>('/api/my-learning?page=1', { signal: requestController.signal });
+      if (requestSequence === loadSequenceRef.current) {
+        setCourses(result.courses); setCertificates(result.certificates || []);
+        setCertificateTotal(result.certificatesTotal ?? result.certificates?.length ?? 0);
+        setCertificatePage(result.certificatesPage ?? 1); setCertificatesHasMore(result.certificatesHasMore ?? false);
+        setTotal(result.total ?? result.courses.length); setHasMore(result.hasMore ?? false);
+        pageRef.current = result.page ?? 1;
+      }
+    } catch (cause) {
+      if (requestSequence === loadSequenceRef.current) setError(cause instanceof ApiError ? cause.message : 'Your courses could not be loaded.');
+    } finally {
+      if (requestSequence === loadSequenceRef.current) {
+        setLoading(false);
+        if (courseRequestControllerRef.current === requestController) courseRequestControllerRef.current = null;
+      }
+    }
+  }
+  async function loadMore() {
+    if (!hasMore || loading || loadingMore) return;
+    const requestSequence = ++loadSequenceRef.current;
+    courseRequestControllerRef.current?.abort();
+    const requestController = new AbortController();
+    courseRequestControllerRef.current = requestController;
+    const requestedPage = pageRef.current + 1;
+    setLoadingMore(true); setError(''); setCourseLoadMoreFailed(false);
+    try {
+      const result = await api.get<CourseListResponse>(`/api/my-learning?page=${requestedPage}&includeCertificates=0`, { signal: requestController.signal });
+      if (requestSequence === loadSequenceRef.current) {
+        if (coursePageHasDrift(courses, result, total, requestedPage)) {
+          await load();
+          return;
+        }
+        setCourses((current) => {
+          const existingIds = new Set(current.map((course) => course.id));
+          return [...current, ...result.courses.filter((course) => !existingIds.has(course.id))];
+        });
+        setTotal(result.total ?? total); setHasMore(result.hasMore ?? false);
+        pageRef.current = result.page ?? requestedPage;
+        if (!(result.hasMore ?? false)) requestAnimationFrame(() => paginationStatusRef.current?.focus());
+      }
+    } catch (cause) {
+      if (requestSequence === loadSequenceRef.current) { setError(cause instanceof ApiError ? cause.message : 'More courses could not be loaded.'); setCourseLoadMoreFailed(true); }
+    } finally {
+      if (requestSequence === loadSequenceRef.current) {
+        setLoadingMore(false);
+        if (courseRequestControllerRef.current === requestController) courseRequestControllerRef.current = null;
+      }
+    }
+  }
+  async function loadMoreCertificates() {
+    if (!certificatesHasMore || loading || loadingMoreCertificates) return;
+    const requestSequence = ++certificateLoadSequenceRef.current;
+    certificateRequestControllerRef.current?.abort();
+    const requestController = new AbortController();
+    certificateRequestControllerRef.current = requestController;
+    const requestedPage = certificatePage + 1;
+    setLoadingMoreCertificates(true); setCertificateError('');
+    try {
+      const result = await api.get<CertificateListResponse>(`/api/my-learning/certificates?page=${requestedPage}`, { signal: requestController.signal });
+      if (requestSequence !== certificateLoadSequenceRef.current) return;
+      if (result.total !== certificateTotal || result.page !== requestedPage) {
+        const refreshed = await api.get<CertificateListResponse>('/api/my-learning/certificates?page=1', { signal: requestController.signal });
+        if (requestSequence === certificateLoadSequenceRef.current) {
+          setCertificates(refreshed.certificates);
+          setCertificateTotal(refreshed.total); setCertificatePage(refreshed.page); setCertificatesHasMore(refreshed.hasMore);
+        }
+        return;
+      }
+      setCertificates((current) => {
+        const existingIds = new Set(current.map((certificate) => certificate.id));
+        return [...current, ...result.certificates.filter((certificate) => !existingIds.has(certificate.id))];
+      });
+      setCertificateTotal(result.total); setCertificatePage(result.page); setCertificatesHasMore(result.hasMore);
+      if (!result.hasMore) requestAnimationFrame(() => certificatePaginationStatusRef.current?.focus());
+    } catch (cause) {
+      if (requestSequence === certificateLoadSequenceRef.current) setCertificateError(cause instanceof ApiError ? cause.message : 'More certificates could not be loaded.');
+    } finally {
+      if (requestSequence === certificateLoadSequenceRef.current) {
+        setLoadingMoreCertificates(false);
+        if (certificateRequestControllerRef.current === requestController) certificateRequestControllerRef.current = null;
+      }
+    }
+  }
   useEffect(() => {
-    api.get<CourseListResponse>('/api/my-learning').then((result) => setCourses(result.courses))
-      .catch((cause) => setError(cause instanceof ApiError ? cause.message : 'Your courses could not be loaded.'))
-      .finally(() => setLoading(false));
+    load();
+    return () => {
+      loadSequenceRef.current += 1; certificateLoadSequenceRef.current += 1;
+      courseRequestControllerRef.current?.abort(); certificateRequestControllerRef.current?.abort();
+      courseRequestControllerRef.current = null; certificateRequestControllerRef.current = null;
+    };
   }, []);
   return <div className="catalog-page my-learning-page">
     <PageHeading title="My learning" subtitle="Pick up where you left off." />
-    {error && <ErrorNotice message={error} />}
-    {loading ? <div className="page-loading">Loading your courses…</div> : courses.length ? <div className="course-grid">{courses.map((course) => <CourseCard key={course.id} course={course} continueLabel />)}</div> : <EmptyState title="Your learning starts here" detail="Open a course from the catalog to add it to your learning list." action={<Link className="button button-primary" to="/courses">Browse courses</Link>} />}
+    {error && <ErrorNotice message={error} onRetry={courseLoadMoreFailed ? loadMore : load} />}
+    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading your courses…</div> : courses.length ? <div className="course-grid">{courses.map((course, index) => <div className="my-learning-card" key={course.id}><CourseCard course={course} continueLabel coverLoading={index === 0 ? 'eager' : 'lazy'} />{user?.role === 'learner' && course.completed && <Link className="certificate-card-link" to={`/my-learning/certificates/${course.id}`}><Award size={16} />View certificate</Link>}</div>)}</div> : !error && !certificates.length && <EmptyState title="Your learning starts here" detail="Open a course from the catalog to add it to your learning list." action={<Link className="button button-primary" to="/courses">Browse courses</Link>} />}
+    {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {total} courses</p>{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
+    {!loading && certificates.length > 0 && <section className="certificate-history"><div className="certificate-history-heading"><h2>Your certificates</h2><p>Certificates remain available in your learning history.</p></div><div className="certificate-history-list">{certificates.map((certificate) => <article className="certificate-history-item" key={certificate.id}><span className="certificate-history-icon"><Award size={19} /></span><div className="certificate-history-copy"><h3>{certificate.courseTitle}</h3><p>Awarded {formatCertificateDate(certificate.issuedAt, certificateHistoryDateFormatter)} · {certificate.certificateCode}</p></div><Link className="button button-secondary" to={`/my-learning/certificates/${certificate.id}`}>View certificate</Link></article>)}</div>
+      {certificateError && <ErrorNotice message={certificateError} onRetry={loadMoreCertificates} />}
+      <div className="catalog-pagination"><p ref={certificatePaginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {certificates.length} of {certificateTotal} certificates</p>{certificatesHasMore && <Button variant="secondary" disabled={loadingMoreCertificates} onClick={loadMoreCertificates}>{loadingMoreCertificates ? 'Loading more certificates…' : 'Load more certificates'}</Button>}</div>
+    </section>}
+  </div>;
+}
+
+export function CourseCertificatePage() {
+  const { courseId: certificateRef = '' } = useParams();
+  const { platformName, platformIcon } = useAuth();
+  const requestSequenceRef = useRef(0);
+  const [certificate, setCertificate] = useState<CourseCertificate | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+
+  useEffect(() => {
+    const requestSequence = ++requestSequenceRef.current;
+    setCertificate(null); setError(''); setLoading(true);
+    api.get<{ certificate: CourseCertificate }>(`/api/certificates/${certificateRef}`).then((result) => {
+      if (requestSequence === requestSequenceRef.current) setCertificate(result.certificate);
+    }).catch((cause) => {
+      if (requestSequence === requestSequenceRef.current) setError(cause instanceof ApiError ? cause.message : 'Your certificate could not be loaded.');
+    }).finally(() => {
+      if (requestSequence === requestSequenceRef.current) setLoading(false);
+    });
+    return () => { requestSequenceRef.current += 1; };
+  }, [certificateRef, refreshVersion]);
+
+  if (loading) return <div className="page-loading" role="status" aria-live="polite">Preparing your certificate…</div>;
+  if (!certificate) return <div className="certificate-page"><div className="breadcrumbs"><Link to="/my-learning">My learning</Link><span>/</span><span>Certificate</span></div>{error && <ErrorNotice message={error} onRetry={() => setRefreshVersion((version) => version + 1)} />}<Link className="back-link" to="/my-learning"><ArrowLeft size={17} />Back to my learning</Link></div>;
+
+  const formattedDate = formatCertificateDate(certificate.issuedAt, certificateIssueDateFormatter);
+  return <div className="certificate-page">
+    <div className="certificate-page-heading"><div><div className="breadcrumbs"><Link to="/my-learning">My learning</Link><span>/</span><span>Certificate</span></div><h1>Certificate of completion</h1><p>Recognizing your achievement in this course.</p></div><div className="certificate-actions"><Button variant="secondary" onClick={() => window.print()}><Printer size={17} />Print certificate</Button></div></div>
+    <article className="certificate-paper" aria-label={`Certificate awarded to ${certificate.recipientName} for ${certificate.courseTitle}`}>
+      <div className="certificate-inner-border" aria-hidden="true" />
+      <div className="certificate-brand"><ImageWithFallback src={platformIcon} className="certificate-brand-image" fallback={<span className="certificate-brand-mark"><Award size={22} /></span>} /><span>{certificate.platformName || platformName}</span></div>
+      <div className="certificate-kicker">Certificate of completion</div>
+      <p className="certificate-intro">This certificate is proudly presented to</p>
+      <h2 className="certificate-recipient">{certificate.recipientName}</h2>
+      <p className="certificate-description">for successfully completing</p>
+      <h3 className="certificate-course-title">{certificate.courseTitle}</h3>
+      <div className="certificate-footer"><div><span className="certificate-label">Awarded on</span><strong>{formattedDate}</strong></div><div className="certificate-seal"><Award size={28} /><span>Completed</span></div><div className="certificate-code"><span className="certificate-label">Certificate ID</span><strong>{certificate.certificateCode}</strong></div></div>
+    </article>
+    <Link className="back-link certificate-back" to="/my-learning"><ArrowLeft size={17} />Back to my learning</Link>
   </div>;
 }
 
@@ -71,29 +343,65 @@ export function CourseOverviewPage() {
   const { courseId = '' } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const loadSequenceRef = useRef(0);
+  const courseRequestControllerRef = useRef<AbortController | null>(null);
+  const enrollmentSequenceRef = useRef(0);
+  const routeCourseIdRef = useRef(courseId);
+  routeCourseIdRef.current = courseId;
   const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
+  const [loadRetryVersion, setLoadRetryVersion] = useState(0);
   useEffect(() => {
-    fetchCourse(courseId).then((result) => setCourse(result.course))
-      .catch((cause) => setError(cause instanceof ApiError ? cause.message : 'This course could not be loaded.'))
-      .finally(() => setLoading(false));
-  }, [courseId]);
+    const requestSequence = ++loadSequenceRef.current;
+    const requestController = new AbortController();
+    courseRequestControllerRef.current?.abort();
+    courseRequestControllerRef.current = requestController;
+    setCourse(null); setError(''); setLoading(true); setStarting(false);
+    fetchCourse(courseId, false, { signal: requestController.signal }).then((result) => {
+      if (requestSequence === loadSequenceRef.current && routeCourseIdRef.current === courseId) setCourse(result.course);
+    }).catch((cause) => {
+      if (requestSequence === loadSequenceRef.current && routeCourseIdRef.current === courseId) setError(cause instanceof ApiError ? cause.message : 'This course could not be loaded.');
+    }).finally(() => {
+      if (requestSequence === loadSequenceRef.current && routeCourseIdRef.current === courseId) setLoading(false);
+      if (courseRequestControllerRef.current === requestController) courseRequestControllerRef.current = null;
+    });
+    return () => {
+      loadSequenceRef.current += 1; enrollmentSequenceRef.current += 1;
+      requestController.abort();
+      if (courseRequestControllerRef.current === requestController) courseRequestControllerRef.current = null;
+    };
+  }, [courseId, loadRetryVersion]);
 
   async function startLearning() {
-    if (!course) return;
+    if (!course || course.id !== courseId || starting) return;
+    const requestedCourse = course;
+    const requestedCourseId = courseId;
+    const requestSequence = ++enrollmentSequenceRef.current;
+    const isCurrentRequest = () => requestSequence === enrollmentSequenceRef.current && routeCourseIdRef.current === requestedCourseId;
+    setStarting(true); setError('');
     try {
-      await api.post(`/api/courses/${course.id}/enroll`);
-      const lesson = course.modules?.flatMap((module) => module.lessons).find((item) => !item.completed) || course.modules?.flatMap((module) => module.lessons)[0];
-      if (lesson) navigate(`/courses/${course.id}/learn/${lesson.id}`);
+      await api.post(`/api/courses/${requestedCourseId}/enroll`);
+      if (!isCurrentRequest()) return;
+      const activity = nextCourseActivity(requestedCourse.modules);
+      if (activity?.type === 'lesson') navigate(`/courses/${requestedCourseId}/learn/${activity.id}`);
+      else if (activity?.type === 'quiz') navigate(`/courses/${requestedCourseId}/quiz/${activity.id}`);
       else setError('This course does not have any lessons yet.');
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Course access could not be started.'); }
+    } catch (cause) {
+      if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'Course access could not be started.');
+    } finally {
+      if (isCurrentRequest()) setStarting(false);
+    }
   }
 
-  if (loading) return <div className="page-loading">Loading course…</div>;
-  if (!course) return <div className="narrow-content">{error && <ErrorNotice message={error} />}<Link className="back-link" to="/courses"><ArrowLeft size={17} />Back to courses</Link></div>;
-  const lessons = course.modules?.flatMap((module) => module.lessons) || [];
-  const nextLesson = lessons.find((lesson) => !lesson.completed) || lessons[0];
+  if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading course…</div>;
+  if (!course) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to="/courses"><ArrowLeft size={17} />Back to courses</Link></div>;
+  const nextActivity = nextCourseActivity(course.modules);
+  const startButtonLabel = starting ? 'Starting…'
+    : nextActivity?.type === 'quiz'
+      ? course.progress > 0 ? 'Continue to quiz' : 'Start quiz'
+      : course.progress > 0 ? 'Continue learning' : 'Start learning';
   return <div className="course-overview">
     <div className="breadcrumbs"><Link to="/courses">Browse courses</Link><span>/</span><span>{course.title}</span></div>
     {error && <ErrorNotice message={error} />}
@@ -101,11 +409,11 @@ export function CourseOverviewPage() {
       <div className="course-hero-copy">
         <span className="category-label">{course.category}</span>
         <h1>{course.title}</h1>
-        <p>{course.description || 'A practical course for your learning journey.'}</p>
+        {course.description ? <p className="course-hero-description" aria-hidden="true">{course.description}</p> : null}
         <div className="course-hero-meta"><span><BookOpen size={17} />{course.moduleCount} {course.moduleCount === 1 ? 'module' : 'modules'}</span><span><Play size={15} />{course.lessonCount} lessons</span></div>
         <div className="course-hero-actions">
-          <Button onClick={startLearning} disabled={!nextLesson}>{course.progress > 0 ? 'Continue learning' : 'Start learning'}<ArrowRight size={17} /></Button>
-          {course.progress > 0 && <span className="progress-caption">{course.completed ? 'Course completed' : `${course.progress}% complete`}</span>}
+          <Button onClick={startLearning} disabled={!nextActivity || starting}>{startButtonLabel}<ArrowRight size={17} /></Button>
+          {user?.role === 'learner' && course.completed ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link> : course.progress > 0 && <span className="progress-caption">{course.progress}% complete</span>}
         </div>
       </div>
       <CourseCover course={course} className="course-hero-cover" />
@@ -113,11 +421,11 @@ export function CourseOverviewPage() {
     <section className="course-overview-body">
       <div className="course-description-block"><h2>About this course</h2><p>{course.description || 'Explore the lessons and practical knowledge in this course.'}</p></div>
       <div className="course-curriculum-block">
-        <div className="section-heading-row"><div><h2>Course content</h2><p>{course.moduleCount} modules <span>·</span> {course.lessonCount} lessons</p></div>{course.progress > 0 && <div className="course-progress-summary"><span>{course.completedLessons} of {course.lessonCount} lessons complete</span><ProgressBar value={course.progress} /></div>}</div>
+        <div className="section-heading-row"><div><h2>Course content</h2><p>{course.moduleCount} modules <span>·</span> {course.lessonCount} lessons</p></div>{course.progress > 0 && <div className="course-progress-summary"><span>{course.completedLessons} of {course.lessonCount} lessons complete</span><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /></div>}</div>
         {course.modules?.map((module) => <CurriculumModule key={module.id} module={module} courseId={course.id} />)}
       </div>
     </section>
-    <div className="course-bottom-cta"><span>{user?.username ? `Ready when you are, ${user.username}.` : 'Ready when you are.'}</span><Button onClick={startLearning} disabled={!nextLesson}>{course.progress > 0 ? 'Continue learning' : 'Start learning'}<ArrowRight size={17} /></Button></div>
+    <div className="course-bottom-cta"><span>{user?.username ? `Ready when you are, ${user.username}.` : 'Ready when you are.'}</span><Button onClick={startLearning} disabled={!nextActivity || starting}>{startButtonLabel}<ArrowRight size={17} /></Button></div>
   </div>;
 }
 
@@ -128,39 +436,331 @@ function orderedLessons(modules: CourseModule[]) {
 export function CoursePlayerPage() {
   const { courseId = '', lessonId = '' } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isCourseManager = user?.role === 'admin' || user?.role === 'moderator';
+  const canViewLessonFeedback = user?.role === 'learner' || isCourseManager;
+  const loadSequenceRef = useRef(0);
+  const courseRequestControllerRef = useRef<AbortController | null>(null);
+  const coursePageActiveRef = useRef(false);
+  const routeCourseIdRef = useRef(courseId);
+  routeCourseIdRef.current = courseId;
+  const routeLessonIdRef = useRef(lessonId);
+  routeLessonIdRef.current = lessonId;
+  const feedbackSequenceRef = useRef(0);
+  const commentPageSequenceRef = useRef(0);
+  const commentPageControllerRef = useRef<AbortController | null>(null);
+  const completionSequenceRef = useRef(0);
+  const previousLessonRouteRef = useRef(`${courseId}:${lessonId}`);
   const [course, setCourse] = useState<Course | null>(null);
+  const [availableCertificate, setAvailableCertificate] = useState<CourseCertificate | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [courseLoadRetryVersion, setCourseLoadRetryVersion] = useState(0);
   const [saving, setSaving] = useState(false);
   const [railOpen, setRailOpen] = useState(true);
   const [videoError, setVideoError] = useState(false);
+  const [feedback, setFeedback] = useState<LessonFeedback | null>(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(true);
+  const [feedbackRefreshVersion, setFeedbackRefreshVersion] = useState(0);
+  const [feedbackError, setFeedbackError] = useState<{ lessonId: string; message: string } | null>(null);
+  const [commentPostedNotice, setCommentPostedNotice] = useState<{ courseId: string; lessonId: string } | null>(null);
+  const [commentModerationNotice, setCommentModerationNotice] = useState<{ courseId: string; lessonId: string; message: string } | null>(null);
+  const [commentRemovalIds, setCommentRemovalIds] = useState<Set<string>>(() => new Set());
+  const [reactionSaving, setReactionSaving] = useState(false);
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [commentSavingLessonIds, setCommentSavingLessonIds] = useState<Set<string>>(() => new Set());
+  const commentSavingLessonIdsRef = useRef(new Set<string>());
+  const [commentsLoading, setCommentsLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const railToggleRef = useRef<HTMLButtonElement | null>(null);
+  const railCloseRef = useRef<HTMLButtonElement | null>(null);
+  const focusRailAfterOpenRef = useRef(false);
+  const lessonHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const commentSectionTitleRef = useRef<HTMLHeadingElement | null>(null);
 
-  async function load() {
-    setLoading(true); setError('');
-    try { setCourse((await fetchCourse(courseId)).course); }
-    catch (cause) { setError(cause instanceof ApiError ? cause.message : 'This course could not be loaded.'); }
-    finally { setLoading(false); }
+  useEffect(() => {
+    if (!railOpen) {
+      focusRailAfterOpenRef.current = false;
+      return;
+    }
+    if (!focusRailAfterOpenRef.current) return;
+    focusRailAfterOpenRef.current = false;
+    if (window.matchMedia('(max-width: 720px)').matches) railCloseRef.current?.focus();
+  }, [railOpen]);
+
+  function toggleCourseRail() {
+    const open = !railOpen;
+    focusRailAfterOpenRef.current = open;
+    setRailOpen(open);
   }
-  useEffect(() => { load(); }, [courseId]);
-  useEffect(() => { setVideoError(false); }, [lessonId]);
+
+  async function load(showLoading = true) {
+    if (!coursePageActiveRef.current) return;
+    const requestSequence = ++loadSequenceRef.current;
+    const requestedCourseId = courseId;
+    courseRequestControllerRef.current?.abort();
+    const requestController = new AbortController();
+    courseRequestControllerRef.current = requestController;
+    const isCurrentRequest = () => requestSequence === loadSequenceRef.current && routeCourseIdRef.current === requestedCourseId;
+    if (showLoading) setLoading(true);
+    setError('');
+    try {
+      const response = await fetchCourse(requestedCourseId, false, { signal: requestController.signal });
+      if (isCurrentRequest()) setCourse(response.course);
+    } catch (cause) {
+      if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'This course could not be loaded.');
+    } finally {
+      if (isCurrentRequest()) setLoading(false);
+      if (courseRequestControllerRef.current === requestController) courseRequestControllerRef.current = null;
+    }
+  }
+  useEffect(() => {
+    coursePageActiveRef.current = true;
+    setCourse(null); setLoading(true); setSaving(false); setError('');
+    load();
+    return () => {
+      coursePageActiveRef.current = false;
+      loadSequenceRef.current += 1;
+      courseRequestControllerRef.current?.abort();
+      courseRequestControllerRef.current = null;
+    };
+  }, [courseId, courseLoadRetryVersion]);
+  useEffect(() => { setVideoError(false); }, [courseId, lessonId]);
+  useEffect(() => {
+    const requestSequence = ++feedbackSequenceRef.current;
+    const controller = new AbortController();
+    commentPageSequenceRef.current += 1;
+    let active = true;
+    setFeedback(null); setFeedbackError(null); setReactionSaving(false); setCommentsLoading(false);
+    if (!canViewLessonFeedback) {
+      setFeedbackLoading(false);
+      return () => {
+        active = false;
+        commentPageSequenceRef.current += 1;
+        controller.abort();
+        commentPageControllerRef.current?.abort();
+        commentPageControllerRef.current = null;
+      };
+    }
+    setFeedbackLoading(true);
+    api.get<LessonFeedback>(`/api/lessons/${lessonId}/feedback`, { signal: controller.signal }).then((result) => {
+      if (active && requestSequence === feedbackSequenceRef.current && routeCourseIdRef.current === courseId && routeLessonIdRef.current === lessonId) setFeedback(result);
+    }).catch((cause) => {
+      if (active && requestSequence === feedbackSequenceRef.current && routeCourseIdRef.current === courseId && routeLessonIdRef.current === lessonId) {
+        setFeedbackError({ lessonId, message: cause instanceof ApiError ? cause.message : 'Lesson feedback could not be loaded.' });
+      }
+    }).finally(() => {
+      if (active && requestSequence === feedbackSequenceRef.current && routeCourseIdRef.current === courseId && routeLessonIdRef.current === lessonId) setFeedbackLoading(false);
+    });
+    return () => {
+      active = false;
+      commentPageSequenceRef.current += 1;
+      controller.abort();
+      commentPageControllerRef.current?.abort();
+      commentPageControllerRef.current = null;
+    };
+  }, [courseId, lessonId, canViewLessonFeedback, feedbackRefreshVersion]);
 
   const modules = course?.modules || [];
   const lessons = useMemo(() => orderedLessons(modules), [modules]);
   const currentIndex = lessons.findIndex((lesson) => lesson.id === lessonId);
   const current = lessons[currentIndex];
   const previous = currentIndex > 0 ? lessons[currentIndex - 1] : null;
-  const next = currentIndex >= 0 && currentIndex < lessons.length - 1 ? lessons[currentIndex + 1] : null;
+  const nextActivityAfterCurrent = current ? nextCourseActivityAfterLesson(modules, current.id) : null;
+  const commentDraft = commentDrafts[lessonId] ?? '';
+  const commentSaving = commentSavingLessonIds.has(lessonId);
+  const visibleFeedback = feedback?.lessonId === lessonId ? feedback : null;
+  const visibleFeedbackError = feedbackError?.lessonId === lessonId ? feedbackError.message : '';
+
+  useEffect(() => {
+    const routeKey = `${courseId}:${lessonId}`;
+    if (previousLessonRouteRef.current === routeKey) return;
+    previousLessonRouteRef.current = routeKey;
+    setCommentPostedNotice(null);
+    setCommentModerationNotice(null);
+    if (course?.id === courseId && current) lessonHeadingRef.current?.focus();
+  }, [courseId, lessonId, course?.id, current?.id]);
 
   async function toggleCompleted() {
     if (!current) return;
+    const requestedCourseId = courseId;
+    const requestedLessonId = lessonId;
+    const requestSequence = ++completionSequenceRef.current;
     setSaving(true); setError('');
     try {
       if (current.completed) await api.delete(`/api/lessons/${current.id}/completion`);
-      else await api.put(`/api/lessons/${current.id}/completion`);
-      await load();
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Progress could not be saved.'); }
-    finally { setSaving(false); }
+      else {
+        const response = await api.put<{ completed: boolean; certificate: CourseCertificate | null }>(`/api/lessons/${current.id}/completion`);
+        if (routeCourseIdRef.current === requestedCourseId) setAvailableCertificate(response.certificate);
+      }
+      if (coursePageActiveRef.current && routeCourseIdRef.current === requestedCourseId) await load(false);
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) {
+        setError(cause instanceof ApiError ? cause.message : 'Progress could not be saved.');
+      }
+    }
+    finally {
+      if (requestSequence === completionSequenceRef.current) setSaving(false);
+    }
+  }
+
+  async function chooseReaction(nextReaction: LessonReaction) {
+    if (!feedback || reactionSaving) return;
+    const requestedCourseId = courseId;
+    const requestedLessonId = lessonId;
+    const requestedReaction = feedback.reaction === nextReaction ? null : nextReaction;
+    setReactionSaving(true); setFeedbackError(null);
+    try {
+      const response = await api.put<{ reaction: LessonReaction | null; counts: LessonFeedback['counts'] }>(
+        `/api/lessons/${requestedLessonId}/reaction`, { reaction: requestedReaction },
+      );
+      if (routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) {
+        setFeedback((current) => current?.lessonId === requestedLessonId ? { ...current, ...response } : current);
+      }
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) {
+        setFeedbackError({ lessonId: requestedLessonId, message: cause instanceof ApiError ? cause.message : 'Your reaction could not be saved.' });
+      }
+    } finally {
+      if (routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) setReactionSaving(false);
+    }
+  }
+
+  async function postComment(event: React.FormEvent) {
+    event.preventDefault();
+    if (!feedback || !commentDraft.trim() || commentSavingLessonIdsRef.current.has(lessonId)) return;
+    const requestedCourseId = courseId;
+    const requestedLessonId = lessonId;
+    const submittedDraft = commentDraft;
+    updateCommentSaving(requestedLessonId, true);
+    setCommentPostedNotice(null);
+    setFeedbackError(null);
+    try {
+      await api.post<{ comment: LessonComment; total: number }>(
+        `/api/lessons/${requestedLessonId}/comments`, { body: submittedDraft },
+      );
+      setCommentDrafts((current) => {
+        if (current[requestedLessonId] !== submittedDraft) return current;
+        const nextDrafts = { ...current };
+        delete nextDrafts[requestedLessonId];
+        return nextDrafts;
+      });
+      if (routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) {
+        setCommentPostedNotice({ courseId: requestedCourseId, lessonId: requestedLessonId });
+        commentPageSequenceRef.current += 1;
+        commentPageControllerRef.current?.abort();
+        commentPageControllerRef.current = null;
+        setCommentsLoading(false);
+        setFeedbackRefreshVersion((version) => version + 1);
+      }
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) {
+        setFeedbackError({ lessonId: requestedLessonId, message: cause instanceof ApiError ? cause.message : 'Your comment could not be posted.' });
+      }
+    } finally {
+      updateCommentSaving(requestedLessonId, false);
+    }
+  }
+
+  async function removeComment(comment: LessonComment) {
+    if (!isCourseManager || commentRemovalIds.has(comment.id)) return;
+    if (!window.confirm(`Remove this comment by ${comment.username}? This cannot be undone.`)) return;
+    const requestedCourseId = courseId;
+    const requestedLessonId = lessonId;
+    setCommentRemovalIds((current) => new Set(current).add(comment.id));
+    setFeedbackError(null);
+    setCommentModerationNotice(null);
+    try {
+      await api.delete<void>(`/api/lessons/${requestedLessonId}/comments/${comment.id}`);
+      if (routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) {
+        commentPageSequenceRef.current += 1;
+        commentPageControllerRef.current?.abort();
+        commentPageControllerRef.current = null;
+        setCommentsLoading(false);
+        setCommentModerationNotice({ courseId: requestedCourseId, lessonId: requestedLessonId, message: `Removed comment by ${comment.username}.` });
+        commentSectionTitleRef.current?.focus();
+        setFeedbackRefreshVersion((version) => version + 1);
+      }
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) {
+        setFeedbackError({ lessonId: requestedLessonId, message: cause instanceof ApiError ? cause.message : 'The comment could not be removed.' });
+      }
+    } finally {
+      setCommentRemovalIds((current) => {
+        if (!current.has(comment.id)) return current;
+        const next = new Set(current);
+        next.delete(comment.id);
+        return next;
+      });
+    }
+  }
+
+  async function loadMoreComments() {
+    if (!feedback || commentsLoading || feedback.comments.length >= feedback.total) return;
+    const requestedCourseId = courseId;
+    const requestedLessonId = lessonId;
+    const nextPage = feedback.page + 1;
+    commentPageControllerRef.current?.abort();
+    const controller = new AbortController();
+    commentPageControllerRef.current = controller;
+    const requestSequence = ++commentPageSequenceRef.current;
+    const isCurrentRequest = () => requestSequence === commentPageSequenceRef.current
+      && routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId;
+    setCommentsLoading(true); setFeedbackError(null);
+    try {
+      const response = await api.get<LessonFeedback>(`/api/lessons/${requestedLessonId}/feedback?page=${nextPage}`, { signal: controller.signal });
+      if (isCurrentRequest()) {
+        const newComments = response.comments.filter((comment) => !feedback.comments.some((existing) => existing.id === comment.id));
+        if (response.page < nextPage || response.total !== feedback.total || (!newComments.length && feedback.comments.length < response.total)) {
+          commentPageSequenceRef.current += 1;
+          setCommentsLoading(false);
+          setFeedbackRefreshVersion((version) => version + 1);
+          return;
+        }
+        setFeedback((current) => current?.lessonId === requestedLessonId ? {
+          ...current,
+          comments: [...current.comments, ...newComments.filter((comment) => !current.comments.some((existing) => existing.id === comment.id))],
+          page: response.page,
+          total: response.total,
+        } : current);
+      }
+    } catch (cause) {
+      if (isCurrentRequest()) {
+        setFeedbackError({ lessonId: requestedLessonId, message: cause instanceof ApiError ? cause.message : 'More comments could not be loaded.' });
+      }
+    } finally {
+      if (commentPageControllerRef.current === controller) commentPageControllerRef.current = null;
+      if (requestSequence === commentPageSequenceRef.current
+        && routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) setCommentsLoading(false);
+    }
+  }
+
+  function commentTimestamp(value: string) {
+    const date = new Date(value.includes('Z') ? value : `${value.replace(' ', 'T')}Z`);
+    const valid = !Number.isNaN(date.getTime());
+    return {
+      dateTime: valid ? date.toISOString() : undefined,
+      label: valid ? lessonCommentDateFormatter.format(date) : value,
+    };
+  }
+
+  function updateCommentDraft(value: string) {
+    const draftLessonId = lessonId;
+    setCommentDrafts((current) => {
+      if (value) return { ...current, [draftLessonId]: value };
+      if (!Object.hasOwn(current, draftLessonId)) return current;
+      const nextDrafts = { ...current };
+      delete nextDrafts[draftLessonId];
+      return nextDrafts;
+    });
+  }
+
+  function updateCommentSaving(targetLessonId: string, isSaving: boolean) {
+    const nextSaving = new Set(commentSavingLessonIdsRef.current);
+    if (isSaving) nextSaving.add(targetLessonId);
+    else nextSaving.delete(targetLessonId);
+    commentSavingLessonIdsRef.current = nextSaving;
+    setCommentSavingLessonIds(nextSaving);
   }
 
   function retryVideo() {
@@ -168,71 +768,227 @@ export function CoursePlayerPage() {
     videoRef.current?.load();
   }
 
-  if (loading) return <div className="page-loading">Loading lesson…</div>;
-  if (!course || !current) return <div className="narrow-content">{error && <ErrorNotice message={error} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
+  if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading lesson…</div>;
+  if (!course || !current) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
 
   return <div className={`player-layout ${railOpen ? '' : 'player-layout-wide'}`}>
     <div className="player-main-column">
       <div className="player-breadcrumb"><Link to={`/courses/${course.id}`}>{course.title}</Link><span>/</span><span>{current.moduleTitle}</span></div>
       {error && <ErrorNotice message={error} />}
-      <div className="player-heading"><div><p>{current.moduleTitle}</p><h1>{current.title}</h1></div><button className="rail-toggle" type="button" onClick={() => setRailOpen(!railOpen)} aria-label={railOpen ? 'Hide course content' : 'Show course content'}><ChevronDown size={18} /></button></div>
+      <div className="player-heading"><div><p>{current.moduleTitle}</p><h1 ref={lessonHeadingRef} tabIndex={-1}>{current.title}</h1></div><button ref={railToggleRef} className="rail-toggle" type="button" onClick={toggleCourseRail} aria-label={railOpen ? 'Hide course content' : 'Show course content'} aria-expanded={railOpen} aria-controls="course-content-rail"><ChevronDown size={18} /></button></div>
       <section className="video-stage">
-        {current.hasVideo && current.mediaUrl ? <video ref={videoRef} controls playsInline preload="metadata" src={current.mediaUrl} poster={course.coverUrl || undefined} aria-label={current.title} onError={() => setVideoError(true)} /> : <div className="video-missing"><Play size={36} /><span>Video not available</span></div>}
+        {current.hasVideo && current.mediaUrl ? <video ref={videoRef} controls playsInline preload="metadata" src={current.mediaUrl} poster={course.coverUrl || undefined} aria-label={current.title} onError={() => setVideoError(true)}>
+          {current.captions.map((caption) => <track key={caption.id} kind="captions" src={caption.url} srcLang={caption.language} label={caption.label} />)}
+        </video> : <div className="video-missing"><Play size={36} /><span>Video not available</span></div>}
       </section>
       {videoError && <div className="player-video-error" role="alert"><p>The video could not be loaded. Retry, or contact your course administrator if it still will not play.</p><Button type="button" variant="secondary" onClick={retryVideo}>Retry video</Button></div>}
       <div className="player-controls-row">
         <button className="button button-secondary" type="button" disabled={!previous} onClick={() => previous && navigate(`/courses/${course.id}/learn/${previous.id}`)}><ArrowLeft size={17} />Previous lesson</button>
-        <Button variant={current.completed ? 'secondary' : 'primary'} disabled={saving} onClick={toggleCompleted}>{current.completed ? <><Check size={17} />Completed</> : 'Mark lesson complete'}</Button>
-        <button className="button button-secondary" type="button" disabled={!next} onClick={() => next && navigate(`/courses/${course.id}/learn/${next.id}`)}>Next lesson<ArrowRight size={17} /></button>
+        <Button variant={current.completed ? 'secondary' : 'primary'} disabled={saving} aria-busy={saving} onClick={toggleCompleted}>{saving ? 'Saving progress…' : current.completed ? <><Check size={17} />Completed</> : 'Mark lesson complete'}</Button>
+        {saving && <span className="sr-only" role="status" aria-live="polite">Saving lesson progress…</span>}
+        <button className="button button-secondary" type="button" disabled={!nextActivityAfterCurrent} onClick={() => {
+          if (!nextActivityAfterCurrent) return;
+          navigate(nextActivityAfterCurrent.type === 'quiz'
+            ? `/courses/${course.id}/quiz/${nextActivityAfterCurrent.id}`
+            : `/courses/${course.id}/learn/${nextActivityAfterCurrent.id}`);
+        }}>{nextActivityAfterCurrent?.type === 'quiz' ? 'Continue to quiz' : nextActivityAfterCurrent ? 'Next lesson' : 'No next activity'}<ArrowRight size={17} /></button>
       </div>
+      {user?.role === 'learner' && (course.completed || availableCertificate?.courseId === course.id) && <div className="course-completion-certificate"><div role="status" aria-live="polite"><strong>Course complete</strong><p>You have completed all lessons and required quizzes.</p></div><Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link></div>}
       <section className="lesson-notes"><h2>About this lesson</h2><p>{current.description || 'Work through this lesson at your own pace. Mark it complete when you are ready to continue.'}</p></section>
+      {current.transcript && <section className="lesson-transcript" aria-labelledby={`lesson-transcript-heading-${current.id}`}><h2 id={`lesson-transcript-heading-${current.id}`}>Lesson transcript</h2><details><summary>Read transcript</summary><div className="lesson-transcript-text">{current.transcript}</div></details></section>}
       {current.resources.length > 0 && <section className="learner-lesson-resources" aria-label="Lesson links and documents">
         <h2>Links and documents</h2>
         <ul>{current.resources.map((resource) => <li key={resource.id}>
           {resource.kind === 'link' ? <Link2 size={17} /> : <FileText size={17} />}
           <a href={resource.url} {...(resource.kind === 'link' ? { target: '_blank', rel: 'noopener noreferrer' } : { download: true })}>
-            <span><strong>{resource.title}</strong><small>{resource.kind === 'document' ? resource.fileName : resource.url}</small></span>
+            <span><strong>{resource.title}{resource.kind === 'link' && <span className="sr-only"> (opens in a new tab)</span>}</strong><small>{resource.kind === 'document' ? resource.fileName : resource.url}</small></span>
             {resource.kind === 'link' ? <ExternalLink size={15} /> : <Download size={15} />}
           </a>
         </li>)}</ul>
       </section>}
+      {canViewLessonFeedback && <section className="lesson-feedback" aria-labelledby="lesson-feedback-title">
+        <div className="lesson-feedback-heading"><div><h2 ref={commentSectionTitleRef} id="lesson-feedback-title" tabIndex={-1}>{isCourseManager ? 'Learner comments' : 'Lesson feedback'}</h2><p>{isCourseManager ? 'Review comments for this lesson. Removals are recorded in the audit log.' : 'Share your reaction and discuss this lesson with other learners.'}</p></div>{visibleFeedback && <span><MessageSquare size={16} />{visibleFeedback.total} {visibleFeedback.total === 1 ? 'comment' : 'comments'}</span>}</div>
+        <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {commentPostedNotice?.courseId === courseId && commentPostedNotice.lessonId === lessonId ? 'Your comment was posted.' : ''}
+        </p>
+        <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {commentModerationNotice?.courseId === courseId && commentModerationNotice.lessonId === lessonId ? commentModerationNotice.message : ''}
+        </p>
+        {feedbackLoading || (!visibleFeedback && !visibleFeedbackError) ? <div className="feedback-loading" role="status">Loading lesson feedback…</div> : visibleFeedback && <>
+          {user?.role === 'learner' && <>
+            <div className="lesson-reactions" role="group" aria-label="React to this lesson">
+              <Button type="button" variant={visibleFeedback.reaction === 'like' ? 'primary' : 'secondary'} aria-pressed={visibleFeedback.reaction === 'like'} disabled={reactionSaving} onClick={() => chooseReaction('like')}><ThumbsUp size={17} />Like<span className="reaction-count">{visibleFeedback.counts.like}</span></Button>
+              <Button type="button" variant={visibleFeedback.reaction === 'dislike' ? 'primary' : 'secondary'} aria-pressed={visibleFeedback.reaction === 'dislike'} disabled={reactionSaving} onClick={() => chooseReaction('dislike')}><ThumbsDown size={17} />Dislike<span className="reaction-count">{visibleFeedback.counts.dislike}</span></Button>
+            </div>
+            <form className="lesson-comment-form" onSubmit={postComment} aria-busy={commentSaving}>
+              <label htmlFor="lesson-comment">Add a comment</label>
+              <textarea id="lesson-comment" aria-describedby="lesson-comment-hint" rows={4} maxLength={2000} value={commentDraft} onChange={(event) => updateCommentDraft(event.target.value)} placeholder="What did you think of this lesson?" disabled={commentSaving} />
+              <div><small id="lesson-comment-hint">{commentDraft.length}/2,000 characters · visible to learners with course access</small><Button type="submit" disabled={commentSaving || !commentDraft.trim()}>{commentSaving ? 'Posting…' : 'Post comment'}<Send size={16} /></Button></div>
+            </form>
+            <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{commentSaving ? 'Posting comment…' : ''}</p>
+          </>}
+          {visibleFeedbackError && <ErrorNotice message={visibleFeedbackError} />}
+          <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {visibleFeedback.comments.length === visibleFeedback.total
+              ? `Showing all ${visibleFeedback.total} ${visibleFeedback.total === 1 ? 'comment' : 'comments'}.`
+              : `Showing ${visibleFeedback.comments.length} of ${visibleFeedback.total} comments.`}
+          </p>
+          <div className="lesson-comments">
+            {visibleFeedback.comments.map((comment) => {
+              const timestamp = commentTimestamp(comment.createdAt);
+              const removing = commentRemovalIds.has(comment.id);
+              return <article className="lesson-comment" key={comment.id}><span className="comment-avatar" aria-hidden="true">{comment.username.slice(0, 1).toUpperCase()}</span><div><header><strong>{comment.username}</strong><time dateTime={timestamp.dateTime}>{timestamp.label}</time>{isCourseManager && <Button type="button" variant="quiet" className="lesson-comment-remove" aria-label={`Remove comment by ${comment.username}`} disabled={removing} onClick={() => removeComment(comment)}>{removing ? 'Removing…' : <><Trash2 size={14} />Remove</>}</Button>}</header><p>{comment.body}</p></div></article>;
+            })}
+            {!visibleFeedback.comments.length && <p className="comments-empty">{isCourseManager ? 'No learner comments yet.' : 'No comments yet. Start the conversation.'}</p>}
+          </div>
+          {visibleFeedback.comments.length < visibleFeedback.total && <Button type="button" variant="secondary" className="load-comments-button" disabled={commentsLoading} onClick={loadMoreComments}>{commentsLoading ? 'Loading…' : 'Load more comments'}</Button>}
+        </>}
+        {!feedbackLoading && visibleFeedbackError && !visibleFeedback && <ErrorNotice message={visibleFeedbackError} onRetry={() => setFeedbackRefreshVersion((version) => version + 1)} />}
+      </section>}
     </div>
-    {railOpen && <aside className="course-rail"><div className="course-rail-head"><div><span>Course content</span><small>{course.progress}% complete</small></div><button aria-label="Hide course content" onClick={() => setRailOpen(false)}><ChevronDown size={18} /></button></div><ProgressBar value={course.progress} />
+    <aside id="course-content-rail" className="course-rail" aria-labelledby="course-rail-title" hidden={!railOpen}><div className="course-rail-head"><div><h2 id="course-rail-title">Course content</h2><small>{course.progress}% complete</small></div><button ref={railCloseRef} type="button" aria-label="Hide course content" onClick={() => { focusRailAfterOpenRef.current = false; setRailOpen(false); railToggleRef.current?.focus(); }}><ChevronDown size={18} /></button></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} />
       {modules.map((module) => <CurriculumModule key={module.id} module={module} selectedLessonId={lessonId} courseId={course.id} compact />)}
-    </aside>}
+    </aside>
   </div>;
 }
 
 export function QuizPage() {
   const { courseId = '', quizId = '' } = useParams();
+  const loadSequenceRef = useRef(0);
+  const courseRequestControllerRef = useRef<AbortController | null>(null);
+  const routeCourseIdRef = useRef(courseId);
+  routeCourseIdRef.current = courseId;
+  const routeKey = `${courseId}:${quizId}`;
+  const routeKeyRef = useRef(routeKey);
+  routeKeyRef.current = routeKey;
+  const submitSequenceRef = useRef(0);
+  const firstAnswerRef = useRef<HTMLInputElement | null>(null);
+  const reviewHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const focusFirstAnswerRef = useRef(false);
+  const focusReviewRef = useRef(false);
   const [course, setCourse] = useState<Course | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<QuizAttempt | null>(null);
+  const [availableCertificate, setAvailableCertificate] = useState<CourseCertificate | null>(null);
+  const [resultRouteKey, setResultRouteKey] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [attemptLoadFailed, setAttemptLoadFailed] = useState(false);
+  const [courseLoadRetryVersion, setCourseLoadRetryVersion] = useState(0);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    fetchCourse(courseId).then(({ course: data }) => setCourse(data))
-      .catch((cause) => setError(cause instanceof ApiError ? cause.message : 'This quiz could not be loaded.'))
-      .finally(() => setLoading(false));
-  }, [courseId]);
+    const requestSequence = ++loadSequenceRef.current;
+    const requestedRouteKey = `${courseId}:${quizId}`;
+    const requestController = new AbortController();
+    courseRequestControllerRef.current?.abort();
+    courseRequestControllerRef.current = requestController;
+    const isCurrentRequest = () => requestSequence === loadSequenceRef.current
+      && routeCourseIdRef.current === courseId
+      && routeKeyRef.current === requestedRouteKey;
+    setCourse(null); setLoading(true); setError(''); setAttemptLoadFailed(false); setSaving(false);
+    void (async () => {
+      try {
+        const { course: data } = await fetchCourse(courseId, false, { signal: requestController.signal });
+        if (!isCurrentRequest()) return;
+        setCourse(data);
+        const latestAttempt = data.modules?.find((module) => module.quiz?.id === quizId)?.quiz?.latestAttempt;
+        if (latestAttempt) {
+          try {
+            const response = await api.get<{ attempt: QuizAttempt }>(`/api/quizzes/${quizId}/attempts/${latestAttempt.id}`, { signal: requestController.signal });
+            if (isCurrentRequest()) {
+              focusReviewRef.current = true;
+              setResult(response.attempt);
+              setResultRouteKey(requestedRouteKey);
+            }
+          } catch (cause) {
+            if (isCurrentRequest() && !requestController.signal.aborted) {
+              setAttemptLoadFailed(true);
+              setError(cause instanceof ApiError ? cause.message : 'Your latest quiz result could not be loaded.');
+            }
+          }
+        }
+      } catch (cause) {
+        if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'This quiz could not be loaded.');
+      } finally {
+        if (isCurrentRequest()) setLoading(false);
+        if (courseRequestControllerRef.current === requestController) courseRequestControllerRef.current = null;
+      }
+    })();
+    return () => {
+      loadSequenceRef.current += 1; submitSequenceRef.current += 1;
+      requestController.abort();
+      if (courseRequestControllerRef.current === requestController) courseRequestControllerRef.current = null;
+    };
+  }, [courseId, quizId, courseLoadRetryVersion]);
+  useEffect(() => {
+    submitSequenceRef.current += 1;
+    focusFirstAnswerRef.current = false; focusReviewRef.current = false;
+    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setSaving(false);
+  }, [courseId, quizId]);
   const quiz = course?.modules?.find((module) => module.quiz?.id === quizId)?.quiz;
+  const currentResult = resultRouteKey === routeKey ? result : null;
+
+  useEffect(() => {
+    if (currentResult && focusReviewRef.current) {
+      focusReviewRef.current = false;
+      reviewHeadingRef.current?.focus();
+    } else if (!currentResult && focusFirstAnswerRef.current) {
+      focusFirstAnswerRef.current = false;
+      firstAnswerRef.current?.focus();
+    }
+  }, [currentResult]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!quiz) return;
+    const requestedRouteKey = routeKey;
+    const requestSequence = ++submitSequenceRef.current;
+    const isCurrentSubmission = () => requestSequence === submitSequenceRef.current && routeKeyRef.current === requestedRouteKey;
     setError(''); setSaving(true);
     try {
-      const response = await api.post<{ attempt: QuizAttempt }>(`/api/quizzes/${quiz.id}/attempts`, { answers });
-      setResult(response.attempt);
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Your quiz could not be submitted.'); }
-    finally { setSaving(false); }
+      const response = await api.post<{ attempt: QuizAttempt; certificate: CourseCertificate | null }>(`/api/quizzes/${quiz.id}/attempts`, { answers });
+      if (isCurrentSubmission()) {
+        focusReviewRef.current = true;
+        setResult(response.attempt); setAvailableCertificate(response.certificate); setResultRouteKey(requestedRouteKey);
+        setCourse((currentCourse) => {
+          if (!currentCourse?.modules || routeKeyRef.current !== requestedRouteKey) return currentCourse;
+          let updatedQuiz = false;
+          const modules = currentCourse.modules.map((module) => {
+            if (module.quiz?.id !== quiz.id) return module;
+            updatedQuiz = true;
+            const passed = module.quiz.passed || response.attempt.passed;
+            return passed === module.quiz.passed ? module : { ...module, quiz: { ...module.quiz, passed } };
+          });
+          if (!updatedQuiz) return currentCourse;
+          const progress = summarizeCourseProgress(modules);
+          return {
+            ...currentCourse,
+            modules,
+            ...progress,
+            completed: response.certificate?.courseId === currentCourse.id || progress.completed,
+          };
+        });
+      }
+    } catch (cause) {
+      if (isCurrentSubmission()) setError(cause instanceof ApiError ? cause.message : 'Your quiz could not be submitted.');
+    } finally {
+      if (isCurrentSubmission()) setSaving(false);
+    }
   }
 
-  if (loading) return <div className="page-loading">Loading quiz…</div>;
-  if (!course || !quiz) return <div className="narrow-content">{error && <ErrorNotice message={error} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
-  const questionsToShow = result?.questions || quiz.questions;
-  const allAnswered = quiz.questions.length > 0 && quiz.questions.every((question) => answers[question.id || '']);
+  if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading quiz…</div>;
+  if (attemptLoadFailed) return <div className="narrow-content"><ErrorNotice message={error || 'Your latest quiz result could not be loaded.'} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} /><Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
+  if (!course || !quiz) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
+  const questionsToShow = currentResult?.questions || quiz.questions;
+  const answeredCount = quiz.questions.filter((question) => Boolean(answers[question.id || ''])).length;
+  const allAnswered = quiz.questions.length > 0 && answeredCount === quiz.questions.length;
+  const courseFinished = course.completed || availableCertificate?.courseId === course.id;
+  const nextResultActivity = currentResult?.passed && !courseFinished ? nextCourseActivity(course.modules) : null;
+
+  function retryQuiz() {
+    focusFirstAnswerRef.current = true;
+    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey('');
+  }
 
   return <div className="quiz-page">
     <div className="breadcrumbs"><Link to={`/courses/${course.id}`}>{course.title}</Link><span>/</span><span>{quiz.title}</span></div>
@@ -240,30 +996,39 @@ export function QuizPage() {
       <div className="quiz-main">
         <div className="quiz-topline"><span>{quiz.questions.length} questions</span><span>Pass mark {quiz.passMark}%</span></div>
         <h1>{quiz.title}</h1>
-        {!result ? <><p className="lead-copy">Choose one answer for each question. You can retry this quiz if you need another attempt.</p>
+        {!currentResult ? <><p className="lead-copy">Choose one answer for each question. You can retry this quiz if you need another attempt.</p>
           {error && <ErrorNotice message={error} />}
-          <form onSubmit={submit} className="quiz-form">
-            {quiz.questions.map((question, index) => <fieldset className="question-block" key={question.id || index}>
+          <form onSubmit={submit} className="quiz-form" aria-busy={saving}>
+            {quiz.questions.map((question, index) => <fieldset className="question-block" key={question.id || index} disabled={saving}>
               <legend><span className="question-number">{String(index + 1).padStart(2, '0')}</span>{question.prompt}</legend>
-              <div className="quiz-choices">{question.choices.map((choice, choiceIndex) => <label className={`quiz-choice ${answers[question.id || ''] === choice.id ? 'choice-selected' : ''}`} key={choice.id || choiceIndex}><input type="radio" name={question.id} value={choice.id} checked={answers[question.id || ''] === choice.id} onChange={() => setAnswers({ ...answers, [question.id || '']: choice.id || '' })} /><span className="choice-letter">{String.fromCharCode(65 + choiceIndex)}</span><span>{choice.text}</span></label>)}</div>
+              <div className="quiz-choices">{question.choices.map((choice, choiceIndex) => <label className={`quiz-choice ${answers[question.id || ''] === choice.id ? 'choice-selected' : ''}`} key={choice.id || choiceIndex}><input ref={index === 0 && choiceIndex === 0 ? firstAnswerRef : undefined} type="radio" name={question.id} value={choice.id} checked={answers[question.id || ''] === choice.id} onChange={() => setAnswers({ ...answers, [question.id || '']: choice.id || '' })} /><span className="choice-letter">{String.fromCharCode(65 + choiceIndex)}</span><span>{choice.text}</span></label>)}</div>
             </fieldset>)}
             {!quiz.questions.length && <EmptyState icon={<CircleHelp size={24} />} title="This quiz is being prepared" detail="Check back when your course moderator has added questions." />}
-            <Button type="submit" disabled={!allAnswered || saving}>{saving ? 'Checking answers…' : 'Submit answers'}<ArrowRight size={17} /></Button>
+            {quiz.questions.length > 0 && <p id="quiz-submit-hint" className="quiz-submit-hint" role="status" aria-live="polite" aria-atomic="true">{allAnswered ? `All ${quiz.questions.length} questions answered.` : `${answeredCount} of ${quiz.questions.length} questions answered. Answer the rest to enable submission.`}</p>}
+            <Button type="submit" aria-describedby={quiz.questions.length > 0 ? 'quiz-submit-hint' : undefined} disabled={!allAnswered || saving}>{saving ? 'Checking answers…' : 'Submit answers'}<ArrowRight size={17} /></Button>
           </form>
         </> : <div className="quiz-results">
-          <div className={`score-panel ${result.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{result.passed ? <Check size={22} /> : <Clock3 size={22} />}</span><div><span className="score-label">{result.passed ? 'Quiz passed' : 'Keep practicing'}</span><strong>{result.score}%</strong><small>{result.passed ? `You reached the ${result.passMark}% pass mark.` : `You need ${result.passMark}% to pass.`}</small></div></div>
-          <h2>Review your answers</h2>
+          <div className={`score-panel ${currentResult.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{currentResult.passed ? <Check size={22} /> : <Clock3 size={22} />}</span><div><span className="score-label">{currentResult.passed ? 'Quiz passed' : 'Keep practicing'}</span><strong>{currentResult.score}%</strong><small>{currentResult.passed ? `You reached the ${currentResult.passMark ?? quiz.passMark}% pass mark.` : `You need ${currentResult.passMark ?? quiz.passMark}% to pass.`}</small></div></div>
+          <h2 ref={reviewHeadingRef} tabIndex={-1}>Review your answers</h2>
           {questionsToShow.map((question, index) => {
             const attemptQuestion = question as NonNullable<QuizAttempt['questions']>[number];
             const correctChoiceId = attemptQuestion.correctChoiceId;
             const selectedChoiceId = attemptQuestion.selectedChoiceId;
             return <div className="result-question" key={question.id || index}><h3>{index + 1}. {question.prompt}</h3><p className={selectedChoiceId === correctChoiceId ? 'answer-correct' : 'answer-incorrect'}>{question.choices.find((choice) => choice.id === selectedChoiceId)?.text || 'No answer selected'}</p>{correctChoiceId !== selectedChoiceId && <p className="correct-answer">Correct answer: {question.choices.find((choice) => choice.id === correctChoiceId)?.text}</p>}{question.explanation && <p className="answer-explanation">{question.explanation}</p>}</div>;
           })}
-          <div className="quiz-result-actions"><Button variant="secondary" onClick={() => { setAnswers({}); setResult(null); }}>Try again</Button><Link className="button button-primary" to={`/courses/${course.id}`}>Back to course</Link></div>
+          <div className="quiz-result-actions">
+            {courseFinished && <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link>}
+            {nextResultActivity && <Link className="button button-primary" to={nextResultActivity.type === 'quiz'
+              ? `/courses/${course.id}/quiz/${nextResultActivity.id}`
+              : `/courses/${course.id}/learn/${nextResultActivity.id}`}>
+              {nextResultActivity.type === 'quiz' ? 'Continue to quiz' : 'Continue learning'}<ArrowRight size={17} />
+            </Link>}
+            <Button variant="secondary" onClick={retryQuiz}>Try again</Button>
+            <Link className={`button ${nextResultActivity ? 'button-secondary' : 'button-primary'}`} to={`/courses/${course.id}`}>Back to course</Link>
+          </div>
         </div>}
       </div>
-      <aside className="quiz-aside"><span className="quiz-aside-label">Course progress</span><strong>{course.progress}%</strong><ProgressBar value={course.progress} /><p>Complete lessons and pass module quizzes to finish this course.</p><Link to={`/courses/${course.id}`}>View course content<ArrowRight size={16} /></Link></aside>
+      <aside className="quiz-aside"><span className="quiz-aside-label">Course progress</span><strong>{course.progress}%</strong><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /><p>Complete lessons and pass module quizzes to finish this course.</p><Link to={`/courses/${course.id}`}>View course content<ArrowRight size={16} /></Link></aside>
     </div>
   </div>;
 }
-

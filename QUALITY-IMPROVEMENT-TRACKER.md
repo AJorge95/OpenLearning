@@ -1,5 +1,1477 @@
 # Quality Improvement Tracker
 
+## 2026-10-09 — Clear catalog filters from the no-results state
+
+- **Reviewed:** Applied versus draft search text, category/sort reload sequencing, the catalog empty state, retry snapshots, and focus behavior when the empty state disappears.
+- **Improvement:** Add a one-click action that clears the applied search, category, and sort; keep focus in the search field while the catalog reloads.
+- **Why it helps:** Learners can recover from a no-match search in one step, and keyboard users keep a predictable focus target while results refresh.
+- **Checked:** Source contract checks confirmed the action appears only for applied search/category filters, resets all three controls, avoids a duplicate request when the category or sort change triggers the existing effect, and focuses the search field; `npm test`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Recheck server configuration and startup boundaries
+
+- **Reviewed:** Environment parsing and production secret validation, proxy trust, upload and request-timeout limits, readiness/health handlers, middleware order, and asynchronous startup media cleanup.
+- **Result:** No code change. Invalid configuration stops startup, production rejects the development/example session secrets, readiness reports unavailable when the schema or setup setting is missing, and media cleanup starts after the listener without blocking it.
+- **Why no change:** The sampled settings and startup paths already have bounded validation, documented deployment guidance, and focused prior coverage; no separate failure case appeared in the current source.
+- **Checked:** Compared `server/config.js`, `.env.example`, `server/index.js`, and the deployment/configuration sections of `README.md` with the related tracker history; `git diff --check` passed.
+
+## 2026-10-09 — Match course-editor guidance to publication state
+
+- **Reviewed:** The course editor's visibility/status fields, draft-save and publish actions, the private-course access model, and the note shown above course details.
+- **Improvement:** Show accurate guidance for published public courses, published private courses, drafts, and archived courses; explain that private content is visible only to learners with access and that drafts remain hidden until published.
+- **Why it helps:** Staff can tell when edits become learner-visible and what action restores an archived course, without implying that drafts or archived content are already visible.
+- **Checked:** Added four focused tests for status/visibility copy, phrased to distinguish explicit saves from autosaving; `npm test`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Recheck shared learner and management interactions
+
+- **Reviewed:** Quiz answer fieldsets and result flow, route-scoped request cancellation and retry states, administrator account and settings forms, the shared account menu, and responsive header/sidebar rules; also rechecked API error mapping, session persistence, retained logging, and media cleanup.
+- **Result:** No code change. The sampled paths already provide grouped quiz controls, guarded asynchronous requests, retry feedback, bounded session/log cleanup, and media-cleanup failure reporting.
+- **Why no change:** Source inspection did not identify a separate failure that a focused patch would fix. The compact learner header and result layouts still need rendered viewport checks to establish an actual overflow or interaction defect.
+- **Checked:** Read the relevant components in `src/pages-learner.tsx`, `src/pages-manage.tsx`, `src/components.tsx`, `src/styles.css`, `src/api.ts`, `server/http.js`, `server/session-store.js`, `server/log-store.js`, and `server/media-cleanup.js`; `git diff --check` passed. A connected browser is needed for rendered keyboard and narrow-screen verification.
+
+## 2026-10-09 — Limit authentication quotas to credential posts
+
+- **Reviewed:** Authentication rate-limit mounts, setup-status reads during application startup, login/register/setup route methods, and the existing shared quota for setup and registration.
+- **Improvement:** Mount the login, registration, and setup limiters only on their exact POST endpoints; keep setup and registration on the shared limiter.
+- **Why it helps:** Repeated startup status reads, unsupported GETs, or unrelated subpaths can no longer exhaust the quota intended for credential-changing requests.
+- **Checked:** Added an isolated Express test confirming 15 setup-status reads and GETs to auth paths do not invoke limiters, while POST setup/registration share the account limiter and POST login uses its own. All 38 `npm test` cases, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed.
+
+## 2026-10-09 — Continue from a passed quiz to unfinished learning
+
+- **Reviewed:** Passed and failed quiz result actions, the course-completion state updated after submission, certificate visibility, and the shared first-unfinished-activity selector.
+- **Improvement:** Show a direct “Continue to quiz” or “Continue learning” link after a passed attempt when the course still has unfinished activities. Keep the certificate action for completed courses and retain the course overview link as a secondary route when a direct continuation is available.
+- **Why it helps:** Learners can move on from a successful quiz without returning to the overview and selecting the next activity themselves.
+- **Checked:** Reused the tested course activity selector, whose cases cover unfinished lessons, pending quizzes, completed activities, and review fallback. All 37 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. CUA has no browser surface, so the result-action layout remains unverified at narrow widths.
+
+## 2026-10-09 — Keep quiz-page progress current after submission
+
+- **Reviewed:** Quiz submission result handling, the pre-submit course payload, the progress sidebar, certificate visibility, and the backend's lesson-plus-passed-quiz completion formula.
+- **Improvement:** After a quiz attempt succeeds, update that quiz's passed state in the current course payload and recalculate completed lessons, progress percentage, and course completion from the activity list. Preserve an existing pass when a later retry fails.
+- **Why it helps:** Learners see progress and course completion immediately after submitting, without reloading or navigating away and back.
+- **Checked:** Added focused tests for mixed lesson/quiz completion, full completion, and courses with no activities. All 37 `npm test` cases, `npx tsc --noEmit`, `npm run build`, helper syntax, and `git diff --check` passed. Rendered sidebar behavior remains unverified because CUA has no browser surface.
+
+## 2026-10-09 — Restore quiz results when learners return
+
+- **Reviewed:** The quiz route's saved-attempt summary in the course payload, the user-scoped attempt-detail endpoint, the answer-snapshot response, result focus behavior, and the retry flow.
+- **Improvement:** When a learner opens a quiz with a previous attempt, load and display that saved result and its answer review before showing the submission form. If the detail request fails, keep the form unavailable and offer a retry; show the earned-certificate link when the course payload reports completion.
+- **Why it helps:** Refreshing or returning to a quiz no longer discards the learner's latest score and review or silently invites an extra attempt.
+- **Checked:** Added an isolated Express/SQLite regression test proving the course payload identifies the learner's latest attempt, the detail endpoint returns its saved answer snapshot, and another learner cannot read it. All 34 `npm test` cases, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed. CUA has no browser surface, so rendered reload and keyboard behavior remain unverified.
+
+## 2026-10-09 — Continue from lessons into pending quizzes
+
+- **Reviewed:** The lesson player's previous/next controls, module lesson and quiz order, the course rail's quiz links, and the overview's existing unfinished-activity selection.
+- **Improvement:** Make the player's forward control follow curriculum order after the current lesson: continue through remaining lessons, route to an unpassed module quiz, then proceed to later modules. Show “Continue to quiz” when that is the next activity and “No next activity” when the course sequence ends.
+- **Why it helps:** Learners can move directly from a module's final lesson into its required quiz without reopening the course overview or searching the content rail.
+- **Checked:** Added focused ordering tests for remaining lessons, a pending quiz before later lessons, passed quizzes, quiz-only later modules, missing lessons, and completed sequences. All 33 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. CUA reports no browser surface, so rendered route and narrow-screen checks remain unverified.
+
+## 2026-10-09 — Recheck account limits and app-shell behavior
+
+- **Reviewed:** Public and administrator account-capacity checks, quiz-answer identity validation and atomic attempt submission, JSON/CSRF error handling and retry behavior, route focus and title announcements, skip-link targets, and the existing tracker entries for these areas.
+- **Result:** No code change. Registration and administrator account creation recheck capacity inside immediate transactions; quiz submissions validate question/choice identity before committing; API mutation retries refresh a rejected CSRF token once; and the authenticated app shell exposes a skip link, main landmark, and route-title announcement.
+- **Why no change:** The candidate account-limit race and the sampled request, quiz, and app-shell paths are already addressed. A further change would duplicate current behavior without a distinct defect or browser evidence.
+- **Checked:** Compared `server/routes-auth.js`, `server/routes-admin.js`, `server/routes-courses.js`, `server/http.js`, `src/api.ts`, `src/App.tsx`, and `src/components.tsx` with related tracker history; `git diff --check` passed. A connected browser is needed for rendered keyboard and viewport verification; otherwise, another cycle should start from a newly identified behavior or measured bottleneck.
+
+## 2026-10-09 — Continue to the next unfinished course activity
+
+- **Reviewed:** Course-overview start/continue actions, module and lesson ordering, per-lesson completion, quiz pass state in the learner course payload, and publish readiness rules.
+- **Improvement:** Select the first unfinished activity in module order, including an unpassed quiz after that module's lessons; route the overview action to the quiz and label it “Continue to quiz.” Keep a completed course's first lesson available for review.
+- **Why it helps:** Learners who finish lessons but still need to pass a quiz can resume at the required assessment instead of being sent back to an already completed lesson.
+- **Checked:** Focused tests cover unfinished lessons, a pending quiz before later modules, passed-quiz progression, completed-course review, and courses without activities. `npm test`, `npx tsc --noEmit`, `npm run build`, server/source syntax checks, and `git diff --check` passed. CUA has no browser surface and Playwright is not installed, so rendered route/button behavior remains unverified.
+
+## 2026-10-09 — Verify visible focus on file-upload controls
+
+- **Reviewed:** Every rendered file input, its label and accessible name, visually hidden input styling, and the shared keyboard-focus rules.
+- **Result:** No code change. The platform-icon and media-upload wrappers already draw a visible `:focus-within` outline; caption uploads keep a visible native input with a global `:focus-visible` outline; and quiz radio controls have their own focus treatment.
+- **Why no change:** The suspected invisible focus state is already covered by the current CSS, so another selector would duplicate behavior without fixing a defect.
+- **Checked:** Compared file-input JSX in `src/components.tsx` and `src/pages-manage.tsx` with focus rules in `src/styles.css`; verified the CUA state has no browser or app surface for rendered QA. `git diff --check` passed.
+
+## 2026-10-09 — Recheck API, session, and learner-control behavior
+
+- **Reviewed:** Client CSRF refresh and retry behavior, auth refresh state guards, SQLite session expiry and malformed-row handling, bounded course pagination, learner video accessibility, admin input labels, and responsive caption-form rules.
+- **Result:** No code change. Mutating requests share CSRF refreshes and retry a rejected token once; the session store removes expired or malformed entries; pagination clamps requested pages to available results; and the sampled controls expose labels and status feedback.
+- **Why no change:** Source inspection and existing tests did not reveal a separate behavior defect. Rendered keyboard, viewport, and native video-menu checks need a connected browser surface, which is unavailable in the current CUA state.
+- **Checked:** Read `src/api.ts`, `src/auth-context.tsx`, `server/session-store.js`, pagination handling in `server/routes-courses.js`, the learner player in `src/pages-learner.tsx`, and caption/admin form rules in `src/pages-manage.tsx` and `src/styles.css`; confirmed there is no `AGENTS.md` guidance file. `git diff --check` passed.
+
+## 2026-10-09 — Reject malformed WebVTT cue timings
+
+- **Reviewed:** Caption upload validation, existing caption delivery and invalid-upload coverage, WebVTT cue timestamp ordering, caption editor labels and upload status, and narrow-screen form rules.
+- **Improvement:** Validate the WebVTT header, cue start/end timestamp syntax, positive cue duration, nondecreasing cue start times, cue identifiers, and basic timing-line settings before storing a caption file. Compare hour fields as normalized decimal text to avoid large-integer conversion costs. Cue payload text and CSS remain browser-parsed.
+- **Why it helps:** Malformed tracks fail at upload with the existing clear file-type error instead of silently producing missing or mistimed subtitles during playback.
+- **Checked:** Focused tests cover BOM/CRLF, comments and styling/region blocks, overlapping ordered cues, very long hour fields, malformed timestamps and settings, invalid duration, duplicate identifiers, and out-of-order cues. `npm test`, `npx tsc --noEmit`, `npm run build`, `node --check` on the changed server modules and test, and `git diff --check` passed. Rendered native caption-menu behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Bound repeated password-change work per account
+
+- **Reviewed:** The self-service password route's authentication and current-password verification order, scrypt verification and hashing cost, existing rate-limit conventions, account-security error handling, and current working-tree edits.
+- **Improvement:** Add a per-account limit of five password-change requests per 15 minutes after authentication, with a stable retryable `429 rate_limited` response. Add an HTTP regression test for the boundary and isolation between accounts.
+- **Why it helps:** Repeated authenticated attempts cannot trigger unbounded scrypt work for one account or consume another account's allowance.
+- **Checked:** `npm test` passed all eighteen cases; `npx tsc --noEmit`, `npm run build`, `node --check` for changed server files, and `git diff --check` passed.
+
+## 2026-10-09 — Explain the sign-in effect of switching to HTTP
+
+- **Reviewed:** The administrator protocol selector, the saved per-request secure-cookie policy, setup and settings guidance, and the session behavior when a browser moves from HTTPS to HTTP.
+- **Improvement:** When the saved protocol is HTTPS and the administrator selects HTTP, show a concise warning in the selector's existing accessible description that browsers will stop sending the secure session cookie over HTTP and require a new sign-in.
+- **Why it helps:** Administrators can anticipate the sign-in transition before saving a connection-security change.
+- **Checked:** `npm test` passed all seventeen cases; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. No browser surface is connected, so the rendered warning and small-screen wrapping were not visually checked.
+
+## 2026-10-09 — Review learner controls and course query paths
+
+- **Reviewed:** Learner course search and pagination, lesson feedback and comment controls, quiz answers and progress messaging, shared course cards, focus and reduced-motion CSS, and the related paginated course, feedback, and certificate queries and indexes. Also rechecked the current working-tree status and repository guidance; no `AGENTS.md` file is present.
+- **Result:** No code change. The sampled controls have accessible names and state feedback, the narrow-screen rules cover the reviewed layouts, and the database queries bound result pages with indexes for their main lookup and ordering paths.
+- **Why no change:** Source inspection did not establish a specific defect or a measured performance problem. A rendered and keyboard review is still needed to assess actual browser behavior at narrow widths.
+- **Checked:** Reviewed `src/pages-learner.tsx`, `src/components.tsx`, the relevant rules in `src/styles.css`, and course query/index definitions in `server/routes-courses.js` and `server/db.js`; `git diff --check` passed.
+
+## 2026-10-09 — Keep live protocol cookie policy regression-tested
+
+- **Reviewed:** The admin HTTP/HTTPS setting, the existing per-request secure-cookie behavior, middleware ordering after session initialization, and the prior protocol review.
+- **Improvement:** Extract the cookie protocol policy into a focused middleware factory and add regression tests proving it rereads the saved setting on each request and uses the environment fallback for unset or invalid values.
+- **Why it helps:** Protocol changes continue to affect the next request without a server restart, while production retains secure cookies by default; a later refactor cannot silently turn the setting into startup-only configuration.
+- **Checked:** `npm test` passed all seventeen cases; `npx tsc --noEmit`, `npm run build`, `node --check` for the changed server modules and test, and `git diff --check` passed. Production HTTPS/proxy behavior still needs verification through a configured HTTPS endpoint.
+
+## 2026-10-09 — Recheck live connection-protocol cookie behavior
+
+- **Reviewed:** The admin HTTP/HTTPS selector and TLS guidance, settings partial-update defaults, the session middleware order, and the per-request secure-cookie policy.
+- **Result:** No code change; the saved protocol is read after session initialization on every request, so a protocol update applies to the next request without restarting the process. Production defaults to HTTPS when the setting is absent, and the UI explains the TLS and trusted-proxy prerequisites.
+- **Why no change:** The UI, settings endpoint, and runtime cookie policy agree on what the protocol setting controls; no stale-at-startup configuration defect was found.
+- **Checked:** Read `AdminSettingsPage` in `src/pages-manage.tsx`, `/admin/settings` in `server/routes-auth.js`, session middleware ordering and the cookie policy in `server/index.js`, and the protocol-related tracker entries; `git diff --check` passed. Runtime TLS/proxy behavior still needs an appropriately configured HTTPS endpoint.
+
+## 2026-10-09 — Validate lesson-link policy before saving
+
+- **Reviewed:** The staff URL field's native URL syntax check and length bound, the API's credential-free HTTP(S) policy, lesson-detail persistence ordering, the learner's external-link cues, and resource editor error styling.
+- **Improvement:** Add client validation for unsupported protocols and embedded credentials before persisting pending lesson details; focus the URL field and expose the error through its accessible description and alert.
+- **Why it helps:** Authors receive the API's policy error at the field, and a rejected link no longer saves unrelated pending lesson edits first.
+- **Checked:** Added three helper tests for accepted HTTP(S), unsupported schemes, embedded credentials, and malformed input. All fifteen `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Browser surfaces were unavailable; Playwright CLI could not launch because its Chromium executable is absent, and no browser binary was downloaded.
+
+## 2026-10-09 — Recheck administrator account controls
+
+- **Reviewed:** Account role and disabled-state edits, password-reset dialog labeling and draft clearing, focus handling, async route guards, the last-active-administrator transaction, session revocation, admin route protection, and narrow-screen account layouts.
+- **Result:** No code change; account controls have accessible names and pending states, password drafts are cleared when the dialog closes, the API protects the final active administrator and revokes sessions transactionally, and account cards stack on smaller screens.
+- **Why no change:** The visible controls, client recovery paths, server invariants, and responsive source rules agree with the intended administrator workflow. A separate rendered interaction or viewport defect was not established.
+- **Checked:** Read `AdminUsersPage` and `AdminUserDetailPage` in `src/pages-manage.tsx`, account handlers in `server/routes-admin.js`, the admin router mount in `server/index.js`, account rules in `src/styles.css`, and existing tracker entries; confirmed no `AGENTS.md` guidance file is present. Rendered keyboard and viewport QA needs an available browser surface.
+
+## 2026-10-09 — Avoid conflicting fallback course descriptions
+
+- **Reviewed:** The optional course description field, the visually summarized hero copy, the “About this course” text, and the hero's existing accessibility treatment.
+- **Improvement:** Render the hero description only when a real course description exists; keep the existing explanatory fallback in the details section.
+- **Why it helps:** A course without a description no longer shows two different generic descriptions on the same overview, while actual course copy remains available in both visual sections and is announced once.
+- **Checked:** Confirmed course descriptions remain optional at the API boundary and the hero summary is conditional. All twelve `npm test` cases, `npx tsc --noEmit`, and `npm run build` passed. Rendered layout verification remains unavailable because this workspace has no browser surface.
+
+## 2026-10-09 — Keep log retention and redaction regression-tested
+
+- **Reviewed:** Sampled the learner course overview, video player, and comment form for duplicated content and control names; audit and system log row caps, primary-key trimming, structured secret-key masking, free-form system-message redaction, and existing test fixture isolation.
+- **Improvement:** Add a temporary-database test that exercises writes beyond both retention limits and checks credentials are redacted from messages and detail values. Clarify that the test suite also uses an isolated temporary SQLite file.
+- **Why it helps:** Future log changes are checked against bounded storage and the credential protection needed for administrator-visible diagnostics.
+- **Checked:** `npm test` passed all twelve cases; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The logger fixture overrides database and media paths with a guarded temporary directory and removes it after closing SQLite. The course description's hero summary is repeated in the visible course-details section, and the comment field and video have accessible names. Rendered QA remains unverified because the browser inventory is empty.
+
+## 2026-10-09 — Recheck quiz editor and API validation alignment
+
+- **Reviewed:** Quiz prompt, answer, explanation, and title limits; pass-mark options; whitespace validation and focus targeting; and server-side quiz structure and correctness checks.
+- **Result:** No code change; the editor limits match the API, local validation identifies blank prompts or choices before saving, and the API remains authoritative for choice counts and correct-answer flags.
+- **Why no change:** Source inspection found the client and server contracts aligned, so another validation branch would duplicate existing checks. Rendered layout and keyboard behavior still need a connected browser surface.
+- **Checked:** Compared `firstQuizTextIssue` and `QuizEditor` in `src/quiz-validation.ts` and `src/pages-manage.tsx` with the quiz update handler in `server/routes-courses.js`; `git diff --check` passed.
+
+## 2026-10-09 — Test per-learner comment throttling
+
+- **Reviewed:** The learner comment, reaction, and quiz-attempt limiter configuration, authenticated course-router ordering, and existing backend test coverage.
+- **Improvement:** Add an isolated HTTP regression test proving the comment limit returns the stable `429 rate_limited` response at its configured boundary and does not block a different learner.
+- **Why it helps:** A change to the shared per-user limiter key or comment response can no longer silently throttle unrelated learners or break the client-facing retry error.
+- **Checked:** `npm test` passed all eleven cases; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The fixture uses an ephemeral local HTTP server and resets its unique in-memory limiter keys.
+
+## 2026-10-09 — Document the test command and data isolation
+
+- **Reviewed:** The npm test script, all current Node test fixtures, and the README's install/development instructions.
+- **Improvement:** Add a Checks section documenting `npm test` and clarifying that its SQLite and filesystem fixtures are isolated from the configured application data.
+- **Why it helps:** Maintainers can find the regression suite and run it without risking course or account data.
+- **Checked:** `npm test` passed all ten cases; `git diff --check` passed with existing line-ending warnings.
+
+## 2026-10-09 — Keep orphan-media cleanup regression-tested
+
+- **Reviewed:** Startup cleanup age bounds, generated filename and course-directory filters, database references for media, lesson documents and captions, and the learner video retry UI.
+- **Improvement:** Add isolated filesystem/SQLite tests for deleting a stale unreferenced generated file while preserving referenced, recent, and unrecognized files; also cover a missing media root and invalid age bounds.
+- **Why it helps:** The startup cleanup can be changed without risking deletion of active lesson content or blocking startup when the media directory has not been created.
+- **Checked:** `npm test` passed all ten cases. `npx tsc --noEmit`, `npm run build`, server `node --check`, and `git diff --check` passed. Source review confirmed the learner's video failure remains announced and retryable.
+
+## 2026-10-09 — Keep media-stream cleanup regression-tested
+
+- **Reviewed:** The shared file-stream helper, protected media delivery, and the learner player's retryable video-error state.
+- **Improvement:** Add repeatable stream tests for normal byte delivery and a response that closes before the file finishes.
+- **Why it helps:** Future stream changes are checked for both complete delivery and prompt file-stream cleanup when a learner navigates away or interrupts playback.
+- **Checked:** `npm test` passed both stream cases and all six existing search/session cases; `npx tsc --noEmit`, `npm run build`, server `node --check`, and `git diff --check` passed. The learner error state keeps an explicit retry action and announces the failure.
+
+## 2026-10-09 — Cover SQLite session-store invariants
+
+- **Reviewed:** Session persistence, expiration cleanup, malformed session reads, user ownership, and selective/all-session revocation.
+- **Improvement:** Add isolated session-store tests using in-memory SQLite to cover set/get/touch, startup and read-time cleanup, and preservation of the current and other users' sessions during revocation.
+- **Why it helps:** Changes to authentication persistence can be checked repeatably without starting the server or writing to the app database.
+- **Checked:** `npm test` passed all six search and session cases; `npx tsc --noEmit`, `npm run build`, server `node --check`, and `git diff --check` passed.
+
+## 2026-10-09 — Keep search behavior covered by repeatable tests
+
+- **Reviewed:** Existing npm validation scripts, the Node runtime floor, the shared search helper, and catalog/course-management search limits in the interface and server.
+- **Improvement:** Add `npm test` using Node's built-in test runner and an isolated SQLite suite for Unicode case matching, canonical normalization, literal wildcard handling, and the native ASCII search path.
+- **Why it helps:** Search regressions can be checked with one repository command without requiring the app's persistent database or another test dependency.
+- **Checked:** `npm test` passed all three cases; `npx tsc --noEmit`, `npm run build`, server `node --check`, and `git diff --check` passed. The catalog controls' 120-character limit matches their server validation; the 100-character account and log controls match their server query limits.
+
+## 2026-10-09 — Match non-ASCII search terms without case sensitivity
+
+- **Reviewed:** SQLite search behavior and the catalog, course-management, audit-log, and system-log filters.
+- **Improvement:** For search terms containing non-ASCII characters, use a Unicode-normalized lowercase substring predicate; keep the existing escaped SQLite `LIKE` path for ASCII terms.
+- **Why it helps:** Learners and staff can find accented course text and log details regardless of letter case, while common ASCII searches retain the existing native query path and literal wildcard behavior.
+- **Checked:** A temp database started through `server/db.js` reached schema version 15 and executed the registered Unicode search function. An isolated fixture matched `École` with `école` and composed `Café` with its decomposed equivalent, treated `%_!` literally, and confirmed ASCII predicates still use `LIKE`. The same 30,000-row ASCII scan measured 4 ms after warm-up. `node --check` on changed server modules, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Audit migration CLI and learner controls
+
+- **Reviewed:** The database migration command and shared database module initialization, shared button defaults, and sampled catalog, lesson, and management controls.
+- **Result:** No code change; importing `server/db.js` already applies migrations before the CLI body runs, and the second migration call is idempotent. The shared `Button` defaults to `type="button"`; sampled learner controls expose accessible names and status announcements.
+- **Why no change:** No reliability or interaction defect was confirmed from source inspection, and changing the shared database initialization path would affect all server modules. A browser preview was not connected for rendered or keyboard verification.
+- **Checked:** Read `server/migrate.js`, migration initialization in `server/db.js`, button behavior in `src/components.tsx`, and representative controls in `src/pages-learner.tsx` and `src/pages-manage.tsx`; confirmed no browser tabs were available.
+
+## 2026-10-09 — Wrap long names in learner access rows
+
+- **Reviewed:** Learner-assignment row flex sizing, mobile grid layout, username validation limits, and optional grantor text.
+- **Improvement:** Let the access-row text block shrink and allow usernames and grantor labels to wrap at any character.
+- **Why it helps:** Valid maximum-length usernames no longer force assignment rows beyond their narrow-screen container.
+- **Checked:** Focused source assertions confirmed the text block can shrink and both labels use `overflow-wrap: anywhere`; the server's 32-character username limit was compared with the row. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered narrow-screen verification remains unavailable without a connected browser.
+
+## 2026-10-09 — Prevent quiz settings from overflowing narrow widths
+
+- **Reviewed:** The quiz title and pass-mark grid at desktop and mobile breakpoints, full-width form-control sizing, and the editor's 320px minimum viewport.
+- **Improvement:** Give the flexible grid track a zero minimum and allow the title input to shrink inside it; keep the pass-mark control's fixed width.
+- **Why it helps:** Long quiz titles no longer force the settings row wider than the editor on narrow screens.
+- **Checked:** A focused CSS source assertion confirmed the desktop/mobile tracks use `minmax(0, 1fr)` and only the title input gets `min-width: 0`. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered 320px layout verification remains unavailable without a connected browser.
+
+## 2026-10-09 — Recheck clickable semantics and skip destinations
+
+- **Reviewed:** JSX click handlers on non-interactive containers, shared learner/staff skip links, and their `main-content` landmarks.
+- **Result:** No code change; no non-interactive container is used as a button or link, and both authenticated shells provide a skip link to a focusable main landmark.
+- **Why no change:** The current markup preserves native keyboard behavior and a direct path past repeated navigation.
+- **Checked:** Searched JSX for click handlers on `div`, `span`, `li`, `article`, and `section` elements, then compared `AppFrame` and `StaffFrame` in `src/components.tsx` with the existing navigation and interactive-semantics tracker entries. Rendered keyboard behavior remains unverified without a connected browser.
+
+## 2026-10-09 — Verify learner limiter authentication order
+
+- **Reviewed:** The per-user comment, reaction, and quiz-attempt rate-limit key generators, course-router middleware order, and user loading.
+- **Result:** No code change; `courseRouter.use(requireAuth)` runs before every route handler, so anonymous requests are rejected before a limiter reads `req.currentUser.id`.
+- **Why no change:** The current router-level guard already provides the authentication precondition; duplicating it on individual routes would add noise without changing behavior.
+- **Checked:** Traced `loadCurrentUser` and `courseRouter.use(requireAuth)` in `server/index.js`, `server/http.js`, and `server/routes-courses.js`; matched all three limiter registrations to their keys in `server/rate-limits.js`.
+
+## 2026-10-09 — Recheck authentication form contracts
+
+- **Reviewed:** Sign-in, public registration, first-run setup, and password-change fields, browser constraints, autocomplete values, server validation, and visible error announcements.
+- **Result:** No code change; username/password limits and registration characters match server rules, and password mismatch errors are surfaced to the user.
+- **Why no change:** The browser and server contracts are aligned; adding another local validation branch would duplicate existing server feedback without correcting a contract or accessibility gap.
+- **Checked:** Compared `src/pages-auth.tsx`, `src/auth-context.tsx`, and `server/routes-auth.js` with the existing auth-form tracker entries. Rendered layout and announcement behavior remain unverified without a connected browser.
+
+## 2026-10-09 — Let quiz answer fields shrink on narrow screens
+
+- **Reviewed:** The quiz editor's choice row flex layout, inherited full-width text inputs, fixed radio/remove controls, and existing mobile editor breakpoint.
+- **Improvement:** Allow the answer text input to shrink below its intrinsic minimum width within the flex row.
+- **Why it helps:** Narrow screens are less likely to gain horizontal overflow from a choice field competing with its radio and remove controls.
+- **Checked:** A focused CSS source assertion confirmed the shrink constraint applies to only the answer text input; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered mobile verification remains unavailable because no Browser skill or Playwright dependency is present.
+
+## 2026-10-09 — Keep draft quiz rows stable while editing
+
+- **Reviewed:** Dynamic question and answer-choice insertion/removal, React row keys, editor focus restoration, and the quiz save request contract.
+- **Improvement:** Give unsaved questions and choices stable editor-only keys, use them as React keys until server IDs exist, and strip the local keys (and database IDs) from the saved payload.
+- **Why it helps:** Removing a draft row no longer shifts index keys across the remaining editor rows, and UI bookkeeping stays out of the backend request.
+- **Checked:** Source assertions confirmed draft rows get unique keys, both lists prefer stable IDs over array indexes, and the save payload contains only question/choice content. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered removal/focus behavior could not be checked because no Browser skill or Playwright dependency is available.
+
+## 2026-10-09 — Recheck management table semantics
+
+- **Reviewed:** Course, analytics, account, learner-progress, and system/audit table captions, column headers, and keyboard-scroll regions.
+- **Result:** No code change; each reviewed data table has a caption and scoped column headers, and the wide tables are exposed through named, keyboard-focusable regions.
+- **Why no change:** The current markup already provides the labels and navigation semantics needed to identify tables and move across their columns.
+- **Checked:** Compared all table markup in `src/pages-manage.tsx` with the existing table/accessibility tracker entries. Rendered keyboard behavior still needs a connected browser surface.
+
+## 2026-10-09 — Return structured 404s for unknown media routes
+
+- **Reviewed:** Protected media route registration, the API's JSON not-found fallback, and the client route table.
+- **Improvement:** Add a JSON 404 fallback after protected media routes so unmatched `/media` requests do not fall through to the single-page app shell.
+- **Why it helps:** Media integrations and browser requests get an explicit not-found response instead of HTML that can look like a successful asset response.
+- **Checked:** `node --check server/index.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`. A temporary server fixture confirmed an unknown media URL returns `404` with the structured `not_found` JSON body; no browser QA was needed for this routing change.
+
+## 2026-10-09 — Keep unsubmitted catalog searches pending
+
+- **Reviewed:** Catalog search draft and applied filters, category/sort-triggered reloads, pagination, retry targets, and existing stale-request guards.
+- **Improvement:** Category and sort changes now reuse the last submitted search text; only submitting the search form applies the current text. Retry and “Load more” continue using the same applied filter snapshot.
+- **Why it helps:** A learner editing a search no longer triggers it accidentally by changing category or sort, and the displayed results stay consistent with the last explicit search submission.
+- **Checked:** Source assertions confirmed category/sort reloads derive their query from `filtersRef.current`, form submission passes the current trimmed query, and retries use the applied filter snapshot. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction QA remains unavailable because no Browser skill or Playwright dependency is present.
+
+## 2026-10-09 — Recheck quiz and feedback request bounds
+
+- **Reviewed:** Quiz-answer identity validation and its authoring limit, transactional attempt creation, lesson-feedback reads, comment paging, and per-user learner-write limits.
+- **Result:** No code change; quiz saves are capped at 50 questions, attempts validate each selected choice against that question, and comment/reaction writes and feedback pages are already bounded.
+- **Why no change:** The extra question-ID membership scan is limited to at most 50 keys, so optimizing it would be cosmetic without a measured delay or a larger supported quiz size. The reviewed authorization, atomicity, and retry behavior already match the learner flow.
+- **Checked:** Compared `server/routes-courses.js`, `server/rate-limits.js`, `server/http.js`, and the related quiz/feedback tracker entries. No new route fixture was needed for this source-only review.
+
+## 2026-10-09 — Recheck curriculum database invariants
+
+- **Reviewed:** Database uniqueness and foreign-key rules for course/module and lesson ordering, one quiz per module, and one caption track per lesson language; compared them with curriculum and media write transactions.
+- **Result:** No code change; the database enforces those uniqueness rules, and the relevant mutation paths already recheck current course membership and write atomically.
+- **Why no change:** No missing schema invariant or route/schema mismatch appeared; additional constraints would duplicate the existing guarantees.
+- **Checked:** Read the table definitions and migration history in `server/db.js`, the curriculum and caption mutations in `server/routes-courses.js` and `server/routes-media.js`, and the existing schema tracker entries.
+
+## 2026-10-09 — Validate caption languages before upload
+
+- **Reviewed:** Caption language input, the shared file-size validator, WebVTT track delivery, and the server's canonical BCP 47 language-tag check.
+- **Improvement:** Canonicalize valid language tags in the editor and reject invalid or blank tags before uploading the caption file. Mark and focus the language field, associate its format hint and inline alert, and send the canonical tag; server validation remains authoritative.
+- **Why it helps:** A mistyped locale is caught immediately without transferring a file first, and keyboard and screen-reader users are directed to the field that needs correction.
+- **Checked:** Direct cases covered `en`, case normalization (`EN-gb` to `en-GB`), an underscore-separated invalid tag, whitespace, and a value beyond the server's 35-character limit. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered QA was unavailable: no Browser skill or Playwright dependency is present.
+
+## 2026-10-09 — Recover from app-wide rendering errors
+
+- **Reviewed:** The React root, startup recovery screen, and the existing error boundary limited to lazy-loaded management pages.
+- **Improvement:** Add an application-level error boundary around authentication and all routes. If a render or lifecycle error escapes a page, show a focused, accessible recovery screen with a reload action; retain the more specific management-page fallback.
+- **Why it helps:** A client rendering failure outside management no longer removes the entire app without an explanation or a clear recovery step.
+- **Checked:** Source assertions confirmed the boundary wraps the app root, focuses the fallback heading after a caught error, and provides a reload action; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered failure-state QA was unavailable because there is no Browser skill or Playwright dependency.
+
+## 2026-10-09 — Explain when password recovery cannot refresh sign-in state
+
+- **Reviewed:** The account-security page's `401` and `password_changed` recovery path, its auth refresh request, and visible form errors.
+- **Improvement:** Preserve the original password-change error and append a reload instruction if refreshing the local sign-in state also fails.
+- **Why it helps:** A network failure during recovery no longer silently leaves the person unsure whether the app has reconciled their current session.
+- **Checked:** Focused source assertions confirmed the original error remains visible and the reload instruction is conditional on refresh failure; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Finish sign-out after session revocation
+
+- **Reviewed:** The shared sign-out action, CSRF recovery after a session disappears, server logout authorization, and existing retryable logout errors.
+- **Improvement:** Treat only `401 unauthorized` from `/auth/logout` as an already-ended session, then clear the local user and CSRF cache; continue surfacing network, server, and other API errors.
+- **Why it helps:** A person whose session expired or was revoked can still finish signing out locally instead of remaining stuck in a signed-in view with an error that implies logout failed.
+- **Checked:** An isolated Express/SQLite fixture confirmed logout returns `401 unauthorized` after CSRF validation when no active session exists. A source assertion confirmed only that exact response is tolerated and other failures are rethrown. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Refresh account state after password-change conflicts
+
+- **Reviewed:** The self-service password-change conflict, concurrent requests sharing one session, administrator-triggered session revocation, and the account-security form's error handling.
+- **Improvement:** Return `401 unauthorized` when the account was removed or disabled, reserve `409 password_changed` for a stale password hash, and have the account-security page clear password drafts and refresh auth state after either response.
+- **Why it helps:** A second tab no longer receives a misleading instruction to sign in when its shared session is still valid, while a session revoked by an administrator is cleared from the UI and redirects through the existing signed-in route guard.
+- **Checked:** An isolated Express/SQLite fixture confirmed the 409 response and that a following `/auth/me` returns `user: null` after revocation; a second interleaving confirmed disabled accounts return 401. Focused client assertions, `node --check server/routes-auth.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Keep learner activity details inside the visible table area
+
+- **Reviewed:** The learner-progress table's horizontal scroll region, expanded lesson/quiz details, staff-sidebar widths, and the existing viewport-based panel sizing.
+- **Improvement:** Make the learner table a named inline-size container, size its expanded detail panel to the remaining container width, and switch to one column when the scroll region is narrow.
+- **Why it helps:** The details panel now fits the actual table viewport at tablet and phone widths instead of extending beyond the space left by the staff sidebar and page padding.
+- **Checked:** Focused source assertions confirmed the sizing container, container-relative width, and narrow-container stacking; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered QA could not run: no browser surface is connected and Playwright is not installed.
+
+## 2026-10-09 — Reject stale password verification results
+
+- **Reviewed:** Login's asynchronous password verification and session persistence, self-service password changes, administrator reset transactions, and shared session invalidation.
+- **Improvement:** After saving a login session, re-read the account and reject the sign-in if its password hash changed or the account was disabled or removed; destroy the new session before returning the generic login error. Recheck the verified hash and enabled state inside the self-service password-change transaction before writing.
+- **Why it helps:** A login verified against an old password can no longer create a session after an administrator reset has already revoked sessions. A self-service change verified against a stale password cannot overwrite a newer administrator reset.
+- **Checked:** An isolated Express/SQLite fixture interleaved an administrator reset after login session persistence and confirmed `401 login_failed` with no session left; a second fixture interleaved the reset after self-service verification and confirmed `409 password_changed` with the reset hash preserved. Also checked `node --check server/routes-auth.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Check feedback for password-change conflicts
+
+- **Reviewed:** The account-security form, API error parsing, and the new stale-password conflict response.
+- **Result:** No code change; the form displays `ApiError.message` in an alert, and the API client preserves the server's status and message.
+- **Why no change:** The race conflict reaches the person changing the password without losing context, so a separate client branch would duplicate existing error handling.
+- **Checked:** Traced the response through `server/routes-auth.js`, `src/api.ts`, and `AccountSecurityPage` in `src/pages-auth.tsx`.
+
+## 2026-10-09 — Check button submission defaults
+
+- **Reviewed:** Native button type attributes and the shared button component's default behavior.
+- **Result:** No code change; native buttons in `src` explicitly declare their type, and the shared `Button` component defaults to `type="button"`.
+- **Why no change:** The source avoids accidental form submission by default, with submit buttons opting in explicitly.
+- **Checked:** Searched JSX for native buttons missing `type` and confirmed the shared component's default in `src/components.tsx`.
+
+## 2026-10-09 — Recheck uploaded filename handling
+
+- **Reviewed:** Cross-platform basename normalization, control-character removal, extension checks before truncation, generated storage names, and filename display in staff and learner views.
+- **Result:** No code change; both slash styles are normalized, supported extensions survive bounded display names, and storage uses generated UUID names rather than client paths.
+- **Why no change:** The reviewed checks already address the path and extension mismatch cases; a further filename policy would need a reproducible display problem or a product requirement.
+- **Checked:** Compared `server/routes-media.js`, the video/resource/caption display fields, and prior filename-specific tracker coverage; `git diff --check` passed.
+
+## 2026-10-09 — Retry the registered-account count
+
+- **Reviewed:** Admin settings count loading and failure feedback, its account-cap context, the existing settings endpoint, and responsive settings-card styling.
+- **Improvement:** Show the count as a polite status and provide a local retry action when its request fails, separate from errors while saving settings.
+- **Why it helps:** Administrators can recover the account count needed to judge a registration cap without reloading the whole settings page or mistaking a failed count request for a save failure.
+- **Backend review:** The existing admin settings response already includes `registeredUserCount`; no server change was needed.
+- **Checked:** Focused source assertions covered the status, alert, retry action, and wrapping layout. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Cancel obsolete account-count reads
+
+- **Reviewed:** The admin settings page's initial account-count request, successful settings saves, route cleanup, and the existing revision guard.
+- **Improvement:** Pass an abort signal to the initial settings GET, cancel it when the page unmounts, and cancel it after a successful save supplies a newer account count.
+- **Why it helps:** Navigation and completed saves no longer leave an obsolete account-count query running; the revision guard still protects state from late responses.
+- **Checked:** Focused assertions confirmed signal wiring, cleanup, and save ordering; an API-client fixture confirmed the signal reaches `fetch`. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered settings-page QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Recheck custom storage-path startup
+
+- **Reviewed:** Startup directory creation for derived and explicitly overridden database and media paths.
+- **Result:** No code change; the server creates the configured database file's parent and the complete media root before opening SQLite or accepting requests.
+- **Why no change:** The newly documented independent path overrides already work with startup directory creation, so another filesystem change would duplicate existing behavior.
+- **Checked:** Read `server/config.js`, the database initialization in `server/db.js`, and the environment-variable documentation; the direct path-derivation check passed and `git diff --check` was rerun.
+
+## 2026-10-09 — Keep database and media paths aligned with DATA_DIR
+
+- **Reviewed:** Runtime path derivation, the copied `.env.example` values, and the README configuration and restore guidance.
+- **Improvement:** Leave `DB_PATH` and `MEDIA_ROOT` as optional overrides in the example and explain that their defaults are derived from `DATA_DIR`.
+- **Why it helps:** Changing only `DATA_DIR` in a new `.env` now moves the database and media together, reducing accidental split storage and backup/restore confusion.
+- **Checked:** A direct config check confirmed both paths follow a custom `DATA_DIR` when overrides are unset and remain independently configurable when set. `git diff --check` passed.
+
+## 2026-10-09 — Recheck course-access request lifecycle
+
+- **Reviewed:** Learner search and paging, the parallel course/access reads, request supersession and route cleanup, assignment updates, and the matching grant/revoke authorization.
+- **Result:** No code change; the page shares one abort signal across its paired reads, ignores superseded responses, and checks the active route before updating after a grant change. The API restricts management to course managers and assignments to active learners.
+- **Why no change:** The request lifecycle and server permission checks already cover the reviewed cases; additional UI findings need rendered browser evidence, and no browser surface is available.
+- **Checked:** Read the course-access component, its API helpers, the access list and mutation routes, and prior tracker coverage; `git diff --check` passed.
+
+## 2026-10-09 — Cancel superseded course-list requests
+
+- **Reviewed:** Staff course-list filter, page, retry, and mutation refresh requests; their existing sequence guard; and the shared API client's abort-signal support.
+- **Improvement:** Abort the previous course-list GET when a newer load starts and abort the active GET when the page unmounts, while retaining the sequence guard for state updates.
+- **Why it helps:** Rapid filter changes, pagination, or navigation no longer leave obsolete course-list requests consuming network and server work.
+- **Checked:** A focused API-client fixture confirmed GET forwards the supplied signal and rejects when it is aborted. Source review confirmed each list load aborts its predecessor and effect cleanup aborts the active request. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Recheck server session and log lifecycle
+
+- **Reviewed:** HTTP server startup and bounded shutdown, SQLite session expiry and revocation, authentication and learner-write rate limits, and bounded audit/system-log retention.
+- **Result:** No code change; the reviewed paths already prune expired sessions, drain active HTTP work before closing SQLite, return structured rate-limit errors, and cap retained log rows.
+- **Why no change:** No reproducible lifecycle failure or representative load evidence points to a safe additional tuning change. A concrete failure case or session/database load profile would help identify the next backend opportunity.
+- **Checked:** Read the server entry point, session store, HTTP middleware, rate-limit definitions, log persistence, schema indexes, and prior tracker coverage; `git diff --check` passed.
+
+## 2026-10-09 — Preserve empty-quiz preparation workflow
+
+- **Reviewed:** Saving a quiz with no questions, the learner-facing empty-quiz state, attempt submission checks, and course publish readiness.
+- **Result:** No code change; staff can save an empty quiz while preparing course content, learners see a “being prepared” state, and the server blocks publishing until the quiz has at least one question.
+- **Why no change:** Rejecting empty quizzes in the save route would break the supported preparation flow. A separate rendered UI issue could not be confirmed because no browser is available in this workspace.
+- **Checked:** Compared the quiz editor and save route with learner quiz handling, `assertPublishable`, and prior tracker coverage; the isolated local server was stopped after the browser provider reported unavailable.
+
+## 2026-10-09 — Validate quiz text before saving
+
+- **Reviewed:** Quiz question and answer-choice authoring, the existing focus management, and matching server-side trimming and required-text validation.
+- **Improvement:** Check question prompts and choice text locally before sending a save request; announce the problem, mark the first empty field, and focus it.
+- **Why it helps:** Authors can correct incomplete quiz content immediately, and assistive technology identifies the specific field that needs text.
+- **Backend review:** The API already enforces trimmed required text and remains the authoritative validation boundary; no server change was needed.
+- **Checked:** Direct cases covered valid input, whitespace-only prompts and choices, and issue ordering. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Recheck authentication and catalog interactions
+
+- **Reviewed:** Sign-in and account-security form markup, header disclosure behavior, image fallback and icon upload errors, catalog search/pagination request handling, authentication context sequencing, and the related API auth/error boundaries and focus styles.
+- **Result:** No additional code change; the reviewed fields have labels, errors are announced, image fallbacks handle failed loads, and catalog requests cancel or ignore stale results.
+- **Why no change:** The source contracts align and no separate implementation defect was apparent in this pass. Rendered keyboard, touch, and responsive behavior still need a browser surface.
+- **Checked:** Compared the React flows with the auth and course routes and CSS focus rules; the current CUA surface reports no browser or app available. `git diff --check` passed.
+
+## 2026-10-09 — Recheck schema indexes after cleanup
+
+- **Reviewed:** Index definitions and uniqueness constraints across all tables in a fresh schema v15 database.
+- **Result:** No further exact duplicate index column sets; the course-module and lesson-caption duplicates are removed by migrations 15 and 14.
+- **Why no change:** The remaining index declarations do not exactly duplicate a unique constraint index, so another removal would need query-specific evidence.
+- **Checked:** An isolated fresh database migrated through v15 and the inventory covered all 22 application tables; no exact non-unique/unique column-set duplicates remained.
+
+## 2026-10-09 — Remove the duplicate module-order index
+
+- **Reviewed:** The `course_modules` position uniqueness rule, explicit order index, module ordering queries, and the full migrated schema's exact index-column sets.
+- **Improvement:** Add schema migration 15 to remove the non-unique `(course_id, position)` index already covered by the unique constraint index.
+- **Why it helps:** Module writes maintain one fewer index, while the existing unique index still supports course-position lookup and ordering.
+- **Checked:** An isolated v14 SQLite fixture confirmed migration preserves the module row, drops the named duplicate, retains duplicate-position rejection, and uses the unique index for the ordered query. `node --check server/db.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Remove the duplicate caption lookup index
+
+- **Reviewed:** The caption table's `(lesson_id, language)` uniqueness rule, explicit lookup index, caption retrieval query, and migration history.
+- **Improvement:** Add schema migration 14 to drop the extra non-unique index; keep the unique constraint and its index, which support the same lookup and language ordering.
+- **Why it helps:** Caption writes no longer maintain a redundant index, and SQLite stores one fewer copy of the same keys without losing lookup or uniqueness behavior.
+- **Checked:** An isolated v13 SQLite fixture confirmed migration 14 preserves its caption row, drops the named duplicate, retains duplicate-language rejection, and uses the unique autoindex for the lesson/language query plan. Also checked `node --check server/db.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Document caption upload limits and access
+
+- **Reviewed:** The feature overview, detailed media guidance, and current caption upload and protected-delivery behavior.
+- **Improvement:** Update the media guidance to include WebVTT support, the 5 MB per-track limit, one track per language, native player selection, and course-viewer-only delivery.
+- **Why it helps:** Administrators can prepare compatible files and understand how learners access them before starting course authoring.
+- **Checked:** Compared the revised guidance with the upload validator, language uniqueness rule, player `<track>` rendering, and course-viewer authorization; `git diff --check` passed.
+
+## 2026-10-09 — Reject oversized caption files before upload
+
+- **Reviewed:** The lesson caption file input, upload handler, accessible error/status patterns, and the matching server-side 5 MB upload limit.
+- **Improvement:** Add a shared client-side size check that clears selections over 5 MB, announces an associated error for the file input, and repeats the guard before starting the upload. Keep the server limit as the authoritative check.
+- **Why it helps:** Staff get immediate feedback and avoid sending a file the server will reject, saving time and bandwidth on slower connections.
+- **Checked:** The same size-validation helper used by the UI accepts 0 bytes and exactly 5 MiB and rejects 5 MiB plus one byte. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered file-picker interaction is unverified because no browser surface or Playwright installation is available.
+
+## 2026-10-09 — Recheck caption access and upload controls
+
+- **Reviewed:** Manager authorization before multipart parsing, protected caption streaming, upload validation and cleanup, editor field labels and upload status, and responsive caption-form rules.
+- **Result:** No additional code change. Upload endpoints check course-manager access before writing, playback checks course-viewer access, invalid files are removed, and the editor scopes progress and cancellation to the active upload.
+- **Why no change:** Source review and the isolated route fixture support these contracts. Actual native caption-menu behavior and narrow-screen rendering still need a connected browser to verify.
+- **Checked:** Compared route middleware, JSX labels and status roles, and the responsive CSS with the completed caption fixture; `git diff --check` passed.
+
+## 2026-10-09 — Add synchronized WebVTT lesson captions
+
+- **Reviewed:** The transcript editor and learner disclosure, native video controls, media upload validation and delivery, course authorization, lesson/module deletion cleanup, orphan-file cleanup, migration history, and existing working-tree changes.
+- **Improvement:** Add per-language WebVTT caption tracks to lessons. Staff can upload, replace, and remove tracks; learners can select them in the native video controls. Caption files are capped at 5 MB, checked for a UTF-8 WebVTT header, delivered only to course viewers, and included in file cleanup paths.
+- **Why it helps:** Captions synchronize text with the video and let learners follow speech and meaningful sounds while watching. Keeping captions separate from the plain-text transcript supports both reading and playback without changing the existing player design.
+- **Checked:** Isolated Express/SQLite fixtures confirmed migration v13, upload and authorized delivery, private-course denial, same-language replacement and old-file removal, multiple locales in the course payload, invalid WebVTT/language rejection, the 5 MB limit, track removal, lesson/module file cleanup, and orphan cleanup preserving referenced tracks. Also checked `node --check` on edited server modules, `npx tsc --noEmit`, `npm run build`, and `git diff --check`. Rendered player and editor behavior remain unverified because no browser surface is connected.
+
+## 2026-10-09 — Recheck lesson transcript and course route contracts
+
+- **Reviewed:** The course mutation route list and shared HTTP error translation, the lesson transcript field and learner disclosure, the responsive editor grid, and current working-tree changes.
+- **Result:** No additional code change; the transcript is optional, bounded, persisted with the lesson, delivered through course authorization, and rendered as escaped text in a native disclosure. The editor field spans the desktop grid and collapses with the existing mobile rule.
+- **Why no change:** The reviewed route and markup contracts align with the new field; no separate source defect was apparent in this pass.
+- **Checked:** Compared the route handlers and error middleware with the editor/player markup and relevant CSS. `git diff --check` passed. Rendered viewport and interaction verification needs an available browser surface.
+
+## 2026-10-09 — Add optional lesson transcripts
+
+- **Reviewed:** The video player, lesson-details editor, course payload assembly, lesson-update validation, migration history, and the current project changes.
+- **Improvement:** Store an optional plain-text transcript per lesson, let staff edit it in the lesson editor, and show it in a native expandable disclosure for learners.
+- **Why it helps:** Learners can read the spoken content and meaningful audio cues; the editor gives staff a labeled field with a visible character limit, while text is stored and delivered through the existing authorized course path.
+- **Checked:** An isolated Express/SQLite fixture confirmed migration adds an empty default for existing lessons, transcript updates persist and are included in the learner course payload, and over-limit values return `400` without changing stored data. Also checked `node --check` on edited server files, `npx tsc --noEmit`, `npm run build`, and `git diff --check`. Rendered layout and disclosure behavior remain unverified because no browser surface is connected.
+
+## 2026-10-09 — Reject non-object lesson updates
+
+- **Reviewed:** Lesson title and description partial updates, the shared object-body validator, neighboring course and account PATCH routes, and current working-tree changes.
+- **Improvement:** Require the lesson PATCH body to be a JSON object before reading optional fields.
+- **Why it helps:** A top-level array can no longer receive a misleading successful no-op response; an empty object remains a valid no-op and field validation is unchanged.
+- **Checked:** An isolated Express/SQLite route fixture confirmed arrays return `400 validation_error` without changing the lesson, `{}` returns `200` without updating timestamps or audit history, and a valid title update is persisted and audited. Also checked `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Ignore stale platform settings reads after save
+
+- **Reviewed:** The administrator settings form, its initial account-count request, the transactional settings update response, and current working-tree changes.
+- **Improvement:** Track a settings-count revision and apply the initial GET result only if no successful save has supplied a newer value; clear any request error when the save succeeds.
+- **Why it helps:** A slow initial request cannot overwrite the saved count, and a request error that arrives during the save does not remain beside the success message.
+- **Checked:** Source inspection confirms the revision advances only after a successful PUT, both GET handlers check it, and success clears the form error. Also checked `npx tsc --noEmit`, `npm run build`, and `git diff --check`; rendered review is unavailable because this workspace has no connected browser surface.
+
+## 2026-10-09 — Share object-body validation for course edits
+
+- **Reviewed:** The course editor's create and partial-update payloads, the account-edit payload, and how empty objects differ from top-level arrays in these routes.
+- **Improvement:** Add a shared request-body object validator and use it for course creation, course updates, and administrator account updates.
+- **Why it helps:** Malformed arrays can no longer masquerade as empty update objects; valid empty course objects retain their existing create defaults or no-op behavior.
+- **Checked:** An isolated Express/SQLite fixture confirmed arrays return `400`, an empty create object still produces the documented default course, an empty update leaves timestamps and audit history unchanged, and a valid edit persists with one audit event. Also checked `node --check` for the edited server files, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Preserve default administrator filters
+
+- **Reviewed:** The shared enum parser's call sites and the administrator account/log pages when no filter is selected.
+- **Improvement:** Keep `all` as the shared enum parser's default for callers that omit an explicit fallback; course sort, course status, and certificate inclusion continue to pass their own defaults.
+- **Why it helps:** Administrator pages without a selected filter continue to show all accounts or log levels after the parser is shared, instead of narrowing results unexpectedly.
+- **Checked:** An Express/SQLite fixture with seeded users and logs confirmed omitted role/level filters return all fixture rows and explicit filters return only matching rows. Also checked `node --check server/http.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Keep account update timestamps accurate
+
+- **Reviewed:** The admin account editor's partial updates, account `PATCH` transaction, stored `updated_at` field, and the detail page's “Last updated” display.
+- **Improvement:** Reject non-object account-change bodies, skip database writes when role and disabled state are unchanged, return `updatedAt`, and let the detail page use the returned timestamp after a real change.
+- **Why it helps:** Malformed arrays no longer pass as successful no-op updates, empty edits do not make an account appear recently changed, and the administrator sees the actual timestamp after changing an account.
+- **Checked:** An isolated Express/SQLite fixture reproduced an array body returning `200` while advancing `updated_at` without an audit event. After the fix, arrays return `400 validation_error`, `{}` leaves timestamp and audit history unchanged, and a role change updates both and returns `updatedAt`; the UI merge assertion passed. Also checked `node --check server/routes-admin.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Require an object when creating a course
+
+- **Reviewed:** The course editor's create payload and default values, Express JSON handling of top-level arrays, and the existing field-level text validation.
+- **Improvement:** Require the course-creation request body to be an object before applying the omitted-field defaults.
+- **Why it helps:** A malformed top-level JSON array can no longer create an unintended “Untitled course”; clients can still send an empty object to use the documented defaults.
+- **Checked:** An isolated Express/SQLite fixture reproduced the array body's `201` before the fix. After the fix it returns `400 validation_error` without a course row, while `{}` and an object with a supplied title still return `201`. Also checked `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Review remaining API query fields
+
+- **Reviewed:** Every `req.query` access in the course and administrator routers, including text search, pagination, sort/status enums, log filters, and the learner certificate option.
+- **Result:** No additional code change; text, page, and enum inputs now use the shared single-value validators, and the nested certificate page uses the same page bound as the main pager.
+- **Why no change:** The accepted query values match the frontend controls and their defaults; no query field remains that silently coerces a repeated key into a different filter.
+- **Checked:** Searched all server `req.query` references and traced them to their parsers; `git diff --check` passed.
+
+## 2026-10-09 — Validate learner and staff filter query values
+
+- **Reviewed:** The catalog sort control, staff course-status tabs, the learner certificate-fetch option, and the shared administrator filter validation.
+- **Improvement:** Move enum-query validation into the shared HTTP helpers and use it for course sorting, staff course status, and certificate inclusion as well as administrator filters. Reject unknown or repeated choices while preserving the existing valid defaults.
+- **Why it helps:** A malformed filter can no longer silently switch to recent sorting, show every course status, or trigger an unexpected certificate fetch; API responses now match the choices exposed by the interface.
+- **Checked:** An Express fixture confirmed repeated and unknown sort, status, certificate, role, and log-level values return `400 validation_error`, while valid choices and defaults return `200`. Also checked `node --check` for edited server files, `npx tsc --noEmit`, `npm run build`, and `git diff --check`. The catalog select labels and staff pressed-state controls were already present; rendered UI review remains unavailable without a browser surface.
+
+## 2026-10-09 — Reject ambiguous page query parameters
+
+- **Reviewed:** The accessible shared pager and its status text, page parsing across learner and staff course endpoints, feedback pagination, and administrator account and log lists.
+- **Improvement:** Add one shared page-query parser that returns a structured `400 validation_error` when `page` appears more than once or is not a single text value; use it across all paginated course and admin routes. Keep existing defaults and maximum-page bounds for single values.
+- **Why it helps:** A repeated page key can no longer silently send a client back to page one; API consumers receive a clear validation response, while normal pagination remains unchanged.
+- **Checked:** An Express fixture confirmed repeated `page` keys return `400 validation_error` for the course catalog, audit log, and account list, while single page values return `200`. Also checked `node --check` on the three edited server files, `npx tsc --noEmit`, `npm run build`, and `git diff --check`. Rendered pager behavior was not rechecked because no browser surface is connected.
+
+## 2026-10-09 — Recheck learner and staff request contracts
+
+- **Reviewed:** Quiz submission and result handling, lesson-comment pagination and reactions, administrator account/log queries, and protected media/document authorization and byte-range responses.
+- **Result:** No code change; the client/server limits align, lesson and access-sensitive writes recheck current records within transactions, and protected files are served with private caching and disconnect-aware streaming.
+- **Why no change:** Source review and existing tracker coverage exposed no new actionable defect. Rendered UI behavior still needs a connected browser; this workspace has no browser surface or installed Playwright package.
+- **Checked:** Compared the current source with the existing tracker entries and ran `git diff --check`.
+
+## 2026-10-09 — Recheck curriculum targets before creation
+
+- **Reviewed:** Lesson and resource-link authoring controls, learner resource links and responsive styles, the create-route transaction boundaries, and current working-tree changes.
+- **Improvement:** Re-read and authorize the target module or lesson inside the immediate transaction before assigning the next position and inserting a lesson or link.
+- **Why it helps:** If another staff process removes the target after the initial lookup, the request now returns a clear `404` instead of a foreign-key failure reported as `500`; position selection and insertion use the same current target.
+- **Checked:** A two-connection Express/SQLite fixture reproduced both races as `500` before the fix and confirmed both now return `404 not_found`. Normal lesson and link creation remained `201`. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check -- server/routes-courses.js` passed.
+
+## 2026-10-09 — Classify malformed route encoding as a client error
+
+- **Reviewed:** Course and catalog request handling, shared HTTP error translation, and current working-tree changes.
+- **Improvement:** Map Express `URIError` failures with status `400` to a structured `invalid_url_encoding` response instead of the generic internal-server error.
+- **Why it helps:** Invalid percent-encoding is a malformed client URL; returning `400` avoids reporting a client input problem as a server failure and keeps the API response predictable.
+- **Checked:** A pre-change Express fixture using the project error handler returned `500 internal_error` for an invalid UTF-8 route parameter. After the change, the same request returned `400 invalid_url_encoding`, while a valid route remained `200`. `node --check server/http.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check -- server/http.js` passed.
+
+## 2026-10-09 — Make learner activity lists keyboard-scrollable
+
+- **Reviewed:** Analytics learner-detail disclosures, the 260px scrollable lesson and quiz lists, mobile stacking rules, authentication form labels and validation, and current working-tree changes.
+- **Improvement:** Make each populated activity list keyboard-focusable and name it from its visible section heading.
+- **Why it helps:** Staff can use the keyboard to scroll through long learner histories, and assistive technology can identify whether the focused list contains lesson progress or quiz attempts.
+- **Checked:** Focused source assertions confirmed both lists have `tabIndex={0}` and matching heading references, and that the existing list scroll cap and global focus-visible style remain present. `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed. Rendered keyboard behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Return 404 for missing built assets
+
+- **Reviewed:** Production static asset middleware, SPA deep-link fallback, current working-tree changes, and earlier tracker coverage for static asset caching.
+- **Improvement:** Add an `/assets` miss handler after static serving so requests for missing built files return `404 text/plain` rather than falling through to the SPA HTML route.
+- **Why it helps:** Browsers and proxies can recognize stale or invalid asset URLs as missing resources instead of treating the HTML app shell as a successful JavaScript or CSS response; valid assets and client-side routes keep their existing behavior.
+- **Checked:** A production-mode server fixture confirmed a missing asset returns `404 text/plain`, a built JavaScript asset returns `200`, and `/courses/example` still returns the SPA HTML with `200`. `node --check server/index.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Recheck timestamp time-zone handling
+
+- **Reviewed:** SQLite `CURRENT_TIMESTAMP` values, learner and management timestamp parsing, local-time list formatting, and UTC certificate-date formatting.
+- **Result:** No code change. SQLite timestamps are interpreted as UTC before display; course, account, comment, and log dates use the viewer's locale, while certificate dates remain stable in UTC.
+- **Why no change:** The storage and display conventions agree, and the existing shared formatter work already avoids per-row formatter construction.
+- **Checked:** Compared timestamp defaults in `server/db.js` with `DateText`, comment formatting, and certificate formatting in `src/pages-manage.tsx` and `src/pages-learner.tsx`; confirmed existing tracker coverage. No rendered time-zone comparison was run.
+
+## 2026-10-09 — Validate and publish courses atomically
+
+- **Reviewed:** Course PATCH validation, publish-readiness checks, concurrent curriculum/media writes, no-op metadata updates, and audit ordering.
+- **Improvement:** Re-read the course, validate its requested fields and publish readiness, and update its status within one immediate SQLite transaction; keep audit logging after commit.
+- **Why it helps:** With multiple server processes sharing SQLite, a concurrent media or curriculum change can no longer slip between the readiness check and publication, leaving a published course incomplete.
+- **Checked:** A two-worker Express/SQLite fixture confirmed a valid course publishes with `200`; while another connection held a write lock and removed the only lesson video, the waiting publish rechecked readiness and returned `400 course_incomplete`, leaving the course in draft. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Match OpenDocument extensions to ZIP containers
+
+- **Reviewed:** Lesson-document extension/MIME checks, ZIP and Compound File Binary (CFB) signature handling, and the earlier encrypted-OOXML compatibility decision.
+- **Improvement:** Keep the CFB signature exception for encrypted `.docx`, `.pptx`, and `.xlsx` files, but require ZIP signatures for `.odt`, `.odp`, and `.ods` files.
+- **Why it helps:** OpenDocument files with legacy Office bytes can no longer be stored under a misleading extension and then fail when a learner opens them; supported encrypted Office files remain accepted.
+- **Checked:** An isolated Express/SQLite upload fixture rejected CFB uploads for all three OpenDocument types, accepted ZIP uploads for all six ZIP-based types, and retained CFB support for `.docx`, `.pptx`, `.xlsx`, `.doc`, `.ppt`, and `.xls`. The fixture confirmed only the 12 accepted resources were saved. `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Preserve file types when bounding upload names
+
+- **Reviewed:** Original-name normalization, the 255-character metadata cap, Multer's type filter, file-signature checks, and generated storage filenames.
+- **Improvement:** Keep recognized extensions intact when shortening an overlong name, avoid splitting a Unicode surrogate pair, and validate the extension from the complete sanitized client filename so truncation cannot turn an unsupported suffix into a supported type.
+- **Why it helps:** Valid uploads from multipart clients with long filenames remain usable, while type validation continues to reflect the supplied filename and MIME/signature checks.
+- **Checked:** An isolated Express/SQLite route fixture accepted a 256-character PDF filename, stored a 255-character original name ending in `.pdf`, and generated a `.pdf` storage name. A 256-character `.pdfZ` filename was rejected and created no second resource. `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Review request and interactive-control contracts
+
+- **Reviewed:** Course, administrator, and authentication request-field parsing; quiz-answer identity checks; interactive control semantics; lesson resource link attributes; and shared focus, reduced-motion, and responsive overflow rules.
+- **Result:** No code change. The inspected handlers reject malformed typed values, the learner's new-tab resource links use `noopener noreferrer`, and the source search found no click handlers on non-interactive text containers.
+- **Why no change:** Static review found no reproducible defect. Rendered viewport, keyboard, and assistive-technology behavior needs a browser surface to verify.
+- **Checked:** Read the relevant route helpers and quiz submission flow; searched JSX/CSS for interactive semantics, labels, focus styles, reduced-motion rules, and responsive overflow handling. `npm ls playwright @playwright/test --depth=0` found no configured browser test package, and the available browser inventory was empty. `git diff --check` passed.
+
+## 2026-10-09 — Review repository implementation markers
+
+- **Reviewed:** Application and server source, README deployment guidance, repository-specific agent guidance, working-tree changes, and existing tracker coverage for unfinished implementation notes.
+- **Result:** No code change; the source search found no TODO, FIXME, HACK, or documented deferred feature in the reviewed project files.
+- **Why no change:** There is no concrete backlog item or reproducible defect to implement from these markers. Future cycles can continue source-based audits; rendered UI changes need an available browser session for viewport and assistive-technology verification.
+- **Checked:** `rg` searches across `src`, `server`, and `README.md`; confirmed no `AGENTS.md` file; reviewed `git status --short` without resetting or cleaning the existing worktree.
+
+## 2026-10-09 — Announce successful lesson comments
+
+- **Reviewed:** The comment form's pending announcement, successful POST response handling, route guards, refreshed comment count, and existing live status regions.
+- **Improvement:** Add a polite status message after a comment is accepted; scope it to the current course and lesson, clear it when navigating, and reset it when another submission starts.
+- **Why it helps:** Screen-reader users hear a direct confirmation that their comment posted, not only the refreshed total.
+- **Checked:** A focused source assertion confirmed the success message follows the POST, is route-scoped, clears on route change, and preserves the pending announcement. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered assistive-technology behavior remains unverified because no Browser integration is connected and Playwright is not installed.
+
+## 2026-10-09 — Verify remaining low-contrast color pairs
+
+- **Reviewed:** The remaining low-ratio CSS declarations after the module-count fix, their actual foreground/background pairs, whether each is text or a non-text indicator, and all five palette swatches.
+- **Result:** No code change. Certificate and quiz status glyphs exceed 3:1; the visibility glyph is 4.47:1; video-placeholder text is 8.44:1 on the dark player surface; palette checkmarks range from 5.32:1 to 8.01:1.
+- **Why no change:** The static scan's other low ratios are decorative icons or were compared against white instead of their actual surface; none presents another text-contrast failure.
+- **Checked:** Read the relevant JSX and CSS in `src/pages-learner.tsx`, `src/components.tsx`, and `src/styles.css`; calculated the actual pairs and checked current worktree/tracker coverage. No code edits were needed.
+
+## 2026-10-09 — Improve course module-count contrast
+
+- **Reviewed:** The visible 12px module item-count text, its light summary-row background, and the existing muted text token.
+- **Improvement:** Use `var(--muted)` instead of the lower-contrast hard-coded gray for module counts.
+- **Why it helps:** The count is easier to read in course curriculum summaries and matches the platform's established secondary-text color.
+- **Checked:** A focused source check confirmed the count markup and token rule; the computed text/background contrast rose from 4.33:1 to 5.15:1. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Recheck shared button submission behavior
+
+- **Reviewed:** The shared `Button` default type, native buttons inside forms, and explicit submit actions across the learner, account, and management screens.
+- **Result:** No code change; shared buttons default to `button`, and form submission controls declare `type="submit"`.
+- **Why no change:** The current component and form call sites match the existing contract recorded in the earlier button-submission review; no accidental submit behavior was found.
+- **Checked:** Read `Button` in `src/components.tsx`, reviewed form and button call sites in `src/pages-auth.tsx`, `src/pages-learner.tsx`, and `src/pages-manage.tsx`, and compared with prior tracker coverage.
+
+## 2026-10-09 — Reject malformed current-password values before verification
+
+- **Reviewed:** Account-security password inputs, their required/maximum-length attributes, current-password parsing, password verification cost, and existing change-password/session-revocation behavior.
+- **Improvement:** Require the current password to be a non-empty string within the 256-character limit before calling the password verifier.
+- **Why it helps:** Malformed API values receive a precise validation response and do not trigger an unnecessary password-hash operation; normal form submissions keep the same checks.
+- **Checked:** A pre-fix Express/SQLite fixture returned `password_incorrect` for a numeric current password. The updated fixture confirmed numeric, missing, empty, and oversized values return `invalid_current_password` and leave the stored hash unchanged. `node --check server/routes-auth.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Bound document titles derived from long filenames
+
+- **Reviewed:** The optional document-title field, filename basename limit, client truncation, server resource-title limit, and cleanup on rejected uploads.
+- **Improvement:** Truncate only the filename-derived default title to 160 UTF-16 code units without splitting a surrogate pair; continue rejecting explicit titles over 160 characters and non-text values.
+- **Why it helps:** A valid document with a long original filename can be attached by clients that omit a custom title, while the stored resource title remains within the editor's limit.
+- **Checked:** Reproduced a 400 response for a signed PDF with a 200-character basename and no title. An isolated Express/SQLite fixture then confirmed the file saves with a 160-character title and that an explicit 161-character title is still rejected with temporary-file cleanup. `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Recheck lesson resource-link contracts
+
+- **Reviewed:** The labeled staff link form, client title and URL limits, server URL parsing and protocol restrictions, atomic resource insertion, and learner link and document attributes.
+- **Result:** No code change. The client/server limits align; saved external links are normalized to credential-free HTTP(S), and learner links open safely with an announced new-tab behavior.
+- **Why no change:** This path already matches its access and navigation contract and the existing tracker covers its atomic persistence and accessibility behavior. A further change needs a reproduced issue or a clarified resource policy.
+- **Checked:** Traced `src/pages-manage.tsx`, `server/routes-courses.js`, and `src/pages-learner.tsx`; compared findings with existing tracker entries. No browser rendering was needed for the validated source contract.
+
+## 2026-10-09 — Recheck learner and staff navigation
+
+- **Reviewed:** The learner header, staff sidebar, skip links and main landmarks, route-change focus and page announcements, mobile horizontal navigation rules, and prior narrow-header coverage.
+- **Result:** No code change. The source provides named navigation regions, a skip link, route-change focus to the main landmark, and a horizontally scrollable staff navigation row at mobile widths.
+- **Why no change:** The source shows a deliberate mobile overflow pattern and no definite structural defect. Checking actual fit, keyboard scrolling, and focus visibility requires a rendered browser session.
+- **Checked:** Read `src/components.tsx`, `src/App.tsx`, and the navigation breakpoints in `src/styles.css`; compared against existing tracker entries. Browser integration is unavailable and Playwright is not installed. `git diff --check` passed.
+
+## 2026-10-09 — Make multipart uploads independent of field order
+
+- **Reviewed:** Upload middleware filters and generated filenames, multipart field order, document/video/cover route validation, signature checks, temporary-file cleanup, and the app's FormData construction.
+- **Improvement:** Determine upload eligibility from the file type and route, generate the stored extension from the file name, and validate the requested media kind after Multer has parsed all fields.
+- **Why it helps:** Supported uploads no longer depend on clients sending `kind` before the file part, while the completed request still has to match the destination route and requested media kind.
+- **Checked:** An isolated Express/SQLite fixture uploaded a signed PDF and PNG cover with each file part before its metadata fields; both returned 201 and stored the expected `.pdf` and `.png` extensions. `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Keep editor resource names readable
+
+- **Reviewed:** Staff lesson-resource rows, their title and filename/URL content, the matching learner resource layout, and the editor's flexible row structure.
+- **Improvement:** Let resource titles and supporting filenames or URLs wrap instead of truncating them, and increase their text sizes from 12/10px to 13/11px.
+- **Why it helps:** Staff can identify long attachments and inspect complete resource URLs while managing lesson materials.
+- **Checked:** Focused source assertions confirmed the editor list renders both resource names and uses wrapping rules. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The Browser integration is unavailable and Playwright is not installed, so rendered viewport behavior remains unverified.
+
+## 2026-10-09 — Improve lesson-comment hint readability
+
+- **Reviewed:** The feedback textarea's visible label and accessible description, character-count/privacy hint, mobile action layout, retained draft behavior, and the matching client/server/database length limits.
+- **Improvement:** Increase the character-count and visibility hint from 11px to 12px with a readable line height.
+- **Why it helps:** Learners can more easily read the 2,000-character limit and who can see their comment before posting.
+- **Checked:** Focused assertions confirmed the larger hint, associated label/description, mobile stacked layout, and matching 2,000-character limits. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered appearance remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Normalize uploaded media filenames
+
+- **Reviewed:** Multipart filenames, extension validation, video/cover database storage and responses, audit details, and the existing document-upload basename cleanup.
+- **Improvement:** Normalize client filenames to a 255-character basename with path separators and control characters removed, and use that value for media validation, generated extensions, storage, responses, and audit details. Reuse the same helper for documents.
+- **Why it helps:** Course and audit metadata no longer preserves client-supplied path prefixes or control characters, and video/cover handling matches document uploads.
+- **Checked:** A source-extracted helper fixture passed Windows/POSIX path, control-character, empty-name fallback, and length-cap cases; source assertions confirmed all media/document write and response paths use the normalized name. `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Enlarge the module expand/collapse target
+
+- **Reviewed:** The course-editor module disclosure button, its accessible name and expanded state, and the neighboring 36px module actions.
+- **Improvement:** Increase the disclosure hit area from 28px to 36px and align its dimensions with the adjacent controls.
+- **Why it helps:** Staff can open and close modules more reliably by touch while the control retains its existing accessible state and label.
+- **Checked:** Focused source assertions confirmed the 36px target, named expanded/collapsed states, and matching neighboring controls. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered touch spacing remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Improve instructor analytics status readability
+
+- **Reviewed:** Quiz pass-mark and disabled-account supporting labels, learner status chips, and their existing table markup.
+- **Improvement:** Increase analytics table supporting text and learner status chips from 10px to 12px; add a readable line height to supporting labels.
+- **Why it helps:** Instructors can scan account state and quiz requirements more easily while reviewing course performance.
+- **Checked:** Focused source assertions confirmed both selectors and their corresponding analytics content. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered table sizing remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Keep course progress labels readable on mobile
+
+- **Reviewed:** Course-card progress and module labels, the mobile two-column layout, and the existing accessible progress-bar label.
+- **Improvement:** Restore the progress labels to 12px on mobile and allow the progress/module pair to wrap at narrow card widths.
+- **Why it helps:** Learners can read course completion and module counts more easily without the labels competing for limited horizontal space.
+- **Checked:** Focused source assertions confirmed the mobile typography and wrapping, retained course-card counts, and accessible progress-bar label. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered wrapping remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Improve mobile course-editor controls
+
+- **Reviewed:** The mobile course editor's module and lesson controls, upload label, add-action buttons, and the desktop-sized rules they override.
+- **Improvement:** At the mobile breakpoint, increase icon controls to 36px, the upload target to 36px with 12px text, and add-action targets to a 36px minimum height with 12px text.
+- **Why it helps:** Staff can more easily see and tap lesson and module editing actions on phones, with less crowding from undersized controls.
+- **Checked:** Focused source assertions confirmed the mobile sizes and removal of the old 25px and 10px rules. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered touch layout remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Improve certificate metadata readability
+
+- **Reviewed:** Certificate labels, the completion seal and credential code sizes, the accessible certificate name, and the landscape print layout.
+- **Improvement:** Increase certificate metadata labels and the credential code to 12px, and the completion-seal label to 10px while retaining the existing print layout.
+- **Why it helps:** Award dates, certificate IDs, and completion details are easier to read on screen and in printed copies.
+- **Checked:** Focused source assertions confirmed the new sizes, accessible certificate label, landscape page setup, hidden print controls, and print dimensions. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered screen and print appearance remain unverified because no browser surface is connected.
+
+## 2026-10-09 — Improve learner-detail readability and remove unused analytics
+
+- **Reviewed:** The learner-progress disclosure target and expanded detail typography, the learner quiz-stat markup, per-learner analytics aggregation and response type, and the separate global quiz-average metric.
+- **Improvement:** Increase the disclosure to 12px with a 32px minimum height, raise expanded detail text from 9–10px to 11–13px with long-word wrapping, and remove the per-learner average-score aggregate and field that the UI does not display. Keep the global average-score metric.
+- **Why it helps:** Staff can read and activate learner details more easily, and the endpoint no longer computes or transfers an unused per-learner statistic.
+- **Checked:** Focused source assertions confirmed the larger target and typography, removal of the unused query/response/type field, and retention of visible learner stats and the global average. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered appearance remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Cancel obsolete learner course-payload reads
+
+- **Reviewed:** Course-overview, lesson-player, and quiz course-data effects, retry and unmount cleanup, the course payload's full curriculum data, and existing request-sequence guards.
+- **Improvement:** Pass abort signals through all three learner course GETs, abort them when retries supersede a request or the view unmounts, and prevent the lesson player from starting a post-save refresh after it has left the page.
+- **Why it helps:** Large course payload transfers stop when learners leave or retry, while sequence checks continue to protect the displayed state.
+- **Checked:** Focused source assertions covered signals and cleanup in all three views. An isolated `fetchCourse` fixture confirmed the signal reaches `fetch` and rejects a pending request with `AbortError`. Also checked `npx tsc --noEmit`, `npm run build`, and `git diff --check`. Component-level navigation behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Keep long course descriptions from dominating the overview
+
+- **Reviewed:** The 6,000-character course-description limit, the course payload's description field, and its repeated use in the overview hero and “About this course” section.
+- **Improvement:** Clamp the hero copy to three visual lines and hide that duplicate from the accessibility tree; retain the full description in the following “About this course” section.
+- **Why it helps:** Long descriptions no longer push course content far down the page, and screen readers encounter the full description once.
+- **Checked:** Focused source assertions confirmed the editor limit, hero clamp, hidden duplicate, and full body copy. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered line wrapping remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Prevent learner activity details from overflowing on narrow screens
+
+- **Reviewed:** The expandable learner-progress details panel, its 240px minimum grid columns, viewport-based width, existing mobile stacking rule, and the analytics endpoint's 50-learner page and per-page detail construction.
+- **Improvement:** Stack lesson and quiz detail sections through 640px; keep the two-column layout when each 240px column plus the gap fits.
+- **Why it helps:** Expanded learner details stay inside the panel on phones and narrow tablets instead of forcing the table wider than its viewport-based detail card.
+- **Checked:** A focused CSS assertion confirmed the breakpoint, and width calculations verified that two minimum-width columns fit from 641px. Source review confirmed the server builds learner details only for its bounded 50-row page; prior isolated coverage for 61 learners is recorded below. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered layout remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Check stylesheet custom-property references
+
+- **Reviewed:** All CSS custom-property references in the project's stylesheet for undefined values without fallbacks.
+- **Result:** No code change; all 332 variable references resolve to one of the 21 defined custom properties or provide a fallback.
+- **Why no change:** The scan found no undefined color, spacing, or other design token that would cause a declaration to be ignored.
+- **Checked:** A focused Node source scan parsed `src/styles.css` and found no unresolved custom-property references.
+
+## 2026-10-09 — Bound repeated quiz-attempt writes per user
+
+- **Reviewed:** Quiz submission authorization and transaction behavior, stored attempt snapshots, existing per-user comment and reaction limits, and the learner's inline submission-error state.
+- **Improvement:** Limit authenticated quiz attempts to 30 per user per 15 minutes, return the existing structured `429` error shape, and keep the current answers available for retry after the limit clears.
+- **Why it helps:** Repeated submissions can no longer grow the quiz-attempt table without bound, while ordinary retries have a generous allowance and a clear recovery message.
+- **Checked:** An isolated Express fixture confirmed 30 requests pass, request 31 receives `429 rate_limited`, and a second user has an independent quota. Source review confirmed the error message is surfaced through the quiz alert. Also checked `node --check server/rate-limits.js`, `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Keep catalog empty and retry states tied to submitted filters
+
+- **Reviewed:** Catalog search draft versus applied filters, category and sort reloads, empty-state selection, retry behavior, and the published-course list contract.
+- **Improvement:** Base the empty-state message and standard retry action on the last applied filter snapshot, so editing the search box without submitting cannot mislabel an empty catalog or change what “Try again” requests.
+- **Why it helps:** Learners see a message that matches the displayed results, and retries repeat the request that failed.
+- **Checked:** Focused source assertions confirmed the empty-state and retry paths use `filtersRef.current`; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser interaction remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Reject duplicate account names before password hashing
+
+- **Reviewed:** Administrator account validation, the case-insensitive unique username constraint, password hashing cost, and the immediate transaction that protects capacity and uniqueness under concurrent requests.
+- **Improvement:** Check the indexed username constraint before hashing the password, then retain the existing transactional duplicate check to handle a concurrent account creation race.
+- **Why it helps:** A duplicate-name submission returns without running the intentionally expensive password hash, reducing wasted CPU on a common input error.
+- **Checked:** A focused source assertion confirmed the precheck precedes hashing and the transactional recheck remains in place; `node --check server/routes-admin.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Explain how learner accounts become assignable
+
+- **Reviewed:** Course-access empty-state copy, the registration setting, administrator account creation, and role protection on the create-account route.
+- **Improvement:** Give administrators a direct link to create a learner account when the assignment list is empty; tell moderators that registered and administrator-created learners appear there. Keep the no-results message for searches.
+- **Why it helps:** Staff can understand why the assignment list is empty when registration is disabled and reach an available next step without guessing.
+- **Checked:** Focused source assertions confirmed both role-specific messages, search-empty behavior, the existing admin-only route, and the README account-creation contract. Also checked npx tsc --noEmit, npm run build, and git diff --check. Rendered layout remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Cancel obsolete administrator account-detail reads
+
+- **Reviewed:** Administrator user-detail page and retry effect dependencies, request-staleness guard, and the read-only endpoint returning up to 50 course progress summaries per page.
+- **Improvement:** Pass an abort signal to the account-detail GET and abort it when the user, page, or retry changes, or when the page unmounts; retain the active guard for state updates.
+- **Why it helps:** A stale account history response stops transferring when staff switch users or pages, and leaving the detail screen cancels its pending read.
+- **Checked:** Focused source assertions confirmed request signal, effect dependencies, and cleanup. A one-off API fixture confirmed aborting the signal rejects the pending GET with AbortError. Also checked npx tsc --noEmit, npm run build, and git diff --check. Rendered network behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Cancel obsolete course-editor reads
+
+- **Reviewed:** Staff course-editor route loading and post-edit refreshes, sequence ownership during saves, the managed course GET handler, and signal support in the shared course helper.
+- **Improvement:** Abort the previous course payload read when another load or save supersedes it, and abort the active read on either route-effect cleanup path while preserving sequence guards.
+- **Why it helps:** Large curriculum payloads no longer continue transferring after staff leave the editor or start a newer operation.
+- **Checked:** Focused source assertions covered load ordering, save invalidation, and both cleanup paths. An isolated API helper fixture confirmed the managed course GET forwards its abort signal. Also checked npx tsc --noEmit, npm run build, and git diff --check. Rendered network behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Cancel obsolete course-access reads
+
+- **Reviewed:** Staff course assignment search and pagination, route changes, refresh-after-assignment flows, sequence guards, and the read-only managed course and access-list endpoints (50 learners per page).
+- **Improvement:** Forward an optional abort signal through the course and access API helpers; cancel prior access-page loads when a new load starts, cancel sibling reads when one fails, and abort on route cleanup.
+- **Why it helps:** Obsolete learner pages and course metadata stop transferring after staff search, change pages, or leave the access screen; a failed parallel request also cancels its unfinished companion request.
+- **Checked:** Focused source assertions confirmed supersession ordering, error cleanup, and route cleanup. An isolated API helper fixture confirmed both GET paths forward the same signal. Also checked npx tsc --noEmit, npm run build, and git diff --check. Rendered network behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Validate reverse-proxy configuration values
+
+- **Reviewed:** TRUST_PROXY parsing, its use in Express proxy trust and secure-cookie handling, the example environment file, and deployment documentation.
+- **Improvement:** Parse true/false case-insensitively and reject unrecognized non-empty values at startup; document the accepted values.
+- **Why it helps:** A typo no longer silently disables proxy trust and can leave secure cookies misconfigured behind an HTTPS-terminating proxy.
+- **Checked:** A one-off Node config fixture confirmed true, TRUE, false, and False parse as expected and tru is rejected. Also checked node --check server/config.js, npx tsc --noEmit, npm run build, and git diff --check.
+
+## 2026-10-09 — Review remaining synchronous filesystem calls
+
+- **Reviewed:** Remaining synchronous filesystem APIs in server and client source, including their call sites and startup ordering.
+- **Result:** No code change. Directory creation occurs during database initialization before the server accepts requests, and the built-client existence check runs once while the server is configured; the scan found no synchronous filesystem calls in request handlers.
+- **Why no change:** Moving startup-only setup work to asynchronous APIs would not improve request responsiveness, while the recent media and upload changes already removed synchronous filesystem work from request paths.
+- **Checked:** Searched server and client source for synchronous filesystem APIs and read the remaining call sites in server/db.js and server/index.js; git diff --check passed. Rendered UI review still needs an available browser session.
+
+## 2026-10-09 — Fail fast on unsupported deployment environments
+
+- **Reviewed:** NODE_ENV configuration, its production-only cookie, cache, CSP, and session-secret behavior, the documented deployment values, and current config validation.
+- **Improvement:** Trim NODE_ENV, accept development, test, or production, and reject unrecognized values at startup; document the accepted values.
+- **Why it helps:** A misspelled production setting can no longer silently start with development security and caching behavior.
+- **Checked:** A one-off Node config fixture accepted development, test, and production, rejected prod with the expected error, and used a valid fixture secret for production. Also checked node --check server/config.js, npx tsc --noEmit, npm run build, and git diff --check.
+
+## 2026-10-09 — Cancel obsolete administrator account-list reads
+
+- **Reviewed:** Administrator user search, role filtering, page navigation and refresh-after-role-change flows; request-sequence guards; the API client signal support; and the read-only endpoint bounded to 50 account rows per page.
+- **Improvement:** Abort the previous account-list GET when a new load starts and abort the active request when the page or role-filter effect is cleaned up. Keep the request-sequence guard to prevent stale state updates.
+- **Why it helps:** Superseded search, filter, and page responses stop consuming network and server work, and leaving the page cancels its pending list read.
+- **Checked:** Focused source assertions confirmed signal forwarding, supersession ordering, latest-request cleanup, and effect cleanup; npx tsc --noEmit, npm run build, and git diff --check passed. Rendered network behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Retry transient administrator account-detail failures
+
+- **Reviewed:** Administrator account-detail loading and pagination, API error status handling, the read-only user-detail endpoint and its bounded course list, and the existing responsive account-list error layout.
+- **Improvement:** Offer a direct retry on account-detail load errors caused by network failures, timeouts, rate limits, or server errors; keep the current user and page when retrying. Permanent client errors retain the back link without a retry action.
+- **Why it helps:** Administrators can recover from temporary failures without navigating away and back, including when inspecting a later page of a user's course history.
+- **Checked:** Focused source assertions confirmed retry eligibility, route/page retry dependencies, and reuse of the wrapping error layout; npx tsc --noEmit, npm run build, and git diff --check passed. Rendered keyboard and screen-reader behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Cancel obsolete course analytics reads
+
+- **Reviewed:** The analytics page's course/page/refresh loading effect, stale-result guard, 50-learner page bound, learner-progress table semantics and responsive overflow, and the analytics endpoint's read-only behavior.
+- **Improvement:** Pass an abort signal to the analytics request and abort it when its page or course changes, the view refreshes, or the page unmounts.
+- **Why it helps:** An obsolete dashboard response containing learner progress and assessment metrics no longer continues transferring after staff move to another page or course; the existing active guard still protects UI state.
+- **Checked:** A focused source assertion confirmed request cancellation and the learner table caption/headers; an isolated API fixture confirmed `api.get` forwards the signal and surfaces `AbortError`; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered viewport behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Cancel obsolete lesson-feedback reads
+
+- **Reviewed:** The lesson-feedback fetch effect, comment pagination and offset-refresh logic, route-scoped stale-response guards, the API client's abort-signal support, and the server's 20-comment page bound.
+- **Improvement:** Pass abort signals to the initial feedback and load-more requests; abort them when the lesson changes, the feed refreshes, or a newly posted comment invalidates a pending page.
+- **Why it helps:** Obsolete comment payloads stop transferring after learners navigate or refresh the feed, while existing sequence checks and retry behavior continue to protect current UI state.
+- **Checked:** Focused source assertions confirmed both GET paths use signals and cleanup invalidates them; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered network behavior remains unverified because no browser surface is connected and Playwright is not installed.
+
+## 2026-10-09 — Make orphan-media cleanup warnings actionable
+
+- **Reviewed:** Startup orphan-media cleanup, its failure counter and system-log warning, log-detail redaction/API normalization, and the administrator's existing detail disclosure.
+- **Improvement:** Include up to 10 failure samples in the single startup warning, identifying the cleanup stage, course ID, generated filename when applicable, and filesystem error name/code.
+- **Why it helps:** Operators can locate representative permission or filesystem failures from the existing admin system log without generating one log row per file or exposing absolute paths.
+- **Checked:** A temporary filesystem fixture injected directory-read and file-removal errors, confirmed the total count and 10-sample cap, and verified successful cleanup still deletes only stale unreferenced generated files while preserving referenced, recent, and unrecognized files. Also checked `node --check server/media-cleanup.js`, `node --check server/index.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Recheck session and HTTP error handling
+
+- **Reviewed:** API error translation, CSRF validation, current-user lookup, SQLite session read/write/touch/expiry/revocation, and the learner resource list's link semantics and responsive text wrapping.
+- **Result:** No code change. The server already maps malformed and oversized requests to structured client errors, removes expired or malformed sessions, and restricts protected media to authorized viewers. Learner links announce new-tab behavior and their long text now wraps.
+- **Why no change:** The reviewed paths match the documented deployment and access model; further backend tuning needs representative session/database load or a reproducible failure, while rendered UI checks need a browser.
+- **Checked:** Re-read the runtime and protected-media guidance in `README.md`, compared the source with existing tracker coverage, and ran `git diff --check`.
+
+## 2026-10-09 — Keep learner resource names readable
+
+- **Reviewed:** Learner lesson-resource links, displayed titles, original filenames and URLs, the resource row's flexible layout, and the mobile spacing rules.
+- **Improvement:** Allow resource titles and secondary filename/URL text to wrap instead of clipping each value with a one-line ellipsis.
+- **Why it helps:** Learners can distinguish long or similarly named attachments and inspect full link addresses on narrow screens without hidden text.
+- **Checked:** Focused source assertions, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The Browser plugin is unavailable and Playwright is not installed; rendered viewport checks remain unverified. I did not install browser dependencies.
+
+## 2026-10-09 — Cancel obsolete administrator log requests
+
+- **Reviewed:** Audit/system-log paging, search and severity/action filters, refresh and route cleanup, stale-response guards, and the shared API's existing abort-signal support.
+- **Improvement:** Pass an `AbortController` signal to each audit and system log request and abort it when the effect is replaced or unmounted.
+- **Why it helps:** Changing filters or pages, refreshing, or leaving the view stops obsolete log payloads from continuing to transfer; existing request-sequence checks still prevent stale state updates.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, focused source assertions for both request signals and cleanup aborts, and `git diff --check` passed. Browser network-cancellation behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Restore file-picker focus after cancelling uploads
+
+- **Reviewed:** The new document, cover, and video cancel actions, the way they disappear when progress resets, the upload labels' existing focus-visible ring, and automatic cancellation when an editor closes.
+- **Improvement:** Track user-triggered cancellation separately from route cleanup and return focus to that upload's file input after its busy state clears.
+- **Why it helps:** Keyboard users remain in the upload workflow instead of losing focus when the cancel button is removed; automatic navigation cleanup does not pull focus back into the closing editor.
+- **Checked:** Source assertions confirmed all three upload types restore their own picker only after user cancellation and that the existing picker focus ring is present. `npx tsc --noEmit` and `npm run build` passed; browser focus behavior remains unverified without a browser surface.
+
+## 2026-10-09 — Let staff cancel large media uploads
+
+- **Reviewed:** The shared XHR upload helper, course-cover/video/document controls, upload progress states, course-editor and lesson-editor cleanup, the 2 GiB configured upload limit, and Multer's handling of aborted requests.
+- **Improvement:** Add accessible “Cancel upload” controls while bytes are transferring, pass `AbortSignal` through the shared upload helper, suppress cancellation as an error, and abort active transfers when the relevant editor route or lesson closes. Cover controls wrap on narrow layouts, and video cancel follows progress on mobile.
+- **Why it helps:** Staff can stop an incorrect or unnecessary multi-gigabyte transfer and avoid continuing uploads after leaving the editor. The server's existing Multer middleware removes partial files when the request is aborted.
+- **Checked:** A runtime XHR fixture confirmed signal cancellation aborts the request, rejects with `AbortError`, suppresses later progress callbacks, and leaves successful uploads working; an isolated Express/Multer fixture confirmed a client abort removes the partial file. Source checks confirmed all three upload types have cancel controls and signals. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered layout and browser interaction remain unverified because no browser surface is available.
+
+## 2026-10-09 — Cancel My Learning requests when the view changes
+
+- **Reviewed:** My Learning's initial course/certificate load, course pagination, certificate pagination, unmount cleanup, existing request-sequence guards, and the shared API's abort-signal support; also checked SQLite session expiry and invalidation against prior backend coverage.
+- **Improvement:** Pass abort signals to all four course and certificate GET requests; abort prior requests when refreshing and abort both request groups when the page unmounts.
+- **Why it helps:** Leaving My Learning or refreshing it no longer leaves obsolete list responses transferring in the background. Existing sequence guards continue to prevent stale state updates; the session store already prunes expired rows and rejects malformed or expired sessions, so no backend change was warranted in this pass.
+- **Checked:** Source assertions confirmed all four GET calls receive the controller signal and refresh/unmount paths abort the relevant controllers. `npx tsc --noEmit` and `npm run build` passed; rendered network-cancellation behavior remains unverified without a browser surface.
+
+## 2026-10-09 — Review learner write-rate limits
+
+- **Reviewed:** Per-user comment and reaction quotas, route authentication order, their structured `429` responses, and the documented one-process deployment model.
+- **Result:** No code change. Authenticated comment and reaction writes already have separate per-user limits, and the current deployment contract does not require sharing counters across processes.
+- **Why no change:** No reliability or abuse-control gap appeared in the configured limits; adding a shared limiter store would introduce deployment requirements without a demonstrated need.
+- **Checked:** Compared `server/rate-limits.js`, the two route bindings, README deployment guidance, and existing isolated quota checks recorded below; `git diff --check` passed.
+
+## 2026-10-09 — Refresh learner course lists when pages shift
+
+- **Reviewed:** Public-catalog and My Learning offset pagination, stable ordering, sequence guards, and the existing overlap deduplication.
+- **Improvement:** Detect changed totals, clamped pages, or a course ID repeated across loaded and requested pages; reload page one with the applied catalog filters or refresh My Learning from its first page.
+- **Why it helps:** Course edits can change recently-updated ordering, while new enrollments and access assignments can shift My Learning offsets. Learners no longer silently miss courses after deduplication removes an overlapping page item.
+- **Checked:** Executed the actual drift helper against stable, overlapping, changed-total, and clamped-page responses; source assertions confirmed both list loaders restart at page one. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Review course row menus and protected file delivery
+
+- **Reviewed:** Course-list table semantics, the named keyboard-scroll region, row action disclosures and their pending states, mobile table sizing, and protected lesson-document/media authorization, path containment, HEAD responses, and byte ranges.
+- **Result:** No code change. The row actions use a labeled native `<details>` disclosure, global `:focus-visible` styling, and a named focusable horizontal-scroll region; protected file routes check course access and avoid streaming on HEAD requests.
+- **Why no change:** The source review found no concrete menu, keyboard-navigation, or file-delivery defect, and the existing tracker already covers row-action concurrency, scroll-region accessibility, and protected-media behavior.
+- **Checked:** Compared the markup and responsive CSS with the action handlers and protected routes, and reviewed the prior tracker entries. Rendered viewport and interaction QA could not run: the Browser plugin is unavailable and Playwright is not installed in this project; `npm exec --no -- playwright --version` confirmed it would require adding a package.
+
+## 2026-10-09 — Avoid argument-limit failures when reordering large curricula
+
+- **Reviewed:** Module and lesson reorder transactions, their unbounded sibling lists, and the temporary position calculation used before swapping unique positions.
+- **Improvement:** Replace spread-based `Math.max(...items.map(...))` with a single-pass reduction for both modules and lessons.
+- **Why it helps:** Reordering no longer throws a JavaScript `RangeError` when a large imported or accumulated curriculum exceeds the engine's function-argument limit; it also avoids allocating a second array of positions.
+- **Checked:** The previous expression raised `RangeError` with 200,000 items; the new reduction returned the expected maximum for empty, ordinary, negative, and 200,000-item lists. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Keep stale auth refreshes from restoring an old session
+
+- **Reviewed:** The shared auth refresh used after self-access changes, the header and staff sign-out controls, and startup's overlapping StrictMode requests.
+- **Improvement:** Sequence refresh requests and compare an auth-state revision before applying `/auth/me` and platform settings. Increment that revision after successful sign-in, registration, setup, sign-out, and local settings updates; apply refresh data only after CSRF readiness succeeds.
+- **Why it helps:** A delayed refresh can no longer restore a user after a successful logout or overwrite a newer auth/settings state. Older overlapping startup refreshes also cannot publish stale results.
+- **Checked:** Focused source assertions confirmed the request/revision guards precede context writes and all auth/settings mutation callbacks advance the revision. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered race behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Review management-list request sequencing
+
+- **Reviewed:** Course and user search/pagination, learner-access assignment refreshes, analytics paging, and audit/system log filter requests.
+- **Result:** No code change. List loaders already guard state updates and loading cleanup with request sequence IDs; route-sensitive loads also verify the current course ID, and effect-based pages ignore results after unmount.
+- **Why no change:** The inspected paths already prevent an older search or page response from replacing the current view. No concrete stale-result defect was found.
+- **Checked:** Traced the request, success, error, and `finally` guards in `src/pages-manage.tsx`; confirmed responsive user filters stack at the mobile breakpoint; `git diff --check` passed. A rendered network-order interaction check needs a connected browser.
+
+## 2026-10-09 — Review theme token coverage and contrast
+
+- **Reviewed:** Stylesheet custom-property references, all five selectable palette definitions, primary-button text, and selected curriculum text.
+- **Result:** No code change. Every referenced color token is defined, and the palette pairs already meet normal-text contrast: white on the primary colors ranges from 5.32:1 to 8.01:1; selected-row text ranges from 9.82:1 to 14.42:1.
+- **Why no change:** The static audit found no missing theme value or contrast defect to correct. A rendered viewport review still needs a connected browser, which is not available in this workspace.
+- **Checked:** Compared every `var(--...)` reference in `src/styles.css` with its declaration and calculated WCAG contrast ratios from the current five palette values; `git diff --check` passed.
+
+## 2026-10-09 — Bound repeated lesson-reaction writes
+
+- **Reviewed:** The learner's toggle-to-clear reaction controls, nullable reaction API contract, transactional count updates, and existing per-user comment limiter.
+- **Improvement:** Limit lesson-reaction changes to 60 per learner in 15 minutes, returning the same structured `rate_limited` response style used for comment posting.
+- **Why it helps:** Rapid automated reaction toggles can no longer drive unbounded SQLite writes and recounts, while the generous per-user allowance accommodates normal corrections across lessons.
+- **Checked:** An isolated Express fixture confirmed 60 requests per user succeed, the 61st returns `429 rate_limited`, and a second user has an independent quota. `node --check` passed for both changed server files; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Use the defined text token for course completion
+
+- **Reviewed:** Root and palette CSS custom properties and the learner's course-completion certificate panel.
+- **Improvement:** Replace the panel title's undefined `--text` reference with the existing `--ink` text color token.
+- **Why it helps:** The completion heading now uses the established primary text color explicitly instead of relying on inherited color after an invalid declaration.
+- **Checked:** A stylesheet assertion confirmed every referenced custom property is defined and the completion title uses `--ink`; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Focus newly added quiz fields
+
+- **Reviewed:** Quiz question and answer-choice insertion, existing focus restoration after removal, and the matching server limits.
+- **Improvement:** Reuse the quiz editor's focus-target state to focus a new question prompt or the new answer field immediately after insertion.
+- **Why it helps:** Keyboard users can continue entering the content they just added without tabbing back through the editor to find its new field.
+- **Checked:** Focused source assertions confirmed both add actions set the corresponding target and the existing effect resolves the new field; the API's 50-question and two-to-six-choice limits remain aligned. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered focus behavior remains unverified because no Browser plugin or Playwright dependency is available.
+
+## 2026-10-09 — Return keyboard focus after module entry
+
+- **Reviewed:** The two Add module entry points, autofocus on the inline title field, and the form's cancel and success close paths.
+- **Improvement:** Let the shared button accept a ref, remember which Add module trigger opened the form, return focus to that trigger on cancel, and focus the persistent curriculum action after a successful add.
+- **Why it helps:** Keyboard users remain in the curriculum context after the conditional form disappears instead of losing their focus position.
+- **Checked:** Focused source assertions confirmed ref forwarding, both invokers, cancel focus restoration, and the success focus target. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered focus behavior remains unverified because no Browser plugin or Playwright dependency is available.
+
+## 2026-10-09 — Skip unnecessary log-retention scans
+
+- **Reviewed:** Audit and system log insertion, the documented row caps, and SQLite query plans for the current prune statement.
+- **Improvement:** Count retained rows once per log table, skip pruning until the cap is exceeded, and remove the oldest row through the integer primary key when a new entry overflows the cap.
+- **Why it helps:** Ordinary log writes avoid an offset scan through as many as 10,000 rows and an unnecessary delete statement, while both tables retain their exact configured limits.
+- **Checked:** An isolated SQLite fixture confirmed below-cap writes do not prepare a prune statement, overflow removes the oldest row and keeps audit/system counts at 10,000/5,000, and query plans use the integer primary key for oldest-row trimming. `node --check server/log-store.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Expose the Add module form disclosure state
+
+- **Reviewed:** Course curriculum actions, the conditional Add module form, and the neighboring module and lesson disclosures.
+- **Improvement:** Expose the Add module button's expanded state and associate it with the form while the form is open.
+- **Why it helps:** Screen-reader users can tell whether the form is open and which form the button controls.
+- **Checked:** A focused source assertion confirmed the button state and form association; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered assistive-technology behavior remains unverified because no browser or Playwright setup is available.
+
+## 2026-10-09 — Disable no-op draft saves in the course editor
+
+- **Reviewed:** Draft and publish actions, course metadata normalization, the server's no-op PATCH behavior, and the responsive editor action row.
+- **Improvement:** Compare trimmed metadata with saved values; when an unchanged course is already a draft, disable the action and show “Draft saved.” Keep Publish available and give screen-reader users a readiness-recheck hint for already published courses.
+- **Why it helps:** Staff avoid a redundant save request and can see the draft is already saved, while the published-course validation action remains available after curriculum edits.
+- **Checked:** A focused source check confirmed the draft guard uses the server's trimmed text contract and does not disable Publish; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction remains unverified because Playwright is not installed.
+
+## 2026-10-09 — Keep successful sign-ins from exhausting the auth quota
+
+- **Reviewed:** The shared per-IP limiter on sign-in, registration, and setup; throttled-request logging; response status behavior; and the platform's single-organization audience.
+- **Improvement:** Give sign-in its own limiter and uncount successful responses; keep the request cap shared by registration and setup. Log only the first request that crosses a limiter's threshold and record its full mounted route path.
+- **Why it helps:** People sharing a school or office network no longer consume one another's failed-login budget. Repeated 429s no longer create a database write for each request, and the warning identifies which auth endpoint crossed its limit.
+- **Checked:** An isolated Express fixture confirmed 20 successful sign-ins remained allowed, the 13th failed sign-in returned 429, registration/setup shared their cap, repeated 429s generated one warning per limiter threshold, and logged paths identified the route that crossed each cap. Source assertions, `node --check server/index.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Announce quiz answer progress as it changes
+
+- **Reviewed:** Quiz answer counts, disabled-submit guidance, radio fieldsets, and the existing result status announcement.
+- **Improvement:** Make the existing answered-question hint a polite, atomic status region while retaining its association with the submit button.
+- **Why it helps:** Screen-reader users hear how many questions remain as they answer, without moving focus away from the current choice.
+- **Checked:** A focused source check confirmed the live-region attributes remain on the same conditional hint and the submit button still references it; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered assistive-technology behavior remains unverified because no browser or Playwright setup is available.
+
+## 2026-10-09 — Hide the repeated staff-account initial
+
+- **Reviewed:** Staff sidebar account markup, the displayed username and role, account-menu naming, and authentication-form labels and validation.
+- **Improvement:** Mark the staff sidebar's one-letter avatar as decorative so screen readers announce the full username and role without an extra initial.
+- **Why it helps:** The account identity is more concise and avoids repeating the first letter before the username.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, a focused source check, and `git diff --check` passed. Rendered assistive-technology behavior remains unverified because no browser or Playwright setup is available.
+
+## 2026-10-09 — Keep certificate history usable with a malformed date
+
+- **Reviewed:** Certificate timestamps returned by the API, learner history rendering, and the dedicated certificate date fallback.
+- **Improvement:** Share date parsing and fallback formatting across certificate history and certificate pages; an invalid stored timestamp now displays as supplied instead of throwing during render.
+- **Why it helps:** A malformed legacy or manually edited certificate row cannot break the learner's entire My Learning page.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered UI behavior remains unverified because no browser or Playwright setup is available.
+
+## 2026-10-09 — Recheck paginated course-summary scaling
+
+- **Reviewed:** Catalog, My Learning, and staff course-list result bounds and the related summary query shape.
+- **Result:** No code change; each list computes summaries for a bounded page and batches related counts instead of issuing a per-course query.
+- **Why no change:** The current source matches the established query-scaling review. A further query or index change needs representative database profiling that demonstrates a bottleneck.
+- **Checked:** Compared `courseSummaries` and its three list call sites with the 24/50-row page limits; `git diff --check` passed.
+
+## 2026-10-09 — Disable quiz saves when nothing changed
+
+- **Reviewed:** Quiz editor state, saved quiz content, and the no-op behavior in the quiz update route.
+- **Improvement:** Compare the trimmed title, pass mark, and normalized question and choice content with the saved quiz; disable the save action and show “No changes” while the editor is clean.
+- **Why it helps:** Learners’ course administrators get immediate feedback that the form is already saved, and avoid a redundant request and refresh when no quiz content changed.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction remains unverified because no browser or Playwright setup is available.
+
+## 2026-10-09 — Avoid rewriting unchanged quizzes
+
+- **Reviewed:** Quiz editor save payloads, persisted question and answer ordering, attempt snapshots, course timestamps, and audit writes.
+- **Improvement:** Normalize validated quiz content, compare it to the saved quiz inside the immediate transaction, and leave quiz rows, child IDs, course metadata, and audit history untouched when values match.
+- **Why it helps:** Repeated saves no longer rebuild every question and answer, churn their IDs, or make an unchanged course appear recently updated. Real quiz edits continue through the existing atomic replacement path.
+- **Checked:** An isolated Express/SQLite fixture confirmed an unchanged save preserved question/choice IDs, timestamps, attempts, and audit count; a title/pass-mark change persisted and wrote one audit row. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Skip unchanged module and lesson edits
+
+- **Reviewed:** Module-title and lesson-detail PATCH routes, their course timestamp writes, and audit events.
+- **Improvement:** Re-read each curriculum item inside the immediate transaction, skip timestamp and audit writes when submitted values already match, and retain audit entries for actual changes.
+- **Why it helps:** Retries and repeated saves no longer make an unchanged course appear recently updated or create a misleading module audit entry. Transactional rechecks also keep authorization and no-op decisions aligned with the current rows.
+- **Checked:** An isolated Express/SQLite fixture confirmed no-op module and lesson edits preserved course timestamps, editor identity, and audit counts; actual edits persisted and created the expected audit rows and changed-field details. `node --check server/course-service.js`, `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Avoid audit noise from unchanged settings
+
+- **Reviewed:** Administrator settings validation, setting writes, icon versioning, and audit-event behavior.
+- **Improvement:** Compare normalized settings and optional icon content inside an immediate transaction; write only changed keys and create an audit entry only when at least one setting actually changed.
+- **Why it helps:** Repeated saves of the same values no longer create misleading “settings updated” entries, and audit details identify the fields that changed, including real icon removal or replacement.
+- **Checked:** An isolated Express/SQLite fixture confirmed unchanged settings created no audit row, a palette change stored one precise audit entry, and icon removal deleted its value/version and logged `platformIcon`. `node --check server/routes-auth.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Skip no-op course updates
+
+- **Reviewed:** Course metadata and status PATCH behavior, change detection, audit logging, and the `updated_at` ordering used by course lists.
+- **Improvement:** Skip the database update, timestamp change, and audit write when all submitted course values already match the saved row; return the existing course payload.
+- **Why it helps:** Repeated saves with no edits no longer make a course appear recently changed or update its editor identity without a corresponding audit event, and they avoid unnecessary SQLite writes.
+- **Checked:** An isolated Express/SQLite fixture confirmed a no-op preserved `updated_at`, `updated_by`, and audit count, while a real title change updated the timestamp and wrote one audit row. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Preserve course-detail edits during refreshes
+
+- **Reviewed:** Course-editor metadata fields and the course reloads triggered after curriculum changes, lesson edits, and cover or video uploads.
+- **Improvement:** Reconcile refreshed course details field by field: update a form field from the server only while its current value still matches the previously saved course value.
+- **Why it helps:** An administrator can keep editing the title, category, description, or visibility while a longer action runs without the follow-up course refresh silently discarding those newer edits. Untouched fields still receive the latest saved server values.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered async interaction remains unverified because no browser surface is attached.
+
+## 2026-10-09 — Review administrator account-change safeguards
+
+- **Reviewed:** Administrator role and account-status changes, pending and error feedback, responsive control layout, and the server's last-active-administrator invariant.
+- **Result:** No code change. The endpoint validates status values and protects the last active administrator inside an immediate transaction; the UI disables controls while saving, announces pending state, and exposes server errors through an alert.
+- **Why no change:** The existing server and interface already cover the identified failure and recovery cases, and the tracker documents these safeguards. No additional change is justified by the source review.
+- **Checked:** Read `server/routes-admin.js`, the account details flow and shared notice in `src/pages-manage.tsx`, and account control styles in `src/styles.css`; reviewed existing tracker coverage and working-tree status. `git diff --check` passed. Rendered narrow-screen and assistive-technology behavior still needs browser QA.
+
+## 2026-10-09 — Review authentication, session, and media-stream boundaries
+
+- **Reviewed:** Setup and registration input validation, account-cap checks around user creation, password-change session invalidation, malformed and expired SQLite sessions, and protected-file stream cleanup on client disconnect.
+- **Result:** No code change. The inspected paths already validate inputs before writes, recheck registration availability in the write transaction, remove invalid sessions, and close media streams when a response ends early.
+- **Why no change:** These source paths match the existing contracts and have focused tracker coverage; this review did not expose a new reproducible defect.
+- **Checked:** Read `server/routes-auth.js`, `server/session-store.js`, and `server/file-stream.js`, and compared the relevant tracker entries. `npm ls playwright @playwright/test --depth=0` found no configured browser test package; the available computer-use surface reports no browsers. `git diff --check` passed after this entry was added. Rendered UI validation needs an attached browser or an existing Playwright setup.
+
+## 2026-10-09 — Surface certificates when learners complete a course
+
+- **Reviewed:** Certificate eligibility in the API, lesson and quiz completion responses, learner result actions, My Learning and course-overview links, and the narrow-screen course-player layout.
+- **Improvement:** Return the certificate from the lesson-completion transaction; show eligible learners a direct certificate link after the final lesson or quiz; and show course-completion certificate links only to learners, matching the API role boundary.
+- **Why it helps:** Learners can open their certificate as soon as course requirements are complete, while staff no longer see completion links that would be rejected when no learner certificate exists. The certificate history remains available for previously issued certificates.
+- **Checked:** An isolated Express/SQLite fixture confirmed the completion response returns the learner's certificate, returns `null` for a moderator, and creates only one certificate row. Focused UI assertions covered learner-only links, quiz result access, the live completion message, and the narrow-screen layout. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction remains unverified without browser QA.
+
+## 2026-10-09 — Cache versioned production assets for a year
+
+- **Reviewed:** Vite's generated asset filenames, the Express `/assets` middleware, SPA HTML delivery, and development cache behavior.
+- **Improvement:** Give production assets under `/assets` a one-year `max-age` and `immutable`; keep development asset caching at `max-age=0`. The SPA HTML keeps its existing non-immutable response so it can reference the latest bundle hashes.
+- **Why it helps:** Browsers can reuse the exact content-hashed JavaScript and CSS across visits, while a new build's changed hash naturally requests the updated file.
+- **Checked:** An isolated Express static fixture confirmed production assets return `max-age=31536000, immutable`, development assets return `max-age=0`, and SPA HTML is not immutable. Confirmed the build emits hashed assets; `node --check server/index.js`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Refresh certificate history when paging data shifts
+
+- **Reviewed:** My Learning's independent course/certificate paging state, certificate offset ordering, load-more retry behavior, and narrow-screen layout.
+- **Improvement:** When a certificate page reports a changed total or a clamped page, reload page one and replace the currently appended list; keep the request-sequence guard around both requests.
+- **Why it helps:** A certificate issued while the learner is paging can shift later offsets. Refreshing the first page prevents deduplication from silently leaving a gap in the visible history.
+- **Checked:** Focused source assertions confirmed the sequence guard, drift checks, page-one refresh, and list replacement; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered concurrent-update behavior remains unverified without browser QA.
+
+## 2026-10-09 — Expose the current lesson in the curriculum
+
+- **Reviewed:** The shared curriculum lesson links, their selected styling, and the course-player's current lesson ID.
+- **Improvement:** Set `aria-current="page"` on the link for the active lesson and omit the attribute from other lesson links.
+- **Why it helps:** Screen-reader users can identify which lesson is currently open, matching the visual selected state.
+- **Checked:** A focused source check confirmed the attribute is conditional on the selected lesson; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered assistive-technology behavior remains unverified without browser QA.
+
+## 2026-10-09 — Bound learner comment posting
+
+- **Reviewed:** The learner comment form's character limit, pending/error behavior, the authenticated comment endpoint, and existing request limits.
+- **Improvement:** Limit each authenticated account to 20 lesson comments per 15-minute window, with a clear 429 response. Key the limiter by user ID so learners sharing a school or household network do not share a quota.
+- **Why it helps:** Bounds comment-driven storage and database write growth, reduces repeated-post spam, and gives the learner a direct explanation when they need to wait before posting again.
+- **Checked:** An isolated Express fixture accepted the first 20 requests, rejected the 21st with the expected JSON and rate-limit header, and confirmed a second account had an independent allowance. `node --check server/rate-limits.js`, `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The limiter uses the library's process-local default store, matching the existing authentication limiter.
+
+## 2026-10-09 — Review account disclosure and administrator logs
+
+- **Reviewed:** The learner account disclosure's accessible name and route-change close behavior; administrator audit/system-log filters, pagination, loading and retry states; server query bounds, deterministic ordering, bounded retention, and credential redaction.
+- **Result:** No code change. The disclosure already identifies the signed-in user and closes after navigation; log requests already validate filters, cap page input, return bounded pages, and persist redacted entries with retention limits.
+- **Why no change:** The source matches the existing UI/API contract and tracker coverage, with no concrete regression found in these paths.
+- **Checked:** Read `src/components.tsx`, the audit/system log pages in `src/pages-manage.tsx`, `server/routes-admin.js`, and `server/log-store.js`; confirmed no `AGENTS.md` guidance file was present and reviewed the working-tree status without altering other files. `git diff --check` passed after this entry was added. Rendered keyboard and assistive-technology behavior still needs browser QA.
+
+## 2026-10-09 — Review course overview enrollment semantics
+
+- **Reviewed:** Enrollment on `GET /api/courses/:courseId`, the explicit `POST /api/courses/:courseId/enroll` from “Start learning”, direct lesson/quiz links, My Learning membership, analytics eligibility, and the README access description.
+- **Result:** No code change; the overview read currently creates an enrollment, while the start action also explicitly enrolls. Direct lesson and quiz links provide another path into course activity.
+- **Why no change:** The docs do not define whether opening an overview, pressing Start, or entering a lesson is the intended enrollment event. That choice changes My Learning and staff analytics, so changing it without a product rule could miscount learners.
+- **Checked:** Compared the learner page, course routes, enrollment helper, and README; `git diff --check` passed. No runtime behavior was changed or claimed.
+
+## 2026-10-09 — Bring opened course content into view on mobile
+
+- **Reviewed:** Course-player rail placement after the full lesson column, the 720px stacking breakpoint, and the existing toggle/close focus path.
+- **Improvement:** When the rail is opened at the mobile breakpoint, move focus to its close control so the browser brings the newly opened panel into view; closing still restores focus to the heading toggle.
+- **Why it helps:** The course list is immediately visible and reachable instead of silently appearing below lesson notes and comments.
+- **Checked:** Focused source assertions confirmed breakpoint-scoped focus on open and toggle focus on close; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-learner.tsx` passed. Rendered focus/scroll behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Recheck course and media access boundaries
+
+- **Reviewed:** Upload authorization before multipart parsing and inside the save transaction; current course visibility checks on protected downloads; path containment, no-store headers, byte-range fallback, and stream cleanup on disconnect.
+- **Result:** No code change; the current routes enforce these boundaries and the tracker already records focused upload, revocation, range, and disconnect checks.
+- **Why no change:** This pass found no new failing case or access-policy decision that would justify changing established media behavior.
+- **Checked:** Read `server/routes-media.js`, `server/http.js`, and `server/file-stream.js` alongside the related tracker entries; `node --check server/routes-media.js` and `git diff --check` passed. No new runtime fixture was needed for this source-only recheck.
+
+## 2026-10-09 — Keep modal focus during password resets
+
+- **Reviewed:** Password-reset dialog focus trapping and the temporary state when all dialog controls are disabled during a save.
+- **Improvement:** Make the dialog section programmatically focusable for the empty-controls fallback, and wrap Tab/Shift+Tab from that section when controls become available again.
+- **Why it helps:** Focus remains in the modal both while a reset is pending and if it fails while the fallback section has focus.
+- **Checked:** Focused source assertions confirmed the fallback focus target and both tab-boundary checks; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed. Rendered pending-state behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Recheck startup failure recovery
+
+- **Reviewed:** The bootstrap loading state, startup-error page, retry action, and overlapping-request guard.
+- **Result:** No further code change; the error is announced, retry is available, and retry returns to the existing live loading status while the request runs.
+- **Why no change:** The source already provides a clear recovery path and does not expose editable setup fields during bootstrap failure.
+- **Checked:** Traced `src/App.tsx`, `src/auth-context.tsx`, and `LoadingScreen` in `src/components.tsx`; checked the existing startup-recovery tracker record. Rendered retry behavior needs a connected browser, and none is available.
+
+## 2026-10-09 — Keep setup navigation locked during creation
+
+- **Reviewed:** First-run setup's access step, its pending field state, the Back action, and the create-platform request lifecycle.
+- **Improvement:** Disable Back while the setup request is saving, matching the existing disabled access fields and submit button.
+- **Why it helps:** The wizard cannot return to editable account details while a request using the earlier values is still creating the platform.
+- **Checked:** A focused source assertion confirmed the Back action follows `saving`; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-auth.tsx` passed. Rendered pending-state behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Review authentication and session boundaries
+
+- **Reviewed:** Request-body parsing and error mapping, session-cookie configuration and SQLite store behavior, CSRF verification, authentication rate limits, and setup/registration transactions.
+- **Result:** No code change; these paths bound request input, map expected malformed requests to client errors, use timing-safe CSRF comparison, and recheck setup/account-capacity conditions inside immediate transactions.
+- **Why no change:** The reviewed code showed no concrete reliability or contract gap that justified changing authentication behavior.
+- **Checked:** Traced `server/index.js`, `server/http.js`, `server/session-store.js`, `server/routes-auth.js`, and `server/config.js`; `git diff --check` passed. No rendered UI or end-to-end behavior was claimed from this source review.
+
+## 2026-10-09 — Preserve lesson comment drafts while navigating
+
+- **Reviewed:** Lesson route changes, comment draft state, feedback refreshes, and pending comment submissions.
+- **Improvement:** Store comment drafts and in-flight submission state by lesson ID. Clear a draft after a successful post only when it still matches the submitted text.
+- **Why it helps:** Learners can move between lessons without losing unfinished comments, and a late response cannot erase newer edits or permit a duplicate post when returning to the lesson.
+- **Checked:** Focused source contract checks confirmed lesson-scoped drafts and pending guards, plus conditional draft clearing. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction remains unverified because no browser surface is connected and Playwright is not installed.
+
+## 2026-10-09 — Serve built assets before loading sessions
+
+- **Reviewed:** Production Vite asset paths, Express middleware order, session-store access, current-user lookup, and SPA fallback routing.
+- **Improvement:** Serve the public built `/assets` directory before session and current-user middleware, retaining the current production and development cache policy.
+- **Why it helps:** JavaScript and CSS requests no longer incur per-request session-store and user lookups; API and protected media routes still pass through their existing authentication paths.
+- **Checked:** An isolated production server fixture confirmed a built JavaScript asset returns 200 with the production cache header, `/courses` still serves the SPA, and asset middleware precedes session/current-user lookup. `node --check server/index.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Focus public pages after route changes
+
+- **Reviewed:** Public sign-in and registration navigation, setup-page markup, and the shared route-change focus behavior.
+- **Improvement:** Give the auth and setup main landmarks the `main-content` ID and a programmatic tab stop so the existing focus handler can target them after navigation.
+- **Why it helps:** Keyboard and assistive-technology users enter the new public page context after route navigation; initial form autofocus remains in place on first load.
+- **Checked:** A focused source check confirmed both landmarks are focusable, route focus remains limited to pathname changes, and auth form autofocus attributes remain. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered route focus remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Freeze account fields during creation
+
+- **Reviewed:** The admin account creation request, controlled form inputs, submit state, and post-create navigation.
+- **Improvement:** Disable the username, role, password, and confirmation fields while creation is pending, and expose the form's busy state.
+- **Why it helps:** The visible values cannot diverge from the already-submitted request while the administrator waits for the created account page to open.
+- **Checked:** A focused source check confirmed the busy state and all four fields plus the submit button are disabled during submission; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Keep API readiness independent of media cleanup
+
+- **Reviewed:** Startup ordering, the readiness and liveness handlers, orphan-media scan completion logging, and shutdown behavior.
+- **Improvement:** Start the listener first and schedule orphan-media cleanup on the next event-loop turn; suppress cleanup logging once shutdown has begun.
+- **Why it helps:** A large or slow media directory no longer delays health checks or accepting API traffic during startup, while the existing cleanup still runs automatically.
+- **Checked:** An isolated server fixture confirmed `/healthz` and `/readyz` returned 200 before an old orphan was removed, and unrecognized content remained untouched. `node --check server/index.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Serialize visible curriculum reorders
+
+- **Reviewed:** Module and lesson move controls, the synchronous pending guard, and the server's transactional position swaps.
+- **Improvement:** Allow only one curriculum move request at a time; disable all module and lesson move directions while that request and refresh run, retaining the active item's busy name and the shared live status.
+- **Why it helps:** A second move can no longer act on a different item using the old order before the first swap appears in the editor.
+- **Checked:** Focused source assertions confirmed the synchronous global guard, all four move directions' disabled state, and the live status; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Refresh comment pages when the feed changes during pagination
+
+- **Reviewed:** Newest-first comment offsets, the learner's load-more request, comment-post refreshes, and current route/request guards.
+- **Improvement:** Invalidate pending page requests when the lesson feed refreshes or the learner posts a comment; refresh the first page if the server total changed while a page was loading; only let the current request clear the loading state.
+- **Why it helps:** A comment arriving during pagination can shift page offsets. Stale pages are now discarded and the current newest-first feed is reloaded instead of appending a shifted page out of order.
+- **Checked:** Focused source assertions confirmed page-request sequencing, post/refresh invalidation, total-change recovery, and guarded loading cleanup; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered concurrent-comment behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Recover stale unreferenced course uploads at startup
+
+- **Reviewed:** Upload file placement, database references for course media and lesson documents, cleanup paths after request failures, and the documented single-process startup model.
+- **Improvement:** After the listener starts, scan UUID-named course directories and remove only old regular files with the application's generated upload-name pattern that have no matching media or document reference. Keep files newer than the greater of the request timeout or 24 hours, preserve unrecognized files, and log cleanup counts or failures.
+- **Why it helps:** A process exit after writing an upload but before committing its database reference no longer leaves stale app-managed files consuming course-media storage indefinitely after a later restart.
+- **Checked:** A temporary SQLite/filesystem fixture confirmed stale unreferenced uploads were removed while database-referenced media/documents, recent files, and unrecognized content were preserved. Compared the cleanup pattern with all 20 supported image, video, and document extensions. `node --check` passed for the cleanup module and server entrypoint; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Keep the password-reset dialog usable in short viewports
+
+- **Reviewed:** The reset-password dialog content, fixed backdrop, focus behavior, and existing mobile rules.
+- **Improvement:** Cap the dialog card to the available viewport height, allow its content to scroll, and contain scroll chaining within the card; use dynamic viewport units with a `vh` fallback.
+- **Why it helps:** At high zoom or in a short landscape viewport, users can scroll to the close and submit controls instead of having dialog content extend beyond the screen.
+- **Checked:** CSS assertions confirmed the viewport cap, internal scrolling, scroll containment, and unchanged backdrop spacing; `npm run build` and `git diff --check` passed. Rendered short-viewport interaction remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Reuse course-cover fallbacks in staff views
+
+- **Reviewed:** Course thumbnails in the staff course list, the course-editor cover preview, and the shared source-keyed image fallback.
+- **Improvement:** Route both staff cover images through `ImageWithFallback`, retaining the existing book placeholders, decorative thumbnail alt text, preview alt text, lazy loading, and image dimensions.
+- **Why it helps:** Missing or unreadable cover media now leaves a consistent placeholder instead of a broken-image marker in staff workflows.
+- **Checked:** Focused source assertions confirmed both staff views use the shared error fallback and preserve their existing labels/loading and CSS dimensions; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered image-failure behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Review shared request and failure handling
+
+- **Reviewed:** The shared client request helper, Express API routing and error mapping, SQLite session cleanup, bounded system/audit logging, and reduced-motion styles.
+- **Result:** No code change; API calls use same-origin credentials, retry one rejected CSRF token after refresh, and reject invalid JSON responses. Unknown API routes and parser errors return structured JSON responses; expired or malformed sessions are discarded; stored logs have bounded retention and credential redaction; reduced-motion preferences are respected.
+- **Why no change:** The inspected paths have explicit recovery and resource bounds, with no concrete contract mismatch or failure that warrants changing behavior in this cycle.
+- **Checked:** Traced `src/api.ts`, `server/index.js`, `server/http.js`, `server/session-store.js`, and `server/log-store.js`; confirmed the reduced-motion override in `src/styles.css`; `git diff --check` passed.
+
+## 2026-10-09 — Prevent duplicate curriculum moves
+
+- **Reviewed:** Module and lesson reorder controls, the server's transactional position swaps, and the editor's pending-action patterns.
+- **Improvement:** Guard each module/lesson against a second move request while its first move and course refresh are in flight; disable both move directions for that item and expose an accessible pending name/status.
+- **Why it helps:** A rapid repeat click no longer moves an item an unintended second position before the refreshed order appears.
+- **Checked:** Focused source assertions confirmed per-item synchronous guards, disabled/busy move controls for modules and lessons, and a polite live status; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Keep password reset open until the request resolves
+
+- **Reviewed:** Password-reset dialog submission, close button, Escape and backdrop dismissal, pending controls, and success/error reporting.
+- **Improvement:** Reject all dialog-close paths while that user's reset request is pending; re-enable closing as soon as the server confirms success or failure.
+- **Why it helps:** Staff cannot mistake dismissing the dialog for canceling a password change that has already been submitted.
+- **Checked:** Focused source assertions confirmed the shared close guard covers Escape, close-button, and backdrop calls; the close button is disabled while pending; and the successful response clears pending state before closing. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered dialog interaction remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Freeze lesson editor fields during saves
+
+- **Reviewed:** Lesson title/description and link title/URL inputs during lesson updates, link creation, document upload, and resource removal.
+- **Improvement:** Disable the lesson and link text fields, and the editor close control, while any lesson-detail/resource operation is busy; expose the named editor section's busy state.
+- **Why it helps:** New text can no longer be typed after a request snapshot and then silently cleared or replaced by the successful refresh.
+- **Checked:** Focused source assertions confirmed all four text fields and the close control follow the shared busy state and the section exposes `aria-busy`; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered pending-state interaction remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Cancel superseded catalog requests
+
+- **Reviewed:** Catalog filter/search and pagination requests, the existing stale-response sequence guard, page cleanup, and shared fetch options.
+- **Improvement:** Let `api.get` accept an abort signal and cancel an earlier catalog request when a new page/filter load begins or the catalog unmounts; retain sequence checks for response ordering.
+- **Why it helps:** The browser stops transferring obsolete catalog responses when filters change or learners leave; the existing sequence guard still protects the displayed results if a response wins the race.
+- **Checked:** Focused source assertions confirmed both catalog read paths pass their current abort signal, each new request cancels its predecessor, and effect cleanup aborts on filter changes/unmount; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Browser network-cancellation behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Reject whitespace-only production session secrets
+
+- **Reviewed:** Session-secret environment parsing, the production startup guard, and the documented random-secret setup.
+- **Improvement:** Trim the configured session secret before applying the existing production validation, so whitespace-only values fall back to the development placeholder and fail production startup.
+- **Why it helps:** A secret made only of spaces can no longer satisfy the production length check and become the session-signing key.
+- **Checked:** Isolated Node processes confirmed whitespace-only secrets are rejected in production, the documented 32-byte hex secret is accepted, and a padded valid secret is normalized; `node --check server/config.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Name the lesson reaction control group
+
+- **Reviewed:** Lesson reaction button structure, their accessible pressed states and counts, and the surrounding feedback section.
+- **Improvement:** Expose the labeled reaction container as a control group.
+- **Why it helps:** Screen-reader users can hear that Like and Dislike are related reactions for the current lesson, while each button keeps its own pressed state and count.
+- **Checked:** Focused source assertion confirmed the group role and accessible name wrap both reaction buttons; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered assistive-technology output remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Reset image fallback state when the source changes
+
+- **Reviewed:** Shared course-cover and platform-icon fallback rendering, source changes during course navigation, and the existing failed-image fallback behavior.
+- **Improvement:** Key the stateful image renderer by its source URL so a previous image failure is cleared when the component changes sources.
+- **Why it helps:** Returning to a previously failed cover after viewing another course retries the image instead of keeping a stale placeholder when the file has since become available.
+- **Checked:** Focused source assertions confirmed per-source component identity and failure state, while `loading` and `decoding` props still reach the `<img>`; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Browser error/retry interaction remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Check Office and RTF document containers
+
+- **Reviewed:** Supported lesson-document extensions and MIME types, existing PDF envelope checks, the management editor's file accept list and multipart field order, and the learner's protected download link.
+- **Improvement:** Check the CFB header for legacy `.doc`, `.ppt`, and `.xls`, the ZIP local-file header for Open XML and OpenDocument files, allow CFB-backed encrypted Open XML, and check the RTF version header; keep text and delimited files on their extension/MIME checks.
+- **Why it helps:** Obvious non-document bytes can no longer be saved under common Office or RTF extensions and fail only when a learner downloads them. These are bounded container-header checks, not full archive or document validation.
+- **Checked:** An isolated Express/SQLite upload fixture confirmed invalid headers are rejected and temporary files are removed; CFB, ZIP, encrypted Open XML, and RTF headers pass; and text uploads remain accepted. Traced the client extension list and multipart order through server validation to the authorized learner download route; no mismatch was found. Also checked `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Defer off-screen course cover images
+
+- **Reviewed:** Catalog and My Learning grids that append pages, the 50-row staff course table, shared cover-image fallback behavior, and existing cover aspect-ratio rules.
+- **Improvement:** Eager-load only the first course-card cover, lazy-load later card covers and staff-table thumbnails, and decode deferred images asynchronously while retaining reserved image space.
+- **Why it helps:** Browsing lists avoids requesting and decoding every below-the-fold cover immediately, which matters more as learners append course pages; the first visible card keeps an eager image and the existing aspect ratio prevents layout shifts.
+- **Checked:** Focused source assertions confirmed both learner lists keep the first cover eager and defer the rest, staff thumbnails are lazy, and the course-detail hero remains eager; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered network behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Return client errors for unsupported request encodings
+
+- **Reviewed:** Installed Express/body-parser error types, the shared HTTP error handler, and behavior for unsupported request encodings and excessive URL-encoded fields.
+- **Improvement:** Map unsupported charsets/content encodings to 415, invalid or interrupted body lengths to 400, and excessive form parameters to 413 before generic error logging.
+- **Why it helps:** Expected malformed client requests no longer appear as server failures; parser errors that retain the submitted form body are handled without printing that body to the console.
+- **Checked:** An isolated Express/SQLite fixture exercised actual parser requests for unsupported charset/encoding, 1,001 form fields, malformed JSON, and oversized bodies, plus direct error-handler cases for invalid body length and interrupted requests. It confirmed the 4xx status/error codes, no system-log entries for these client errors, and no parser stack/body printed. Also checked `node --check server/http.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Review learner catalog query contract
+
+- **Reviewed:** Catalog search/category limits, supported sort values, SQL wildcard escaping, learner-visible category results, deterministic ordering, and bounded pagination.
+- **Result:** No code change; the route validates and bounds its inputs, uses parameterized visibility-aware queries, and orders page ties by course ID.
+- **Why no change:** The route’s filter and pagination behavior matches the learner controls, and existing isolated fixtures already cover page boundaries and visibility.
+- **Checked:** Traced `accessiblePublishedCourses` and `GET /courses` in `server/routes-courses.js`, compared them with the catalog controls and earlier pagination fixture coverage, and ran `git diff --check`.
+
+## 2026-10-09 — Announce lesson comment submission
+
+- **Reviewed:** Lesson comment form submission, duplicate-submit prevention, pending button label, and accessible status patterns used by other save actions.
+- **Improvement:** Mark the comment form busy while posting and expose the pending state through a polite live status region.
+- **Why it helps:** Screen-reader users receive explicit feedback when a comment is being submitted, including while the submit control is disabled.
+- **Checked:** Focused source assertions confirmed the live status tracks `commentSaving`, sits outside the busy form, and duplicate submission remains guarded; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Wrap long quiz answer choices
+
+- **Reviewed:** Learner choice markup and layout, mobile quiz breakpoints, and the server's 500-character answer-choice limit.
+- **Improvement:** Let quiz choice text shrink within its flex row and wrap even when it contains a long unbroken string.
+- **Why it helps:** Valid long answers stay inside the choice card on narrow screens instead of widening the quiz layout or causing horizontal overflow.
+- **Checked:** Focused source assertions confirmed the text span can shrink and wraps arbitrary long strings; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered mobile layout remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Freeze quiz answers during submission
+
+- **Reviewed:** Learner radio controls, the disabled submit button and its pending label, answer snapshot timing, and the transactional server scoring path.
+- **Improvement:** Disable each question fieldset while the attempt request is in flight, mark the form busy, and remove the active pointer/hover treatment from temporarily unavailable choices.
+- **Why it helps:** Learners can no longer change answers after the server has received the submitted snapshot and then see those unsaved edits discarded when results appear.
+- **Checked:** Focused source assertions confirmed busy-state and fieldset disabling are tied to the same `saving` state and disabled styling suppresses hover; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered pending-state interaction remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Review quiz submission and result flow
+
+- **Reviewed:** Learner answer grouping and completion feedback, submit/retry focus behavior, the transactional attempt validator, and quiz layout breakpoints.
+- **Result:** No code change; the client enables submission only when every question has one selected answer, and the server checks question and choice IDs before saving an attempt.
+- **Why no change:** The learner-visible readiness rule matches server validation, and the result/retry states have explicit status and focus handling.
+- **Checked:** Read `CoursePlayer` quiz markup and handlers, quiz attempt route, relevant CSS breakpoints, and prior tracker coverage; `git diff --check` passed. Rendered keyboard and narrow-screen interaction still need a connected browser.
+
+## 2026-10-09 — Review analytics totals and responsive tables
+
+- **Reviewed:** Course analytics eligibility and aggregate calculations, 50-row learner detail pages, lesson/quiz result tables, named scroll regions, and the 720px/460px dashboard breakpoints.
+- **Result:** No code change; the aggregate queries are set-based, learner-detail queries remain page-bounded, and wide tables have captions plus named keyboard-scroll regions.
+- **Why no change:** The query path and responsive source rules match the existing learner and dashboard contracts; no separate correctness or layout defect was established.
+- **Checked:** Traced the SQL and response fields through `CourseAnalyticsPage`, its table markup, and responsive CSS; `git diff --check` passed. Representative-data latency and rendered viewport behavior still need suitable data and a connected browser.
+
+## 2026-10-09 — Review interactive element semantics
+
+- **Reviewed:** Common non-interactive container elements for click handlers or simulated control roles, plus focusable wrappers around wide management tables.
+- **Result:** No code change; the scanned containers do not simulate buttons or links, and focusable table wrappers use named region semantics.
+- **Why no change:** The source shows native interactive controls for the inspected actions, with keyboard focus reserved for labeled scroll regions.
+- **Checked:** Scanned learner and management TSX for container click handlers, custom button/link roles, and positive/zero tab stops; `git diff --check` passed. Rendered tab order and viewport behavior need a connected browser; the current browser inventory is empty.
+
+## 2026-10-09 — Reject non-object JSON API responses
+
+- **Reviewed:** All successful JSON response envelopes from server routes, the shared fetch client, CSRF bootstrap, and XHR uploads.
+- **Improvement:** Require successful JSON API and upload payloads to parse as non-null objects, and use the same boundary check for CSRF tokens.
+- **Why it helps:** Valid JSON values such as `null`, arrays, strings, and numbers can no longer pass the transport layer and fail later when typed callers access expected response fields.
+- **Checked:** An isolated transport harness confirmed object responses pass while malformed JSON, `null`, arrays, strings, and numbers fail with `invalid_response` for JSON requests, CSRF bootstrap, and uploads. Also checked `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Recover once from a stale CSRF token
+
+- **Reviewed:** The global CSRF middleware order and response codes, cached token refresh, JSON mutation requests, and multipart upload handling.
+- **Improvement:** When the server rejects a write with `csrf_missing` or `csrf_invalid`, refresh the token and retry that request once. Apply the same bounded recovery to uploads and reset upload progress before resending.
+- **Why it helps:** A session/token rotation no longer makes a learner or administrator repeat an otherwise valid action; other server errors and a second CSRF rejection still surface normally.
+- **Checked:** An isolated transport harness confirmed a stale-token JSON write and multipart upload each refresh and succeed on one retry, ordinary server errors are not retried, and repeated CSRF rejection stops after two write attempts. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Follow up on streaming, sessions, and navigation focus
+
+- **Reviewed:** The shared file-stream abort/error lifecycle, protected media range fallback, SQLite session expiry and revocation, password-reset dialog focus handling, account-menu dismissal, and route-change focus.
+- **Result:** No code change; the inspected paths already close streams on aborted responses, reject expired or malformed sessions, constrain modal keyboard focus, and move focus to the main landmark after navigation.
+- **Why no change:** Source and prior focused validation show the expected recovery and accessibility behavior, with no distinct defect in these paths.
+- **Checked:** Read `server/file-stream.js`, `server/routes-media.js`, `server/session-store.js`, the dialog/header components, route status handling, and related tracker entries; `git diff --check` passed. Rendered viewport and route interaction checks need a connected browser, which is unavailable in this environment.
+
+## 2026-10-09 — Hide course analytics from the previous route
+
+- **Reviewed:** Dashboard route changes, the active-request guard, the displayed course title, analytics metrics, and course-specific management links.
+- **Improvement:** Keep the dashboard in its loading state whenever the stored analytics belong to a different course than the current route.
+- **Why it helps:** Navigating between course dashboards no longer briefly pairs one course's metrics with another course's assignment and edit links.
+- **Checked:** A focused source assertion verified the route identity guard precedes the dashboard render; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered route-switch behavior remains unverified without a connected browser.
+
+## 2026-10-09 — Keep account actions with the selected user
+
+- **Reviewed:** Administrator account detail navigation, role and disable updates, password resets, and the route-guarded account loader.
+- **Improvement:** Scope account action results and pending state to the account that started them, clear account notices and password fields when the selected user changes, and keep the previous user's details hidden during the route transition.
+- **Why it helps:** A delayed save or password reset can no longer overwrite another user's details or leave a misleading success/error message on the next account.
+- **Checked:** Focused source assertions verified route/action sequence guards on both mutations, guarded account merging, per-user notice reset, and stale-account loading; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Keep lesson comment pages current as the feed changes
+
+- **Reviewed:** The newest-first comment query, page-number offsets, posting flow, and the learner's “Load more comments” state.
+- **Improvement:** Refresh the first page after posting so its contents and offset stay aligned with server ordering; refresh again if a requested page is clamped or returns no unseen comments while the total says more remain.
+- **Why it helps:** Concurrent comments no longer leave learners stuck repeatedly requesting a page that cannot advance, and a successful post returns the feed to a current, consistent first page.
+- **Checked:** Focused source assertions covered the post-success refresh and both no-progress recovery conditions; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-09 — Return useful errors for invalid or oversized request bodies
 
 - **Reviewed:** Existing uncommitted setup, authentication, branding, settings, and style changes; Express middleware and error handling; application forms and responsive/accessibility styles.
@@ -131,3 +1603,1802 @@
 - **Improvement:** Parse JSON responses through a shared guarded helper, map malformed JSON to a typed `invalid_response` API error, and make upload setup a normal async function so synchronous setup failures reject the returned promise.
 - **Why it helps:** A malformed JSON response no longer throws outside the upload promise and leaves its editor in a permanent busy state; regular API calls also receive a consistent actionable error.
 - **Checked:** TypeScript and production build; isolated transport harness confirmed valid uploads resolve, malformed upload and API JSON reject with `ApiError`, and server upload status/code are preserved.
+
+## 2026-10-09 — Give course filters accurate accessibility semantics
+
+- **Reviewed:** Course-management status controls and the list they filter.
+- **Improvement:** Expose the filters as a labeled button group with `aria-pressed` state instead of a tablist with tabs and no tab-panel or arrow-key behavior.
+- **Why it helps:** Assistive technology now receives the actual filter interaction model, while each native button remains directly keyboard operable.
+- **Checked:** TypeScript and production build; source-level assertion confirmed the named group and pressed state are present and the misleading tab semantics are absent; `git diff --check`.
+
+## 2026-10-09 — Show startup failures and allow a retry
+
+- **Reviewed:** Initial setup-status, session, and CSRF loading in the auth provider and the route chosen after bootstrap.
+- **Improvement:** Preserve bootstrap errors, show a recovery screen with a retry action instead of falling through to first-run setup, and ignore stale overlapping startup attempts. The loading screen is centered and announced as a status update.
+- **Why it helps:** A temporary API or session failure no longer looks like a fresh installation, and users have a clear way to retry once the service is available.
+- **Checked:** `npx tsc --noEmit`; `npm run build`; source contract assertion; isolated built-client fixture returned 503 for API requests and its rendered accessibility snapshot showed the error heading, message, and Retry button. The button click was not automated in the available browser-control session. Fixture server was stopped.
+
+## 2026-10-09 — Revoke other sessions after a password change
+
+- **Reviewed:** Admin reset session invalidation, the SQLite session store, and self-service password changes.
+- **Improvement:** Share session invalidation logic and revoke a user's other sessions after a successful self-service password change while preserving the current session; explain the effect on the account-security page.
+- **Why it helps:** A session on another device cannot keep using the old authenticated state after the account password changes, and the user can continue in the session that made the change.
+- **Checked:** Isolated Express/SQLite fixture verified the 204 response, new password hash, current-session preservation, removal of same-user sessions, retention of another user's session, and full invalidation for admin resets. `node --check`; TypeScript; production build; `git diff --check`. Live account-security accessibility snapshot showed the updated copy; temporary fixture data was removed.
+
+## 2026-10-09 — Match login field limits to server validation
+
+- **Reviewed:** Login form constraints and the authentication route's maximum input lengths.
+- **Improvement:** Cap the login username at 32 characters and password at 256 characters in the browser, matching the server's request validation.
+- **Why it helps:** Users cannot submit oversized credentials that the server would reject with a validation error.
+- **Checked:** `npx tsc --noEmit`; `npm run build`; source assertion confirmed both field limits match the route; `git diff --check`.
+
+## 2026-10-09 — Validate CSRF bootstrap responses
+
+- **Reviewed:** The CSRF token fetch used after startup, sign-in, registration, setup, and sign-out, alongside the guarded JSON handling used by other API calls.
+- **Improvement:** Parse CSRF responses with the shared guarded parser, require a JSON response with a non-empty string token, and reject malformed payloads as `invalid_response` instead of storing the string `"undefined"`.
+- **Why it helps:** Broken or intercepted bootstrap responses fail at the session boundary with a clear typed error, rather than causing later writes to fail with confusing CSRF errors.
+- **Checked:** `npx tsc --noEmit`; `npm run build`; isolated transport harness covered valid token, malformed JSON, missing and wrong-type token, non-JSON response, and malformed ordinary API JSON; `git diff --check`.
+
+## 2026-10-09 — Make the learner course rail keyboard predictable
+
+- **Reviewed:** Course-player rail disclosure, its close button, landmark name, and wide/narrow layout behavior.
+- **Improvement:** Keep a stable controlled rail region in the DOM, expose `aria-expanded` and `aria-controls`, name the region with a real section heading, and return focus to the toggle when the in-rail close button is used.
+- **Why it helps:** Keyboard and assistive-technology users can identify the course-content section, understand whether it is open, and continue from the control after closing it.
+- **Checked:** `npx tsc --noEmit`; `npm run build`; source contract assertion confirmed the panel ID remains present while hidden, state/control attributes match, and focus returns to the toggle; `git diff --check`.
+
+## 2026-10-09 — Recover cleanly from malformed stored sessions
+
+- **Reviewed:** SQLite session expiry, JSON decoding, and session invalidation paths.
+- **Improvement:** Delete a single malformed or non-object session row and load the request as unauthenticated, while preserving callback errors for actual database failures.
+- **Why it helps:** One bad session record no longer turns its owner's requests into server errors or affects other sessions.
+- **Checked:** `node --check`; isolated SQLite fixture confirmed valid sessions still load, malformed/non-object/expired rows are removed, missing sessions remain anonymous, and database read errors still propagate; `git diff --check`.
+
+## 2026-10-09 — Recheck learner lesson-resource links
+
+- **Reviewed:** Staff URL validation, learner external-link attributes, and protected document delivery.
+- **Result:** No additional code change; the server limits external resources to credential-free HTTP(S) URLs, learner links use `noopener noreferrer`, and document downloads require course access.
+- **Why no change:** This pass did not establish a malformed-link, unsafe-navigation, or document-access defect. A further change needs a reproducible browser/accessibility issue or a clarified resource policy.
+- **Checked:** Read the resource create/delete routes, protected document route, and learner resource markup; `git diff --check`.
+
+## 2026-10-09 — Serialize quiz save and removal actions
+
+- **Reviewed:** Quiz-editor save, delete, and field interactions while requests are pending.
+- **Improvement:** Use one exclusive busy state for save/removal, disable quiz fields and competing actions while busy, expose the busy state, and label the disabled delete control as it removes.
+- **Why it helps:** A quiz cannot be removed during a save or edited while a reload is replacing its state, avoiding conflicting requests and silently lost edits.
+- **Checked:** `npx tsc --noEmit`; `npm run build`; source contract assertion confirmed shared busy state, disabled fieldset and controls, and active removal label; `git diff --check`.
+
+## 2026-10-09 — Prevent duplicate draft creation in development
+
+- **Reviewed:** New-course creation in a mount effect, the component cleanup guard, and `React.StrictMode` in the application entry point.
+- **Improvement:** Share the in-flight create request across StrictMode's effect replay, while keeping stale effect instances from applying the response and clearing the request when leaving the new-course route.
+- **Why it helps:** Creating a course in the development client no longer leaves an extra untitled draft in the database.
+- **Checked:** Before the fix, an isolated StrictMode Vite/API fixture received two create POSTs and navigated to `fixture-course-2`; after the fix, the same flow received one POST and navigated to `fixture-course-1`. The fixture used a mock API and changed no project data. `npx tsc --noEmit`; `npm run build`; source contract assertion; `git diff --check`. Fixture servers were stopped.
+
+## 2026-10-09 — Ignore stale course-editor responses
+
+- **Reviewed:** Course-editor route changes and every refresh path after course, module, lesson, quiz, and media updates.
+- **Improvement:** Sequence course fetches, invalidate pending loads when the route changes, and apply a response only when it still matches the selected course. Keep the editor in its loading state while route data is being replaced.
+- **Why it helps:** A slow response for the previous course can no longer replace the current course’s title, details, or curriculum after an administrator switches routes.
+- **Checked:** An isolated browser fixture delayed course A’s response by two seconds and returned course B first; after A completed, the editor still displayed B. The fixture used mocked read responses and made no project-data writes. `npx tsc --noEmit`; `npm run build`; source contract assertions; `git diff --check`.
+
+## 2026-10-09 — Keep account search results in request order
+
+- **Reviewed:** Admin user search submissions and role-filter reloads while prior requests remain in flight.
+- **Improvement:** Apply user results, errors, and loading completion only from the latest request.
+- **Why it helps:** A slow earlier search can no longer replace the current list after an administrator has searched for another account, reducing the chance of acting on a stale visible result.
+- **Checked:** An isolated browser fixture returned the `fast` search first and the earlier `slow` search five seconds later; the table continued to show only `fast-result`. The fixture used mock reads and no project-data writes. `npx tsc --noEmit`; `npm run build`; source contract assertion; `git diff --check`.
+
+## 2026-10-09 — Keep private-course access tied to the selected course
+
+- **Reviewed:** Course-access page route changes, learner searches, and grant/revoke completion behavior.
+- **Improvement:** Sequence access-list requests, clear the old course and query on a course switch, and ignore stale read or access-mutation responses once the selected course changes.
+- **Why it helps:** Administrators cannot see an old course’s access list alongside the new course title, and a late request cannot overwrite the currently selected learner list.
+- **Checked:** An isolated browser fixture delayed course A and its access list by 2.2 seconds, returned course B first, and confirmed B’s learner and title remained after A completed. The fixture used mock reads and no project-data writes. `npx tsc --noEmit`; `npm run build`; source contract assertions; `git diff --check`.
+
+## 2026-10-09 — Keep public catalog results aligned with filters
+
+- **Reviewed:** Catalog search submissions and reloads caused by category or sort changes.
+- **Improvement:** Apply course results, category options, errors, and loading completion only from the latest catalog request.
+- **Why it helps:** A slow earlier search or filter request cannot replace results for the current search and selected filters.
+- **Checked:** An isolated browser fixture returned the `fast` course search first and the earlier `slow` search five seconds later; the catalog continued to show only `Fixture fast`. The fixture used mock reads and no project-data writes. `npx tsc --noEmit`; `npm run build`; source contract assertion; `git diff --check`.
+
+## 2026-10-09 — Keep staff course results aligned with current filters
+
+- **Reviewed:** Course search, status-filter reloads, and refreshes after course actions.
+- **Improvement:** Sequence list requests and read the latest search text and status when a refresh starts, so a late course action refresh respects the controls currently shown.
+- **Why it helps:** Old search or status results cannot replace the current staff list after a newer filter request completes.
+- **Checked:** An isolated browser fixture returned the `fast` course search first and the earlier `slow` search five seconds later; the table continued to show only `Fixture fast`. The fixture used mock reads and no project-data writes. `npx tsc --noEmit`; `npm run build`; source contract assertions; `git diff --check`.
+
+## 2026-10-09 — Keep learner lesson data on the selected course
+
+- **Reviewed:** Course-player loads and lesson-completion refreshes during route changes.
+- **Improvement:** Sequence course loads, discard stale responses and errors, clear old course data when switching, and ignore completion responses after leaving that course.
+- **Why it helps:** Learners do not see one course’s lesson under another course’s route, and late progress requests cannot replace the lesson currently selected.
+- **Checked:** An isolated browser fixture delayed course A by 2.2 seconds and returned course B first; after A completed, the player still showed course B and Lesson B. The fixture used mock reads and no project-data writes. `npx tsc --noEmit`; `npm run build`; source contract assertions; `git diff --check`.
+
+## 2026-10-09 — Keep quiz state scoped to its route
+
+- **Reviewed:** Quiz loads, course/quiz route changes, and submission completion after navigation.
+- **Improvement:** Ignore stale course loads and quiz submissions, reset answers/results when either route identifier changes, and display a result only for the quiz route that produced it.
+- **Why it helps:** A result from one quiz cannot be shown under another quiz, and navigating away during a submission cannot update the newly selected quiz.
+- **Checked:** `npx tsc --noEmit`; `npm run build`; source contract checks for load/submission guards and route-keyed results; `git diff --check`. Browser behavior could not be exercised because the current computer-use inventory reported no available browsers.
+
+## 2026-10-09 — Make log disclosures identifiable to assistive technology
+
+- **Reviewed:** The current admin audit/system-log tables, their column headers, and repeated details disclosures.
+- **Improvement:** Add explicit table captions and column scopes, and give each “View details” disclosure an accessible name tied to its event summary.
+- **Why it helps:** Screen-reader users can distinguish each details control and identify which log table and column they are navigating.
+- **Checked:** `npx tsc --noEmit`; `npm run build`; source assertions confirmed both captions and per-entry labels; `git diff --check`. Browser accessibility inspection was unavailable because the current computer-use inventory has no browser surfaces.
+
+## 2026-10-09 — Track private-course access changes per learner
+
+- **Reviewed:** Grant/revoke requests for multiple learners when administrators act before earlier requests finish.
+- **Improvement:** Maintain a pending set per learner, prevent duplicate requests for the same learner synchronously, and clear each row independently.
+- **Why it helps:** One learner’s request can no longer re-enable another learner’s control, and repeated clicks cannot launch duplicate access changes.
+- **Checked:** `npx tsc --noEmit`; `npm run build`; source contract checks for the synchronous duplicate guard and per-row pending state; `git diff --check`. Browser interaction checks were unavailable because the current computer-use inventory has no browser surfaces.
+
+## 2026-10-09 — Keep course overview actions on the selected course
+
+- **Reviewed:** Learner overview course loads and the enrollment/start-learning action during route changes.
+- **Improvement:** Ignore stale overview loads, show loading when route data is changing, scope enrollment completion to the selected course, prevent duplicate starts, and label the pending action.
+- **Why it helps:** A delayed enrollment cannot navigate a learner into a different course after they have switched, and the action cannot be submitted repeatedly while pending.
+- **Checked:** `npx tsc --noEmit`; `npm run build`; source contract checks for load/enrollment guards and the pending label; `git diff --check`. Browser interaction checks were unavailable because the current computer-use inventory has no browser surfaces.
+
+## 2026-10-09 — Announce log refreshes accessibly
+
+- **Reviewed:** Audit/system-log refresh and filter loading states.
+- **Improvement:** Mark each log table busy while its request is pending and expose the loading message as a polite status region.
+- **Why it helps:** Assistive-technology users receive feedback when a filter or refresh is updating the log table.
+- **Checked:** `npx tsc --noEmit`; `npm run build`; source contract checks for both busy tables and status messages; `git diff --check`. Browser accessibility inspection was unavailable because the current computer-use inventory has no browser surfaces.
+
+## 2026-10-09 — Prune retained logs with a primary-key cutoff
+
+- **Reviewed:** Audit and system log retention once each table reaches its configured row limit.
+- **Improvement:** Replace the `NOT IN` list of every retained row with a cutoff ID lookup and a primary-key range delete.
+- **Why it helps:** The same newest 10,000 audit entries and 5,000 system entries are retained, with less temporary work on each log write.
+- **Checked:** An isolated database applied migration v3, verified redaction, inserted beyond both caps, and confirmed the row counts and newest entries. `EXPLAIN QUERY PLAN` confirmed the delete uses an integer-primary-key range. Also checked `node --check server/log-store.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Keep log pagination valid after retention
+
+- **Reviewed:** Filtered audit/system log pages after old rows are pruned at the retention limit.
+- **Improvement:** Clamp requested pages to the last page in the filtered result and sync the pager to the page returned by the server.
+- **Why it helps:** An administrator who refreshes after old matching events expire sees the latest valid page instead of an empty page beyond the results.
+- **Checked:** An isolated Express/SQLite fixture requested page 2 with 60 matching entries in each log, reduced each result set to 5, then confirmed both endpoints returned page 1 with all 5 entries. Also checked `node --check server/routes-admin.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Label management tables for screen readers
+
+- **Reviewed:** Course and account tables in the management area.
+- **Improvement:** Add screen-reader captions and explicit column scopes to both tables.
+- **Why it helps:** Assistive technology can identify each table and announce the correct column heading while navigating cells.
+- **Checked:** Source assertions confirmed both captions and all column scopes; `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Redact complete credentials from system messages
+
+- **Reviewed:** System-log message sanitization for authorization headers and secret-like assignments.
+- **Improvement:** Redact the credential after Bearer/Basic schemes, and cover cookie and session assignments in free-form messages.
+- **Why it helps:** Common credential formats no longer leave the token or password behind in an administrator-visible log message.
+- **Checked:** An isolated database confirmed Bearer and Basic credentials plus password, cookie, and session values are redacted before storage. Also checked `node --check server/log-store.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Track admin account changes per user
+
+- **Reviewed:** Concurrent role, account-status, and password-reset actions in the user-management table.
+- **Improvement:** Replace the single pending user ID with a per-user pending set and synchronously block duplicate requests for the same account.
+- **Why it helps:** One account’s completion can no longer clear another account’s busy state, and role/status/reset requests for one user cannot overlap.
+- **Checked:** Source assertions confirmed the ref-backed duplicate guard, per-user pending updates, and disabled controls; `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Prevent duplicate module and lesson creation
+
+- **Reviewed:** Course-editor add-module and add-lesson actions before their list refresh completes.
+- **Improvement:** Add synchronous duplicate guards, per-module pending state, disabled controls, and “Adding…” labels while requests are in flight.
+- **Why it helps:** A double click or repeated submit no longer creates duplicate modules or lessons while the editor is waiting for the server.
+- **Checked:** Source assertions confirmed both guards and pending controls; `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Prevent overlapping course media uploads
+
+- **Reviewed:** Course-cover and lesson-video upload controls while an upload is pending.
+- **Improvement:** Add synchronous cover/lesson upload guards, disable each active file input, and show an upload label and busy cursor.
+- **Why it helps:** Repeated file selections cannot launch concurrent replacements for the same cover or lesson video, avoiding wasted transfer and last-completion-wins results.
+- **Checked:** Source assertions confirmed both lock guards, disabled inputs, and pending labels; `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Expose upload progress to assistive technology
+
+- **Reviewed:** Lesson-document, lesson-video, and course-cover upload progress indicators.
+- **Improvement:** Give each progress indicator a progress-bar role, a meaningful accessible name, and its current value from 0 to 100.
+- **Why it helps:** Screen readers can identify which upload is progressing and announce its current completion value.
+- **Checked:** Source assertions confirmed all three indicators expose role, bounds, current value, and labels; `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Bound multipart upload metadata
+
+- **Reviewed:** Multipart parser limits against the fields used by cover, video, and lesson-document uploads.
+- **Improvement:** Cap field names, field values, text-field count, total parts, and multipart header pairs while retaining the configured file-size limit and one-file limit.
+- **Why it helps:** Upload requests can no longer consume unbounded memory through arbitrary metadata fields, while the editor’s current upload forms continue to work.
+- **Checked:** An isolated Express/SQLite fixture accepted a cover and a document using the largest current field set, rejected excess fields with `LIMIT_FIELD_COUNT`, and rejected a 9 KiB field with `LIMIT_FIELD_VALUE`. Also checked `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Name course-editor icon actions
+
+- **Reviewed:** Icon-only module and lesson move/remove buttons.
+- **Improvement:** Add explicit accessible names that include the affected module or lesson, and declare each control as a button.
+- **Why it helps:** Screen-reader users can identify both the action and the item it affects, and the controls cannot accidentally submit a surrounding form.
+- **Checked:** Source assertions confirmed item-specific names and explicit button types; `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Keep the lesson player visible while saving progress
+
+- **Reviewed:** Learner completion toggles and their follow-up course refresh.
+- **Improvement:** Refresh course data without activating the full-page loading view, mark the completion button busy, and announce the pending save politely.
+- **Why it helps:** Learners keep their place in the lesson while the completion state updates and receive clear feedback during the request.
+- **Checked:** Source assertions confirmed background refresh and busy/status semantics; `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Default shared buttons to non-submit
+
+- **Reviewed:** All shared `Button` usages, especially those rendered near forms.
+- **Improvement:** Default the reusable button component to `type="button"`; intentional form submissions already declare `type="submit"` explicitly.
+- **Why it helps:** A button added inside a form cannot accidentally submit it unless its caller explicitly requests submission.
+- **Checked:** The current form-submit callers all specify their type; source assertions confirmed the default and explicit submit types. `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Log and delegate post-header stream errors
+
+- **Reviewed:** Error handling for protected media streams that fail after response headers are sent.
+- **Improvement:** Record these failures in the system log and pass them to Express’s final error handler instead of returning silently.
+- **Why it helps:** Operators can diagnose interrupted media delivery, and Express can close a partially written response correctly. Ordinary API error responses remain unchanged.
+- **Checked:** An isolated SQLite check confirmed post-header errors are logged without query strings and forwarded to the next handler; a normal error still returns the generic 500 response. Also checked `node --check server/http.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Announce page-level loading states
+
+- **Reviewed:** Loading feedback on learner and management pages.
+- **Improvement:** Expose all nine page-level loading messages as polite status regions.
+- **Why it helps:** Screen-reader users are notified while course lists, lessons, quizzes, course editing, access controls, and accounts are loading.
+- **Checked:** A source assertion confirmed all nine page loaders have `role="status"` and `aria-live="polite"`; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Make native action buttons non-submit
+
+- **Reviewed:** Native action buttons in course management, account controls, and private-course access.
+- **Improvement:** Declare all eight action buttons as `type="button"`; form submissions remain explicit.
+- **Why it helps:** These controls keep their action-only behavior if later placed inside a form, avoiding accidental submits.
+- **Checked:** A source scan confirmed no native button relies on its default type; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Review remaining form and focus accessibility
+
+- **Reviewed:** Form-control labels, keyboard focus styles, and reduced-motion support.
+- **Result:** No additional code change. Inputs are labeled or wrapped by labels, the global focus-visible outline is present, and transitions honor reduced-motion preferences.
+- **Why no change:** Source review did not establish another accessibility defect. A rendered responsive and interaction review needs an available browser surface; the Browser plugin is absent and Playwright is not installed in this workspace.
+- **Checked:** Reviewed all app input/select/textarea markup and focus/reduced-motion CSS; confirmed no configured Playwright dependency or CLI. Existing TypeScript, production-build, and diff checks passed for the UI edits above.
+
+## 2026-10-09 — Contain expired-session cleanup failures
+
+- **Reviewed:** The daily SQLite session-expiry cleanup timer and its failure path.
+- **Improvement:** Catch cleanup errors, record a structured system-log event in the running app, and fall back to stderr if error reporting itself fails.
+- **Why it helps:** A transient database lock during background cleanup no longer escapes an interval callback and terminates the server; the next scheduled cleanup can still run.
+- **Checked:** An isolated timer harness injected `SQLITE_BUSY`, confirmed the error was reported without escaping, then confirmed a subsequent cleanup succeeded. Also checked `node --check` for both server files, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Keep staff navigation available on mobile
+
+- **Reviewed:** Staff sidebar navigation and account controls at the 720px breakpoint.
+- **Improvement:** Keep “Back to learning” and the account/sign-out row visible in the compact mobile sidebar, and give the icon-only sign-out button an explicit accessible name.
+- **Why it helps:** Staff can return to learner pages or sign out while using course management on a phone.
+- **Checked:** A source assertion confirmed the mobile rules display both controls and the button has an accessible name; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered viewport testing remains unavailable because no browser surface or Playwright runtime is installed.
+
+## 2026-10-09 — Report media cleanup failures after course deletion
+
+- **Reviewed:** Permanent course deletion across SQLite and the course media directory.
+- **Improvement:** Keep the successful database deletion and audit response consistent if filesystem removal fails, and record a system-log error with the course ID and filesystem error code.
+- **Why it helps:** Staff no longer receive a misleading 500 for a course that has already been deleted, and operators can identify the media directory needing cleanup.
+- **Checked:** An isolated Express/SQLite route fixture forced `fs.rmSync` to fail and confirmed the 204 response, deleted course row, retained fixture directory, system-log details, and deletion audit. The temporary fixture was removed. Also checked `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Preserve replacement media after old-file cleanup failure
+
+- **Reviewed:** Video and course-cover replacement across the media row transaction and old-file removal.
+- **Improvement:** Limit rollback cleanup of the new upload to database-save failures. Treat old-media removal as post-commit best effort and log the course, old/new media IDs, and filesystem error.
+- **Why it helps:** A failure removing the previous file can no longer delete the new upload after the database has switched to it, leaving the lesson or cover pointed at a missing file.
+- **Checked:** An isolated Express/SQLite upload fixture forced old-file removal to fail and confirmed the 201 response, the lesson's new media ID, the replacement file's presence, and a system-log record. The old file remained as the logged cleanup failure; the temporary fixture was removed. Also checked `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Keep lesson deletion consistent when file cleanup fails
+
+- **Reviewed:** Lesson and document removal across SQLite records, course timestamps, audit entries, and media files.
+- **Improvement:** Commit related database deletions and course updates together, then remove files as best effort and log each cleanup failure with its lesson/resource/media ID.
+- **Why it helps:** A filesystem error no longer leaves the API reporting failure after the lesson or resource row has already been deleted, or skips the course update after a partial SQL sequence.
+- **Checked:** An isolated Express/SQLite fixture forced failures for a removed document, lesson video, and lesson document; both routes returned 204, rows and course metadata were consistent, the lesson audit was recorded, and three system-log entries identified the cleanup failures. The temporary fixture was removed. Also checked `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Batch course payload queries
+
+- **Reviewed:** Course payload construction for per-module lesson/quiz reads and per-quiz question/attempt reads.
+- **Improvement:** Load lessons, quizzes, questions, and the user's latest/pass history in bounded per-course queries, then group the rows in memory.
+- **Why it helps:** SQLite query count no longer grows with the number of modules, quizzes, or questions when a learner opens a course or staff edits it.
+- **Checked:** An isolated SQLite fixture with 8 modules, 16 lessons, 8 quizzes, and 24 questions verified progress, resources, answer visibility, latest-attempt tie-breaking, and pass history. Prepared queries fell from 47 to 11 for the same course. The temporary fixture was removed. Also checked `node --check server/course-service.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Restrict quiz-attempt work to the requested course
+
+- **Reviewed:** Latest-attempt and pass-history lookup after batching course payload reads.
+- **Improvement:** Drive the attempt query from the requested course's quizzes, using indexed per-quiz lookups for the latest attempt and any passing attempt.
+- **Why it helps:** Opening one course no longer scans and sorts every quiz attempt for that learner across other courses.
+- **Checked:** A synthetic SQLite dataset with 22,000 attempts returned identical current-attempt and pass-history results; 40 query runs took about 15 ms for the course-driven query and 377 ms for the window query. The plan used the course, quiz, and user/quiz indexes. An isolated payload fixture also confirmed latest-attempt tie-breaking, pass history, answer visibility, progress, resources, and 11 prepares per response. `node --check server/course-service.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Reuse the registered-user count in admin settings
+
+- **Reviewed:** Admin settings responses and partial updates when a registration cap is configured.
+- **Improvement:** Compute the user count once and pass it to configuration generation; read saved protocol and registration values directly for omitted fields in partial updates.
+- **Why it helps:** Avoids repeated full-table count queries when a cap is active. A partial settings update could previously trigger up to four user counts; it now performs one for its response.
+- **Checked:** An isolated Express/SQLite fixture confirmed admin GET and partial PUT each ran exactly one count query, returned the correct count and availability flag, and preserved protocol/settings. The temporary fixture was removed. `node --check server/routes-auth.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Identify quiz editor controls by question and answer
+
+- **Reviewed:** Repeated question and answer controls in the staff quiz editor.
+- **Improvement:** Add question and answer positions to accessible names for question text, correct-answer selectors, answer fields, and remove buttons.
+- **Why it helps:** Screen reader users can tell which question or answer a repeated control edits or removes when navigating through the form controls.
+- **Checked:** Source inspection confirmed each repeated control name includes the relevant question and answer number. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered screen reader/browser verification remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Protect the last active administrator transactionally
+
+- **Reviewed:** Admin role/disabled updates, the last-administrator guard, and session invalidation.
+- **Improvement:** Run the user lookup, active-admin check, account update, and any session deletions inside one immediate SQLite transaction; write the audit event after commit.
+- **Why it helps:** Concurrent server processes sharing the SQLite database cannot both pass a stale admin count and remove the final active administrator. Session cleanup also commits or rolls back with the account change.
+- **Checked:** An isolated Express/SQLite route fixture confirmed disabling a learner removed their session, demoting the second active admin succeeded, and demoting the remaining admin returned 409 while preserving one active admin. The temporary database was removed. `node --check server/routes-admin.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Preserve media upload errors when cleanup fails
+
+- **Reviewed:** Temporary upload cleanup after invalid lesson validation and media database-save failures.
+- **Improvement:** Route rejected/rolled-back uploads through one best-effort cleanup helper that logs the generated filename and filesystem error without replacing the validation or database response.
+- **Why it helps:** Storage cleanup failures remain visible to operators while clients receive the actual reason their upload failed; orphaned temporary files can be identified from the system log.
+- **Checked:** An isolated Express/SQLite upload fixture forced cleanup to fail for both an invalid lesson and a failed media insert. It confirmed the API preserved the 400 and 500 responses and wrote cleanup logs with `EACCES`; the temporary database and files were removed. `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Clear password-reset drafts when the dialog closes
+
+- **Reviewed:** Admin password-reset dialog state, open/close actions, and focus handling.
+- **Improvement:** Clear both password fields and stale errors when opening or closing the dialog, including Escape, backdrop dismissal, and successful submission.
+- **Why it helps:** A dismissed password draft is no longer retained in React state or restored when the dialog is reopened for another account.
+- **Checked:** Source inspection confirmed open and all close paths reset both fields; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction verification remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Scope password-reset responses to the active dialog
+
+- **Reviewed:** Password-reset API completion after an admin dismisses the dialog and opens another account's form.
+- **Improvement:** Track the active dialog account and apply late success/error state only when the response still belongs to that account (or no dialog is open).
+- **Why it helps:** A slow response for one account can no longer close a newer reset form or show its error inside the wrong account's dialog.
+- **Checked:** Source inspection confirmed the response guards compare the active dialog account before closing or setting errors. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered race/interaction verification is unavailable because the browser inventory is empty.
+
+## 2026-10-09 — Reject invalid successful API responses
+
+- **Reviewed:** Shared fetch and XHR upload response parsing for success, error, and empty responses.
+- **Improvement:** Require JSON for successful non-204 API responses, accept structured `+json` media types, and make upload requests resolve empty 204 responses consistently with fetch requests.
+- **Why it helps:** Proxy or server HTML pages can no longer flow into UI code as `null` success payloads and fail later during rendering; valid structured JSON APIs remain supported.
+- **Checked:** A local mocked transport fixture covered valid JSON, HTML success rejection for fetch and upload, `application/problem+json`, and upload 204 behavior. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Add a keyboard skip link to authenticated pages
+
+- **Reviewed:** Shared learner and staff page shells, navigation landmarks, and global focus styles.
+- **Improvement:** Add a visible-on-focus “Skip to main content” link to each shell and make the corresponding main landmark focusable with a scroll offset.
+- **Why it helps:** Keyboard users can bypass repeated header or management navigation and move directly to the current page's content.
+- **Checked:** A source assertion confirmed both shells include the link, matching target, and focusable main landmark; CSS keeps the link offscreen until keyboard focus. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered keyboard verification remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Prevent caching protected course media
+
+- **Reviewed:** Authenticated video range responses and lesson-document downloads for granted private courses.
+- **Improvement:** Set `Cache-Control: private, no-store` on both protected media response paths, including HEAD and range responses.
+- **Why it helps:** Browsers and intermediaries are instructed not to retain private course bytes, so later playback or downloads must pass through the current access check after a grant is revoked.
+- **Checked:** An isolated Express/SQLite fixture confirmed full and ranged video delivery, document attachment delivery, the no-store header on all three, and a 403 on the next video request after grant revocation. The temporary database/files were removed. `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Identify the signed-in user in the account menu
+
+- **Reviewed:** The shared learner header's account-menu summary and its accessible name.
+- **Improvement:** Include the signed-in username in the summary's accessible name while keeping a fallback label.
+- **Why it helps:** Screen reader users can identify which account the menu belongs to, including when the visible username is hidden at mobile widths.
+- **Checked:** A source assertion confirmed the accessible name includes the username and fallback; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered screen reader/mobile verification remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Increase keyboard focus indicator contrast
+
+- **Reviewed:** Global, form, select, quiz-choice, and palette-picker focus outlines across all five theme palettes.
+- **Improvement:** Replace translucent accent outlines with solid `--purple` focus indicators while preserving existing sizes and offsets.
+- **Why it helps:** Keyboard focus is easier to see against the white and selected surfaces used throughout the interface, with the indicator adapting to the chosen palette.
+- **Checked:** A source/contrast assertion confirmed there are no translucent outline rules and measured at least 3.75:1 for all palette accents against white and selected palette surfaces. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered visual QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Announce page changes and update document titles
+
+- **Reviewed:** The static document title and React Router navigation across learner, staff, and account pages.
+- **Improvement:** Add a route status component that updates `document.title` from the current page heading, observes headings that load asynchronously, and announces the new heading through a polite status region. Route-specific fallback titles cover pages without a heading yet.
+- **Why it helps:** Browser tabs identify the current page, and screen reader users receive context after client-side navigation without manually finding the new heading.
+- **Checked:** A source assertion confirmed the component is under `BrowserRouter`, uses a live status region, observes heading changes, and covers primary routes. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered navigation/screen-reader verification is unavailable because no browser surface is connected.
+
+## 2026-10-09 — Ignore stale platform-icon reads
+
+- **Reviewed:** Platform icon file selection, validation errors, removal, and component cleanup.
+- **Improvement:** Use a read sequence guard so only the latest selected file can update the icon or error; invalidate pending reads on removal and unmount.
+- **Why it helps:** A slower earlier `FileReader` result can no longer overwrite a newer icon choice or restore an icon after the user removes it.
+- **Checked:** A source assertion confirmed guards on load/error callbacks and invalidation on selection, removal, and unmount. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered file-selection verification remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Preserve route titles during branding updates
+
+- **Reviewed:** The interaction between route-specific document titles and the auth provider's platform-branding effect.
+- **Improvement:** Let the branding effect update the base title only while the current title is still the previous brand name; route-specific titles remain owned by the route status component.
+- **Why it helps:** A platform name or palette refresh no longer replaces the current page title with the brand name alone.
+- **Checked:** A source assertion and small title-state fixture confirmed base-title updates still work and an active route title is preserved. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Clamp lesson feedback pagination to available comments
+
+- **Reviewed:** Lesson feedback pagination against the admin log endpoints and the comment count query.
+- **Improvement:** Clamp requested feedback pages to the last page containing comments before applying the SQL offset.
+- **Why it helps:** An authenticated request for a very distant page no longer scans a large empty offset, and clients consistently receive the last available page instead of an empty result with a misleading page number.
+- **Checked:** A focused route fixture confirmed first/last-page behavior, empty-comment handling, and clamping of page 100,000. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Use a clear focus ring on the lesson comment box
+
+- **Reviewed:** The lesson comment composer against the shared palette-aware keyboard focus styles.
+- **Improvement:** Replace its remaining translucent focus outline with the solid theme accent used by other text fields.
+- **Why it helps:** Keyboard users get the same high-visibility focus cue while writing a lesson comment as they do elsewhere in the interface.
+- **Checked:** A CSS source assertion confirmed all text-entry focus outlines use the solid palette accent. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered visual verification remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Commit password updates with session revocation
+
+- **Reviewed:** Self-service password changes, administrator password resets, and the shared session invalidation helper.
+- **Improvement:** Apply each password hash update and its session deletions in one immediate SQLite transaction; reject current-password values over the platform's 256-character limit before verification and expose the same limit in the account form.
+- **Why it helps:** A failed session cleanup can no longer leave a changed password with still-valid sessions, and oversized current-password input does not consume password-verification work.
+- **Checked:** A focused Express/SQLite fixture confirmed rollback of the hash update when session deletion fails and successful password changes revoke the expected sessions for both routes. Source assertions confirmed the 256-character bound in the API and form. `node --check` for both route files, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Ignore stale course-save responses after navigation
+
+- **Reviewed:** The course editor's route-change loading guard and asynchronous save, draft, and publish actions.
+- **Improvement:** Apply save responses and errors only while the editor still shows the course that started the request, and reset the saving state when a new course route loads.
+- **Why it helps:** A slow save from the previous course can no longer replace the newly loaded course in the editor or leave the page stuck on its loading state.
+- **Checked:** A source assertion confirmed success, error, and saving-state updates are scoped to the requested course ID and route changes clear stale saving state. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered route-race verification remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Reset course-editor state when switching courses
+
+- **Reviewed:** Course editor route reuse, unsaved module and lesson drafts, and asynchronous edits and uploads while moving between course IDs.
+- **Improvement:** Render the course editor through a pathname-keyed route component so switching course editor paths creates a fresh editor instance.
+- **Why it helps:** Draft fields, progress indicators, and late responses from the previous course cannot appear in or overwrite the next course's editor state.
+- **Checked:** A source assertion confirmed both create/edit routes use the keyed route wrapper. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered navigation and upload-race verification remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Recheck course access before returning quiz results
+
+- **Reviewed:** Saved quiz-attempt retrieval against the course-view and private-grant checks used by the other learner endpoints.
+- **Improvement:** Resolve the quiz's course and run the current course-access check before returning the learner's stored result snapshot.
+- **Why it helps:** Revoking a private-course grant now blocks the next quiz-result API request as promised by the access model.
+- **Checked:** A focused Express/SQLite fixture confirmed a learner can retrieve their result with an active grant and receives 403 after the grant is removed. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Close the account menu after route changes
+
+- **Reviewed:** The learner header's native account menu inside the persistent app frame and its in-frame navigation to account security.
+- **Improvement:** Close the account `<details>` menu whenever the current route changes.
+- **Why it helps:** A menu opened on one page no longer stays expanded over the destination page after client-side navigation.
+- **Checked:** A source assertion confirmed the header observes route changes and closes the referenced `<details>` element. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered navigation verification remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Validate the upload-size configuration strictly
+
+- **Reviewed:** `MAX_UPLOAD_BYTES` parsing, the example environment file, and the documented upload-size setting.
+- **Improvement:** Require a positive safe whole-number byte count when the setting is supplied, and document that invalid values stop startup.
+- **Why it helps:** Values such as `100MB`, decimals, or oversized integers can no longer be partially parsed or silently replaced by the 2 GB default, which could otherwise break uploads or exceed the operator's intended limit.
+- **Checked:** Fresh Node processes accepted the default and valid byte counts and rejected unit suffixes, zero, negative, decimal, and unsafe-integer values. `node --check server/config.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Validate the configured server port
+
+- **Reviewed:** `PORT` parsing, the example environment file, and the port passed to Express `listen`.
+- **Improvement:** Require a whole-number TCP port from 1 through 65535 and document that invalid values stop startup.
+- **Why it helps:** Malformed or out-of-range values no longer bind an unintended port or fail later with a lower-level server error.
+- **Checked:** Fresh Node processes accepted the default and a valid custom port and rejected zero, negative, out-of-range, suffixed, decimal, and unsafe-integer values. `node --check server/config.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Use the lesson-comment index ordering
+
+- **Reviewed:** The comment list's timestamp tie-breaker, the existing `(lesson_id, created_at DESC, id DESC)` index, and the client ordering after a comment is posted.
+- **Improvement:** Order comment pages by ID after timestamp, matching the composite index, and use the same stable order when inserting a newly posted comment into the client list.
+- **Why it helps:** SQLite can return comment pages from the existing index without a temporary sort, and pagination stays consistent when several comments share the same one-second timestamp.
+- **Checked:** SQLite `EXPLAIN QUERY PLAN` on an in-memory schema showed the old rowid tie-breaker used a temporary B-tree; the ID tie-breaker removed it. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Handle unsupported media ranges without a false 416
+
+- **Reviewed:** Protected video range parsing, `HEAD` requests, `If-Range`, and the response for multi-range or unsupported-unit requests.
+- **Improvement:** Return full `200` responses when range handling does not apply, including `HEAD`, `If-Range`, and unsupported or malformed range syntax. Keep `206` for supported single byte ranges and `416` for valid unsatisfiable byte ranges, following [RFC 9110 §14.2](https://www.rfc-editor.org/rfc/rfc9110.html#section-14.2).
+- **Why it helps:** Browsers that send multi-range or conditional requests no longer receive a misleading unsatisfiable response, while range seeking still works for supported requests.
+- **Checked:** An isolated Express/SQLite fixture verified a single range, multi-range fallback, unknown unit, malformed range fallback, `If-Range` fallback, `HEAD` headers, and a genuinely unsatisfiable range. `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Keep the skip-link destination visibly focused
+
+- **Reviewed:** The shared skip links, their `#main-content` target, and the global keyboard focus styles.
+- **Improvement:** Show the standard focus ring on the main-content target when keyboard navigation reaches it, instead of removing its outline.
+- **Why it helps:** After activating “Skip to main content,” keyboard users retain a visible cue for where focus moved.
+- **Checked:** Source inspection confirmed both learning and management frames target a focusable `main` element, and the CSS now styles that target with `:focus-visible`. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered keyboard QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Aggregate course analytics in linear passes
+
+- **Reviewed:** Per-learner lesson and quiz progress assembly, the nested lookups in lesson and quiz metrics, and the sort used only to find each learner's latest activity.
+- **Improvement:** Calculate lesson totals and weighted quiz metrics in one pass over learner progress, and find the latest activity timestamp with a linear reduction instead of sorting every learner's dates.
+- **Why it helps:** Analytics work now scales with the progress rows and curriculum size instead of repeatedly searching each learner's progress arrays for every lesson and quiz.
+- **Checked:** An isolated Express/SQLite analytics fixture confirmed learner completion, per-lesson counts and rates, quiz attempts, pass rate, weighted average score, and latest activity. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Prune expired sessions at startup
+
+- **Reviewed:** SQLite session-store cleanup timing, the persisted expiry index, and the daily cleanup timer.
+- **Improvement:** Run the existing expired-session deletion once when the store is constructed, then keep the daily cleanup schedule.
+- **Why it helps:** Persisted expired rows are removed after a restart instead of waiting a full day for the first timer tick; sessions are still rejected immediately by the per-read expiry check.
+- **Checked:** A focused SQLite fixture confirmed expired rows are removed during store construction while unexpired rows remain. `node --check server/session-store.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Make analytics metric tables keyboard-scrollable
+
+- **Reviewed:** The analytics table widths at mobile breakpoints, table captions, and whether horizontally overflowing tables have keyboard-focusable descendants.
+- **Improvement:** Make the lesson completion and quiz performance scroll regions focusable and give each region an accessible name.
+- **Why it helps:** Keyboard users can focus and scroll the two data-only tables horizontally when their columns extend beyond a narrow viewport.
+- **Checked:** Source checks confirmed both regions have `tabIndex`, `role="region"`, and specific accessible names; the tables retain their captions and column headers. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered keyboard QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Expose module disclosure state to assistive technology
+
+- **Reviewed:** Course-editor module disclosure buttons, their changing accessible names, and the corresponding expanded/collapsed curriculum content.
+- **Improvement:** Add `aria-expanded` to each module disclosure and bind it to the same state that controls whether its lessons and quiz are rendered.
+- **Why it helps:** Screen readers receive the control's open or closed state as well as its action label.
+- **Checked:** A source assertion confirmed the disclosure state and conditional curriculum rendering use the same module state. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered screen-reader QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Make module deletion resilient to media cleanup failures
+
+- **Reviewed:** Module deletion's database mutation, video and document cleanup, and the existing shared cleanup helper used by lesson and resource deletion.
+- **Improvement:** Delete the module, its media records, and the course update timestamp in one SQLite transaction; remove files afterward through the helper, which logs cleanup failures without failing the completed request.
+- **Why it helps:** A filesystem error no longer returns a misleading server failure after the module has already been deleted, and related database changes cannot be left partially applied.
+- **Checked:** An isolated Express/SQLite fixture verified the module, lessons, resources, and media rows are deleted together, the course timestamp is updated, removable documents are removed, and a simulated video cleanup failure is logged while the API returns `204`. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Create modules with an atomic course update
+
+- **Reviewed:** Module creation's next-position calculation, insert, course timestamp update, and audit event ordering.
+- **Improvement:** Calculate the next position, insert the module, and update the course timestamp in one immediate SQLite transaction; write the audit event after the transaction succeeds.
+- **Why it helps:** A failed course update no longer leaves a newly created module behind while the client receives an error, and concurrent module creation is serialized around position allocation.
+- **Checked:** An Express/SQLite fixture used a trigger to fail the course update and confirmed the module insert and timestamp change rolled back; after removing the trigger, creation succeeded with the expected position and timestamp update. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Rename modules with an atomic course update
+
+- **Reviewed:** Module renaming's title update, course timestamp update, and audit event ordering.
+- **Improvement:** Commit the module title and course timestamp together in an immediate SQLite transaction, and write the audit event only after both updates succeed.
+- **Why it helps:** A failed course update can no longer leave a renamed module behind while the client receives an error.
+- **Checked:** An Express/SQLite fixture used a trigger to fail the course update and confirmed the previous module title and course timestamp remained unchanged. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Create lessons with an atomic course update
+
+- **Reviewed:** Lesson creation's next-position calculation, insert, course timestamp update, and audit event ordering.
+- **Improvement:** Calculate the next lesson position, insert the lesson, and update the course timestamp in one immediate SQLite transaction; write the audit event after the transaction succeeds.
+- **Why it helps:** Concurrent lesson creation cannot claim the same next position, and a failed course update cannot leave an inserted lesson behind while the client receives an error.
+- **Checked:** An isolated Express/SQLite fixture used a trigger to fail the course update and confirmed the lesson insert and timestamp update rolled back; after removing the trigger, creation succeeded with the expected position and timestamp update. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Save lesson details with an atomic course update
+
+- **Reviewed:** Lesson title/description updates, course timestamp changes, and conditional audit event ordering.
+- **Improvement:** Update lesson details and course metadata in one immediate SQLite transaction; retain the existing audit behavior after the transaction succeeds.
+- **Why it helps:** A failed course update can no longer leave edited lesson details saved while the client sees an error.
+- **Checked:** An isolated Express/SQLite fixture used a trigger to fail the course update and confirmed the prior lesson details and course timestamp remained unchanged; after removing the trigger, the edit succeeded and created one audit event. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Add lesson links with an atomic course update
+
+- **Reviewed:** The resource form’s labeled title and URL fields, pending-state handling, server URL validation, position allocation, insert, timestamp, and audit ordering.
+- **Improvement:** Allocate the resource position, insert the validated link, and update the course timestamp in one immediate SQLite transaction; retain audit logging after the transaction succeeds.
+- **Why it helps:** Concurrent link creation cannot claim the same position, and a failed course update cannot leave a saved link behind while the client sees an error. The current form already exposes clear labels and disables duplicate submission while it is busy.
+- **Checked:** An isolated Express/SQLite fixture used a trigger to fail the course update and confirmed the resource insert and timestamp change rolled back; after removing the trigger, adding the link succeeded with the expected position and audit event. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Serialize lesson-document position allocation
+
+- **Reviewed:** The document-upload form’s progress and busy state, plus the API’s multipart validation, temporary-file cleanup, resource insert, course timestamp update, and position allocation.
+- **Improvement:** Calculate the next resource position inside the immediate SQLite transaction that saves the document record and course timestamp.
+- **Why it helps:** Concurrent uploads for one lesson are assigned consecutive positions instead of racing on the same `MAX(position) + 1`; a failed database update still rolls back the record and removes the uploaded temporary file.
+- **Checked:** An isolated Express/SQLite fixture forced a course-update failure and confirmed the resource row was rolled back and uploaded file cleaned up, then sent two valid document uploads concurrently and confirmed 201 responses with positions 0 and 1 and both audit entries. `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Serialize curriculum reorder actions
+
+- **Reviewed:** The module and lesson move buttons, their boundary states, and the API’s position swaps, course recency, and audit events.
+- **Improvement:** Read the current order, choose the neighbor, swap positions, and update course editor/timestamp metadata in one immediate transaction for module and lesson moves. Keep audit entries after successful moves.
+- **Why it helps:** Concurrent staff moves use the latest committed order, a failed course update rolls back the swap, and a real reorder correctly updates course recency.
+- **Checked:** An isolated Express/SQLite fixture forced timestamp failures and confirmed both module and lesson positions stayed unchanged, then verified successful swaps update positions, course metadata, and one audit entry each. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Review quiz editing and persistence
+
+- **Reviewed:** Quiz editor field and removal states while saving, the quiz/question transaction, course timestamp update, and audit ordering.
+- **Result:** No additional code change; fields and removal controls are disabled during writes, the editor exposes its busy state, and quiz data plus course metadata already commit in one transaction before the audit event.
+- **Why no change:** The current UI and write path already handle the identified pending-state and partial-save risks. A further change needs a reproducible interaction or persistence defect.
+- **Checked:** Read the quiz editor JSX and responsive styles, the API save transaction, and its post-commit audit path; `git diff --check`.
+
+## 2026-10-09 — Make remaining admin tables keyboard-scrollable
+
+- **Reviewed:** Course, account, learner-progress, account-activity, audit-log, and system-log table wrappers and their narrow-screen overflow styles.
+- **Improvement:** Make each horizontally scrollable wrapper keyboard-focusable and expose it as a specifically named region, matching the lesson and quiz analytics tables.
+- **Why it helps:** Keyboard users can focus and scroll all admin tables that overflow at narrow widths, and screen readers can identify each scrolling area.
+- **Checked:** Source review confirmed all six remaining scrollable table wrappers now have `role="region"`, a specific `aria-label`, and `tabIndex={0}`; existing captions and headers remain. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered keyboard QA was unavailable in the connected browser session.
+
+## 2026-10-09 — Improve forest and amber accent contrast
+
+- **Reviewed:** Palette accent tokens and swatches against their white, soft, hover, and selected surfaces, including small links and white text on primary buttons.
+- **Improvement:** Darken the forest accent to `#137846` and amber to `#995900` in both the palette picker and theme tokens, keeping their selected palettes visually coordinated.
+- **Why it helps:** The previous forest accent reached only 4.43:1 and amber 3.75:1 on palette surfaces commonly used behind accent text; both are now above the 4.5:1 WCAG 2.2 AA minimum for normal text.
+- **Checked:** Contrast calculation across each palette’s white/soft/hover/selected backgrounds found minimum ratios of 4.91:1 for forest and 4.93:1 for amber after the change; violet, ocean, and rose remain above 4.5:1. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered palette QA was unavailable because no browser surface is connected.
+
+## 2026-10-09 — Expose learner assignments as a semantic list
+
+- **Reviewed:** The course-access page’s responsive learner rows, assignment state, and per-learner grant action.
+- **Improvement:** Render learner rows as list items inside a labeled list and reset list defaults so the existing grid layout stays intact.
+- **Why it helps:** Assistive technology can identify the assignments as a list and announce its item count while each row retains its learner, assignment state, and action in the same order.
+- **Checked:** Source review confirmed list and item semantics plus zeroed list spacing; the existing mobile row styles still target `.access-row`. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered screen-reader QA was unavailable because no browser surface is connected.
+
+## 2026-10-09 — Commit private-course grants and enrollments together
+
+- **Reviewed:** The assignment action’s UI pending state, course and learner validation, private-course grant and enrollment writes, idempotency, and audit ordering.
+- **Improvement:** Validate course and learner and insert the access grant plus private-course enrollment in one immediate transaction; repair a missing enrollment on repeated grant requests and write the audit event only for a newly created grant after commit.
+- **Why it helps:** A failed enrollment write can no longer leave an access grant saved while the API returns an error, and a retry repairs legacy partial state without duplicating audit entries.
+- **Checked:** An isolated Express/SQLite fixture forced enrollment insertion to fail and confirmed the grant and audit rolled back; after removing the trigger, repeated requests created one grant, one enrollment, and one audit event, and a simulated missing enrollment was repaired without a duplicate audit. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Validate and save quiz submissions atomically
+
+- **Reviewed:** Learner answer validation and the API’s enrollment, attempt, and certificate writes.
+- **Improvement:** Validate answers before changing enrollment, then commit enrollment, the saved attempt, and any earned certificate in one immediate transaction that rechecks quiz availability and course access.
+- **Why it helps:** Invalid answers no longer enroll a learner, and a failed attempt or certificate write cannot leave a partial result or progress record behind.
+- **Checked:** An isolated Express/SQLite fixture confirmed invalid answers create no enrollment or attempt, a forced certificate-write failure rolls back enrollment and the attempt, and a valid submission commits the attempt, enrollment, and certificate together. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Save lesson completion and certification atomically
+
+- **Reviewed:** Lesson availability and course access checks, enrollment and progress writes, and automatic certificate issuance.
+- **Improvement:** Recheck lesson availability and course access inside an immediate transaction, then save enrollment, completion progress, and any earned certificate together.
+- **Why it helps:** A failed certificate write can no longer leave the learner enrolled and the lesson marked complete while the API reports an error; concurrent or repeated completion remains idempotent.
+- **Checked:** An isolated Express/SQLite fixture forced certificate insertion to fail and confirmed enrollment, progress, and certificate all rolled back; successful and repeated completion kept one row for each. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Name progress indicators by context
+
+- **Reviewed:** Progress bars on course cards and summaries, the course player and quiz sidebar, and course analytics tables.
+- **Improvement:** Give every progress bar an accessible name tied to its course, lesson, or learner instead of exposing only a repeated percentage label.
+- **Why it helps:** Screen-reader users can distinguish several progress values on the same page while the progress-bar role and numeric value remain available.
+- **Checked:** TypeScript now requires a context label at every `ProgressBar` call site; source review confirmed course, lesson, and learner labels are supplied. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered screen-reader QA was unavailable because no browser surface is connected.
+
+## 2026-10-09 — Enable password-manager support in reset modal
+
+- **Reviewed:** Password labels, minimum-length validation, and autocomplete hints across setup, sign-in, learner password change, account creation, and account reset forms.
+- **Improvement:** Mark both password fields in the administrator reset modal as `new-password`, consistent with the other password creation and reset forms.
+- **Why it helps:** Password managers can recognize both fields as a new credential and offer generated passwords during the modal reset flow.
+- **Checked:** Source review confirmed the new and confirmation fields carry `autoComplete="new-password"`; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Index sessions by signed-in user
+
+- **Reviewed:** Session creation and touch persistence, user-wide revocation paths, expiry cleanup, and the existing session indexes.
+- **Improvement:** Add a nullable `sessions.user_id` column in schema migration 7, backfill it from valid existing session JSON in bounded batches, maintain it on session writes and touches, and delete sessions by the indexed user identifier.
+- **Why it helps:** Password changes, administrator resets, and account disabling no longer load and parse the entire session table to revoke one user’s sessions; legacy sessions remain revocable after migration.
+- **Checked:** An isolated fixture backfilled 503 legacy rows in batches, left malformed JSON unassigned, confirmed `EXPLAIN QUERY PLAN` uses `sessions_user_id`, verified `touch` updates the indexed identity, and confirmed revocation preserves the requested active session. `node --check server/db.js`, `node --check server/session-store.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Create lesson comments with their response atomically
+
+- **Reviewed:** Learner/course access validation, comment input limits, comment insertion, and the follow-up reads used to build the API response.
+- **Improvement:** Validate access, insert the comment, retrieve the saved row, and count comments inside one immediate transaction.
+- **Why it helps:** A response-read failure no longer leaves a stored comment behind while the learner sees a failed request and may retry.
+- **Checked:** An isolated Express/SQLite route fixture forced the saved-comment response read to fail after insertion and confirmed the transaction rolled the comment back; it also confirmed invalid input writes nothing and valid input returns the saved comment and updated count. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Review learner controls at the mobile breakpoint
+
+- **Reviewed:** Previous, mark-complete, and next lesson controls at the 720px breakpoint and the narrow-screen player layout.
+- **Result:** No code change; the completion action already moves to a full-width row above the adjacent navigation controls, with text labels and unchanged keyboard order.
+- **Why no change:** The current responsive rules address the constrained width without hiding actions or making the center action difficult to target; rendered device QA remains unavailable.
+- **Checked:** Read the player JSX and responsive rules for 940px, 720px, and 420px widths; `git diff --check`.
+
+## 2026-10-09 — Distinguish file transfer from server-side saving
+
+- **Reviewed:** Video, course-cover, and lesson-document upload progress, busy labels, and the follow-up API save and refresh steps.
+- **Improvement:** When the browser finishes sending a file, switch its progress indicator to a polite “Saving …” status until the server response and course refresh complete; update the video and cover controls to match.
+- **Why it helps:** Staff can tell that 100% transfer still awaits server processing and refreshed course state, including through assistive technology.
+- **Checked:** Source review confirmed all three upload surfaces replace the percentage progress bar with a status at 100% while their inputs remain disabled until completion. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered upload-state QA was unavailable because no browser surface is connected.
+
+## 2026-10-09 — Save lesson reactions with their count response atomically
+
+- **Reviewed:** Reaction access and value validation, per-learner upsert/removal, and aggregate counts returned to the lesson page.
+- **Improvement:** Recheck lesson access, apply the learner’s reaction, and read the updated counts inside one immediate transaction.
+- **Why it helps:** If the response count read fails, the reaction change rolls back with the failed request, so the UI’s selected state stays aligned with saved data. Concurrent reactions also receive counts from the serialized update.
+- **Checked:** An isolated Express/SQLite fixture forced the aggregate-count read to fail after a reaction write and confirmed rollback; it also confirmed invalid values write nothing, switching updates the existing reaction, and clearing removes it with zeroed counts. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Associate the lesson-comment hint with its field
+
+- **Reviewed:** The learner comment textarea label, 2,000-character limit, visible character count, audience guidance, and submit state.
+- **Improvement:** Associate the existing character-count and audience hint with the textarea using `aria-describedby`.
+- **Why it helps:** Screen-reader users hear the length limit and who can read comments when they enter the field, alongside its visible label.
+- **Checked:** Source review confirmed the textarea references the hint ID, and the hint contains the current character count and learner-visibility guidance. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Associate protocol guidance with its setting
+
+- **Reviewed:** Platform identity fields, connection protocol selection and its TLS/proxy guidance, registration controls, and account-limit validation.
+- **Improvement:** Link the public protocol selector to the existing TLS and reverse-proxy explanation with `aria-describedby`.
+- **Why it helps:** Keyboard and screen-reader users receive the operational context when they focus the HTTP/HTTPS setting.
+- **Checked:** Source review confirmed the select’s description ID matches the help paragraph. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Prevent caching personalized API responses
+
+- **Reviewed:** Existing no-store policy for protected media, authenticated JSON endpoints, parser failures, rate-limit responses, and static asset caching.
+- **Improvement:** Set `Cache-Control: no-store` on `/api` requests before body parsing and route dispatch, so personalized success and error responses receive the same policy.
+- **Why it helps:** Browsers and intermediaries are explicitly told not to retain account, course, certificate, or error payloads; static assets keep their existing caching behavior.
+- **Checked:** An isolated Express fixture confirmed successful API responses, malformed-JSON errors, and route errors all carry `Cache-Control: no-store`, while the non-API health endpoint is unchanged. `node --check server/http.js`, `node --check server/index.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Review shared navigation on narrow screens
+
+- **Reviewed:** Main-navigation landmark and current-page state, skip link and focus styles, and topbar spacing and text sizing at mobile breakpoints down to the 320px minimum viewport.
+- **Result:** No code change; the navigation remains labeled and keyboard-accessible in source, and the current responsive rules preserve the brand, links, and account control.
+- **Why no change:** The code review did not show a concrete overflow or interaction defect; a rendered narrow-device check would be needed to justify further layout changes.
+- **Checked:** Read `AppFrame`/`Header` JSX, focus styles, and the 720px and 420px media queries; `git diff --check`.
+
+## 2026-10-09 — Require answerable quiz questions
+
+- **Reviewed:** Quiz editor choice controls and the server-side quiz replacement transaction.
+- **Improvement:** Require each question to have two to six choices and exactly one correct answer; keep the editor from removing choices below two and clarify the rule beside the controls.
+- **Why it helps:** Saved quizzes cannot contain questions learners cannot answer or questions scored against multiple correct answers, and the editor communicates the same constraints before saving.
+- **Checked:** An isolated Express/SQLite fixture confirmed zero or one choice and zero or multiple correct answers return 400 without creating quiz records; a valid question saves, and the existing empty-quiz creation flow remains supported. `node --check server/routes-courses.js`, `npx tsc --noEmit`, and `npm run build` passed.
+
+## 2026-10-09 — Paginate the learner course catalog
+
+- **Reviewed:** Catalog search, category and sort controls; the server’s 100-course cap; course-summary queries; and responsive catalog layout.
+- **Improvement:** Return stable 24-course pages with accessible result totals and `hasMore` metadata, then add a filter-preserving “Load more courses” control that appends unique results. Stack the status and full-width button on narrow screens, and move focus to the updated result count when the final page removes the button.
+- **Why it helps:** Learners can discover every course beyond the previous 100-item limit, while each request computes summaries only for one bounded page; keyboard users retain context after the last page loads.
+- **Checked:** An isolated Express/SQLite fixture confirmed 32 admin-visible courses split into 24 + 8 unique, title-sorted results; category totals persist across pages; learners see public and granted private courses but not ungranted private courses; malformed and out-of-range pages resolve safely. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser interaction QA was unavailable.
+
+## 2026-10-09 — Keep load errors separate from empty course states
+
+- **Reviewed:** Catalog and My Learning loading, error, empty, and retry states.
+- **Improvement:** Hide the empty-state message when a course request fails, add a retry action to both views, and guard My Learning retries against stale responses after unmount or a newer request.
+- **Why it helps:** Learners no longer mistake a network or server failure for an empty catalog, and they can retry without navigating away.
+- **Checked:** Source review confirmed both views expose retry only alongside an error and suppress the empty-state claim while that error is present. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction QA could not run because the Browser plugin is unavailable and Playwright is not installed; no package test script is configured.
+
+## 2026-10-09 — Bound the My Learning course list
+
+- **Reviewed:** The My Learning SQL query, access rules for public and private courses, summary generation, certificate history, and learner list layout.
+- **Improvement:** Apply the shared 24-course page window to My Learning, return total/page metadata, use deterministic ordering for enrollment-time ties, and add an accessible “Load more courses” control with focus retention after the last page.
+- **Why it helps:** Accounts with long learning histories no longer load and summarize every course at once, while learners can still reach all assigned courses and certificates remain available.
+- **Checked:** An isolated Express/SQLite fixture confirmed 31 visible courses return as 24 + 7 unique pages, course ID tie-breaking is stable, an assigned private course remains visible, an ungranted private course stays hidden, and out-of-range pages clamp to the last page. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA was unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Paginate staff course management
+
+- **Reviewed:** The staff course table, its status/search filters, the API’s 200-course cap, and the existing accessible admin log pager.
+- **Improvement:** Return stable 50-course pages with totals from the management endpoint and reuse the admin pager for previous/next navigation; status changes and searches begin at the first page.
+- **Why it helps:** Staff can reach and manage every course after the previous 200-result cap, while the server computes course summaries for only one bounded page.
+- **Checked:** An isolated Express/SQLite fixture confirmed 205 courses are reachable across 50-item pages without duplicates, stable ID tie-breaking, working status and search totals, and safe last-page clamping. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA was unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Paginate administrator account management
+
+- **Reviewed:** The user table’s role/search filters, row updates, reset actions, and the API’s 300-account cap against the configurable account limit.
+- **Improvement:** Return stable 50-user pages with totals, reuse the existing admin pager, reset searches and role filters to page one, and reload after role changes so changed accounts move to the right filtered/sorted position.
+- **Why it helps:** Administrators can find and manage accounts beyond the previous 300-item limit without loading the full user list, and role changes do not leave a row in the wrong filtered result.
+- **Checked:** An isolated Express/SQLite fixture confirmed 305 accounts return across 50-item pages without duplicates, role/search filters and current-user metadata are correct, and out-of-range pages clamp safely. `node --check server/routes-admin.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA was unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Bound course analytics learner details
+
+- **Reviewed:** Course analytics learner selection, per-learner lesson and quiz details, global completion and assessment metrics, and the staff dashboard table.
+- **Improvement:** Return 50 stable learner detail rows per page with previous/next navigation; calculate course-wide learner, lesson, and quiz metrics in SQLite so totals remain global and unchanged across pages.
+- **Why it helps:** Large courses no longer build or transfer every learner’s detailed activity at once, while staff retain accurate course-wide summaries and can reach every learner.
+- **Checked:** An isolated Express/SQLite fixture confirmed 61 learners split into 50 + 11 stable rows, last-page clamping, disabled-account inclusion, consistent global lesson/quiz/summary metrics, and empty-course handling. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Paginate administrator account course history
+
+- **Reviewed:** The account detail endpoint’s enrolled/assigned course query, per-course progress summaries, and the administrator course activity table.
+- **Improvement:** Return stable 50-course pages with total/page metadata and reuse the existing management pager; count and summarize only the current page.
+- **Why it helps:** Accounts with long course histories no longer produce unbounded responses or exceed SQLite’s parameter limit when course summaries are built, while administrators can still review every course.
+- **Checked:** An isolated Express/SQLite fixture confirmed 105 unique courses split into 50 + 50 + 5 pages, stable ordering, accurate progress values, overlapping enrollments and grants without duplicates, and safe last-page clamping. `node --check server/routes-admin.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Paginate learner assignment search
+
+- **Reviewed:** Course assignment search, the 200-learner response cap, assigned-first ordering, and assignment refresh behavior.
+- **Improvement:** Return 50 matching learners per page with result totals, stable username/ID ordering, and assigned learners first; refresh the active page after an assignment change so its ordering stays correct.
+- **Why it helps:** Staff can browse and assign any learner even when the course or platform has more than 200 accounts, while search and assignment status stay accurate across pages.
+- **Checked:** An isolated Express/SQLite fixture confirmed 205 learners page correctly, the assigned-first ordering is stable, disabled accounts remain visible, searched totals are correct, and page overflow clamps to the last page. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Keep lesson comment paging on a valid page
+
+- **Reviewed:** Comment creation, the current comment list length, and the page number used by subsequent “Load more comments” requests.
+- **Improvement:** Clamp the client’s derived comment page to at least page one after a comment is posted.
+- **Why it helps:** Short threads no longer leave the pagination state at page zero, so any later page request starts from a valid page number.
+- **Checked:** Source review verified the state derivation remains aligned with 20-comment pages and cannot produce a page below one; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Reuse course context while paging learner access
+
+- **Reviewed:** Learner access search and pagination requests, course title/context display, and the full staff course payload assembled by the course endpoint.
+- **Improvement:** Load the course payload when opening the access page, then reuse that course context for later searches and page changes.
+- **Why it helps:** Browsing the assignment list no longer downloads and rebuilds all course modules, lessons, resources, and quiz details on every request.
+- **Checked:** Source review confirmed the course payload is requested only when the currently loaded course differs from the route; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Paginate learner certificate history
+
+- **Reviewed:** My Learning’s paginated course response, its unbounded certificate query, and the certificate history list.
+- **Improvement:** Return the first 20 certificates with page metadata, add a dedicated certificate paging endpoint and “Load more certificates” control, and let later course-page requests omit certificate data.
+- **Why it helps:** Learners can still reach their full certificate history without transferring every certificate repeatedly alongside course pages.
+- **Checked:** An isolated Express/SQLite fixture confirmed a 47-certificate history loads as 20 + 20 + 7, preserves issued-date ordering, scopes results to the signed-in learner, skips certificate data on course-only requests, and clamps out-of-range pages. `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Batch publish-readiness validation
+
+- **Reviewed:** The checks that run when staff publish a course, including per-module lesson/video requirements and per-question quiz answer rules.
+- **Improvement:** Replace the module-, quiz-, and question-level query loop with one course-scoped aggregate query while preserving validation order, messages, and error codes.
+- **Why it helps:** Publishing a course with a large curriculum uses a fixed number of database round trips rather than a query for each module, lesson set, quiz, and question.
+- **Checked:** An isolated SQLite fixture confirmed the existing errors for missing modules, lessons, videos, questions, and invalid choices; valid quizzes and a 100-module course pass. `node --check server/course-service.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Serialize setup and registration checks
+
+- **Reviewed:** First-admin setup and learner registration checks for the single-setup invariant, duplicate usernames, and the registered-account limit.
+- **Improvement:** Run setup and registration transactions in immediate mode so the checks and writes serialize before another request can pass the same guard.
+- **Why it helps:** Simultaneous setup requests produce one administrator and an `already_configured` response; concurrent registrations cannot exceed the configured account limit or fail during a deferred SQLite write-lock upgrade.
+- **Checked:** An isolated Express/SQLite concurrency fixture confirmed one success and one intended conflict for parallel setup, and one success plus `user_limit_reached` for parallel registrations at the cap. `node --check server/routes-auth.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Review remaining transaction boundaries
+
+- **Reviewed:** Course and account transactions that calculate positions, enforce limits, replace quiz data, or update related session/progress records.
+- **Result:** No code change; the remaining read-before-write paths already use immediate transactions, and other deferred blocks begin with a write before reading dependent state.
+- **Why no change:** The reviewed paths do not show another read-to-write lock-upgrade race or an unprotected sequence invariant.
+- **Checked:** Read the transaction callbacks and their invocation modes in `routes-auth.js`, `routes-admin.js`, `routes-courses.js`, and `routes-media.js`; `git diff --check` passed.
+
+## 2026-10-09 — Review learner progress and certificate history
+
+- **Reviewed:** Completion and certificate issuance rules, certificate history paging state, status announcements, and the 720px/460px certificate and pagination styles.
+- **Result:** No code change; certificate access is retained independently of the currently published course list, and both progress lists share the existing narrow-screen pager layout.
+- **Why no change:** This pass did not establish a correctness, accessibility, or responsive-layout defect; rendered browser inspection remains unavailable.
+- **Checked:** Read the progress/certificate queries and UI state, then reviewed the shared pager and certificate breakpoints; `git diff --check` passed.
+
+## 2026-10-09 — Keep setup wizard page context current
+
+- **Reviewed:** Route title and live-region updates across learner, staff, authentication, and first-run setup pages.
+- **Improvement:** Include the setup wizard root in the existing heading observer so changing from setup to access settings updates the document title and polite announcement.
+- **Why it helps:** The tab title and assistive-technology context now follow the wizard’s active step instead of continuing to describe the first step.
+- **Checked:** Source review confirmed the existing subtree observer catches the setup heading change; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser interaction remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Respect reduced motion in the setup wizard
+
+- **Reviewed:** The setup wizard’s step transition and the site’s reduced-motion CSS rule.
+- **Improvement:** Use immediate scrolling when `prefers-reduced-motion: reduce` is active, while retaining the smooth transition for other users.
+- **Why it helps:** The wizard no longer overrides a user’s system preference with an explicit animated scroll.
+- **Checked:** Source review confirmed the media preference controls the scroll behavior; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-auth.tsx` passed. Rendered browser interaction remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Review administrator search and log navigation
+
+- **Reviewed:** User search and role filtering, paginated fetch races, account-reset dialog focus handling, and responsive table/filter layouts; also checked audit and system log request sequencing.
+- **Result:** No code change; request sequence guards prevent stale responses, role changes reload page one, the reset dialog traps and restores focus, and narrow screens retain scrollable tables with stacked filters.
+- **Why no change:** The inspected loading and responsive states already cover the reviewed cases; rendered browser inspection remains unavailable.
+- **Checked:** Read the relevant page effects, dialog handlers, table markup, and 720px styles; `git diff --check` passed.
+
+## 2026-10-09 — Match platform-name validation after trimming
+
+- **Reviewed:** First-run setup and administrator settings name inputs against the server’s trimmed 2–80 character validation.
+- **Improvement:** Trim and validate the platform name before advancing setup or saving settings, then submit the normalized value.
+- **Why it helps:** Short names padded with spaces no longer pass the browser’s raw-length check only to fail at the server.
+- **Checked:** Source review confirmed both client flows apply the server’s trimmed bounds; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-auth.tsx src/pages-manage.tsx` passed. Rendered browser interaction remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Review multipart upload field ordering
+
+- **Reviewed:** The upload helper’s `FormData` construction and the server’s Multer filename/type selection for video, cover, and document uploads.
+- **Result:** No code change; the client appends kind and lesson metadata before the file, matching the server’s field-dependent validation and naming behavior.
+- **Why no change:** The current client and server agree on the multipart contract; changing it would not improve the verified path.
+- **Checked:** Read the upload helper, its video/cover/document call sites, and the server storage/filter callbacks; `git diff --check` passed.
+
+## 2026-10-09 — Review course-editor upload recovery
+
+- **Reviewed:** Video, cover, and lesson-document upload progress, duplicate-submit guards, error reporting, and `finally` cleanup.
+- **Result:** No code change; each upload path clears its busy/progress state after success or failure, and the shared XHR helper turns network and API failures into rejected promises consumed by the editor.
+- **Why no change:** The reviewed failure paths already return the editor to an actionable state; rendered upload interaction remains unavailable in this workspace.
+- **Checked:** Read the upload handlers and the shared XHR response/error paths; `git diff --check` passed.
+
+## 2026-10-09 — Index remaining foreign-key child columns
+
+- **Reviewed:** SQLite foreign-key declarations, existing leading-column indexes, and media, course, account, comment, reaction, audit, and certificate cleanup paths.
+- **Improvement:** Add migration 8 with indexes for the nine foreign-key child columns that lacked a usable leading index.
+- **Why it helps:** Course and user cleanup, media replacement, and certificate updates can locate dependent rows through indexes instead of scanning the full child tables.
+- **Checked:** An isolated populated database was upgraded from the version-7 state; the fixture confirmed all declared foreign-key columns have a leading index, media/lesson/comment/certificate rows are preserved, and `PRAGMA foreign_key_check` reports no violations. `node --check server/db.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check -- server/db.js` passed.
+
+## 2026-10-09 — Let learners retry lesson feedback
+
+- **Reviewed:** Initial lesson-feedback loading, error recovery, and the existing request-sequence guard used when lessons change.
+- **Improvement:** Add a retry action when the initial feedback request fails; retrying re-runs the existing guarded effect.
+- **Why it helps:** Learners can recover from a transient feedback-service failure without refreshing the whole lesson page.
+- **Checked:** Source review confirmed retry increments the effect trigger and the current sequence/route checks still reject stale responses; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-learner.tsx` passed. Rendered browser interaction remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Preserve keyboard focus through quiz results
+
+- **Reviewed:** Quiz fieldset/radio semantics, submission results, retry behavior, server question limits, and responsive quiz layout.
+- **Improvement:** Move focus to the answer-review heading after submission and return it to the first answer option after “Try again.”
+- **Why it helps:** Keyboard users keep a clear position when the submit or retry control is replaced by a different quiz state.
+- **Checked:** Source review confirmed focus moves only after a current submission or explicit retry; the existing result status announcement and sequence guards remain intact. `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-learner.tsx` passed. Rendered browser interaction remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Recheck lesson comment paging and retry state
+
+- **Reviewed:** Server comment ordering and page clamping, client append/sort behavior after a new comment, page derivation at page-size boundaries, and feedback request cancellation/retry sequencing.
+- **Result:** No code change during that review; the client kept the server's newest-first ordering, deduplicated page overlaps after a post shifted offsets, and applied responses only to the current lesson request.
+- **Why no change then:** The review found the covered cases aligned, but did not account for a feed change while a load-more request was in flight.
+- **Checked:** Read the feedback/comment handlers and request guards; `git diff --check` passed.
+- **Follow-up correction:** That review missed a comment arriving while a load-more request was pending; changed totals can shift offsets even when the response contains an unseen comment. The newer “Refresh comment pages when the feed changes during pagination” entry records the fix.
+
+## 2026-10-09 — Share concurrent CSRF token refreshes
+
+- **Reviewed:** The shared API client’s token cache, refresh/error paths, and concurrent write behavior.
+- **Improvement:** Make CSRF refresh single-flight so parallel requests awaiting a token reuse one in-progress fetch; clear the in-flight promise on success or failure.
+- **Why it helps:** Concurrent writes no longer race separate session-backed token creation, and a failed refresh does not leave later requests stuck on a rejected promise.
+- **Checked:** An isolated transport harness confirmed two simultaneous writes use one token fetch, a shared refresh failure makes one fetch, and a later retry succeeds. `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/api.ts` passed.
+
+## 2026-10-09 — Review certificate viewing and print layout
+
+- **Reviewed:** Certificate article labeling, print action, credential content, small-screen footer layout, and landscape print rules.
+- **Result:** No code change; the certificate has a named article, hides page controls when printing, keeps its footer within the certificate, and adapts the footer to one column on narrow screens.
+- **Why no change:** The markup and stylesheet agree on the viewing and print layout; rendered print-preview inspection remains unavailable.
+- **Checked:** Read the certificate JSX, responsive breakpoints, and print rules; `git diff --check` passed.
+
+## 2026-10-09 — Move focus to the new app route
+
+- **Reviewed:** Client-side route changes, the page-title/live-region observer, and the focusable main landmarks in learner and staff frames.
+- **Improvement:** Focus `main#main-content` when the pathname changes so keyboard users enter the new page context.
+- **Why it helps:** Navigation no longer leaves focus on an old route control that may have disappeared; login and setup autofocus remain unchanged because those views do not use this landmark.
+- **Checked:** Source review confirmed focus changes only when the pathname changes and the main landmark exists; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/App.tsx` passed. Rendered keyboard interaction remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Avoid a redundant CSRF request after logout
+
+- **Reviewed:** Logout session destruction, local authentication state, CSRF cache lifecycle, and the API client's lazy token refresh on writes.
+- **Improvement:** Clear the cached CSRF token and local user after the logout request succeeds, without fetching a replacement token that logout no longer needs.
+- **Why it helps:** A failed follow-up token fetch can no longer make an already completed logout appear to have failed; the next login write obtains a fresh token through the existing request path.
+- **Checked:** Source review confirmed `ensureCsrf()` refreshes when the cache is empty; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/auth-context.tsx` passed. Rendered interaction remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Review server shutdown and cleanup lifecycle
+
+- **Reviewed:** SIGINT/SIGTERM shutdown handling, active HTTP request draining, SQLite close timing, and expired-session cleanup scheduling/error reporting.
+- **Result:** No code change; shutdown closes SQLite after the HTTP server drains, and the unreferenced session cleanup timer reports its failures without keeping the process alive.
+- **Why no change:** The reviewed lifecycle already avoids closing the database under active requests and makes cleanup failures observable.
+- **Checked:** Read server startup/shutdown, session-store cleanup, and system-log handling; `git diff --check` passed.
+
+## 2026-10-09 — Review API pagination and query bounds
+
+- **Reviewed:** Course, certificate, lesson-feedback, access-management, user, audit-log, and system-log page parsing, result limits, ordering, and search-length bounds.
+- **Result:** No code change; endpoints clamp invalid or excessive page values, keep deterministic ordering for equal timestamps, and cap returned page sizes.
+- **Why no change:** The inspected route contracts already bound per-request work and agree with the client’s paging behavior.
+- **Checked:** Read the relevant query builders and client page consumers; `git diff --check` passed.
+
+## 2026-10-09 — Let learners retry course-data loading
+
+- **Reviewed:** Initial course-data failure states and request-sequence guards for course overview, lesson, and quiz pages.
+- **Improvement:** Add a retry action to each page’s initial load error; retries rerun the existing guarded fetch path.
+- **Why it helps:** Learners can recover from temporary API or network failures without refreshing or leaving the page.
+- **Checked:** Source review confirmed the retry trigger participates in each load effect and stale-route responses remain guarded; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-learner.tsx` passed. Rendered interaction remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Keep auth transitions successful after session rotation
+
+- **Reviewed:** Server-side session regeneration and CSRF token rotation for sign-in, registration, setup, and logout against the client API's lazy token acquisition.
+- **Improvement:** After sign-in, registration, or setup succeeds, clear the now-stale cached token and update authentication state without waiting for an extra CSRF fetch.
+- **Why it helps:** A token-refresh network failure can no longer leave the user on an unauthenticated screen after the server has already created their authenticated session; the next write lazily fetches a fresh token.
+- **Checked:** Source review confirmed each server transition rotates the token, the client clears its cache, and `ensureCsrf()` refreshes when needed. `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/auth-context.tsx` passed.
+
+## 2026-10-09 — Review protected media range handling
+
+- **Reviewed:** Video authorization, file-path containment, HEAD responses, single and suffix byte ranges, unsatisfiable requests, and conditional or unsupported range headers.
+- **Result:** No code change; the route preserves course access checks, returns bounded partial content for supported ranges, and falls back to a full response when it cannot honor a range.
+- **Why no change:** The reviewed cases align with the route’s current lack of media validators and the browser video client’s range needs.
+- **Checked:** Read the protected-media handler and shared HTTP error behavior; `git diff --check` passed.
+
+## 2026-10-09 — Clean up uploads when a course disappears
+
+- **Reviewed:** Course authorization before multipart parsing, temporary upload ownership, and media/document metadata transactions.
+- **Improvement:** Recheck course existence after each upload finishes; if the course was removed during the transfer, delete the temporary file and return a 404.
+- **Why it helps:** Long uploads no longer fall through to a null-course error or leave an unreferenced file when a concurrent course deletion wins the race.
+- **Checked:** Source review confirmed both handlers clean up before returning; `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check -- server/routes-media.js` passed.
+
+## 2026-10-09 — Make sign-out failures actionable
+
+- **Reviewed:** Learner-menu and staff-sidebar sign-out controls, pending-request state, and API error messages.
+- **Improvement:** Share a sign-out handler that prevents repeat submissions, navigates on success, and shows an alert on failure in both account surfaces.
+- **Why it helps:** A failed logout no longer produces an unhandled rejection with no explanation; users can see the failure and try again.
+- **Checked:** Source review confirmed the two controls share the guarded handler and keep the retry button enabled after failure; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/components.tsx src/styles.css` passed. Rendered interaction remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Review asynchronous management actions
+
+- **Reviewed:** Course-editor async buttons, quiz and course deletion callbacks, file-upload handlers, and page-level promise chains.
+- **Result:** No code change; interactive async actions route failures to visible error state, while upload helpers own progress and rejection handling.
+- **Why no change:** The scan found no remaining async event callback that rejects without a user-facing handler.
+- **Checked:** Read each async inline callback and traced its called helper/error path; `git diff --check` passed.
+
+## 2026-10-09 — Review image alternatives and primary landmarks
+
+- **Reviewed:** Informative and decorative images, video labeling, progress-bar names, main landmarks, navigation labels, and skip links.
+- **Result:** No code change; meaningful image content has text alternatives, decorative images are hidden from assistive technology, and primary navigation/content landmarks are named or have skip navigation.
+- **Why no change:** The inspected image and landmark semantics already provide equivalent context without duplicate announcements.
+- **Checked:** Read image, video, progress, main, and navigation markup; `git diff --check` passed. Rendered accessibility inspection remains unavailable because no Browser plugin or Playwright installation is available.
+
+## 2026-10-09 — Review native button types
+
+- **Reviewed:** Native button elements across learner and management screens for missing explicit button types.
+- **Result:** No code change; all native buttons declare their intended type, avoiding accidental form submission from default button behavior.
+- **Why no change:** The static scan found no button with an implicit type.
+- **Checked:** Searched all TSX screens for native buttons without a `type` attribute; `git diff --check` passed.
+
+## 2026-10-09 — Review account capacity and administrator safeguards
+
+- **Reviewed:** Public registration and administrator account creation under concurrent requests, plus administrator demotion and disablement rules.
+- **Result:** No code change; both account-creation paths recheck capacity inside immediate transactions, and last-active-administrator changes are checked under the same write lock.
+- **Why no change:** The inspected checks already protect their invariants against concurrent account writes.
+- **Checked:** Read the registration and administrator routes, including transaction boundaries and uniqueness handling; `git diff --check` passed.
+
+## 2026-10-09 — Review course-summary query scaling
+
+- **Reviewed:** Learner and staff course-list summary queries, progress and quiz counts, per-page limits, and supporting indexes.
+- **Result:** No code change; summaries fetch related counts in a fixed number of grouped queries for each bounded result page instead of issuing one query per course.
+- **Why no change:** The current list path already avoids an N+1 query pattern and uses bounded page sizes.
+- **Checked:** Read `courseSummaries`, its list-route callers, and the relevant schema indexes; `git diff --check` passed.
+
+## 2026-10-09 — Validate media type after multipart parsing
+
+- **Reviewed:** Shared Multer type filtering, field-dependent filename selection, and the final media/document upload handlers.
+- **Improvement:** Revalidate each uploaded file against the fully parsed upload kind and remove the temporary file when the final kind and accepted file type do not match.
+- **Why it helps:** Multipart field ordering can no longer cause an MP4 accepted before the `kind` field to be saved as a cover image or lesson document.
+- **Checked:** Source review confirmed media and document handlers validate after parsing and clean up rejected files; `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check -- server/routes-media.js` passed.
+
+## 2026-10-09 — Explain quiz submission readiness
+
+- **Reviewed:** Quiz answer completeness, disabled submit state, radio grouping, and keyboard/screen-reader flow.
+- **Improvement:** Show an answered-question count and explain that the remaining answers are required before submission; associate the hint with the submit control.
+- **Why it helps:** Learners can see why submission is disabled and how much of the quiz remains, including when navigating the form with assistive technology.
+- **Checked:** Source review confirmed the count follows the same truthy-answer rule as submit eligibility and is omitted for an empty quiz; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-learner.tsx src/styles.css` passed. Rendered interaction remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Review quiz attempt integrity
+
+- **Reviewed:** Attempt authorization, exact question coverage, answer-choice ownership, score calculation, result snapshots, enrollment, and analytics eligibility.
+- **Result:** No code change; the endpoint validates each selected choice against its question and stores the score and review snapshot in one immediate transaction.
+- **Why no change:** Attempt integrity is enforced server-side, while changing staff access to the learner-facing quiz flow needs a clearer product rule.
+- **Checked:** Read the attempt route, quiz schema constraints, course-view authorization, and learner-only analytics queries; `git diff --check` passed.
+
+## 2026-10-09 — Review eager CSRF bootstrap behavior
+
+- **Reviewed:** Auth-provider startup requests, lazy CSRF acquisition for writes, and the existing startup error/retry flow.
+- **Result:** No code change; startup intentionally verifies CSRF availability alongside setup and session state before opening the application.
+- **Why no change:** Removing the preflight would defer a known bootstrap failure to the first write and weaken the established startup recovery behavior.
+- **Checked:** Read the current auth provider, API token path, and the earlier tracker entry defining startup readiness; `git diff --check` passed.
+
+## 2026-10-09 — Match module rename length validation
+
+- **Reviewed:** Module creation input, rename prompt, and server-side module title validation.
+- **Improvement:** Validate the trimmed module rename against the server’s 160-character limit before saving and show a local error when it exceeds the limit.
+- **Why it helps:** Renaming no longer sends a value the server will reject, and the editor explains the constraint at the point of entry.
+- **Checked:** Source review confirmed create, rename, and server limits align; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed.
+
+## 2026-10-09 — Match quiz editor limits to server rules
+
+- **Reviewed:** Quiz question count, question prompt length, answer-choice bounds, and server-side save validation.
+- **Improvement:** Cap question prompts at 1,000 characters and disable adding questions at the 50-question server limit with an explicit button label.
+- **Why it helps:** Quiz authors can see and follow the supported limits before saving rather than discovering them through a rejected request.
+- **Checked:** Source review confirmed the prompt and count limits match the server route; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed.
+
+## 2026-10-09 — Let administrators retry course analytics
+
+- **Reviewed:** Course analytics page fetch lifecycle, selected learner page, stale-request cleanup, and failure rendering.
+- **Improvement:** Add a retry control that reruns the current analytics request without changing the selected page.
+- **Why it helps:** A transient dashboard failure no longer requires a full page refresh or losing the current pagination context.
+- **Checked:** Source review confirmed retries use the existing effect and active-request guard; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed. Rendered interaction remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Let learners retry certificate loading
+
+- **Reviewed:** Certificate request sequence, loading/error states, and recovery navigation.
+- **Improvement:** Add a retry action to certificate fetch failures that reruns the guarded request for the same certificate.
+- **Why it helps:** Learners can recover from a temporary network failure and continue to print or download their certificate without navigating away.
+- **Checked:** Source review confirmed retries reuse the request-sequence guard; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-learner.tsx` passed. Rendered interaction remains unavailable because Playwright is not installed and no Browser plugin is connected.
+
+## 2026-10-09 — Review root document metadata
+
+- **Reviewed:** Root HTML language, encoding, responsive viewport, theme color, description, title, and React mount.
+- **Result:** No code change; the shell already has the required document metadata and a single application mount point.
+- **Why no change:** The inspected defaults are present and the branding provider updates the theme color and document title after bootstrap.
+- **Checked:** Read `index.html`, `src/main.tsx`, and the title/theme update paths; `git diff --check` passed.
+
+## 2026-10-09 — Move setup focus to the active step
+
+- **Reviewed:** Setup wizard step transitions, keyboard focus, heading semantics, and reduced-motion handling.
+- **Improvement:** When the setup wizard moves forward or back, focus the newly active step heading so keyboard and assistive-technology users land at the new content.
+- **Why it helps:** The button that caused each transition is removed with its form; explicit focus keeps the user oriented instead of leaving focus on the document body.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-auth.tsx` passed. Tried a rendered local check with temporary isolated data, but the computer-use browser was unavailable, so focus movement has not been confirmed interactively.
+
+## 2026-10-09 — Announce when lesson links open a new tab
+
+- **Reviewed:** Learner resource link targets, visible external-link icon, accessible link name, and server-side URL policy.
+- **Improvement:** Add screen-reader-only text to external lesson links explaining that they open in a new tab.
+- **Why it helps:** Assistive-technology users get the same navigation behavior cue that the external-link icon provides visually.
+- **Checked:** Source inspection confirmed the hint is present only on HTTP(S) resource links, while documents remain downloads; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-learner.tsx` passed. Rendered accessibility inspection remains unavailable because the computer-use browser is unavailable.
+
+## 2026-10-09 — Associate setup protocol guidance with its field
+
+- **Reviewed:** Initial setup protocol selection, TLS/reverse-proxy help text, and the corresponding administrator setting.
+- **Improvement:** Add `aria-describedby` from the setup HTTP/HTTPS selector to its TLS/proxy explanation, matching the existing administrator settings control.
+- **Why it helps:** First-time administrators hear the server requirements when they reach the protocol field, rather than relying on nearby text alone.
+- **Checked:** Source inspection confirmed the referenced help ID is unique and matches the paragraph; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-auth.tsx` passed. Rendered assistive-technology verification remains unavailable because the computer-use browser is unavailable.
+
+## 2026-10-09 — Report database readiness separately from liveness
+
+- **Reviewed:** Native single-process deployment, existing `/healthz` behavior, SQLite migration startup, and service-monitor documentation.
+- **Improvement:** Add `/readyz` to check the migrated SQLite schema and core setup state, return 503 when either is missing or a query fails; preserve `/healthz` as the HTTP liveness check and document both endpoints.
+- **Why it helps:** Self-hosted service monitors can distinguish a responding process from one that can serve database-backed requests.
+- **Checked:** `node --check server/index.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check -- server/index.js README.md` passed. An isolated server returned 200 from both endpoints with a valid schema; after removing the temporary schema table, `/readyz` returned 503 and `/healthz` remained 200. Temporary data and the server were removed.
+
+## 2026-10-09 — Keep health probes independent of session middleware
+
+- **Reviewed:** Health-route ordering, session cookie configuration, and failure behavior when the core settings table is unavailable.
+- **Improvement:** Run `/healthz` and `/readyz` before session middleware. This keeps process liveness available and lets readiness translate schema/setup-state failures into HTTP 503 without creating a session.
+- **Why it helps:** A database fault no longer hides the process liveness signal or leaks as a generic 500 from middleware before readiness can respond.
+- **Checked:** `node --check server/index.js`, `npx tsc --noEmit`, `npm run build`, and scoped `git diff --check` passed. An isolated server returned 200 from both endpoints when healthy; after removing the temporary `app_settings` table, `/healthz` stayed 200 and `/readyz` returned 503 with `Cache-Control: no-store`. Temporary data and the server were removed.
+
+## 2026-10-09 — Align search inputs with server limits
+
+- **Reviewed:** Catalog, staff-course, learner-assignment, account, audit-log, and system-log search fields against their route query limits.
+- **Improvement:** Add 120-character limits to catalog and staff-course search, and 100-character limits to learner-assignment, account, and log searches.
+- **Why it helps:** The visible search text now matches the query the server will evaluate, avoiding silent server-side truncation and needlessly long requests.
+- **Checked:** Source review confirmed all six fields match their route limits; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-learner.tsx src/pages-manage.tsx` passed.
+
+## 2026-10-09 — Refresh auth state after changing your own account
+
+- **Reviewed:** Administrator role, disabled-state, and password-reset controls in both user management views; session revocation; the `/auth/me` refresh path; and route guards for staff and admin pages.
+- **Improvement:** After the server confirms a signed-in administrator's role, disabled state, or password change, refresh the shared auth user. The users table skips its admin-only list reload after a self-access change; self password resets close the dialog or clear the form and refresh the session state.
+- **Why it helps:** Self-demotion, self-disable, and self-password reset no longer leave stale administrator navigation or an invalid local signed-in state after the server changes access.
+- **Checked:** Source inspection confirmed the existing `refresh` fetches `/auth/me` and updates the guarded user state; `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed. Interactive confirmation remains unavailable because the browser service is unavailable.
+
+## 2026-10-09 — Check course cover image signatures
+
+- **Reviewed:** Course cover upload extension and multipart MIME checks, temporary-file lifecycle, and supported image formats.
+- **Improvement:** After upload, verify PNG, JPEG, and WebP file signatures before saving a course cover; reject and clean up files whose bytes do not match the declared image type.
+- **Why it helps:** Renamed text or other non-image files can no longer be saved as covers and later render as broken images for learners.
+- **Checked:** `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. An isolated route check rejected spoofed JPEG bytes, removed the temporary file, and accepted and recorded a PNG cover. Signature checks do not fully decode image files; rendered UI verification remains unavailable because the browser service is unavailable.
+
+## 2026-10-09 — Keep course layouts intact when a cover cannot load
+
+- **Reviewed:** Shared cover rendering in learner catalog cards, My Learning cards, and course detail pages.
+- **Improvement:** Show the existing book-mark placeholder when a cover image fails to load, and retry naturally when the course is given a different cover URL.
+- **Why it helps:** Missing or unreadable image files no longer leave browser broken-image icons in learner views or remove the intended cover area.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/components.tsx` passed. Rendered error-state verification remains unavailable because the browser service is unavailable.
+
+## 2026-10-09 — Recover gracefully from unreadable platform icons
+
+- **Reviewed:** Platform icon preview, shared header branding, certificate branding, image signature validation, and the course-cover fallback.
+- **Improvement:** Reuse one image-fallback component for course covers and platform icons. If a platform icon cannot render, the picker reports the problem and the header and certificate keep their existing brand marks.
+- **Why it helps:** Supported-format files with truncated or unsupported image contents no longer leave broken-image icons in settings, navigation, or learner certificates.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/components.tsx src/pages-learner.tsx` passed. Browser rendering and forced image decode-error behavior remain unverified because the browser service is unavailable.
+
+## 2026-10-09 — Review SQLite session expiry cleanup
+
+- **Reviewed:** Session reads, expiry handling, startup and daily cleanup, expiry indexing, and cleanup error reporting.
+- **Result:** No code change; expired and malformed sessions are rejected on read, expired rows are pruned at startup and daily, and cleanup failures are reported through the system log.
+- **Why no change:** The inspected paths already cover normal expiry, malformed session data, cleanup retries on the next scheduled pass, and operational visibility without adding request-time full-table work.
+- **Checked:** Read `server/session-store.js`, the session migration/index, server wiring, and the README deployment contract; `git diff --check` passed.
+
+## 2026-10-09 — Review catalog control responsiveness
+
+- **Reviewed:** Catalog category and sort selectors, search field, course-card grid, and the 720px and 420px layout breakpoints.
+- **Result:** No code change; filters stack below 720px, selectors become full-width rows below 420px, and the course grid reduces to one column at the narrowest breakpoint.
+- **Why no change:** The inspected rules already adapt the catalog controls and cards to narrow screens without introducing a horizontal layout or reducing the search field below its container width.
+- **Checked:** Read the base catalog styles and responsive overrides; `git diff --check` passed. Rendered viewport checks remain unavailable because the browser service is unavailable.
+
+## 2026-10-09 — Review account table and password-reset dialog
+
+- **Reviewed:** User search and role filters, mobile table overflow, row actions, reset-password dialog semantics, keyboard focus trapping/restoration, Escape handling, and inline errors.
+- **Result:** No code change; the table is a named keyboard-scrollable region, its narrow-screen filters stack, and the dialog already manages focus and announces errors.
+- **Why no change:** The current source provides a usable keyboard path for the dense account table and a complete modal interaction pattern; no actionable source defect was found.
+- **Checked:** Read the account table markup, dialog effects, shared notice semantics, and responsive CSS; `git diff --check` passed. Rendered viewport verification remains unavailable because the browser service is unavailable.
+
+## 2026-10-09 — Review API error recovery paths
+
+- **Reviewed:** JSON and non-JSON HTTP failures, malformed success responses, CSRF refresh/recovery, upload network errors, shared alert semantics, and retry affordances on learner and management screens.
+- **Result:** No code change; requests expose server messages or a safe fallback, stale CSRF tokens are cleared, upload connection failures are surfaced, and key loading screens provide retry actions.
+- **Why no change:** No concrete contract mismatch or unrecoverable request path was found in the inspected code. Adding retries without a specific failed interaction would duplicate existing recovery controls.
+- **Checked:** Read `src/api.ts`, `server/http.js`, server middleware order, and the caller error states; `git diff --check` passed. Rendered failure-state verification remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Review course-list and analytics query scaling
+
+- **Reviewed:** Catalog and My Learning pagination, analytics learner pagination and aggregate queries, course summary batching, search escaping, and relevant SQLite indexes.
+- **Result:** No code change; course-list responses are limited to 24 courses, learner analytics pages to 50 rows, offsets are bounded, and the inspected enrollment, grant, lesson-progress, and quiz-attempt lookups have supporting indexes.
+- **Why no change:** The current query shapes batch course summaries and bound user-facing result pages. No source evidence justified a broader query rewrite or additional index with migration cost.
+- **Checked:** Read `server/routes-courses.js`, `server/course-service.js`, and the corresponding schema migrations; `git diff --check` passed. Runtime performance under production-scale data remains unmeasured because no representative dataset is available.
+
+## 2026-10-09 — Make account-list failures recoverable
+
+- **Reviewed:** Administrator account filtering and pagination, failed list requests, stale rows after filter failures, and password-reset dialog errors.
+- **Improvement:** Preserve the failed page and filters for a direct retry, hide stale account rows until the list reloads successfully, and keep password-reset errors inside the dialog instead of repeating the same alert on the page.
+- **Why it helps:** Administrators can recover from transient list failures without re-entering filters, and failed filtered requests cannot leave rows from the previous filter looking current.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx src/styles.css` passed. Rendered retry and alert announcement behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Review lesson feedback validation and recovery
+
+- **Reviewed:** Comment length limits, reaction values, learner/course authorization, comment paging, live comment announcements, and retry behavior after feedback failures.
+- **Result:** No code change; the textarea and server both enforce 2,000 characters, the server validates reaction values and access, initial feedback failures offer retry, and a failed comment-page request leaves its load control available for another attempt.
+- **Why no change:** The inspected client and server constraints match, and existing feedback controls provide recovery without a second, duplicate retry action.
+- **Checked:** Compared `src/pages-learner.tsx` with the feedback routes and schema behavior; `git diff --check` passed. Rendered announcement behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Announce course save and publish progress
+
+- **Reviewed:** Course-editor save draft and publish actions, their shared pending state, response notices, and server publication validation.
+- **Improvement:** Track which save action is in progress, change its visible label, set `aria-busy` on that button, and announce the active action through a polite status region.
+- **Why it helps:** Authors can tell whether the draft save or publish request is pending, including when using a screen reader, while the server remains the authority for publication requirements.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed. Rendered status announcement behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Track course-row actions independently
+
+- **Reviewed:** Course list publish, unpublish, archive, and delete actions; per-row disabled state; and overlapping requests on different courses.
+- **Improvement:** Track each course's active row action independently, guard duplicate actions on the same course, and show action-specific pending labels with `aria-busy`.
+- **Why it helps:** Completing one row action can no longer clear another row's pending state and re-enable an in-flight action; the menu also explains what is happening.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed. Rendered concurrent-action behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Clarify pending account-detail changes
+
+- **Reviewed:** Role changes, account enable/disable, password resets, shared saving state, and the existing inline success/error notices.
+- **Improvement:** Separate account-update and password-reset pending states; update the active action label, set `aria-busy`, and announce account-setting saves politely.
+- **Why it helps:** Administrators can tell which request is in progress, and assistive-technology users receive a status when account settings are being saved.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed. Rendered status announcement behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Make course-list failures recoverable
+
+- **Reviewed:** Course search and status filters, paginated list loading, stale rows after a failed request, and existing list-error layout patterns.
+- **Improvement:** Preserve the failed page and filters for a direct retry, hide stale course rows and pagination until a successful response, and use the same responsive retry layout as the account list.
+- **Why it helps:** Staff can recover from transient course-list failures without repeating the search or status selection, and rows from a previous filter cannot appear to match the failed request.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx src/styles.css` passed. Rendered retry behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Recover course-access list failures
+
+- **Reviewed:** Learner search and pagination, assignment and unassignment actions, refresh behavior after a successful access change, and stale rows after list failures.
+- **Improvement:** Preserve the failed query and page for a direct retry, hide stale assignment rows and pagination after a failed load, and route post-assignment refresh failures through the same retry flow with a message that the change completed.
+- **Why it helps:** Staff can recover the current access view without rebuilding the search, and an outdated assignment state is not shown as authoritative after a request fails.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed. Rendered retry behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Review media upload and delivery reliability
+
+- **Reviewed:** Upload size and multipart limits, course-manager authorization, temporary-file cleanup, cover signature checks, media replacement cleanup, document downloads, protected video streaming, and byte-range handling.
+- **Result:** No code change; uploads are bounded and authorized before storage, failed persistence paths remove temporary files, and protected delivery checks course access before streaming.
+- **Why no change:** The inspected paths already cover the concrete failure and access boundaries. A background orphan-file cleanup would need a defined ownership and retention policy before it could safely delete files.
+- **Checked:** Read `server/routes-media.js`, `server/routes-courses.js`, and upload request construction in `src/api.ts`; `git diff --check -- server/routes-media.js server/routes-courses.js` passed. Upload and streaming runtime behavior was not exercised in this cycle.
+
+## 2026-10-09 — Keep failed analytics pages from showing stale data
+
+- **Reviewed:** Course analytics pagination, page-load errors, retry behavior, and whether the displayed learner metrics match the requested page.
+- **Improvement:** Remember the failed learner page, hide the prior report after a page request fails, and keep the existing retry action pointed at the requested page.
+- **Why it helps:** Staff no longer see one page of learner results presented under a failed request for another page, while retaining the course context and a direct retry.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed. Rendered failure behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Make administrator log failures recoverable
+
+- **Reviewed:** Audit and system log search, action/severity filters, pagination, stale table rows after request failures, and existing refresh controls.
+- **Improvement:** Save each failed page and applied filter context, show a direct retry, and replace stale log rows and pagination with an unavailable state until loading succeeds.
+- **Why it helps:** Administrators can recover the exact filtered log view, and entries from an earlier request are not mistaken for the failed search or page.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx src/styles.css` passed. Rendered failure behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Review private-course revocation behavior
+
+- **Reviewed:** Course visibility checks, grant deletion, learner and media access gates, retained enrollment history, and the assignment page’s revocation explanation.
+- **Result:** No code change; private-course access is checked against the current grant for protected content, while enrollment remains available for progress history after revocation.
+- **Why no change:** The existing server paths match the displayed access model. Changing enrollment history would conflate access with learning progress.
+- **Checked:** Read `server/http.js`, `server/course-service.js`, the grant and protected-media routes, and the access-page explanation. Existing isolated revocation checks are documented earlier in this tracker; no new runtime fixture was needed for this source review.
+
+## 2026-10-09 — Preserve focus when removing quiz content
+
+- **Reviewed:** Staff quiz question and answer-choice removal controls, dynamic control names, minimum choice rules, and keyboard focus after list updates.
+- **Improvement:** After removing a question, move focus to the next question (or the previous one, or “Add question” when none remain); after removing a choice, focus the next available answer field.
+- **Why it helps:** Keyboard users keep a predictable position after the focused control disappears from the editor.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed. Keyboard focus behavior could not be exercised in a rendered browser because no browser surface is connected.
+
+## 2026-10-09 — Bound server graceful shutdown
+
+- **Reviewed:** Server signal handling, active HTTP requests, long-running protected media streams, and database close timing.
+- **Improvement:** Allow active requests up to 30 seconds to finish, then log the timeout and close remaining HTTP connections before the database is closed.
+- **Why it helps:** A stalled or long-lived request can no longer keep the process in shutdown indefinitely; normal requests still get a grace period to complete.
+- **Checked:** `node --check server/index.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check -- server/index.js` passed. Signal behavior was not exercised against a running server in this cycle.
+
+## 2026-10-09 — Review sign-in and first-run setup forms
+
+- **Reviewed:** Sign-in, registration, password change, first-run setup steps, field labels and autocomplete, input limits, validation feedback, pending actions, and mobile form styles.
+- **Result:** No code change; the client and server agree on username and password bounds, setup name limits, and password confirmation, and the forms expose labels, errors, and pending labels.
+- **Why no change:** No validation mismatch or missing recovery state was found in the inspected source. Rendered responsive QA needs a browser surface, which is not connected in this session.
+- **Checked:** Compared `src/pages-auth.tsx` with `server/auth.js` and `server/routes-auth.js`; `git diff --check -- src/pages-auth.tsx src/styles.css` passed.
+
+## 2026-10-09 — Retry learner course pagination in place
+
+- **Reviewed:** Catalog and My Learning “Load more” requests, active filters, retained loaded rows, and the error notice retry targets.
+- **Improvement:** Route a failed next-page retry back through the same load-more request using the last successful page and applied filters; keep full-list retry for initial or filter-load failures.
+- **Why it helps:** Learners can retry a transient pagination failure without losing courses already displayed or restarting the list from page 1.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-learner.tsx` passed. Rendered interaction behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Review learner catalog query boundaries
+
+- **Reviewed:** Catalog search length, category and sort values, SQL pattern escaping, category visibility, and page bounds against the learner controls.
+- **Result:** No code change; the UI and server limits align, wildcard characters are escaped, only supported sort values are accepted, and category results respect learner visibility.
+- **Why no change:** No input mismatch or unbounded result path was found in the inspected contract.
+- **Checked:** Compared `src/pages-learner.tsx`, `server/routes-courses.js`, and `server/sql.js`; prior isolated pagination coverage is documented earlier in this tracker. `git diff --check` passed.
+
+## 2026-10-09 — Prevent settings edits from racing a save
+
+- **Reviewed:** Administrator platform settings form controls, save response updates, icon and palette editors, and server validation.
+- **Improvement:** Mark the form busy and disable its full settings field group while the save request runs, preventing edits that the response would overwrite.
+- **Why it helps:** A pending save now has a clear state and cannot silently discard newer input entered before the response returns.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx src/styles.css` passed. Rendered disabled-control behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Move focus to the selected lesson
+
+- **Reviewed:** Previous/next lesson navigation, course-content links, heading structure, and route changes within the lesson player.
+- **Improvement:** Make the lesson title programmatically focusable and move focus to it when the selected lesson changes within the loaded course.
+- **Why it helps:** Keyboard and screen-reader users land on the new lesson context after in-page navigation instead of remaining on a control from the previous lesson.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-learner.tsx` passed. Rendered keyboard navigation remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Allow safe changes to disabled administrator accounts
+
+- **Reviewed:** Administrator role and disable updates, the active-administrator invariant, session invalidation, and the transactional account update.
+- **Improvement:** Apply the last-active-admin guard only when the target is currently active and the request would disable or demote that administrator.
+- **Why it helps:** A disabled admin record can be demoted without risking platform recovery, while the sole active administrator remains protected.
+- **Checked:** A temporary Express/SQLite fixture confirmed disabled-admin demotion returns 200 and demoting the sole active admin returns 409; fixture data was removed. `node --check server/routes-admin.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check -- server/routes-admin.js` passed.
+
+## 2026-10-09 — Lock password fields during account updates
+
+- **Reviewed:** Self-service password form values, pending state, successful field clearing, and the existing server password-change request.
+- **Improvement:** Mark the form busy and disable current, new, and confirmation password fields while the update is in flight.
+- **Why it helps:** Users cannot edit values that will be discarded when the submitted password change succeeds.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-auth.tsx` passed. Rendered pending-state behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Keep auth submissions aligned with visible form values
+
+- **Reviewed:** Sign-in, registration, and first-run access-settings requests, their pending labels, and field editability while requests are active.
+- **Improvement:** Mark each submitting form busy and disable the submitted fields until sign-in, account creation, or setup completes.
+- **Why it helps:** A server error cannot describe values different from those currently shown in editable fields, and successful submission cannot race newer edits.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-auth.tsx` passed. Rendered pending-state behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Keep course saves from replacing newer editor data
+
+- **Reviewed:** Course metadata save responses, curriculum and media refreshes, concurrent editor state loads, and editable course fields during save.
+- **Improvement:** Fence a save response with the editor’s request sequence so a later curriculum refresh wins, and disable course metadata and cover controls while saving.
+- **Why it helps:** A late save response cannot replace newer curriculum data, and the success notice cannot imply that metadata changed during the request was included.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed. Rendered concurrent-action behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Keep administrator reset submissions aligned with visible fields
+
+- **Reviewed:** Password-reset dialog and account-detail reset form values, per-account pending state, and success/error behavior.
+- **Improvement:** Mark both reset forms busy and disable password fields until the request completes.
+- **Why it helps:** Administrators cannot enter new values after submission and then see an error or successful reset for the earlier values.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check -- src/pages-manage.tsx` passed. Rendered pending-state behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Explain unknown signed-in routes
+
+- **Reviewed:** Client route nesting, the authenticated and staff application frames, route-title updates, and current wildcard redirects.
+- **Improvement:** Show a page-not-found heading and a direct course-catalog link when a signed-in user opens an unknown route, while keeping the shared learner navigation available.
+- **Why it helps:** A mistyped or outdated link no longer silently sends learners and staff to a different page without explaining why.
+- **Checked:** `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. A route-matching check confirmed malformed course, staff, and arbitrary paths resolve to the signed-in fallback. Rendered appearance remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Stop older builds from opening a newer database schema
+
+- **Reviewed:** SQLite migration version detection, migration transaction boundaries, and the server's database startup path.
+- **Improvement:** Reject a database whose highest migration version exceeds the version supported by this application, with an error that names both versions.
+- **Why it helps:** An older build can no longer start silently against a database that may contain schema changes it does not understand, which makes downgrade or rollback mistakes visible before serving requests.
+- **Checked:** An isolated temporary SQLite fixture at schema version 9 was rejected by version 8 without changing its recorded version. Also checked `node --check server/db.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Redact credentials in nested system-log details
+
+- **Reviewed:** System-log detail persistence, recursive detail rendering in the administrator log, and existing credential redaction for message text and sensitive property names.
+- **Improvement:** Apply the existing credential-assignment scrubber to every nested string value in system-log details, including arrays, while preserving ordinary detail text.
+- **Why it helps:** Credentials included in diagnostic strings no longer remain visible when an administrator expands a system-log entry.
+- **Checked:** An isolated temporary SQLite fixture confirmed message, nested object, and array credentials are redacted and ordinary details remain unchanged. Also checked `node --check server/log-store.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Explain unknown routes to signed-out visitors
+
+- **Reviewed:** The signed-in not-found page, the outer wildcard route, public auth-page structure, and route-change focus handling.
+- **Improvement:** Route unmatched addresses to an explanatory not-found page for both signed-in and signed-out visitors. Signed-out visitors get the platform brand and a sign-in link; the page uses the main landmark so route changes can move focus to it.
+- **Why it helps:** Typing an invalid address no longer silently redirects a signed-out visitor to sign-in, and the recovery action matches their current access state.
+- **Checked:** Route matching confirmed malformed course, staff, and arbitrary URLs reach the not-found page while `/login` still resolves normally. Also checked `npx tsc --noEmit`, `npm run build`, and `git diff --check`. Rendered appearance remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Report invalid-session deletion failures
+
+- **Reviewed:** Per-request account lookup, invalid session removal, the SQLite session-store callback contract, and existing session cleanup logging.
+- **Improvement:** Log a structured warning when removal of a session for a missing or disabled account fails, including the failure type and reason.
+- **Why it helps:** Operators can see when invalid session rows are not being removed, while the affected request still proceeds as unauthenticated.
+- **Checked:** An isolated temporary SQLite fixture forced deletion failures for both missing-user and disabled-user sessions; both warnings were recorded and both requests remained unauthenticated. Also checked `node --check server/http.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Validate stored password-hash encodings before scrypt
+
+- **Reviewed:** The server's scrypt hash format, login and password-change bounds, and verification behavior for malformed SQLite values.
+- **Improvement:** Require a bounded string, the exact supported scrypt parameters, the expected salt and digest lengths, valid hex, and exactly six encoded fields before invoking scrypt.
+- **Why it helps:** Corrupt or unexpected stored values fail as invalid credentials without selecting unexpected scrypt settings or relying on permissive hex parsing.
+- **Checked:** An isolated temporary fixture confirmed valid hashes still verify, wrong passwords fail, and unsupported parameters, malformed hex, extra fields, oversized values, and non-string values are rejected. Also checked `node --check server/auth.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Reduce login timing differences for unknown accounts
+
+- **Reviewed:** Login lookup and password verification order, disabled-account behavior, stored-hash validation, the generic sign-in error, and the existing authentication rate limit.
+- **Improvement:** Cache a random dummy scrypt hash and verify against it for missing, disabled, and malformed accounts; active accounts continue to verify against their stored hash.
+- **Why it helps:** Allowed-length failed login attempts now perform comparable password-hashing work, reducing the response-time signal that can reveal whether a username belongs to an active account.
+- **Checked:** An isolated temporary database fixture confirmed valid active credentials succeed while wrong, missing, disabled, and malformed accounts fail. Source inspection confirmed each allowed-length attempt verifies one supported scrypt hash. Also checked `node --check server/auth.js`, `node --check server/routes-auth.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Make large-upload request deadlines configurable
+
+- **Reviewed:** The 2 GiB per-file upload limit, Node's whole-request deadline, runtime server setup, and documented environment variables.
+- **Improvement:** Add a validated `REQUEST_TIMEOUT_MS` setting, defaulting to Node's existing five-minute timeout, and apply it to the HTTP server. Document the setting in `.env.example` and the configuration table.
+- **Why it helps:** Self-hosters can extend the deadline for slower large uploads while keeping a nonzero timeout to protect the service from stalled request bodies.
+- **Checked:** Config validation accepted the default and a custom value, rejected zero, non-integers, and values above the supported timer range, and a Node HTTP server accepted the configured timeout. Also checked `node --check server/config.js`, `node --check server/index.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Review learner course and lesson flows
+
+- **Reviewed:** Catalog search and filters, empty and error states, course and certificate pagination, lesson feedback controls, existing responsive breakpoints, upload middleware behavior, and prior tracker coverage for these paths.
+- **Result:** No code change; source inspection found labeled controls, retry paths, request sequencing, bounded pagination, and narrow-screen rules already in place, with no distinct defect supported by the current evidence.
+- **Checked:** Compared learner JSX and related CSS with course, certificate, feedback, and upload handlers, then ran `git diff --check`. Rendered viewport and keyboard behavior could not be verified because no browser surface is connected; a connected browser is needed for a visual QA pass.
+
+## 2026-10-09 — Review session, log, and protected-media behavior
+
+- **Reviewed:** SQLite session expiry and revocation, bounded audit/system-log retention and credential redaction, multipart upload validation and cleanup, protected document/video delivery, course-card image alternatives, and the catalog’s responsive grid rules.
+- **Result:** No code change; the reviewed backend paths already reject expired or malformed sessions, bound log growth, revalidate and clean up rejected uploads, and enforce access checks before serving protected files. The course title supplies the meaning beside its decorative cover image.
+- **Checked:** Compared the session store, admin log routes and UI, media routes, shared course-card component, responsive styles, and prior tracker coverage; `git diff --check` passed. No browser surface is connected, so rendered visual and keyboard behavior still needs browser QA.
+
+## 2026-10-09 — Guard archived-course deletion in the editor
+
+- **Reviewed:** Permanent deletion from the archived-course editor, the guarded delete action in the course list, and the editor's existing save/error states.
+- **Improvement:** Add a synchronous duplicate-request guard, disable the delete control while a save or delete is active, expose `aria-busy`, and show “Deleting course…” until the request finishes.
+- **Why it helps:** A slow request cannot trigger a second destructive API call, and if deletion fails the pending state clears so the administrator can review the error and retry.
+- **Checked:** Source contract assertion confirmed the ref guard, pending label, busy state, and error/finally recovery; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered pending-state appearance remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Guard module and lesson removal requests
+
+- **Reviewed:** Module and lesson removal confirmations, duplicate-click behavior, current course-save state, and the matching per-item pending labels in course-list actions.
+- **Improvement:** Add synchronous removal guards for curriculum items, serialize module and lesson deletions against one another and permanent course deletion, disable their delete controls while a removal is pending, and expose the active item through a changing accessible name and `aria-busy`.
+- **Why it helps:** Repeated clicks no longer send duplicate delete requests that can turn a successful removal into a misleading not-found error; failed requests clear the lock and leave the item available for retry.
+- **Checked:** Source assertions confirmed both handler guards, shared lock release, disabled controls, and item-specific busy state; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered pending-state appearance remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Review learner assignment and access flows
+
+- **Reviewed:** Assignment search and pagination, per-learner pending state, post-change refresh and retry behavior, atomic grant plus enrollment creation, revocation, protected-content authorization, and narrow-screen layout.
+- **Result:** No code change; the existing flow prevents duplicate changes to one learner, refreshes the active course/page after updates, commits private-course grants with enrollment, and checks current grants before serving protected content.
+- **Checked:** Compared the assignment page, access routes, protected-media authorization, responsive access-list styles, and prior tracker coverage; `git diff --check` passed. Rendered viewport and keyboard behavior remain unverified because no browser surface is connected.
+
+## 2026-10-09 — Improve contrast for supporting text
+
+- **Reviewed:** Search placeholders, breadcrumbs, course and module metadata, lesson context, analytics notes and states, form guidance, empty log details, certificate labels, and their actual light backgrounds across the available palettes.
+- **Improvement:** Use the existing `--muted` text token for low-contrast supporting text and placeholders, set placeholder opacity consistently, and darken the certificate heading gold while preserving its warm palette.
+- **Why it helps:** Small instructions and context remain readable across search, learning, analytics, management, and certificate screens instead of relying on pale gray text.
+- **Checked:** Source/contrast assertions measured the muted token at 5.33:1 on white and 4.81:1 on the analytics state background, and certificate gold at 5.06:1 on the certificate surface. Also checked `npx tsc --noEmit`, `npm run build`, and `git diff --check`. Rendered visual QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Revalidate lesson-resource removal transactionally
+
+- **Reviewed:** Resource lookup before deletion, the delete/course-timestamp transaction, post-commit document cleanup, and audit-event ordering.
+- **Improvement:** Recheck the lesson, course authorization, and resource inside an immediate SQLite transaction; use the removed row returned by that transaction for cleanup and audit only after commit.
+- **Why it helps:** Competing removal requests cannot both act on a stale resource row, update the course twice, or write duplicate removal audit entries; a request that loses the race receives a clear not-found response.
+- **Checked:** A temporary Express/SQLite fixture sent two concurrent deletes and confirmed responses of 204 and 404, one resource deletion, and one audit entry. Also checked `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, a source assertion for in-transaction revalidation, and `git diff --check`.
+
+## 2026-10-09 — Improve learner-assignment state contrast
+
+- **Reviewed:** Assigned and not-assigned labels in the staff access list against their white row background and the separate granted-state green.
+- **Improvement:** Use the shared muted text token for the not-assigned label; keep the green assigned label, which measures 4.79:1 on white.
+- **Why it helps:** Both states remain distinguishable and readable in the 12px status column, including the less prominent not-assigned state.
+- **Checked:** Contrast assertions measured not-assigned at 5.33:1 and assigned at 4.79:1 against white; `npm run build` and `git diff --check` passed. Rendered row appearance remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Revalidate upload access after file transfer
+
+- **Reviewed:** Course-manager authorization before multipart upload, manager status changes during long transfers, lesson and course lookup before persistence, media replacement references, and rejected-file cleanup.
+- **Improvement:** Recheck the current manager account, course, and target lesson inside an immediate transaction after each video, cover, or lesson-document upload. Read the replaced media ID from the transaction and verify the lesson update affected a row.
+- **Why it helps:** A manager disabled or demoted while a file is uploading cannot finish an unauthorized change; a course or lesson removed during transfer is rejected cleanly, and concurrent replacements use the current media reference.
+- **Checked:** A temporary Express/SQLite fixture confirmed normal video and document uploads succeed; demotion during each transfer returns 403, removes the uploaded file, and preserves existing media and resources. Also checked `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Reject non-text course content
+
+- **Reviewed:** Shared course API text validation for course, module, lesson, quiz, resource, question, and choice fields, including JSON and repeated query values.
+- **Improvement:** Reject non-string values instead of coercing objects, arrays, numbers, or booleans into stored text; preserve omitted course and quiz defaults.
+- **Why it helps:** Malformed requests cannot silently save values such as `[object Object]` or joined arrays as course content, and clients receive a clear validation error.
+- **Checked:** A temporary Express/SQLite fixture confirmed object, array, and numeric inputs return 400 without database writes, while omitted course defaults still work. Also checked `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Require usernames to arrive as text
+
+- **Reviewed:** Username normalization and credential validation across initial setup, public registration, and sign-in, plus the existing string check for staff-created accounts.
+- **Improvement:** Normalize only string values, so numbers, arrays, booleans, and objects fail credential validation instead of being converted into usernames.
+- **Why it helps:** Malformed JSON cannot create or authenticate an account under a coerced username; numeric-looking usernames remain available when entered as text.
+- **Checked:** A temporary Express/SQLite fixture confirmed non-string registration usernames return 400 without creating accounts and the string `123` remains valid. Also checked `node --check server/auth.js`, `node --check server/routes-auth.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Validate visibility when creating courses
+
+- **Reviewed:** The course editor's public/private visibility control, course creation defaults, and the stricter visibility validation already used when updating courses.
+- **Improvement:** Validate course visibility on creation; default only an omitted value to public and reject invalid values with the same 400 validation response as course updates.
+- **Why it helps:** A malformed request can no longer silently change an invalid visibility choice into public course data.
+- **Checked:** A temporary Express/SQLite fixture confirmed invalid values do not create courses, omitted visibility defaults to public, and explicit private visibility is retained. Also checked `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Require platform names to arrive as text
+
+- **Reviewed:** Initial setup and administrator settings name parsing, existing 2–80 character bounds, and type validation for the other platform settings.
+- **Improvement:** Share a string-only platform-name parser across setup and settings updates; trim valid input and reject missing or non-string names before writing.
+- **Why it helps:** Malformed requests can no longer save a coerced value such as `[object Object]` as the platform brand used across the interface.
+- **Checked:** A temporary Express/SQLite fixture confirmed invalid values leave setup and settings unchanged, while a valid padded name is trimmed and saved. Also checked `node --check server/routes-auth.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Require numeric quiz pass marks
+
+- **Reviewed:** The quiz editor's numeric pass-mark selector, JSON request payload, database range constraint, and shared integer-field parser.
+- **Improvement:** Require pass marks to arrive as integer JSON numbers in the supported 1–100 range; keep the default when the field is omitted.
+- **Why it helps:** Numeric strings, arrays, and booleans can no longer be silently coerced into quiz settings.
+- **Checked:** A temporary Express/SQLite fixture confirmed malformed and out-of-range values return 400 without creating a quiz, while an in-range number and the omitted default succeed. Also checked `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Require login passwords to arrive as text
+
+- **Reviewed:** Sign-in password parsing, string-only credential validation in account creation and password changes, and the generic failed-login response.
+- **Improvement:** Treat non-string login password values as invalid input without coercing them into strings; keep the same generic 401 response and password verification path.
+- **Why it helps:** A malformed JSON number or array cannot be interpreted as a valid text password, while normal sign-in behavior remains unchanged.
+- **Checked:** A temporary Express/SQLite fixture confirmed numeric, array, object, and boolean password values return the generic 401, while the same credential as a JSON string succeeds. Also checked `node --check server/routes-auth.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Widen the password form on small screens
+
+- **Reviewed:** Account-security field labels, password bounds and autocomplete, saving and result announcements, form/card padding, and the 320px minimum viewport.
+- **Improvement:** Reduce the narrow content and form-card horizontal padding below 460px while retaining the existing card and spacing style.
+- **Why it helps:** Password fields gain usable width on phones; at 320px their content area grows from 206px to 254px.
+- **Checked:** A CSS source assertion confirmed the 460px overrides and computed widths; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered appearance remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Validate uploaded MP4 container headers
+
+- **Reviewed:** The media-upload extension and MIME checks, existing course-cover signature validation, and the lesson-video save and cleanup path.
+- **Improvement:** Validate that an MP4 upload begins with a bounded ISO Base Media File Format `ftyp` box, including normal and extended box sizes, before saving it to a lesson.
+- **Why it helps:** Obvious mislabeled files and impossible box lengths are rejected before they can become broken lesson-video links. This header check does not establish that the complete video is decodable.
+- **Checked:** A temporary Express/SQLite upload fixture confirmed plain text and an oversized `ftyp` box return 400, leave no file or database row, and a bounded `ftyp` upload is persisted and linked to its lesson. Also checked `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Validate administrator filter query values
+
+- **Reviewed:** Search, role, severity, and action filters on administrator account, audit-log, and system-log endpoints, including the browser query-string parser behavior for repeated keys.
+- **Improvement:** Require text filters to be single string values and validate supplied role and severity filters against their supported options; keep omitted filters on their existing defaults.
+- **Why it helps:** Repeated or unknown filters now return a clear 400 response instead of being coerced, ignored, or silently widening a filtered result set.
+- **Checked:** A temporary Express/SQLite fixture confirmed repeated search values and repeated or unknown role/severity filters return 400, while valid single filters still return the expected records. Also checked `node --check server/routes-admin.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Check uploaded PDF envelopes
+
+- **Reviewed:** Lesson-document extension and MIME checks, document storage and cleanup, and the accepted PDF, text, Office, and OpenDocument formats.
+- **Improvement:** For PDF uploads, check for a `%PDF-` header within the first 1,024 bytes and a final `%%EOF` marker within the last 1,024 bytes, followed only by whitespace; keep the existing checks for other document formats.
+- **Why it helps:** A renamed text or incomplete file can no longer be saved as a PDF lesson resource and fail only when a learner downloads it. These envelope checks do not parse or guarantee full PDF validity.
+- **Checked:** A temporary Express/SQLite fixture confirmed text masquerading as PDF, a missing end marker, and trailing non-whitespace data return 400 and leave no file or resource row; a structurally complete sample PDF saves successfully. Also checked `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Review lesson links and administrator log details
+
+- **Reviewed:** Staff-created lesson-link URL validation, learner link attributes and new-tab guidance, log-detail serialization and credential redaction, and the admin log filter UI/API contract.
+- **Result:** No code change; links remain limited to credential-free HTTP(S), and log-detail writes retain bounded redacted values with a safe fallback for malformed JSON.
+- **Why no change:** The inspected source paths agree on their contracts and exposed no actionable defect. Further layout changes need rendered browser QA, which is unavailable in this workspace.
+- **Checked:** Read the lesson-resource routes, learner link markup, log store, log parsing and rendering, and corresponding filter controls; `git diff --check` passed.
+
+## 2026-10-09 — Reuse date formatters in learner and admin lists
+
+- **Reviewed:** Date formatting in course/account tables, audit and system logs, certificate history and print views, and lesson comments, along with the previously reviewed list sizes and loading behavior.
+- **Improvement:** Construct each locale-aware `Intl.DateTimeFormat` once at module scope and reuse it for every rendered course, account, log, certificate, or comment timestamp.
+- **Why it helps:** Rerendering paginated lists no longer allocates a fresh formatter for each visible row, while keeping the same locale, time-zone, and date-style options.
+- **Checked:** A source assertion confirmed the learner and management modules each create only their shared formatter instances and all five call sites use them. Also checked `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Load management pages on demand
+
+- **Reviewed:** App route imports, the 104 KB management page module, staff-layout nesting, existing route loading announcements, and the production client bundle output.
+- **Improvement:** Lazy-load the management module behind a route-level Suspense boundary; preserve the staff sidebar while it loads, announce loading, and show a reload action if the chunk fails.
+- **Why it helps:** Learners who never open staff pages download 73.8 KB less JavaScript initially (16.7 KB less gzip); the 76.55 KB management chunk is requested only on a management route.
+- **Checked:** `npx tsc --noEmit` and `npm run build` passed. A source/build assertion confirmed all ten management pages are lazy, the loading/error boundaries are present, and the build emits separate entry and management chunks. Rendered navigation and chunk-failure interaction remain unverified because no browser surface is connected.
+
+## 2026-10-09 — Normalize administrator log-detail shapes
+
+- **Reviewed:** The log API record type, database JSON parsing, and admin detail rendering, which expects a key/value object for both audit and system entries.
+- **Improvement:** Normalize valid JSON arrays, strings, numbers, booleans, and null to an empty details object; preserve parsed objects and the existing fallback for malformed JSON.
+- **Why it helps:** Legacy or externally edited log rows no longer appear as numeric keys or primitive text in the detail viewer, and API responses keep the declared object shape.
+- **Checked:** A temporary Express/SQLite fixture confirmed both log endpoints normalize seven malformed or non-object shapes and preserve valid objects. Also checked `node --check server/routes-admin.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Keep administrator usernames inside the mobile heading
+
+- **Reviewed:** The account-detail page heading and back action, mobile management heading row, and the 3–32 character username rule that allows unbroken text.
+- **Improvement:** Allow long usernames to wrap anywhere and stack the “Back to users” action below the heading at the 720px breakpoint.
+- **Why it helps:** A maximum-length username can no longer force the account-detail heading past a narrow viewport or squeeze its navigation action.
+- **Checked:** A source assertion confirmed the 32-character bound, 320px minimum layout, wrapping rule, and stacked mobile action. Also checked `npx tsc --noEmit`, `npm run build`, and `git diff --check`. Rendered layout remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Review API transport and authentication form semantics
+
+- **Reviewed:** Shared JSON and XHR requests, CSRF bootstrap and error recovery, upload response handling, sign-in/registration/password form labels and limits, and the shared button default type.
+- **Result:** No code change; the inspected paths agree on expected JSON errors, and the forms retain associated labels, server-aligned field bounds, and explicit submit actions.
+- **Checked:** Compared the client error and CSRF paths with `server/http.js`, inspected the rendered form markup and shared button implementation, and ran `git diff --check`.
+- **Next evidence needed:** A connected browser surface would allow checking actual focus, layout, and interaction behavior; no browser is currently available in this workspace.
+
+## 2026-10-09 — Keep long course titles within management headings
+
+- **Reviewed:** Course-title limits in the editor and API, dynamic course-dashboard and learner-assignment headings, and their narrow-screen management layout.
+- **Improvement:** Let management heading content shrink and wrap long unbroken text in both headings and descriptions.
+- **Why it helps:** A valid 160-character title can no longer force a management page wider than the viewport or squeeze its action controls off-screen.
+- **Checked:** A seven-part source assertion confirmed the title bound, dynamic heading and subtitle uses, and wrapping rules. Also checked `npx tsc --noEmit`, `npm run build`, and `git diff --check`. Rendered layout remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Recheck catalog category access and media-upload deadlines
+
+- **Reviewed:** Learner catalog category queries and pagination, course visibility and grant checks, browser upload error handling, and the configurable Node request timeout.
+- **Result:** No code change; category options include all published courses visible to the current user without depending on the active search or page, and upload network/HTTP failures are surfaced while the server enforces its configured request deadline.
+- **Checked:** Six source assertions covered category visibility, pagination independence, latest-request updates, upload error handling, and application of the configured timeout; `git diff --check` passed.
+- **Next evidence needed:** A connected browser is needed to verify rendered responsive layouts and interactions; none is available in the current workspace.
+
+## 2026-10-09 — Index administrator account role filters
+
+- **Reviewed:** The administrator user-list role filter and count query, the one-million-account configuration ceiling, and the existing schema migration sequence.
+- **Improvement:** Add migration 9 with a `users(role)` index so role counts use a covering index and filtered account queries scan only the selected role.
+- **Why it helps:** Role-filtered account pages avoid scanning unrelated roles as account counts grow; the existing result ordering is preserved.
+- **Checked:** A temporary SQLite database confirmed fresh schema creation and upgrade from version 8; `EXPLAIN QUERY PLAN` showed a covering-index role count and role-index filtered list (the established custom sort still uses a temporary B-tree). Also checked `node --check server/db.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Stream role-filtered account pages in username order
+
+- **Reviewed:** The role index added in migration 9, the administrator list ordering contract, and the case-insensitive unique username constraint.
+- **Improvement:** Add migration 10 with a composite `(role, username COLLATE NOCASE)` index, replace the redundant single-column index, and omit the fixed role-priority sort when one role is selected.
+- **Why it helps:** SQLite can read a filtered role directly in username order without building a temporary sort, while all-role priority and filtered username ordering remain unchanged.
+- **Checked:** A temporary database upgraded from version 9 to 10; an HTTP fixture confirmed all-role and role-filtered ordering; `EXPLAIN QUERY PLAN` showed the compound index and no temporary B-tree for the filtered list. Also checked `node --check server/db.js`, `node --check server/routes-admin.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Announce management result ranges
+
+- **Reviewed:** The shared pager used by account, course, access, analytics, audit-log, and system-log lists, plus the account API page bounds and keyboard-scroll table region.
+- **Improvement:** Mark the visible “Showing _–_ of _” result range as an atomic polite status so page and filter changes are announced to assistive technology.
+- **Why it helps:** Screen-reader users get the updated result range after the shared pager loads a different page or result set, without moving focus away from the pager controls.
+- **Checked:** Five source assertions confirmed the live status, range calculations, all seven pager call sites, narrow-screen pager layout, and bounded account API pages. Also checked `npx tsc --noEmit`, `npm run build`, and `git diff --check`. Rendered assistive-technology behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Stream the default administrator account order
+
+- **Reviewed:** The default all-role account query and its CASE-based role priority, the new role-filtered index, and the case-insensitive unique username constraint.
+- **Improvement:** Add migration 11 with an expression index for role priority and username; remove the unreachable `id` tie-breaker from the all-role order because usernames are unique under the same collation.
+- **Why it helps:** The default account page can read its existing role-and-username order directly from the index without a temporary sort; the role-filtered compound index remains available.
+- **Checked:** A temporary database upgraded from version 10; `EXPLAIN QUERY PLAN` showed indexed scans and no temporary B-tree for both default and filtered lists; an HTTP fixture confirmed both orders. Also checked `node --check server/db.js`, `node --check server/routes-admin.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Give repeated management actions contextual names
+
+- **Reviewed:** Repeated learner activity disclosures, account-detail links, and course-dashboard links in management tables and their row context.
+- **Improvement:** Keep the visible labels while adding the learner username, account username, or course title to each control’s accessible name.
+- **Why it helps:** Assistive-technology users can distinguish repeated actions when navigating a control list, while each accessible name still includes its visible label.
+- **Checked:** Four source assertions confirmed all three contextual names and visible-label preservation. Also checked `npx tsc --noEmit`, `npm run build`, and `git diff --check`. Rendered screen-reader behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Match empty-state headings to their section level
+
+- **Reviewed:** Empty-state call sites and their parent headings on learner pages, course analytics, account analytics, and the course editor.
+- **Improvement:** Let `EmptyState` render level 2 or 3 headings; keep root-page states at level 2 and use level 3 for five states nested beneath management section headings. Apply the same visual style to both levels.
+- **Why it helps:** Heading navigation now reflects the page and section outline instead of repeating the same level for nested empty-state content.
+- **Checked:** Five source assertions confirmed component defaults, heading selection, consistent styling, all five nested management states, and default levels on root states. Also checked `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Review shared success, error, and progress announcements
+
+- **Reviewed:** The management `Notice` component, authentication form feedback, learner video and loading messages, and course/media save states.
+- **Result:** No code change; failures use alert roles, success messages use status roles, and loading or upload progress is announced through status or progress-bar semantics.
+- **Checked:** Compared the shared notice implementation with representative auth, learner, and management call sites; `git diff --check` passed.
+- **Next evidence needed:** A connected browser and assistive-technology session would allow confirming actual announcements and focus behavior; neither is available in this workspace.
+
+## 2026-10-09 — Review icon and media upload limits and course-list requests
+
+- **Reviewed:** The platform-icon picker’s MIME and 512 KiB limit against server signature checks and the 1 MiB JSON parser limit; multipart field order, upload type checks and cleanup; and course-list filter, retry, and request-sequencing behavior.
+- **Result:** No code change; a maximum-size icon fits within the JSON body limit, the client sends multipart fields before the file, and course-list requests ignore stale responses while retries preserve their failed filter/page snapshot.
+- **Why no change:** The inspected client and server contracts agree and exposed no actionable defect. A connected browser is needed to verify rendered upload controls, responsive layout, and focus behavior; none is available in this workspace.
+- **Checked:** Compared the source limits and multipart construction, read the media upload validation and course-list request paths, and ran `git diff --check`.
+
+## 2026-10-09 — Announce comment pagination without reading the whole feed
+
+- **Reviewed:** The learner lesson-comment list, its incremental “Load more comments” updates, and the current polite live-region boundary.
+- **Improvement:** Remove the live-region behavior from the entire growing comment list and add an atomic status that announces how many comments are currently shown out of the total.
+- **Why it helps:** Screen-reader users hear concise progress after comments are posted or another page is loaded, without each newly inserted comment being announced as part of a large live region.
+- **Checked:** A focused source assertion confirmed the list is outside the live region and the loaded/total status is atomic; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered assistive-technology behavior remains unverified because no browser surface is connected.
+
+## 2026-10-09 — Review reduced motion and backend failure handling
+
+- **Reviewed:** Stylesheet motion and scroll overrides, audit/system log persistence failures, quiz answer validation and transaction boundaries, and lesson-feedback count/pagination queries.
+- **Result:** No additional code change; reduced-motion preferences already suppress transitions and scrolling, log-write failures are contained, quiz answers are checked against the published quiz inside a transaction, and feedback queries have supporting indexes.
+- **Why no change:** The inspected paths already cover the relevant cases. Rendered motion and screen-reader behavior need a connected browser and assistive-technology session; the current session exposes neither.
+- **Checked:** Compared the CSS media query with all transition/animation declarations and read the log, quiz, and feedback query paths; `git diff --check` passed.
+
+## 2026-10-09 — Verify course-analytics learner query bounds
+
+- **Reviewed:** The course-analytics endpoint’s learner pagination, the learner-ID placeholder queries used for progress details, and the management page’s shared pager.
+- **Result:** No code change; the endpoint selects at most 50 learner rows before constructing either learner-ID query, keeping each statement to 51 bound values including the course ID.
+- **Why no change:** The suspected SQLite variable-limit issue does not occur on this path, and the existing analytics UI consumes the returned page and page size.
+- **Checked:** Traced `paginationWindow` and the `LIMIT` query through both learner-detail queries and the frontend pager; `git diff --check` passed.
+
+## 2026-10-09 — Close media streams when clients disconnect
+
+- **Reviewed:** Protected lesson-document and media responses, including full-file and byte-range streaming, plus learner video retry/navigation behavior.
+- **Improvement:** Route file delivery through a shared stream helper that destroys the file stream when the HTTP response closes before finishing and removes its close listener when the stream ends.
+- **Why it helps:** Interrupted video seeks, page navigation, or document downloads stop reading the file and release its descriptor instead of leaving a paused stream open.
+- **Checked:** A Node stream experiment reproduced an open paused file stream after destination close. An isolated Express fixture verified the normal response bytes and confirmed the file stream closes after a client abort; `node --check` passed for both server files, as did `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Group quiz editor correct-answer controls
+
+- **Reviewed:** Staff quiz-editor radio names and accessible labels, the shared correct-answer instruction, the server’s question/choice constraints, and current editor fieldset styling.
+- **Improvement:** Put each question’s correct-answer radios and instruction in a question-specific fieldset with a screen-reader legend and an associated description; reset native fieldset styling to preserve the existing layout.
+- **Why it helps:** Assistive technology can identify which question’s answer group is active and hear the single-correct-answer and choice-count instructions with the controls.
+- **Checked:** A focused source assertion confirmed each group has its matching legend, description, and radio name; `npx tsc --noEmit` and `npm run build` passed. `git diff --check` passed. Rendered QA could not run: no browser surface is connected, the project has no e2e script, and Playwright is not available offline without adding a dependency.
+
+## 2026-10-09 — Keep long course titles inside learner views
+
+- **Reviewed:** The 160-character server/client course-title bound and its display in course cards, overview headings, player and quiz breadcrumbs, certificate history, and printed certificates.
+- **Improvement:** Allow long words to wrap in headings and breadcrumb items; constrain certificate brand and course-title text to the certificate’s available width.
+- **Why it helps:** Valid titles without spaces and long platform names no longer push learner views beyond their container or get clipped in the certificate layout.
+- **Checked:** A focused source assertion confirmed the title bound and affected rendering surfaces; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered QA remains unavailable because no browser surface or Playwright package is connected.
+
+## 2026-10-09 — Wrap long module and lesson names
+
+- **Reviewed:** The 160-character server limits for module and lesson titles, their display in learner curriculum rows and the management editor, and the editor's existing lesson-title ellipsis.
+- **Improvement:** Allow module and lesson names to break across lines in learner curriculum and management views; remove the lesson editor's one-line ellipsis.
+- **Why it helps:** Full valid titles remain readable and actionable at narrow widths instead of extending beyond their row or being hidden behind an ellipsis.
+- **Checked:** A focused source assertion confirmed the server title bounds and wrapping rules with no lesson-title clamp; `npx tsc --noEmit` and `npm run build` passed. `git diff --check` passed. Rendered QA remains unavailable because no browser surface or Playwright package is connected.
+
+## 2026-10-09 — Redact quoted credentials in diagnostic logs
+
+- **Reviewed:** The shared scrubber for system-log messages and nested string details, including assignment-style credentials and sensitive object keys.
+- **Improvement:** Redact credentials in quoted JSON-style key/value text, and recognize API/private keys and credential-named fields while preserving the value's quote style.
+- **Why it helps:** Diagnostic text that contains serialized headers or configuration values is less likely to expose credentials when operators inspect system logs.
+- **Checked:** An isolated SQLite fixture confirmed quoted JSON, Bearer, plain assignment, API-key, and nested sensitive-field values are redacted while ordinary values remain readable. Also checked `node --check server/log-store.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Review the narrow learner header
+
+- **Reviewed:** The skip link and main landmark, platform-brand shrink behavior, learner navigation, account menu, and the 720px and 420px header breakpoints.
+- **Result:** No CSS change; the source already reduces header spacing and navigation type at mobile widths and allows the brand text to shrink. Actual fit and interaction at 320px remain unverified.
+- **Why no change:** The source did not show a definite overflow requiring another layout rule, and rendered measurements are needed before changing the compact header further.
+- **Checked:** Compared the header markup, focusable main-content target, brand flex rules, and responsive styles; `git diff --check` passed. A connected browser is needed for rendered narrow-screen QA.
+
+## 2026-10-09 — Keep requests responsive during course media cleanup
+
+- **Reviewed:** Permanent course deletion after its SQLite row is removed, including recursive media-directory cleanup and the existing failure log/204 behavior.
+- **Improvement:** Use asynchronous recursive removal in the deletion handler while preserving cleanup-error logging and the completed-deletion response.
+- **Why it helps:** The event loop can serve other requests while a course directory containing many media files is removed.
+- **Checked:** An isolated Express/SQLite fixture held the cleanup promise, confirmed a concurrent health request completed before cleanup was released, then verified the course and media directory were removed and deletion returned `204`. Also checked `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Avoid blocking requests during upload cleanup
+
+- **Reviewed:** Temporary-file removal after rejected or failed uploads and old-media removal after successful replacement.
+- **Improvement:** Await asynchronous file removal in both upload handlers and the shared temporary-upload cleanup helper.
+- **Why it helps:** File cleanup on upload paths no longer blocks the Node event loop while validation or replacement requests are being handled.
+- **Checked:** An isolated Express upload fixture held rejected-file cleanup, confirmed a concurrent health request completed, then verified the request returned its validation error and the temporary file was removed. Also checked `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Keep curriculum deletion cleanup non-blocking
+
+- **Reviewed:** The shared media-file cleanup path for module, lesson, and document-resource deletion, including its existing failure logging.
+- **Improvement:** Make the shared cleanup asynchronous and await it from each deletion handler, preserving the successful database change and best-effort cleanup behavior.
+- **Why it helps:** Deleting curriculum items with media no longer blocks unrelated requests while their files are removed.
+- **Checked:** An isolated Express/SQLite fixture held document cleanup, confirmed a concurrent health request completed, then verified the resource and file were removed and the API returned `204`. Also checked `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Validate uploads without synchronous filesystem calls
+
+- **Reviewed:** Multer's per-course directory setup and the bounded signature reads used to validate uploaded video, PDF, and image files.
+- **Improvement:** Create upload directories asynchronously and use asynchronous file handles for signature checks, closing the handle on every result path.
+- **Why it helps:** Upload requests no longer pause the server event loop while the filesystem opens or reads the validation bytes.
+- **Checked:** An isolated upload fixture held the signature-file open operation, confirmed a concurrent health request completed, then verified invalid content still returned `400` and left no temporary file. Also checked `node --check server/routes-media.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Keep generated quiz titles within the API limit
+
+- **Reviewed:** The 160-character module-title and quiz-title bounds and the editor's default quiz title generation.
+- **Improvement:** Trim the module-name prefix before adding the ` quiz` suffix, while avoiding a cutoff inside a surrogate pair; share the same limit with the quiz-title input.
+- **Why it helps:** Staff can add a quiz to any valid module, including one at the maximum title length, without the server rejecting the generated title.
+- **Checked:** A boundary check covered 160-character titles and a supplementary Unicode character at the cutoff. An isolated Express/SQLite fixture confirmed the quiz endpoint accepted and stored generated titles for maximum-length ASCII and Unicode module names. Also checked `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Preserve Unicode at generated-title cutoffs
+
+- **Reviewed:** The new quiz-title boundary helper and the document uploader's filename-derived title, which also has a 160-code-unit limit.
+- **Improvement:** Reuse surrogate-safe truncation when deriving document titles from filenames.
+- **Why it helps:** A long filename ending at a supplementary Unicode character no longer produces a broken title when the client submits the attachment.
+- **Checked:** A focused boundary check covered both generated quiz names and file-derived titles at the 160-code-unit cutoff; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-09 — Make quiz deletion and course metadata atomic
+
+- **Reviewed:** Quiz deletion's module authorization, quiz-row removal, course editor/timestamp update, and post-change audit event.
+- **Improvement:** Perform module lookup and authorization, quiz deletion, and course metadata update inside one immediate SQLite transaction; write the audit event after commit.
+- **Why it helps:** A failed course update no longer leaves the quiz deleted while returning an error, and audit history only records a committed deletion.
+- **Checked:** An isolated Express/SQLite fixture forced the course update to fail and confirmed the quiz row and metadata rolled back with no deletion audit; after removing the trigger, deletion committed and the audit appeared. Also checked `node --check server/routes-courses.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check`.
+
+## 2026-10-09 — Name learner-assignment actions clearly
+
+- **Reviewed:** The course-access list's learner rows, visible assignment actions, and accessible names when staff navigate among repeated buttons.
+- **Improvement:** Include the learner and course names in each assign/unassign button's accessible name while preserving its concise visible label.
+- **Why it helps:** Screen-reader users can distinguish the target learner and course without moving back through the row before activating an action.
+- **Checked:** A focused source assertion confirmed both action names include the learner and current course, while disabled accounts still have no assignment action. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Review course-access history and staff learning behavior
+
+- **Reviewed:** Private-course grant and revoke behavior, retained learner progress, staff course viewing, and the role checks on learner activities.
+- **Result:** No backend behavior change; revocation removes the active grant while preserving progress, as described in the README and access page. The signed-in interface also exposes course learning to staff, so source alone does not establish that staff activity should be rejected.
+- **Why no change:** Restricting enrollment, completion, or quiz attempts to learner-role accounts would alter the current staff learning flow. That role boundary needs an explicit product decision before changing these endpoints.
+- **Checked:** Read `README.md`, the shared viewer authorization helper, course access routes, and signed-in navigation and learning pages; `git diff --check` passed.
+
+## 2026-10-09 — Identify account actions by user
+
+- **Reviewed:** The administrator account table's repeated row actions and the platform settings route's validation and transaction boundary.
+- **Improvement:** Add the target username to each row's reset-password and enable/disable accessible names while leaving visible action labels unchanged.
+- **Why it helps:** Screen-reader users can choose the right action directly from a list of accounts without first navigating back to the username cell.
+- **Backend review:** The settings update already validates supplied values and commits related settings together, so no backend change was warranted in this cycle.
+- **Checked:** Focused source assertions confirmed both action names include the row username and the enable/disable label follows the account state. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Verify button submission and quiz query bounds
+
+- **Reviewed:** Native JSX button types, the shared button default, quiz question save limits, and the question-ID query used for quiz submissions.
+- **Result:** No code change; every native button declares a type, shared buttons default to `button`, and the quiz API caps saved quizzes at 50 questions before creating the bounded ID query.
+- **Why no change:** The inspected controls cannot accidentally submit a surrounding form, and the dynamic placeholder list remains within the server's enforced quiz limit.
+- **Checked:** Searched all TSX source for native buttons missing `type`, read the shared `Button` default and quiz save/submit routes, and ran `git diff --check`.
+
+## 2026-10-09 — Recheck lesson editor field limits
+
+- **Reviewed:** Lesson title and description inputs, link title and URL controls, and the matching server-side text and protocol validation.
+- **Result:** No code change; the client bounds match the API limits of 160, 2,000, 160, and 2,048 characters, and the server independently restricts resource links to credential-free HTTP(S).
+- **Why no change:** The editor and API currently agree on accepted values, so changing either side would create an unnecessary contract mismatch.
+- **Checked:** Compared `src/pages-manage.tsx` with the lesson and resource routes in `server/routes-courses.js`; `git diff --check` passed.
+
+## 2026-10-09 — Expose lesson editor subsections as headings
+
+- **Reviewed:** The course editor's expanded lesson-details panel, its nested resource section, and their surrounding course-curriculum heading structure.
+- **Improvement:** Use level-three and level-four headings for “Lesson details” and “Links and documents”, and label each section from its matching heading ID. Reset heading margins and typography to preserve the existing visual treatment.
+- **Why it helps:** Screen-reader users can navigate directly between lesson editor sections and hear a resource region's visible heading as its accessible name.
+- **Checked:** A focused source assertion confirmed the unique lesson-specific heading IDs and section references; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Navigate course modules by heading
+
+- **Reviewed:** The course editor's curriculum heading, module title controls, disclosure state, and desktop/mobile flex styling.
+- **Improvement:** Place each module's existing rename button inside a level-three heading and move the responsive font sizing to the heading wrapper.
+- **Why it helps:** Authors can use heading navigation to jump between curriculum modules while keeping the existing rename action, module controls, and visual hierarchy.
+- **Checked:** A focused source assertion confirmed the module title remains a button inside the heading and that desktop/mobile styles target the new wrapper; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA remains unavailable because no browser surface is connected.
+
+## 2026-10-09 — Keep lesson progress pending state with its request
+
+- **Reviewed:** Lesson completion requests, route-scoped errors, course reloads, and pending-state changes when learners navigate between lessons or courses.
+- **Improvement:** Sequence completion requests so an older request cannot clear a newer request's saving state, and show failures only on the lesson that initiated them.
+- **Why it helps:** A delayed completion from a previous course can no longer re-enable the current lesson's control early or surface an unrelated error on another lesson.
+- **Backend review:** Completion remains an idempotent transactional write; no server change was needed.
+- **Checked:** A focused source assertion verified sequence ownership for pending-state cleanup and course-plus-lesson scoping for failures. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered route-race QA remains unavailable because no browser surface is connected and Playwright is not installed.
+
+## 2026-10-09 — Recheck course filters and lesson-resource actions
+
+- **Reviewed:** The staff course-status filter group and its pressed states, the lesson-resource editor's save/upload/delete busy states, and the document upload and protected-download routes.
+- **Result:** No code change; the filter group is labeled, resource actions lock the editor while requests are active and report upload progress, and the server validates uploads and lesson membership before storing protected resources.
+- **Why no change:** The current source and prior validation cover the identified interaction and access boundaries. A further change needs a reproducible rendered issue or a defined new resource workflow.
+- **Checked:** Compared the course list and lesson-resource controls with the upload and download route checks, then ran `git diff --check`. Rendered keyboard and assistive-technology behavior remains unverified without a browser surface.

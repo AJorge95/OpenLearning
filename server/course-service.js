@@ -91,6 +91,25 @@ export function getCoursePayload(course, user, { includeAnswers = false } = {}) 
     });
     lessonResources.set(resource.lesson_id, resources);
   }
+  const captionsByLesson = new Map();
+  for (const caption of db.prepare(`
+    SELECT lc.id, lc.lesson_id, lc.language, lc.label, lc.original_name
+    FROM lesson_captions lc
+    JOIN lessons l ON l.id = lc.lesson_id
+    JOIN course_modules m ON m.id = l.module_id
+    WHERE m.course_id = ?
+    ORDER BY lc.lesson_id, lc.language
+  `).all(course.id)) {
+    const captions = captionsByLesson.get(caption.lesson_id) ?? [];
+    captions.push({
+      id: caption.id,
+      language: caption.language,
+      label: caption.label,
+      url: `/media/captions/${caption.id}`,
+      fileName: caption.original_name,
+    });
+    captionsByLesson.set(caption.lesson_id, captions);
+  }
   const completedLessonIds = user
     ? new Set(db.prepare(`
         SELECT lp.lesson_id
@@ -114,49 +133,101 @@ export function getCoursePayload(course, user, { includeAnswers = false } = {}) 
     choices.push(choice);
     quizChoicesByQuestion.set(choice.question_id, choices);
   }
-  const modules = db.prepare('SELECT * FROM course_modules WHERE course_id = ? ORDER BY position, id').all(course.id).map((module) => {
-    const lessons = db.prepare(`
-      SELECT l.*, mf.original_name, mf.mime_type
-      FROM lessons l LEFT JOIN media_files mf ON mf.id = l.media_id
-      WHERE l.module_id = ? ORDER BY l.position, l.id
-    `).all(module.id).map((lesson) => ({
+  const moduleRows = db.prepare('SELECT * FROM course_modules WHERE course_id = ? ORDER BY position, id').all(course.id);
+  const lessonsByModule = new Map();
+  for (const lesson of db.prepare(`
+    SELECT l.*, mf.original_name, mf.mime_type
+    FROM lessons l
+    JOIN course_modules m ON m.id = l.module_id
+    LEFT JOIN media_files mf ON mf.id = l.media_id
+    WHERE m.course_id = ?
+    ORDER BY m.position, m.id, l.position, l.id
+  `).all(course.id)) {
+    const lessons = lessonsByModule.get(lesson.module_id) ?? [];
+    lessons.push({
       id: lesson.id,
       title: lesson.title,
       description: lesson.description,
+      transcript: lesson.transcript,
       position: lesson.position,
       mediaId: lesson.media_id,
       mediaUrl: lesson.media_id ? `/media/${lesson.media_id}` : null,
       videoName: lesson.original_name,
       hasVideo: Boolean(lesson.media_id),
       resources: lessonResources.get(lesson.id) ?? [],
+      captions: captionsByLesson.get(lesson.id) ?? [],
       completed: completedLessonIds.has(lesson.id),
-    }));
-    const quiz = db.prepare('SELECT * FROM quizzes WHERE module_id = ?').get(module.id);
+    });
+    lessonsByModule.set(lesson.module_id, lessons);
+  }
+
+  const quizzesByModule = new Map();
+  for (const quiz of db.prepare(`
+    SELECT q.* FROM quizzes q
+    JOIN course_modules m ON m.id = q.module_id
+    WHERE m.course_id = ?
+  `).all(course.id)) {
+    quizzesByModule.set(quiz.module_id, quiz);
+  }
+
+  const questionsByQuiz = new Map();
+  for (const question of db.prepare(`
+    SELECT qq.* FROM quiz_questions qq
+    JOIN quizzes q ON q.id = qq.quiz_id
+    JOIN course_modules m ON m.id = q.module_id
+    WHERE m.course_id = ?
+    ORDER BY m.position, m.id, qq.position, qq.id
+  `).all(course.id)) {
+    const questions = questionsByQuiz.get(question.quiz_id) ?? [];
+    questions.push({
+      id: question.id,
+      prompt: question.prompt,
+      explanation: question.explanation,
+      choices: (quizChoicesByQuestion.get(question.id) ?? []).map((choice) => ({
+        id: choice.id,
+        text: choice.choice_text,
+        ...(includeAnswers ? { isCorrect: Boolean(choice.is_correct) } : {}),
+      })),
+    });
+    questionsByQuiz.set(question.quiz_id, questions);
+  }
+
+  const latestAttemptsByQuiz = new Map();
+  const passedQuizIds = new Set();
+  if (user) {
+    for (const attempt of db.prepare(`
+      SELECT q.id AS quiz_id, a.id, a.score, a.passed, a.submitted_at,
+        EXISTS (
+          SELECT 1 FROM quiz_attempts p
+          WHERE p.user_id = ? AND p.quiz_id = q.id AND p.passed = 1
+        ) AS any_passed
+      FROM course_modules m
+      JOIN quizzes q ON q.module_id = m.id
+      LEFT JOIN quiz_attempts a ON a.rowid = (
+        SELECT newest.rowid FROM quiz_attempts newest
+        WHERE newest.user_id = ? AND newest.quiz_id = q.id
+        ORDER BY newest.submitted_at DESC, newest.rowid DESC LIMIT 1
+      )
+      WHERE m.course_id = ?
+    `).all(user.id, user.id, course.id)) {
+      if (attempt.id !== null) latestAttemptsByQuiz.set(attempt.quiz_id, attempt);
+      if (attempt.any_passed) passedQuizIds.add(attempt.quiz_id);
+    }
+  }
+
+  const modules = moduleRows.map((module) => {
+    const lessons = lessonsByModule.get(module.id) ?? [];
+    const quiz = quizzesByModule.get(module.id);
     let quizData = null;
     if (quiz) {
-      const questions = db.prepare('SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY position, id').all(quiz.id).map((question) => ({
-        id: question.id,
-        prompt: question.prompt,
-        explanation: question.explanation,
-        choices: (quizChoicesByQuestion.get(question.id) ?? []).map((choice) => ({
-          id: choice.id,
-          text: choice.choice_text,
-          ...(includeAnswers ? { isCorrect: Boolean(choice.is_correct) } : {}),
-        })),
-      }));
-      const latestAttempt = user
-        ? db.prepare('SELECT id, score, passed, submitted_at FROM quiz_attempts WHERE quiz_id = ? AND user_id = ? ORDER BY submitted_at DESC, rowid DESC LIMIT 1').get(quiz.id, user.id)
-        : null;
-      const anyPassed = user
-        ? db.prepare('SELECT 1 FROM quiz_attempts WHERE quiz_id = ? AND user_id = ? AND passed = 1 LIMIT 1').get(quiz.id, user.id) !== undefined
-        : false;
+      const latestAttempt = latestAttemptsByQuiz.get(quiz.id);
       quizData = {
         id: quiz.id,
         title: quiz.title,
         passMark: quiz.pass_mark,
-        questions,
+        questions: questionsByQuiz.get(quiz.id) ?? [],
         latestAttempt: latestAttempt ? { id: latestAttempt.id, score: latestAttempt.score, passed: Boolean(latestAttempt.passed), submittedAt: latestAttempt.submitted_at } : null,
-        passed: anyPassed,
+        passed: passedQuizIds.has(quiz.id),
       };
     }
     return { id: module.id, title: module.title, position: module.position, lessons, quiz: quizData };
@@ -174,36 +245,60 @@ export function enrollLearner(courseId, userId) {
 }
 
 export function assertPublishable(courseId) {
-  const modules = db.prepare('SELECT * FROM course_modules WHERE course_id = ? ORDER BY position').all(courseId);
+  const modules = db.prepare(`
+    WITH module_rows AS (
+      SELECT id, title, position FROM course_modules WHERE course_id = ?
+    ),
+    lesson_stats AS (
+      SELECT l.module_id, COUNT(*) AS lesson_count,
+        SUM(CASE WHEN l.media_id IS NULL THEN 1 ELSE 0 END) AS missing_media_count
+      FROM lessons l JOIN module_rows m ON m.id = l.module_id GROUP BY l.module_id
+    ),
+    quiz_rows AS (
+      SELECT q.id, q.module_id FROM quizzes q JOIN module_rows m ON m.id = q.module_id
+    ),
+    question_stats AS (
+      SELECT qq.id, qq.quiz_id, COUNT(qc.id) AS choice_count, COALESCE(SUM(qc.is_correct), 0) AS correct_count
+      FROM quiz_questions qq JOIN quiz_rows q ON q.id = qq.quiz_id
+      LEFT JOIN quiz_choices qc ON qc.question_id = qq.id GROUP BY qq.id
+    ),
+    quiz_stats AS (
+      SELECT q.id, q.module_id, COUNT(question.id) AS question_count,
+        SUM(CASE WHEN question.choice_count < 2 OR question.correct_count != 1 THEN 1 ELSE 0 END) AS invalid_question_count
+      FROM quiz_rows q LEFT JOIN question_stats question ON question.quiz_id = q.id GROUP BY q.id
+    )
+    SELECT m.id, m.title, COALESCE(lesson.lesson_count, 0) AS lesson_count,
+      COALESCE(lesson.missing_media_count, 0) AS missing_media_count,
+      quiz.id AS quiz_id, COALESCE(quiz_stats.question_count, 0) AS question_count,
+      COALESCE(quiz_stats.invalid_question_count, 0) AS invalid_question_count
+    FROM module_rows m
+    LEFT JOIN lesson_stats lesson ON lesson.module_id = m.id
+    LEFT JOIN quiz_rows quiz ON quiz.module_id = m.id
+    LEFT JOIN quiz_stats ON quiz_stats.id = quiz.id
+    ORDER BY m.position
+  `).all(courseId);
   if (!modules.length) fail(400, 'Add at least one module before publishing.', 'course_incomplete');
   for (const module of modules) {
-    const lessons = db.prepare('SELECT id, media_id FROM lessons WHERE module_id = ? ORDER BY position').all(module.id);
-    if (!lessons.length) fail(400, `Add a lesson to “${module.title}” before publishing.`, 'course_incomplete');
-    if (lessons.some((lesson) => !lesson.media_id)) fail(400, `Upload a video for every lesson in “${module.title}” before publishing.`, 'course_incomplete');
-    const quiz = db.prepare('SELECT id FROM quizzes WHERE module_id = ?').get(module.id);
-    if (quiz) {
-      const questions = db.prepare('SELECT id FROM quiz_questions WHERE quiz_id = ?').all(quiz.id);
-      if (!questions.length) fail(400, `Add at least one question to the quiz in “${module.title}” before publishing.`, 'course_incomplete');
-      for (const question of questions) {
-        const choices = db.prepare('SELECT is_correct FROM quiz_choices WHERE question_id = ?').all(question.id);
-        if (choices.length < 2 || choices.filter((choice) => choice.is_correct).length !== 1) {
-          fail(400, 'Each quiz question needs at least two choices and exactly one correct answer.', 'quiz_incomplete');
-        }
-      }
+    if (!module.lesson_count) fail(400, `Add a lesson to “${module.title}” before publishing.`, 'course_incomplete');
+    if (module.missing_media_count) fail(400, `Upload a video for every lesson in “${module.title}” before publishing.`, 'course_incomplete');
+    if (module.quiz_id && !module.question_count) fail(400, `Add at least one question to the quiz in “${module.title}” before publishing.`, 'course_incomplete');
+    if (module.invalid_question_count) {
+      fail(400, 'Each quiz question needs at least two choices and exactly one correct answer.', 'quiz_incomplete');
     }
   }
 }
 
 export function courseFromLesson(lessonId) {
   return db.prepare(`
-    SELECT c.*, l.id AS lesson_id, l.module_id, l.title AS lesson_title, l.description AS lesson_description, l.media_id
+    SELECT c.*, l.id AS lesson_id, l.module_id, l.title AS lesson_title, l.description AS lesson_description,
+      l.transcript AS lesson_transcript, l.media_id
     FROM lessons l JOIN course_modules m ON m.id = l.module_id
     JOIN courses c ON c.id = m.course_id WHERE l.id = ?
   `).get(lessonId);
 }
 
 export function moduleCourse(moduleId) {
-  return db.prepare(`SELECT c.*, m.id AS module_id FROM course_modules m JOIN courses c ON c.id = m.course_id WHERE m.id = ?`).get(moduleId);
+  return db.prepare(`SELECT c.*, m.id AS module_id, m.title AS module_title FROM course_modules m JOIN courses c ON c.id = m.course_id WHERE m.id = ?`).get(moduleId);
 }
 
 export function quizCourse(quizId) {

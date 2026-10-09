@@ -1,23 +1,45 @@
-import { BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, FileText, ImagePlus, LockKeyhole, Play, Settings2, UserRound, UsersRound, LogOut, X } from 'lucide-react';
-import { useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Activity, BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, ClipboardList, FileText, ImagePlus, LockKeyhole, Play, Settings2, UserRound, UsersRound, LogOut, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { ApiError } from './api';
 import { useAuth } from './auth-context';
 import { BRAND_PALETTES, MAX_BRAND_ICON_BYTES } from './branding';
 import type { BrandingPalette } from './branding';
 import type { Course, CourseModule, Lesson } from './types';
 
 export function LoadingScreen({ label = 'Loading your learning space…' }: { label?: string }) {
-  return <div className="loading-screen"><span className="loading-mark"><BookOpen size={22} /></span><span>{label}</span></div>;
+  return <div className="loading-screen" role="status" aria-live="polite"><span className="loading-mark"><BookOpen size={22} /></span><span>{label}</span></div>;
 }
 
 export function PlatformBrand({ className, to = '/courses' }: { className: string; to?: string }) {
   const { platformName, platformIcon } = useAuth();
   return <Link className={className} to={to}>
     <span className="brand-content">
-      {platformIcon ? <img className="brand-icon" src={platformIcon} alt="" /> : <span className="brand-icon brand-icon-fallback"><BookOpen size={18} /></span>}
+      <ImageWithFallback src={platformIcon} className="brand-icon" fallback={<span className="brand-icon brand-icon-fallback"><BookOpen size={18} /></span>} />
       <span className="brand-name">{platformName}</span>
     </span>
   </Link>;
+}
+
+type ImageWithFallbackProps = {
+  src: string | null;
+  className: string;
+  alt?: string;
+  fallback: React.ReactNode;
+  onError?: () => void;
+  loading?: React.ImgHTMLAttributes<HTMLImageElement>['loading'];
+  decoding?: React.ImgHTMLAttributes<HTMLImageElement>['decoding'];
+};
+
+export function ImageWithFallback(props: ImageWithFallbackProps) {
+  if (!props.src) return <>{props.fallback}</>;
+  return <ImageWithFallbackImage key={props.src} {...props} src={props.src} />;
+}
+
+function ImageWithFallbackImage({ src, className, alt = '', fallback, onError, loading, decoding }: ImageWithFallbackProps & { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <>{fallback}</>;
+  return <img className={className} src={src} alt={alt} loading={loading} decoding={decoding} onError={() => { setFailed(true); onError?.(); }} />;
 }
 
 export function PalettePicker({ value, onChange }: { value: BrandingPalette; onChange: (palette: BrandingPalette) => void }) {
@@ -31,12 +53,16 @@ export function PalettePicker({ value, onChange }: { value: BrandingPalette; onC
 
 export function PlatformIconPicker({ value, onChange }: { value: string | null; onChange: (icon: string | null) => void }) {
   const [error, setError] = useState('');
+  const readSequenceRef = useRef(0);
+
+  useEffect(() => () => { readSequenceRef.current += 1; }, []);
 
   function selectFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
     setError('');
     if (!file) return;
+    const readSequence = ++readSequenceRef.current;
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
       setError('Choose a PNG, JPG, or WebP image.');
       return;
@@ -46,8 +72,11 @@ export function PlatformIconPicker({ value, onChange }: { value: string | null; 
       return;
     }
     const reader = new FileReader();
-    reader.onerror = () => setError('The selected image could not be read.');
+    reader.onerror = () => {
+      if (readSequence === readSequenceRef.current) setError('The selected image could not be read.');
+    };
     reader.onload = () => {
+      if (readSequence !== readSequenceRef.current) return;
       if (typeof reader.result === 'string') onChange(reader.result);
       else setError('The selected image could not be read.');
     };
@@ -55,22 +84,51 @@ export function PlatformIconPicker({ value, onChange }: { value: string | null; 
   }
 
   return <div className="platform-icon-picker">
-    <div className="platform-icon-preview">{value ? <img src={value} alt="Platform icon preview" /> : <BookOpen size={23} />}</div>
+    <div className="platform-icon-preview"><ImageWithFallback src={value} className="platform-icon-preview-image" alt="Platform icon preview" fallback={<BookOpen size={23} />} onError={() => setError('The selected image could not be displayed. Try a different image.')} /></div>
     <div className="platform-icon-controls">
       <strong>Platform icon</strong>
       <span className="muted">PNG, JPG, or WebP · up to 512 KB</span>
       <div className="platform-icon-actions">
         <label className="button button-secondary platform-icon-upload"><ImagePlus size={16} />Upload icon<input type="file" accept="image/png,image/jpeg,image/webp" onChange={selectFile} /></label>
-        {value && <button type="button" className="button button-quiet platform-icon-remove" onClick={() => { setError(''); onChange(null); }}><X size={15} />Remove</button>}
+        {value && <button type="button" className="button button-quiet platform-icon-remove" onClick={() => { readSequenceRef.current += 1; setError(''); onChange(null); }}><X size={15} />Remove</button>}
       </div>
       {error && <span className="form-error platform-icon-error" role="alert">{error}</span>}
     </div>
   </div>;
 }
 
-export function Header() {
-  const { user, signOut } = useAuth();
+function useSignOutAction() {
+  const { signOut } = useAuth();
   const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit() {
+    if (signingOut) return;
+    setSigningOut(true);
+    setError('');
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'Sign out failed. Check your connection and try again.');
+      setSigningOut(false);
+    }
+  }
+
+  return { submit, signingOut, error };
+}
+
+export function Header() {
+  const { user } = useAuth();
+  const { submit: handleSignOut, signingOut, error: signOutError } = useSignOutAction();
+  const { pathname } = useLocation();
+  const userMenuRef = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    if (userMenuRef.current) userMenuRef.current.open = false;
+  }, [pathname]);
+
   return (
     <header className="topbar">
       <PlatformBrand className="wordmark" />
@@ -78,41 +136,47 @@ export function Header() {
         <NavLink to="/courses" end>Browse courses</NavLink>
         <NavLink to="/my-learning">My learning</NavLink>
       </nav>
-      <details className="user-menu">
-        <summary aria-label="Open account menu"><span className="avatar">{user?.username.slice(0, 1).toUpperCase()}</span><span className="account-name">{user?.username}</span><ChevronDown size={16} /></summary>
+      <details ref={userMenuRef} className="user-menu">
+        <summary aria-label={user?.username ? `Open account menu for ${user.username}` : 'Open account menu'}><span className="avatar">{user?.username.slice(0, 1).toUpperCase()}</span><span className="account-name">{user?.username}</span><ChevronDown size={16} /></summary>
         <div className="user-menu-popover">
           <div className="user-menu-identity"><strong>{user?.username}</strong><span className="muted">{user?.role}</span></div>
           <Link to="/account/security">Change password</Link>
           {user?.role === 'admin' && <Link to="/admin/users">User management</Link>}
+          {user?.role === 'admin' && <Link to="/admin/audit-log">Audit log</Link>}
+          {user?.role === 'admin' && <Link to="/admin/system-log">System log</Link>}
           {(user?.role === 'admin' || user?.role === 'moderator') && <Link to="/manage/courses">Course management</Link>}
           {user?.role === 'admin' && <Link to="/admin/settings">Platform settings</Link>}
-          <button type="button" className="menu-signout" onClick={async () => { await signOut(); navigate('/login'); }}>Sign out</button>
+          {signOutError && <p className="user-menu-signout-error" role="alert">{signOutError}</p>}
+          <button type="button" className="menu-signout" disabled={signingOut} aria-busy={signingOut} onClick={handleSignOut}>{signingOut ? 'Signing out…' : 'Sign out'}</button>
         </div>
       </details>
     </header>
   );
 }
 
-export function AppFrame() {
-  return <><Header /><main className="app-main"><Outlet /></main></>;
+export function AppFrame({ children }: { children?: React.ReactNode }) {
+  return <><a className="skip-link" href="#main-content">Skip to main content</a><Header /><main id="main-content" tabIndex={-1} className="app-main">{children ?? <Outlet />}</main></>;
 }
 
 export function StaffFrame() {
-  const { user, signOut } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { submit: handleSignOut, signingOut, error: signOutError } = useSignOutAction();
   return (
     <div className="staff-layout">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <aside className="staff-sidebar">
         <PlatformBrand className="staff-brand" />
         <nav aria-label="Management navigation">
           <NavLink to="/manage/courses"><BookOpen size={18} />Courses</NavLink>
           {user?.role === 'admin' && <NavLink to="/admin/users"><UsersRound size={18} />Users</NavLink>}
+          {user?.role === 'admin' && <NavLink to="/admin/audit-log"><ClipboardList size={18} />Audit log</NavLink>}
+          {user?.role === 'admin' && <NavLink to="/admin/system-log"><Activity size={18} />System log</NavLink>}
           {user?.role === 'admin' && <NavLink to="/admin/settings"><Settings2 size={18} />Settings</NavLink>}
         </nav>
         <Link className="staff-back-link" to="/courses"><ChevronRight size={16} />Back to learning</Link>
-        <div className="staff-account"><span className="avatar">{user?.username.slice(0, 1).toUpperCase()}</span><span><strong>{user?.username}</strong><small>{user?.role}</small></span><button title="Sign out" onClick={async () => { await signOut(); navigate('/login'); }}><LogOut size={17} /></button></div>
+        <div className="staff-account"><span className="avatar" aria-hidden="true">{user?.username.slice(0, 1).toUpperCase()}</span><span><strong>{user?.username}</strong><small>{user?.role}</small>{signOutError && <small className="staff-signout-error" role="alert">{signOutError}</small>}</span><button type="button" disabled={signingOut} aria-busy={signingOut} aria-label={signingOut ? 'Signing out' : 'Sign out'} title={signingOut ? 'Signing out' : 'Sign out'} onClick={handleSignOut}><LogOut size={17} /></button></div>
       </aside>
-      <main className="staff-content"><Outlet /></main>
+      <main id="main-content" tabIndex={-1} className="staff-content"><Outlet /></main>
     </div>
   );
 }
@@ -121,36 +185,48 @@ export function PageHeading({ title, subtitle, action }: { title: string; subtit
   return <div className="page-heading"><div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>{action && <div className="page-heading-action">{action}</div>}</div>;
 }
 
-export function Button({ children, variant = 'primary', className = '', ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'quiet' | 'danger' }) {
-  return <button className={`button button-${variant} ${className}`.trim()} {...props}>{children}</button>;
+export function Button({ children, variant = 'primary', className = '', type = 'button', ref, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'quiet' | 'danger'; ref?: React.Ref<HTMLButtonElement> }) {
+  return <button ref={ref} type={type} className={`button button-${variant} ${className}`.trim()} {...props}>{children}</button>;
 }
 
-export function EmptyState({ icon = <BookOpen size={24} />, title, detail, action }: { icon?: React.ReactNode; title: string; detail: string; action?: React.ReactNode }) {
-  return <div className="empty-state"><span className="empty-icon">{icon}</span><h2>{title}</h2><p>{detail}</p>{action}</div>;
+export function EmptyState({ icon = <BookOpen size={24} />, title, detail, action, headingLevel = 2 }: { icon?: React.ReactNode; title: string; detail: string; action?: React.ReactNode; headingLevel?: 2 | 3 }) {
+  const Heading = headingLevel === 3 ? 'h3' : 'h2';
+  return <div className="empty-state"><span className="empty-icon">{icon}</span><Heading>{title}</Heading><p>{detail}</p>{action}</div>;
 }
 
-export function ProgressBar({ value }: { value: number }) {
+export function ProgressBar({ value, label }: { value: number; label: string }) {
   const progress = Math.max(0, Math.min(100, value));
-  return <div className="progress-line" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={`${progress}% complete`}><span style={{ width: `${progress}%` }} /></div>;
+  return <div className="progress-line" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={label}><span style={{ width: `${progress}%` }} /></div>;
 }
 
-export function CourseCard({ course, continueLabel = false }: { course: Course; continueLabel?: boolean }) {
+export function CourseCard({ course, continueLabel = false, coverLoading = 'lazy' }: {
+  course: Course;
+  continueLabel?: boolean;
+  coverLoading?: React.ImgHTMLAttributes<HTMLImageElement>['loading'];
+}) {
   return (
     <Link className="course-card" to={`/courses/${course.id}`}>
-      {course.coverUrl ? <img className="course-cover" src={course.coverUrl} alt="" /> : <div className="course-cover course-cover-placeholder"><BookOpen size={34} strokeWidth={1.5} /></div>}
+      <CourseCoverAsset course={course} className="course-cover" iconSize={34} loading={coverLoading} />
       <div className="course-card-copy">
         <h2>{course.title}</h2>
         <p className="course-author">{course.owner || 'OpenLearning course'}</p>
-        {continueLabel ? <><div className="card-progress-label"><span>{course.completed ? 'Completed' : `${course.progress}% complete`}</span><span>{course.moduleCount} modules</span></div><ProgressBar value={course.progress} /></> : <div className="card-meta"><BookOpen size={17} /><span>{course.moduleCount} {course.moduleCount === 1 ? 'module' : 'modules'}</span></div>}
+        {continueLabel ? <><div className="card-progress-label"><span>{course.completed ? 'Completed' : `${course.progress}% complete`}</span><span>{course.moduleCount} modules</span></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /></> : <div className="card-meta"><BookOpen size={17} /><span>{course.moduleCount} {course.moduleCount === 1 ? 'module' : 'modules'}</span></div>}
       </div>
     </Link>
   );
 }
 
+function CourseCoverAsset({ course, className, iconSize, loading }: {
+  course: Course;
+  className: string;
+  iconSize: number;
+  loading?: React.ImgHTMLAttributes<HTMLImageElement>['loading'];
+}) {
+  return <ImageWithFallback src={course.coverUrl} className={className} loading={loading} decoding={loading === 'lazy' ? 'async' : undefined} fallback={<div className={`course-cover-placeholder ${className}`} aria-hidden="true"><BookOpen size={iconSize} strokeWidth={1.5} /></div>} />;
+}
+
 export function CourseCover({ course, className = '' }: { course: Course; className?: string }) {
-  return course.coverUrl
-    ? <img className={`course-cover-image ${className}`} src={course.coverUrl} alt="" />
-    : <div className={`course-cover-placeholder course-cover-image ${className}`}><BookOpen size={44} strokeWidth={1.35} /></div>;
+  return <CourseCoverAsset course={course} className={`course-cover-image ${className}`} iconSize={44} />;
 }
 
 export function CurriculumModule({ module, selectedLessonId, courseId, compact = false }: {
@@ -172,7 +248,7 @@ export function CurriculumModule({ module, selectedLessonId, courseId, compact =
 
 function CurriculumLesson({ lesson, selected, courseId }: { lesson: Lesson; selected: boolean; courseId: string }) {
   return (
-    <Link className={`curriculum-item ${selected ? 'selected' : ''}`} to={`/courses/${courseId}/learn/${lesson.id}`}>
+    <Link className={`curriculum-item ${selected ? 'selected' : ''}`} aria-current={selected ? 'page' : undefined} to={`/courses/${courseId}/learn/${lesson.id}`}>
       <span className="curriculum-icon">{lesson.completed ? <Check size={17} /> : lesson.hasVideo ? <Play size={15} /> : <FileText size={17} />}</span>
       <span className="curriculum-item-name">{lesson.title}</span>
       {lesson.completed && <Check className="completion-icon" size={16} />}
@@ -192,4 +268,3 @@ export function VisibilityLabel({ visibility }: { visibility: Course['visibility
 export function UserInitial({ username }: { username: string }) {
   return <span className="avatar avatar-small" aria-hidden="true">{username.slice(0, 1).toUpperCase() || <UserRound size={14} />}</span>;
 }
-

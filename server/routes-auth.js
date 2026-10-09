@@ -2,8 +2,11 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { db, setSetting, setting, setupComplete } from './db.js';
-import { createUser, hashPassword, normalizeUsername, publicUser, regenerateSession, validateCredentials, verifyPassword } from './auth.js';
+import { createUser, hashPassword, normalizeUsername, publicUser, regenerateSession, validateCredentials, verifyLoginPassword, verifyPassword } from './auth.js';
 import { ApiError, fail, newCsrfToken, requireAuth, requireAdmin } from './http.js';
+import { invalidateUserSessions } from './session-store.js';
+import { writeAuditLog, writeSystemLog } from './log-store.js';
+import { passwordChangeLimiter } from './rate-limits.js';
 
 export const authRouter = Router();
 
@@ -31,25 +34,36 @@ function getUserLimit() {
   return Number.isSafeInteger(value) && value >= 0 && value <= maxUserLimit ? value : 0;
 }
 
-function getPlatformConfiguration() {
+function getPlatformConfiguration(registeredCount) {
   const protocol = setting('connection_protocol');
   return {
     ...getBranding(),
     connectionProtocol: protocol === 'http' || protocol === 'https' ? protocol : defaultConnectionProtocol(),
     registrationEnabled: setting('registration_enabled') !== '0',
-    registrationAvailable: registrationAvailable(),
+    registrationAvailable: registrationAvailable(registeredCount),
     userLimit: getUserLimit(),
   };
+}
+
+function parsePlatformName(value) {
+  if (typeof value !== 'string') {
+    fail(400, 'Platform name must be between 2 and 80 characters.', 'invalid_platform_name');
+  }
+  const name = value.trim();
+  if (name.length < 2 || name.length > 80) {
+    fail(400, 'Platform name must be between 2 and 80 characters.', 'invalid_platform_name');
+  }
+  return name;
 }
 
 function registeredUserCount() {
   return db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
 }
 
-function registrationAvailable() {
+function registrationAvailable(registeredCount) {
   if (setting('registration_enabled') === '0') return false;
   const userLimit = getUserLimit();
-  return userLimit === 0 || registeredUserCount() < userLimit;
+  return userLimit === 0 || (registeredCount ?? registeredUserCount()) < userLimit;
 }
 
 function assertRegistrationAvailable() {
@@ -123,8 +137,7 @@ authRouter.get('/setup/status', (_req, res) => {
 authRouter.post('/setup', async (req, res) => {
   if (setupComplete()) fail(409, 'This platform is already configured.', 'already_configured');
   const { platformName, username, password, confirmPassword } = req.body || {};
-  const name = String(platformName || '').trim();
-  if (name.length < 2 || name.length > 80) fail(400, 'Platform name must be between 2 and 80 characters.', 'invalid_platform_name');
+  const name = parsePlatformName(platformName);
   if (password !== confirmPassword) fail(400, 'Passwords do not match.', 'password_mismatch');
   const credentialError = validateCredentials(username, password);
   if (credentialError) fail(400, credentialError, 'invalid_credentials');
@@ -153,8 +166,11 @@ authRouter.post('/setup', async (req, res) => {
     }
     setSetting('setup_complete', '1');
   });
-  configure();
+  configure.immediate();
   await regenerateSession(req, userId);
+  writeAuditLog({ actor: { id: userId, username: normalizeUsername(username) }, action: 'platform.setup', entityType: 'platform',
+    summary: 'Initial platform setup completed', details: { platformName: name, themePalette, connectionProtocol, registrationEnabled, userLimit } });
+  writeSystemLog('info', 'setup', 'Initial platform setup completed');
   res.status(201).json({ user: publicUser(db.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?').get(userId)), ...getPlatformConfiguration() });
 });
 
@@ -173,65 +189,107 @@ authRouter.post('/auth/register', async (req, res) => {
       fail(409, 'That username is already in use.', 'username_taken');
     }
     return createUser({ username: normalized, passwordHash, role: 'learner' });
-  })();
+  }).immediate();
   await regenerateSession(req, user.id);
+  writeAuditLog({ actor: user, action: 'account.registered', entityType: 'user', entityId: user.id, summary: `Learner account created: ${user.username}` });
   res.status(201).json({ user: publicUser(user), registrationAvailable: registrationAvailable() });
 });
 
 authRouter.post('/auth/login', async (req, res) => {
   const username = normalizeUsername(req.body?.username);
-  const password = String(req.body?.password || '');
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
   if (username.length > 32 || password.length > 256) fail(400, 'Enter a valid username and password.', 'invalid_credentials');
   const user = db.prepare('SELECT id, username, password_hash, role, disabled FROM users WHERE username = ? COLLATE NOCASE').get(username);
-  const valid = user && !user.disabled && await verifyPassword(password, user.password_hash);
-  if (!valid) fail(401, 'The username or password is incorrect.', 'login_failed');
+  const valid = await verifyLoginPassword(password, user);
+  if (!valid) {
+    writeSystemLog('warn', 'auth', 'Sign-in attempt failed');
+    fail(401, 'The username or password is incorrect.', 'login_failed');
+  }
   await regenerateSession(req, user.id);
-  res.json({ user: publicUser(user), ...getPlatformConfiguration() });
+  const currentUser = db.prepare('SELECT id, username, password_hash, role, disabled FROM users WHERE id = ?').get(user.id);
+  if (!currentUser || currentUser.disabled || currentUser.password_hash !== user.password_hash) {
+    await new Promise((resolve, reject) => req.session.destroy((error) => error ? reject(error) : resolve()));
+    writeSystemLog('warn', 'auth', 'Sign-in attempt failed');
+    fail(401, 'The username or password is incorrect.', 'login_failed');
+  }
+  writeAuditLog({ actor: currentUser, action: 'auth.signed_in', entityType: 'user', entityId: currentUser.id, summary: `${currentUser.username} signed in` });
+  res.json({ user: publicUser(currentUser), ...getPlatformConfiguration() });
 });
 
 authRouter.post('/auth/logout', requireAuth, async (req, res, next) => {
-  req.session.destroy((error) => error ? next(error) : res.status(204).end());
+  const user = req.currentUser;
+  req.session.destroy((error) => {
+    if (error) return next(error);
+    writeAuditLog({ actor: user, action: 'auth.signed_out', entityType: 'user', entityId: user.id, summary: `${user.username} signed out` });
+    res.status(204).end();
+  });
 });
 
 authRouter.get('/auth/me', (req, res) => {
   res.json({ user: publicUser(req.currentUser), ...getPlatformConfiguration() });
 });
 
-authRouter.put('/auth/password', requireAuth, async (req, res) => {
+authRouter.put('/auth/password', requireAuth, passwordChangeLimiter, async (req, res) => {
   const { currentPassword, password, confirmPassword } = req.body || {};
+  if (typeof currentPassword !== 'string' || currentPassword.length === 0 || currentPassword.length > 256) {
+    fail(400, 'Enter a valid current password.', 'invalid_current_password');
+  }
+  const currentPasswordValue = currentPassword;
   if (password !== confirmPassword) fail(400, 'Passwords do not match.', 'password_mismatch');
   const credentialError = validateCredentials(req.currentUser.username, password);
   if (credentialError && !credentialError.startsWith('Username')) fail(400, credentialError, 'invalid_password');
   const user = db.prepare('SELECT id, password_hash FROM users WHERE id = ?').get(req.currentUser.id);
-  if (!await verifyPassword(String(currentPassword || ''), user.password_hash)) fail(400, 'Your current password is incorrect.', 'password_incorrect');
-  db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .run(await hashPassword(password), req.currentUser.id);
+  if (!user) fail(401, 'Sign in to continue.', 'unauthorized');
+  if (!await verifyPassword(currentPasswordValue, user.password_hash)) fail(400, 'Your current password is incorrect.', 'password_incorrect');
+  const passwordHash = await hashPassword(password);
+  const updatePassword = db.transaction(() => {
+    const currentUser = db.prepare('SELECT password_hash, disabled FROM users WHERE id = ?').get(req.currentUser.id);
+    if (!currentUser || currentUser.disabled) throw new ApiError(401, 'Your account is no longer active. Contact an administrator.', 'unauthorized');
+    if (currentUser.password_hash !== user.password_hash) {
+      throw new ApiError(409, 'Your password changed while this request was being processed. Enter the current password and try again.', 'password_changed');
+    }
+    db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(passwordHash, req.currentUser.id);
+    invalidateUserSessions(db, req.currentUser.id, req.sessionID);
+  });
+  updatePassword.immediate();
+  writeAuditLog({ actor: req.currentUser, action: 'account.password_changed', entityType: 'user', entityId: req.currentUser.id, summary: `${req.currentUser.username} changed their password` });
   res.status(204).end();
 });
 
 authRouter.get('/admin/settings', requireAdmin, (_req, res) => {
-  res.json({ ...getPlatformConfiguration(), registeredUserCount: registeredUserCount() });
+  const userCount = registeredUserCount();
+  res.json({ ...getPlatformConfiguration(userCount), registeredUserCount: userCount });
 });
 
 authRouter.put('/admin/settings', requireAdmin, (req, res) => {
-  const platformName = String(req.body?.platformName || '').trim();
-  if (platformName.length < 2 || platformName.length > 80) fail(400, 'Platform name must be between 2 and 80 characters.', 'invalid_platform_name');
+  const platformName = parsePlatformName(req.body?.platformName);
   const themePalette = req.body?.themePalette === undefined
     ? (paletteIds.has(setting('theme_palette')) ? setting('theme_palette') : defaultPalette)
     : parsePalette(req.body.themePalette);
-  const connectionProtocol = req.body?.connectionProtocol === undefined ? getPlatformConfiguration().connectionProtocol : parseConnectionProtocol(req.body.connectionProtocol);
+  const savedProtocol = setting('connection_protocol');
+  const connectionProtocol = req.body?.connectionProtocol === undefined
+    ? (savedProtocol === 'http' || savedProtocol === 'https' ? savedProtocol : defaultConnectionProtocol())
+    : parseConnectionProtocol(req.body.connectionProtocol);
   const registrationEnabled = req.body?.registrationEnabled === undefined
-    ? getPlatformConfiguration().registrationEnabled
+    ? setting('registration_enabled') !== '0'
     : parseRegistrationEnabled(req.body.registrationEnabled);
   const userLimit = req.body?.userLimit === undefined ? getUserLimit() : parseUserLimit(req.body.userLimit);
   const platformIcon = Object.hasOwn(req.body || {}, 'platformIcon') ? parsePlatformIcon(req.body.platformIcon) : undefined;
   const update = db.transaction(() => {
-    setSetting('platform_name', platformName);
-    setSetting('theme_palette', themePalette);
-    setSetting('connection_protocol', connectionProtocol);
-    setSetting('registration_enabled', registrationEnabled ? '1' : '0');
-    setSetting('user_limit', userLimit);
-    if (platformIcon !== undefined) {
+    const changedFields = [];
+    const updateSetting = (key, value, field) => {
+      if (setting(key) === String(value)) return;
+      setSetting(key, value);
+      changedFields.push(field);
+    };
+    updateSetting('platform_name', platformName, 'platformName');
+    updateSetting('theme_palette', themePalette, 'themePalette');
+    updateSetting('connection_protocol', connectionProtocol, 'connectionProtocol');
+    updateSetting('registration_enabled', registrationEnabled ? '1' : '0', 'registrationEnabled');
+    updateSetting('user_limit', userLimit, 'userLimit');
+    if (platformIcon !== undefined && setting('platform_icon') !== platformIcon) {
+      changedFields.push('platformIcon');
       if (platformIcon) {
         setSetting('platform_icon', platformIcon);
         setSetting('platform_icon_version', randomUUID());
@@ -239,9 +297,15 @@ authRouter.put('/admin/settings', requireAdmin, (req, res) => {
         db.prepare("DELETE FROM app_settings WHERE key IN ('platform_icon', 'platform_icon_version')").run();
       }
     }
+    return changedFields;
   });
-  update();
-  res.json({ ...getPlatformConfiguration(), registeredUserCount: registeredUserCount() });
+  const changedFields = update.immediate();
+  if (changedFields.length) {
+    writeAuditLog({ actor: req.currentUser, action: 'platform.settings_updated', entityType: 'platform', summary: 'Platform settings updated',
+      details: { changedFields, platformName, themePalette, connectionProtocol, registrationEnabled, userLimit, platformIconChanged: changedFields.includes('platformIcon') } });
+  }
+  const userCount = registeredUserCount();
+  res.json({ ...getPlatformConfiguration(userCount), registeredUserCount: userCount });
 });
 
 export function authRateLimitError() {
