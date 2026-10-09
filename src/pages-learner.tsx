@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Award, BookOpen, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, MessageSquare, Play, Printer, Search, Send, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
-import { Button, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
+import { AppSelect, Button, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
 import { nextCourseActivity, nextCourseActivityAfterLesson } from './course-navigation';
 import { summarizeCourseProgress } from './course-progress';
 import { useAuth } from './auth-context';
@@ -146,8 +146,8 @@ export function CatalogPage() {
     <PageHeading title="Browse courses" subtitle="Find a course to build your skills." />
     <div className="catalog-tools">
       <div className="filter-controls">
-        <label className="select-wrap"><span className="sr-only">Course category</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>All courses</option>{categories.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={16} /></label>
-        <label className="select-wrap"><span className="sr-only">Sort courses</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="recent">Recently updated</option><option value="title">Course title</option></select><ChevronDown size={16} /></label>
+        <div className="select-wrap"><AppSelect className="app-select--filter" ariaLabel="Course category" value={category} onChange={setCategory} options={[{ value: 'All courses', label: 'All courses' }, ...categories.filter((item) => item !== 'All courses').map((item) => ({ value: item, label: item }))]} /></div>
+        <div className="select-wrap"><AppSelect className="app-select--filter" ariaLabel="Sort courses" value={sort} onChange={setSort} options={[{ value: 'recent', label: 'Recently updated' }, { value: 'title', label: 'Course title' }]} /></div>
       </div>
       <form className="search-field" onSubmit={(event) => { event.preventDefault(); load({ query: query.trim(), category, sort }); }}>
         <Search size={19} /><input ref={searchInputRef} aria-label="Search courses" placeholder="Search courses" maxLength={120} value={query} onChange={(event) => setQuery(event.target.value)} /><button type="submit" aria-label="Submit search"><ArrowRight size={17} /></button>
@@ -807,7 +807,7 @@ export function CoursePlayerPage() {
         </li>)}</ul>
       </section>}
       {canViewLessonFeedback && <section className="lesson-feedback" aria-labelledby="lesson-feedback-title">
-        <div className="lesson-feedback-heading"><div><h2 ref={commentSectionTitleRef} id="lesson-feedback-title" tabIndex={-1}>{isCourseManager ? 'Learner comments' : 'Lesson feedback'}</h2><p>{isCourseManager ? 'Review comments for this lesson. Removals are recorded in the audit log.' : 'Share your reaction and discuss this lesson with other learners.'}</p></div>{visibleFeedback && <span><MessageSquare size={16} />{visibleFeedback.total} {visibleFeedback.total === 1 ? 'comment' : 'comments'}</span>}</div>
+        <div className="lesson-feedback-heading"><div><h2 ref={commentSectionTitleRef} id="lesson-feedback-title" tabIndex={-1}>{isCourseManager ? 'Learner comments' : 'Lesson feedback'}</h2><p>{isCourseManager ? 'Review comments for this lesson. Removals appear in the administrator audit log.' : 'Share your reaction and discuss this lesson with other learners.'}</p></div>{visibleFeedback && <span><MessageSquare size={16} />{visibleFeedback.total} {visibleFeedback.total === 1 ? 'comment' : 'comments'}</span>}</div>
         <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
           {commentPostedNotice?.courseId === courseId && commentPostedNotice.lessonId === lessonId ? 'Your comment was posted.' : ''}
         </p>
