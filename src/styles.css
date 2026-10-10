@@ -1358,6 +1358,11 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .certificate-seal { width: 69px; height: 69px; }
   .certificate-seal svg { width: 22px; height: 22px; }
 }
+@media (max-width: 400px) {
+  .lesson-video-controls { display: grid; grid-template-columns: 34px 54px max-content minmax(40px, 1fr) 34px; gap: 8px; }
+  .video-volume-control { grid-column: 4; grid-row: 2; justify-self: start; }
+  .lesson-video-controls > .video-control-button:last-child { grid-column: 5; grid-row: 2; }
+}
 
 @media print {
   @page { size: landscape; margin: 10mm; }
