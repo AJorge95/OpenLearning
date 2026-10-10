@@ -45,6 +45,10 @@ const documentTypes = new Map([
 ]);
 const supportedUploadExtensions = new Set([...imageTypes.keys(), ...documentTypes.keys(), '.mp4', '.vtt']);
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const maxCourseCoverDimension = 4096;
+const maxJpegCoverHeaderBytes = 1024 * 1024;
+const maxJpegCoverHeaderSegments = 1024;
+const jpegCoverFrameMarkers = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
 const pdfHeader = Buffer.from('%PDF-');
 const pdfEndMarker = Buffer.from('%%EOF');
 const compoundFileHeader = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
@@ -88,6 +92,78 @@ function truncateUtf16CodeUnits(value, limit) {
   let truncated = value.slice(0, limit);
   if (/[\uD800-\uDBFF]$/.test(truncated)) truncated = truncated.slice(0, -1);
   return truncated;
+}
+
+function courseCoverDimensionsWithinLimit(width, height) {
+  return width > 0 && height > 0
+    && width <= maxCourseCoverDimension
+    && height <= maxCourseCoverDimension;
+}
+
+function jpegCourseCoverDimensions(header) {
+  let offset = 0;
+  for (let segmentCount = 0; segmentCount < maxJpegCoverHeaderSegments && offset < header.length; segmentCount += 1) {
+    if (header[offset] !== 0xff) return null;
+    while (header[offset] === 0xff) offset += 1;
+    if (offset >= header.length) return null;
+    const marker = header[offset++];
+    if (marker === 0x00 || marker === 0xd9 || marker === 0xda) return null;
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) continue;
+    if (offset + 2 > header.length) return null;
+    const segmentLength = header.readUInt16BE(offset);
+    if (segmentLength < 2 || offset + segmentLength > header.length) return null;
+    if (jpegCoverFrameMarkers.has(marker)) {
+      if (segmentLength < 8) return null;
+      const componentCount = header[offset + 7];
+      if (componentCount < 1 || segmentLength < 8 + componentCount * 3) return null;
+      return {
+        width: header.readUInt16BE(offset + 5),
+        height: header.readUInt16BE(offset + 3),
+      };
+    }
+    offset += segmentLength;
+  }
+  return null;
+}
+
+function webpCourseCoverDimensions(header, fileSize) {
+  if (header.length < 20 || header.toString('ascii', 0, 4) !== 'RIFF'
+    || header.toString('ascii', 8, 12) !== 'WEBP') return null;
+  const riffSize = header.readUInt32LE(4);
+  const riffEnd = riffSize + 8;
+  const firstChunkType = header.toString('ascii', 12, 16);
+  const firstChunkSize = header.readUInt32LE(16);
+  const paddedChunkSize = firstChunkSize + (firstChunkSize % 2);
+  if (riffSize < 12 || riffSize % 2 !== 0 || riffEnd > fileSize
+    || !['VP8 ', 'VP8L', 'VP8X'].includes(firstChunkType)
+    || firstChunkSize === 0
+    || (firstChunkType === 'VP8X' && firstChunkSize !== 10)
+    || 20 + paddedChunkSize > riffEnd) return null;
+
+  let width;
+  let height;
+  if (firstChunkType === 'VP8X') {
+    if (header.length < 30) return null;
+    width = header.readUIntLE(24, 3) + 1;
+    height = header.readUIntLE(27, 3) + 1;
+  } else if (firstChunkType === 'VP8L') {
+    if (firstChunkSize < 5 || header.length < 25 || header[20] !== 0x2f) return null;
+    width = 1 + (((header[22] & 0x3f) << 8) | header[21]);
+    height = 1 + (((header[24] & 0x0f) << 10) | (header[23] << 2) | ((header[22] & 0xc0) >> 6));
+  } else {
+    if (firstChunkSize < 10 || header.length < 30
+      || header[23] !== 0x9d || header[24] !== 0x01 || header[25] !== 0x2a) return null;
+    width = header.readUInt16LE(26) & 0x3fff;
+    height = header.readUInt16LE(28) & 0x3fff;
+  }
+  return courseCoverDimensionsWithinLimit(width, height) ? { width, height } : null;
+}
+
+async function readJpegCourseCoverDimensions(fileHandle, size) {
+  const headerLength = Math.min(Math.max(0, size - 2), maxJpegCoverHeaderBytes);
+  const header = Buffer.alloc(headerLength);
+  if ((await fileHandle.read(header, 0, header.length, 2)).bytesRead !== header.length) return null;
+  return jpegCourseCoverDimensions(header);
 }
 
 async function fileSignatureMatchesKind(file, kind) {
@@ -156,12 +232,14 @@ async function fileSignatureMatchesKind(file, kind) {
     if (ext === '.png') {
       if (size < 45) return false;
       const header = Buffer.alloc(33);
-      if ((await fileHandle.read(header, 0, header.length, 0)).bytesRead !== header.length
+      const { bytesRead } = await fileHandle.read(header, 0, header.length, 0);
+      const width = header.readUInt32BE(16);
+      const height = header.readUInt32BE(20);
+      if (bytesRead !== header.length
         || !header.subarray(0, 8).equals(pngSignature)
         || header.readUInt32BE(8) !== 13
         || header.toString('ascii', 12, 16) !== 'IHDR'
-        || header.readUInt32BE(16) === 0
-        || header.readUInt32BE(20) === 0) return false;
+        || !courseCoverDimensionsWithinLimit(width, height)) return false;
       const trailer = Buffer.alloc(12);
       return (await fileHandle.read(trailer, 0, trailer.length, size - trailer.length)).bytesRead === trailer.length
         && trailer.readUInt32BE(0) === 0
@@ -172,30 +250,17 @@ async function fileSignatureMatchesKind(file, kind) {
       const header = Buffer.alloc(3);
       if ((await fileHandle.read(header, 0, header.length, 0)).bytesRead !== header.length
         || !header.equals(Buffer.from([0xff, 0xd8, 0xff]))) return false;
+      const dimensions = await readJpegCourseCoverDimensions(fileHandle, size);
+      if (!dimensions || !courseCoverDimensionsWithinLimit(dimensions.width, dimensions.height)) return false;
       const tail = Buffer.alloc(Math.min(size, 4096));
       const { bytesRead: tailBytes } = await fileHandle.read(tail, 0, tail.length, size - tail.length);
       return tail.subarray(0, tailBytes).lastIndexOf(Buffer.from([0xff, 0xd9])) !== -1;
     }
     if (ext === '.webp') {
-      const header = Buffer.alloc(20);
-      if (size < header.length
-        || (await fileHandle.read(header, 0, header.length, 0)).bytesRead !== header.length
-        || header.toString('ascii', 0, 4) !== 'RIFF'
-        || header.toString('ascii', 8, 12) !== 'WEBP') return false;
-
-      const riffSize = header.readUInt32LE(4);
-      const riffEnd = riffSize + 8;
-      const firstChunkType = header.toString('ascii', 12, 16);
-      const firstChunkSize = header.readUInt32LE(16);
-      const paddedChunkSize = firstChunkSize + (firstChunkSize % 2);
-      const supportedFirstChunk = ['VP8 ', 'VP8L', 'VP8X'].includes(firstChunkType);
-      return riffSize >= 12
-        && riffSize % 2 === 0
-        && riffEnd <= size
-        && supportedFirstChunk
-        && firstChunkSize > 0
-        && (firstChunkType !== 'VP8X' || firstChunkSize === 10)
-        && header.length + paddedChunkSize <= riffEnd;
+      const header = Buffer.alloc(Math.min(size, 30));
+      if (size < 20 || (await fileHandle.read(header, 0, header.length, 0)).bytesRead !== header.length) return false;
+      const dimensions = webpCourseCoverDimensions(header, size);
+      return Boolean(dimensions);
     }
     return false;
   } catch {
@@ -209,7 +274,7 @@ async function fileSignatureMatchesKind(file, kind) {
 
 function uploadTypeMessage(kind) {
   if (kind === 'video') return 'Upload an MP4 video file.';
-  if (kind === 'cover') return 'Upload a JPG, PNG, or WebP course cover.';
+  if (kind === 'cover') return `Upload a JPG, PNG, or WebP course cover no larger than ${maxCourseCoverDimension} × ${maxCourseCoverDimension} pixels.`;
   if (kind === 'caption') return 'Upload a valid WebVTT (.vtt) captions file.';
   return 'Upload a PDF, text, Word, PowerPoint, Excel, CSV, TSV, or OpenDocument file.';
 }

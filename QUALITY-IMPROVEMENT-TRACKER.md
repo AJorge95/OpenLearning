@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Bound course cover image dimensions
+
+- **Reviewed:** Course-cover upload signatures, the PNG/JPEG/WebP headers, temporary-file cleanup and audit flow, and the course editor's file guidance. The platform icon already has a dimension cap, but course covers did not.
+- **Improvement:** Reject course covers wider or taller than 4096 pixels. Read dimensions from PNG and WebP VP8, VP8L, and VP8X headers; scan no more than 1 MiB or 1,024 JPEG header segments for a frame marker. Show the same limit in the editor and upload error.
+- **Why it helps:** A cover's decoded pixel surface stays bounded before it is stored, oversized uploads fail cleanly, and editors know the accepted dimensions before choosing a file.
+- **Interface review:** The course editor shows “JPG, PNG, or WebP · max 4096 × 4096 px” beside the existing preview and upload control; no layout changes were needed.
+- **Checked:** The media-route suite passed all 9 tests, including oversized dimensions for every supported encoding, the 4096px boundary, and no file/database/audit changes after rejection. Full `npm test` passed all 228 tests; `npx tsc --noEmit`, `npm run build`, `node --check server/routes-media.js`, and `git diff --check` passed. The signed-in local course editor rendered the new helper text at 1999 × 1244.
+
 ## 2026-10-10 — Show email addresses in administrator search results
 
 - **Reviewed:** The administrator user search query, its email matching behavior, the paginated response, and the result table's narrow-screen layout.
