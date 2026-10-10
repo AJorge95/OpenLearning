@@ -30,3 +30,27 @@ test('course details form is exposed as a named region', () => {
   assert.equal(sections.length, 1, 'expected one course details section');
   assert.equal(jsxAttribute(sections[0], 'aria-label'), 'Course details');
 });
+
+test('quiz editor actions include quiz and question context in accessible names', () => {
+  const source = fs.readFileSync(editorPath, 'utf8');
+  const sourceFile = ts.createSourceFile(editorPath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const declaration = sourceFile.statements.find((statement) => ts.isFunctionDeclaration(statement)
+    && statement.name?.text === 'QuizEditor');
+
+  assert.ok(declaration, 'expected to find the quiz editor component');
+  const quizEditor = declaration.getText(sourceFile);
+  assert.match(quizEditor, /const quizContext = .*module\.position \+ 1/);
+  const ariaLabels = [];
+  function visit(node) {
+    if (ts.isJsxAttribute(node) && node.name.getText(sourceFile) === 'aria-label') {
+      ariaLabels.push(node.initializer?.getText(sourceFile) || '');
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(declaration);
+  assert.ok(ariaLabels.some((label) => label.includes('Add question to ${quizContext}')));
+  assert.ok(ariaLabels.some((label) => label.includes('Add answer choice to question ${questionIndex + 1} in ${quizContext}')));
+  assert.ok(ariaLabels.some((label) => label.includes('Save quiz ${quizContext}')));
+  assert.ok(ariaLabels.some((label) => label.includes('No changes to ${quizContext}')));
+  assert.ok(ariaLabels.some((label) => label.includes('Remove question ${questionIndex + 1} from ${quizContext}')));
+});

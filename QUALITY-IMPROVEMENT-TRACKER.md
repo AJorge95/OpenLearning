@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Disambiguate quiz editor controls for screen readers
+
+- **Reviewed:** A rendered course editor with two module quizzes, where repeated question, answer-choice, save, and removal controls shared generic accessible names.
+- **Improvement:** Add stable module context and question numbers to quiz field groups and repeated control names. Keep visible button labels unchanged and keep the context independent of edits to the quiz-title field.
+- **Why it helps:** Screen-reader users can identify which quiz and question each repeated action affects, including when moving through the page's control list.
+- **Interface review:** The live editor distinguishes both modules' “Add question,” “Add answer choice,” and save controls. Adding a question to the first quiz still focuses its new question field; the page was reloaded afterward to discard the unsaved local draft.
+- **Checked:** The focused course-editor structure test passed (2/2); full `npm test` passed all 244 tests; `npm run build` and `git diff --check` passed. The editor rendered without browser console warnings or errors. `npx tsc --noEmit` remains blocked by separate uncommitted edits in `src/pages-manage.tsx`: `navigate` is missing in the course editor and unused in settings.
+
 ## 2026-10-10 — Reuse course access checks when filtering calendar deadlines
 
 - **Reviewed:** Calendar visibility checks for multiple private deadlines in the same assigned learning path, the request-scoped course-access cache, and the reported administrator role-selector hit area.
