@@ -1,5 +1,13 @@
 export type AppSelectNavigationOption = { disabled?: boolean };
 export type AppSelectTypeaheadOption = AppSelectNavigationOption & { label: string };
+export type AppSelectDisplayOption<T extends string | number> = { value: T; label: string };
+
+export function getAppSelectDisplayLabel<T extends string | number>(
+  options: readonly AppSelectDisplayOption<T>[],
+  value: T,
+) {
+  return options.find((option) => option.value === value)?.label ?? 'Choose an option';
+}
 
 export function findEnabledAppSelectIndex(
   options: readonly AppSelectNavigationOption[],
