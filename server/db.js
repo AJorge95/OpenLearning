@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 
-const latestSchemaVersion = 29;
+const latestSchemaVersion = 31;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -761,6 +761,41 @@ export function migrateDatabase(database = db) {
         );
         CREATE INDEX IF NOT EXISTS lesson_watch_progress_lesson ON lesson_watch_progress(lesson_id, user_id);
         INSERT INTO schema_migrations (version) VALUES (29);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 30) {
+    const migration = database.transaction(() => {
+      database.exec('INSERT INTO schema_migrations (version) VALUES (30);');
+    });
+    migration();
+  }
+
+  if (current < 31) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS lesson_watch_telemetry (
+          user_id TEXT NOT NULL,
+          lesson_id TEXT NOT NULL,
+          watched_seconds REAL NOT NULL DEFAULT 0 CHECK (watched_seconds >= 0),
+          rejected_seek_count INTEGER NOT NULL DEFAULT 0 CHECK (rejected_seek_count >= 0),
+          last_rejected_position_seconds REAL,
+          last_rejected_at INTEGER NOT NULL DEFAULT 0,
+          last_alerted_at INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY(user_id, lesson_id),
+          FOREIGN KEY(user_id, lesson_id) REFERENCES lesson_watch_progress(user_id, lesson_id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS lesson_watch_telemetry_lesson ON lesson_watch_telemetry(lesson_id, user_id);
+        INSERT INTO lesson_watch_telemetry (user_id, lesson_id, watched_seconds)
+          SELECT user_id, lesson_id, watched_until_seconds FROM lesson_watch_progress
+          WHERE 1
+          ON CONFLICT(user_id, lesson_id) DO UPDATE SET
+            watched_seconds = MAX(lesson_watch_telemetry.watched_seconds, excluded.watched_seconds),
+            updated_at = CURRENT_TIMESTAMP;
+        INSERT INTO schema_migrations (version) VALUES (31);
       `);
     });
     migration();

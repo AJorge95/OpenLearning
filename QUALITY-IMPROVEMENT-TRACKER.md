@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Record credible lesson-watch telemetry
+
+- **Reviewed:** Lesson video progress, server-side heartbeat validation, completion checks, staff course-preview access, migration history, the learner player’s seek and background-tab behavior, and the README’s course-role descriptions.
+- **Improvement:** Add schema version 31 telemetry for credible watched seconds and rejected seeks, preserving the version 30 checkpoint; require verified playback for every video viewer in the learning player, reject backwards seeks on the server, rate-limit anomaly logs per user and lesson, and record premature completion attempts. Parse fragmented MP4 sample timings and defaults when the movie header has no duration. Pause required playback when the tab is hidden. Keep sequential lesson locks learner-specific so staff can open later lessons while still requiring verified playback to mark their own completion. Document the watch and staff-review rules in the README.
+- **Why it helps:** Operators can investigate implausible progress without receiving a log row for every repeated attempt, and no viewer can earn lesson completion by seeking backward and replaying a short segment. Fragmented MP4 uploads can use verified watch progress, while staff retain direct access to later course content for review.
+- **Checked:** Migration backfill from schemas 29 and 30, idempotence, preservation of existing telemetry, and foreign keys; watched-time accounting, seek rejection, and log cooldown; learner-versus-admin lesson ordering; an admin completion attempt returns `video_watch_required`, leaves progress unchanged, and records its role; fragmented MP4 duration across multiple fragments, default sample durations, and malformed timing. Focused course, migration, watch, and MP4 suites passed. Full `npm test`, `npx tsc --noEmit`, `npm run build`, `node --check` for the changed server modules, and `git diff --check` passed. Live video playback was not exercised.
+
 ## 2026-10-10 — Recheck learner calendar date boundaries
 
 - **Reviewed:** The authenticated calendar endpoint, date parsing, inclusive range bounds, published-course and private-access filters, and its existing route coverage.

@@ -9,7 +9,7 @@ OpenLearning is a lightweight, self-hosted learning platform for a single organi
 - Public courses for signed-in learners and private courses available through individual access grants.
 - Courses organized into ordered modules, described video lessons with optional text transcripts and WebVTT caption tracks, lesson links and documents, and optional single-answer quizzes.
 - Lesson-level likes, dislikes, and learner comments, with reactions limited to one per learner per lesson.
-- Manual lesson completion, saved quiz attempts, unlimited retries, course completion tracking, and learner-specific certificates.
+- Verified video watch progress before lesson completion, saved quiz attempts, unlimited retries, course completion tracking, and learner-specific certificates.
 - SQLite application data and local course media stored in a separate directory for each course.
 - Optional platform icon and selectable violet, ocean, forest, rose, and amber color palettes.
 - MP4 video upload with browser upload progress and authenticated byte-range delivery for seeking.
@@ -71,7 +71,7 @@ The suite uses Node's built-in test runner, in-memory and isolated temporary SQL
 - **Moderator:** Create and manage all courses, assign learners, and review course dashboards. Moderators cannot manage accounts, roles, or platform settings.
 - **Learner:** Browse and learn from published public courses, plus private courses for which they have an active grant.
 
-All course and lesson viewing requires sign-in. Assignments place a course in a learner's My learning list; private courses require an active assignment for access. Revoking a private-course assignment takes effect on the next API or media request.
+All course and lesson viewing requires sign-in. Video lessons must be watched through verified playback in the learning player before they can be marked complete. Learners encounter prior-lesson locks; administrators and moderators can open later lessons to review them. Assignments place a course in a learner's My learning list; private courses require an active assignment for access. Revoking a private-course assignment takes effect on the next API or media request.
 
 Administrators can manually create learner, moderator, or administrator accounts, change roles or account status, and reset passwords. New accounts require a unique email address; sign-in still uses the username and password. Account details show the last successful login, and failed sign-in attempts do not update it. From **Settings** → **Registration fields**, administrators can add up to 30 text, date, select-list, or checkbox fields to public signup and choose which are required. Saved learner answers remain on the account if a field is later changed or removed, and administrators can review them on the account-details page. The account list and course-assignment list can search by username or email.
 

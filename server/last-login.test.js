@@ -108,7 +108,7 @@ function storedSessionIds() {
   }));
 }
 
-test('migrations 16 to 28 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
+test('migrations 16 to 31 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
   const migrationDb = new Database(':memory:');
   try {
     migrationDb.pragma('foreign_keys = ON');
@@ -197,7 +197,7 @@ test('migrations 16 to 28 preserve account history, course versions, captions, c
     `);
 
     migrateDatabase(migrationDb);
-    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 29);
+    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 31);
     assert.deepEqual(migrationDb.prepare('SELECT id, last_login_at FROM users ORDER BY id').all(), [
       { id: 'user-history', last_login_at: '2026-10-02 09:00:00' },
       { id: 'user-never-signed-in', last_login_at: null },
@@ -239,6 +239,9 @@ test('migrations 16 to 28 preserve account history, course versions, captions, c
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 26').get().count, 1);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 27').get().count, 1);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 28').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 29').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 30').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 31').get().count, 1);
     assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name IN ('learning_paths_active_updated', 'learning_paths_status_updated', 'courses_updated_order', 'courses_status_updated_order', 'courses_status_title_order', 'audit_logs_action', 'system_logs_level', 'course_certificates_user_issued')").get().count, 8);
     assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM pragma_table_info('users') WHERE name = 'email'").get().count, 1);
     assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM pragma_table_info('users') WHERE name = 'first_name'").get().count, 1);
@@ -253,7 +256,96 @@ test('migrations 16 to 28 preserve account history, course versions, captions, c
       { name: 'duration_seconds' }, { name: 'last_position_seconds' }, { name: 'last_heartbeat_at' }, { name: 'updated_at' },
     ]);
     assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'lesson_watch_progress_lesson'").get().count, 1);
+    assert.deepEqual(migrationDb.prepare("SELECT name FROM pragma_table_info('lesson_watch_telemetry') ORDER BY cid").all(), [
+      { name: 'user_id' }, { name: 'lesson_id' }, { name: 'watched_seconds' }, { name: 'rejected_seek_count' },
+      { name: 'last_rejected_position_seconds' }, { name: 'last_rejected_at' }, { name: 'last_alerted_at' }, { name: 'updated_at' },
+    ]);
+    assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'lesson_watch_telemetry_lesson'").get().count, 1);
     assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM pragma_table_info('media_files') WHERE name = 'duration_seconds'").get().count, 1);
+    assert.deepEqual(migrationDb.pragma('foreign_key_check'), []);
+  } finally {
+    migrationDb.close();
+  }
+});
+
+test('migration 31 backfills watch telemetry and can be rerun safely', () => {
+  const migrationDb = new Database(':memory:');
+  try {
+    migrationDb.pragma('foreign_keys = ON');
+    migrationDb.exec(`
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      INSERT INTO schema_migrations (version) VALUES (30);
+      CREATE TABLE lesson_watch_progress (
+        user_id TEXT NOT NULL,
+        lesson_id TEXT NOT NULL,
+        watched_until_seconds REAL NOT NULL,
+        duration_seconds REAL NOT NULL,
+        last_position_seconds REAL NOT NULL,
+        last_heartbeat_at INTEGER NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(user_id, lesson_id)
+      );
+      INSERT INTO lesson_watch_progress (user_id, lesson_id, watched_until_seconds, duration_seconds, last_position_seconds, last_heartbeat_at)
+        VALUES ('watch-learner', 'watched-lesson', 42.5, 100, 42.5, 1000), ('watch-learner', 'unwatched-lesson', 0, 60, 0, 1000);
+    `);
+
+    migrateDatabase(migrationDb);
+    assert.deepEqual(migrationDb.prepare('SELECT lesson_id, watched_seconds, rejected_seek_count FROM lesson_watch_telemetry ORDER BY lesson_id').all(), [
+      { lesson_id: 'unwatched-lesson', watched_seconds: 0, rejected_seek_count: 0 },
+      { lesson_id: 'watched-lesson', watched_seconds: 42.5, rejected_seek_count: 0 },
+    ]);
+
+    migrateDatabase(migrationDb);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 31').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM lesson_watch_telemetry').get().count, 2);
+    assert.deepEqual(migrationDb.pragma('foreign_key_check'), []);
+  } finally {
+    migrationDb.close();
+  }
+});
+
+test('migration 31 preserves telemetry already present in a version-30 database', () => {
+  const migrationDb = new Database(':memory:');
+  try {
+    migrationDb.pragma('foreign_keys = ON');
+    migrationDb.exec(`
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      INSERT INTO schema_migrations (version) VALUES (30);
+      CREATE TABLE lesson_watch_progress (
+        user_id TEXT NOT NULL,
+        lesson_id TEXT NOT NULL,
+        watched_until_seconds REAL NOT NULL,
+        duration_seconds REAL NOT NULL,
+        last_position_seconds REAL NOT NULL,
+        last_heartbeat_at INTEGER NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(user_id, lesson_id)
+      );
+      CREATE TABLE lesson_watch_telemetry (
+        user_id TEXT NOT NULL,
+        lesson_id TEXT NOT NULL,
+        watched_seconds REAL NOT NULL DEFAULT 0,
+        rejected_seek_count INTEGER NOT NULL DEFAULT 0,
+        last_rejected_position_seconds REAL,
+        last_rejected_at INTEGER NOT NULL DEFAULT 0,
+        last_alerted_at INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(user_id, lesson_id),
+        FOREIGN KEY(user_id, lesson_id) REFERENCES lesson_watch_progress(user_id, lesson_id) ON DELETE CASCADE
+      );
+      INSERT INTO lesson_watch_progress (user_id, lesson_id, watched_until_seconds, duration_seconds, last_position_seconds, last_heartbeat_at)
+        VALUES ('watch-learner', 'watched-lesson', 42.5, 100, 42.5, 1000), ('watch-learner', 'unwatched-lesson', 0, 60, 0, 1000);
+      INSERT INTO lesson_watch_telemetry (user_id, lesson_id, watched_seconds, rejected_seek_count)
+        VALUES ('watch-learner', 'watched-lesson', 45, 2);
+    `);
+
+    migrateDatabase(migrationDb);
+    assert.deepEqual(migrationDb.prepare('SELECT lesson_id, watched_seconds, rejected_seek_count FROM lesson_watch_telemetry ORDER BY lesson_id').all(), [
+      { lesson_id: 'unwatched-lesson', watched_seconds: 0, rejected_seek_count: 0 },
+      { lesson_id: 'watched-lesson', watched_seconds: 45, rejected_seek_count: 2 },
+    ]);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 31').get().count, 1);
+    assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'lesson_watch_telemetry_lesson'").get().count, 1);
     assert.deepEqual(migrationDb.pragma('foreign_key_check'), []);
   } finally {
     migrationDb.close();
