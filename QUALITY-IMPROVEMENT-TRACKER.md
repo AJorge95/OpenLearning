@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep equivalent registration choices unique
+
+- **Reviewed:** The selector now matches canonically equivalent accented text, while the registration editor and API compared option and field labels using raw lowercase strings. That allowed visually identical values such as composed and decomposed “Café” to be saved twice.
+- **Improvement:** Normalize labels and select options to NFC for case-insensitive uniqueness checks in both client and server validation.
+- **Why it helps:** Administrators cannot create duplicate-looking choices, and keyboard typeahead, user answers, and server validation agree on which options are equivalent.
+- **Compatibility:** Existing option strings are not rewritten to NFC; legacy canonically equivalent choices remain readable, while strict uniqueness applies to new writes and edits.
+- **Interface review:** Existing registration editor error targets and messages remain intact; duplicate-equivalent labels/options point to the same fields as other duplicates.
+- **Backend review:** New definitions are rejected consistently while legacy definitions and exact submitted values continue to load.
+- **Checked:** Client and server registration-field regressions, full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Normalize custom-select typeahead accents
 
 - **Reviewed:** `AppSelect` typeahead lowercases option labels and typed prefixes but compares their raw Unicode sequences. User-defined course categories and registration select choices can contain accents whose composed and decomposed forms look identical but fail that comparison.

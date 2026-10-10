@@ -184,6 +184,28 @@ test('registration label and option uniqueness is independent of server locale',
   }
 });
 
+test('registration writes reject canonical duplicates while stored values remain readable', () => {
+  const originalFields = database.prepare('SELECT value FROM app_settings WHERE key = ?').get('registration_fields').value;
+  const legacyFields = [
+    { id: 'interest', label: 'Interest', type: 'select', required: false, options: ['Café', 'Cafe\u0301', 'Research'] },
+  ];
+
+  assertApiError(() => registrationFields.normalizeRegistrationFields(legacyFields), 'invalid_registration_fields');
+  assertApiError(() => registrationFields.normalizeRegistrationFields([
+    { id: 'first', label: 'Café', type: 'text', required: false },
+    { id: 'second', label: 'Cafe\u0301', type: 'text', required: false },
+  ]), 'invalid_registration_fields');
+  try {
+    setSetting('registration_fields', JSON.stringify(legacyFields));
+    const loaded = registrationFields.getRegistrationFields();
+    assert.deepEqual(loaded, legacyFields);
+    assert.deepEqual(registrationFields.normalizeRegistrationFieldValues({ interest: 'Cafe\u0301' }, loaded)
+      .map((field) => field.value), ['Cafe\u0301']);
+  } finally {
+    setSetting('registration_fields', originalFields);
+  }
+});
+
 test('invalid stored registration fields pause public signup and stay recoverable in admin settings', async () => {
   setSetting('registration_fields', '{invalid json');
   assert.deepEqual(registrationFields.readRegistrationFields(), { fields: [], configurationValid: false });

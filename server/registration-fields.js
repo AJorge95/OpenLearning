@@ -6,7 +6,11 @@ const maximumFields = 30;
 const maximumOptions = 30;
 const maximumTextLength = 2000;
 
-export function normalizeRegistrationFields(value) {
+function caseInsensitiveKey(value) {
+  return value.normalize('NFC').toLowerCase().normalize('NFC');
+}
+
+export function normalizeRegistrationFields(value, { allowCanonicalDuplicates = false } = {}) {
   if (!Array.isArray(value) || value.length > maximumFields) {
     fail(400, `Add between 0 and ${maximumFields} registration fields.`, 'invalid_registration_fields');
   }
@@ -23,7 +27,8 @@ export function normalizeRegistrationFields(value) {
     if (!/^[a-zA-Z0-9_-]{1,80}$/.test(id) || ids.has(id)) {
       fail(400, `Registration field ${index + 1} needs a unique field ID.`, 'invalid_registration_fields');
     }
-    if (!label || label.length > 80 || labels.has(label.toLowerCase())) {
+    const normalizedLabel = caseInsensitiveKey(label);
+    if (!label || label.length > 80 || (!allowCanonicalDuplicates && labels.has(normalizedLabel))) {
       fail(400, `Registration field ${index + 1} needs a unique label of 1 to 80 characters.`, 'invalid_registration_fields');
     }
     if (!allowedTypes.has(type)) {
@@ -33,7 +38,7 @@ export function normalizeRegistrationFields(value) {
       fail(400, `Choose whether "${label}" is required.`, 'invalid_registration_fields');
     }
     ids.add(id);
-    labels.add(label.toLowerCase());
+    labels.add(normalizedLabel);
 
     let options = [];
     if (type === 'select') {
@@ -43,7 +48,7 @@ export function normalizeRegistrationFields(value) {
       options = item.options.map((option) => typeof option === 'string' ? option.trim() : '');
       while (options.length && options.at(-1) === '') options.pop();
       if (options.length < 2 || options.length > maximumOptions || options.some((option) => !option || option.length > 100)
-        || new Set(options.map((option) => option.toLowerCase())).size !== options.length) {
+        || (!allowCanonicalDuplicates && new Set(options.map(caseInsensitiveKey)).size !== options.length)) {
         fail(400, `"${label}" needs 2 to ${maximumOptions} unique options, each up to 100 characters.`, 'invalid_registration_fields');
       }
     }
@@ -55,7 +60,8 @@ export function readRegistrationFields() {
   const value = setting('registration_fields');
   if (!value) return { fields: [], configurationValid: true };
   try {
-    return { fields: normalizeRegistrationFields(JSON.parse(value)), configurationValid: true };
+    // Keep previously saved canonically equivalent values readable; strict uniqueness applies to new writes.
+    return { fields: normalizeRegistrationFields(JSON.parse(value), { allowCanonicalDuplicates: true }), configurationValid: true };
   } catch {
     return { fields: [], configurationValid: false };
   }
