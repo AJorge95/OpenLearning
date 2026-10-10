@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reuse logical course identity statements
+
+- **Reviewed:** `logicalCourseId()` resolves a course, module, lesson, or quiz through four fixed SQLite queries, preparing each statement again on every invocation.
+- **Improvement:** Prepare the four identity lookups once when course-versioning loads and reuse them for subsequent ID resolution. Update certificate regressions to guard against per-call statement preparation.
+- **Why it helps:** Repeated version and certificate checks avoid recompiling the same SQL without caching course identity or changing resolution results.
+- **Interface review:** No visible behavior changed. The current administrator role control was also checked; its matched-width menu keeps the selected role on one line and closes on an outside click.
+- **Checked:** Regressions cover course, module, lesson, quiz, and missing IDs, and the certificate paths no longer prepare the identity query per call. The focused analytics, certificate, and AppSelect tests passed (93/93); `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Full `npm test` passed 272/273; the remaining failure belongs to the separate uncommitted video-rewind response change adding `lastPositionSeconds` while its test still expects the prior response shape.
+
 ## 2026-10-10 — Index course-based learning-path lookups
 
 - **Reviewed:** Course privacy/archive checks, learning-path course membership queries, course deletion cascades, and the existing path-first indexes on `learning_path_courses`.

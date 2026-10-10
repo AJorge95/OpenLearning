@@ -86,12 +86,12 @@ test('certificate pages use an index for stable newest-first ordering', () => {
   assert.doesNotMatch(plan, /USE TEMP B-TREE FOR/);
 });
 
-test('certificate lookup resolves the logical course ID only once for version selection', () => {
+test('certificate lookup reuses the preprepared logical course ID statement', () => {
   const originalPrepare = database.prepare;
-  let logicalCourseIdLookups = 0;
+  let logicalCourseIdStatementPreparations = 0;
   database.prepare = (sql) => {
     if (sql.replace(/\s+/g, ' ').trim().startsWith('SELECT id, logical_course_id FROM courses WHERE id = ?')) {
-      logicalCourseIdLookups += 1;
+      logicalCourseIdStatementPreparations += 1;
     }
     return originalPrepare.call(database, sql);
   };
@@ -100,16 +100,16 @@ test('certificate lookup resolves the logical course ID only once for version se
   } finally {
     database.prepare = originalPrepare;
   }
-  assert.equal(logicalCourseIdLookups, 1);
+  assert.equal(logicalCourseIdStatementPreparations, 0);
 });
 
 test('completed courses receive one version-specific certificate with a name and email snapshot', () => {
   const user = { id: 'certificate-learner', role: 'learner' };
   const originalPrepare = database.prepare;
-  let logicalCourseIdLookups = 0;
+  let logicalCourseIdStatementPreparations = 0;
   database.prepare = (sql) => {
     if (sql.replace(/\s+/g, ' ').trim().startsWith('SELECT id, logical_course_id FROM courses WHERE id = ?')) {
-      logicalCourseIdLookups += 1;
+      logicalCourseIdStatementPreparations += 1;
     }
     return originalPrepare.call(database, sql);
   };
@@ -120,7 +120,7 @@ test('completed courses receive one version-specific certificate with a name and
     database.prepare = originalPrepare;
   }
   assert.ok(certificate);
-  assert.equal(logicalCourseIdLookups, 1);
+  assert.equal(logicalCourseIdStatementPreparations, 0);
   assert.equal(certificate.recipientName, 'Taylor Nguyen');
   assert.equal(certificate.recipientEmail, 'learner@example.invalid');
   assert.equal(certificate.courseTitle, 'Completing Courses Well');
