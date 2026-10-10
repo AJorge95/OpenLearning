@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Announce course cover limits to screen readers
+
+- **Reviewed:** The course editor's visible cover-format and dimension hint, its file-input label, and the existing accessible descriptions for platform icons and lesson captions.
+- **Improvement:** Give the visible course-cover hint a stable `useId()` value and reference it from the file input with `aria-describedby`.
+- **Why it helps:** Screen-reader users receive the accepted formats and 4096 × 4096 pixel limit when the upload control receives focus, matching the guidance already provided for other upload controls.
+- **Interface review:** The visible helper and “Upload cover”/“Replace cover” label remain unchanged; the description adds no layout or interaction changes.
+- **Checked:** The focused accessibility test passed and confirms the file input references the visible hint. Full `npm test` passed all 229 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The signed-in local course editor still rendered its course details and cover control at 1999 × 1244.
+
 ## 2026-10-10 — Bound course cover image dimensions
 
 - **Reviewed:** Course-cover upload signatures, the PNG/JPEG/WebP headers, temporary-file cleanup and audit flow, and the course editor's file guidance. The platform icon already has a dimension cap, but course covers did not.
