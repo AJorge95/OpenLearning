@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Avoid repeated initialization work for existing learner states
+
+- **Reviewed:** Learning-path enrollment and assignment synchronization, which rechecks each unlocked course state for every learner even when that state already exists.
+- **Improvement:** Fetch the course and its logical-course learning state with one joined query. Return the existing state immediately instead of resolving the course twice, reading its published version, attempting an ignored insert, and selecting the state again.
+- **Why it helps:** Repeated path assignment or edits now use one state lookup per unlocked course instead of six state-initialization statements, while first-time state creation and required-recompletion handling remain intact.
+- **Interface review:** The account-role selector remains limited to its visible trigger; the earlier boundary check verified that adjacent and farther-right clicks leave its menu closed. No UI change was needed in this backend cycle.
+- **Checked:** The three-course regression dropped from 18 repeated initialization statements to 3 joined lookups. The recompletion safeguard also passed. Full `npm test` passed all 248 tests; `npm run build` and `git diff --check` passed. `npx tsc --noEmit` still reports the same three `navigate` errors in separate uncommitted `src/pages-manage.tsx` edits.
+
 ## 2026-10-10 — Reuse batched summaries during learning-path state synchronization
 
 - **Reviewed:** Ordered path-state synchronization, course summary batching, and state creation when a published course version requires learner recompletion.

@@ -355,9 +355,17 @@ export function enrollLearner(courseId, userId) {
 }
 
 export function ensureCourseLearningStateWithStatus(courseId, userId, now = new Date()) {
-  const logicalId = db.prepare('SELECT logical_course_id FROM courses WHERE id = ?').get(courseId)?.logical_course_id || courseId;
-  const course = db.prepare('SELECT completion_window_days FROM courses WHERE id = ?').get(logicalId);
+  const course = db.prepare(`SELECT c.id, c.logical_course_id, c.completion_window_days,
+      s.user_id, s.course_id, s.target_version_id, s.deadline_at, s.deadline_window_days, s.started_at
+    FROM courses c LEFT JOIN course_learning_state s
+      ON s.course_id = COALESCE(c.logical_course_id, c.id) AND s.user_id = ?
+    WHERE c.id = ?`).get(userId, courseId);
   if (!course) return { state: null, created: false };
+  const logicalId = course.logical_course_id || course.id;
+  if (course.user_id !== null) {
+    const { user_id, course_id, target_version_id, deadline_at, deadline_window_days, started_at } = course;
+    return { state: { user_id, course_id, target_version_id, deadline_at, deadline_window_days, started_at }, created: false };
+  }
   const version = publishedVersion(logicalId);
   const deadlineDays = course.completion_window_days;
   const deadlineAt = Number.isInteger(deadlineDays) && deadlineDays > 0
