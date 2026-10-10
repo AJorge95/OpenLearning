@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Cover shared API client recovery paths
+
+- **Reviewed:** The shared request helper’s CSRF token refresh and retry flow, concurrent writes, invalid response handling, the current account-role `AppSelect` structure and its geometry/keyboard regressions, and the working tree.
+- **Improvement:** Add direct tests for sharing CSRF refreshes across concurrent writes, retrying each write once with a fresh token, stopping after a repeated CSRF rejection, and returning a stable error for non-JSON responses.
+- **Why it helps:** Regressions in the central request layer can affect every screen. These cases protect recovery from expired sessions and make malformed proxy/server responses fail consistently.
+- **Interface review:** The account role control remains bounded to its trigger; the existing tests cover menu positioning and keyboard navigation. No visual code changed in this cycle.
+- **Checked:** All 3 new API-client tests and all 12 focused `AppSelect` tests passed; full `npm test` passed all 196 tests; `npx tsc --noEmit`, `npm run build`, `node --check src/api.test.js`, and `git diff --check` passed.
+
 ## 2026-10-10 — Bound platform icon pixel dimensions
 
 - **Reviewed:** The platform icon’s 512 KB byte limit, how the branding image is reused throughout the application, dimension headers in PNG/JPEG/WebP, and the upload guidance in the admin settings and setup flow.
