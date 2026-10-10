@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Focus invalid required signup checkboxes
+
+- **Reviewed:** Custom registration field validation, input IDs, and error associations on the public signup form.
+- **Improvement:** Give custom checkbox fields the same stable input ID, `aria-invalid` state, and error description as text, date, and select fields.
+- **Why it helps:** When a required checkbox is missing, the existing validation handler can now focus it and assistive technology can announce the associated validation message.
+- **Interface review:** The checkbox remains inside its visible label; no layout or visual styling change was needed.
+- **Checked:** Focused registration tests passed (6/6), including the input-ID, invalid-state, and error-description regression. Full `npm test` passed all 257 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reduce repeated reads in lesson comment routes
 
 - **Reviewed:** Lesson feedback pagination and comment creation, which each loaded the comment total separately from the row data.
