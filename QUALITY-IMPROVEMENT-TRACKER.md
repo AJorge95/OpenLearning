@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Clarify interrupted upload outcomes
+
+- **Reviewed:** Shared fetch transport errors, XHR upload failures, upload cancellation and CSRF retry behavior, and the course editor's document, caption, video, and cover upload handlers.
+- **Improvement:** Give XHR network failures the shared `network_error` code and status `0`. Explain that completion is uncertain and ask editors to reload the course editor to verify the file before retrying; uploads are not automatically repeated.
+- **Why it helps:** A lost response can happen after the server stored a file. Editors get a consistent error and a safer recovery step that avoids blindly creating duplicate resources.
+- **Interface review:** Existing upload notices display the new actionable message without changing form layout, progress, or cancellation behavior.
+- **Checked:** Focused API tests passed all 11 cases; full `npm test` passed all 236 tests; production build passed; targeted strict TypeScript checking for `src/api.ts` and `git diff --check` on changed files passed. Full `npx tsc --noEmit` reports TS18047 in the separately modified `src/components.tsx:430`; those unrelated working-tree edits were preserved.
+
 ## 2026-10-10 — Cover protected video range playback with integration tests
 
 - **Reviewed:** The lesson player's protected media route, its authorization checks, byte-range parsing and response headers, and existing media-route test coverage. The route supported partial playback, but retrieval and range access were not covered by integration tests.

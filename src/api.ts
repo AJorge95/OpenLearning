@@ -39,9 +39,13 @@ function isAbortError(error: unknown) {
   return typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError';
 }
 
+function transportError(message = 'The server could not be reached. Check your connection and try again.') {
+  return new ApiError(0, message, 'network_error');
+}
+
 function throwTransportFailure(error: unknown): never {
   if (error instanceof ApiError || isAbortError(error)) throw error;
-  throw new ApiError(0, 'The server could not be reached. Check your connection and try again.', 'network_error');
+  throw transportError();
 }
 
 async function fetchResponse(path: string, options: RequestInit): Promise<Response> {
@@ -186,7 +190,10 @@ export const api = {
       xhr.upload.onprogress = (event) => {
         if (!options.signal?.aborted && event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
       };
-      xhr.onerror = () => { removeAbortListener(); reject(new ApiError(0, 'Upload failed. Check your connection and try again.')); };
+      xhr.onerror = () => {
+        removeAbortListener();
+        reject(transportError('The upload connection was interrupted. Reload the course editor to check whether the file was added before retrying.'));
+      };
       xhr.onabort = () => { removeAbortListener(); reject(uploadAbortError()); };
       xhr.onload = () => {
         removeAbortListener();
