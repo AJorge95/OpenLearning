@@ -1587,7 +1587,7 @@ export function AdminUsersPage() {
       : <Notice>{error}</Notice>)}
     {success && <Notice kind="success">{success}</Notice>}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading accounts…</div> : failedRequest ? null : <div className="user-table-wrap" role="region" aria-label="Scrollable account list" tabIndex={0}><p className="table-scroll-hint">Scroll horizontally to see all account columns.</p><table className="user-table"><caption className="sr-only">Accounts</caption><thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Account</th><th scope="col">Created</th><th scope="col">Actions</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}>
-      <td><Link className="owner-cell user-detail-link" to={`/admin/users/${user.id}`}><UserInitial username={user.username} /><strong>{user.username}</strong></Link></td>
+      <td><Link className="owner-cell user-detail-link" to={`/admin/users/${user.id}`}><UserInitial username={user.username} /><span className="user-detail-link-copy"><strong>{user.username}</strong>{user.email && <small>{user.email}</small>}</span></Link></td>
       <td><AppSelect<Role> className="app-select--compact" ariaLabel={`Role for ${user.username}`} value={user.role} disabled={savingIds.has(user.id)} onChange={(role) => updateUser(user, { role })} options={[{ value: 'admin', label: 'Administrator' }, { value: 'moderator', label: 'Moderator' }, { value: 'learner', label: 'Learner' }]} /></td>
       <td><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span></td>
       <td>{user.createdAt ? <DateText value={user.createdAt} /> : '—'}</td>

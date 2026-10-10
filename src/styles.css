@@ -508,6 +508,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .table-course a:hover { color: var(--purple); }
 .table-course small { color: var(--muted); font-size: 11px; }
 .owner-cell { display: inline-flex; align-items: center; gap: 9px; }
+.user-detail-link-copy { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 3px; }
+.user-detail-link-copy small { display: block; max-width: 220px; overflow: hidden; color: var(--muted); font-size: 11px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .avatar-small { width: 29px; height: 29px; font-size: 11px; }
 .visibility-label { display: inline-flex; align-items: center; gap: 7px; color: #555b6a; font-size: 12px; }
 .visibility-label svg { color: #717788; }

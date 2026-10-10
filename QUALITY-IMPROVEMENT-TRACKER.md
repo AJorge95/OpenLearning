@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Show email addresses in administrator search results
+
+- **Reviewed:** The administrator user search query, its email matching behavior, the paginated response, and the result table's narrow-screen layout.
+- **Improvement:** Return each matched account's email and display it beneath the username with a 220px ellipsis cap.
+- **Why it helps:** Administrators can identify which account matched an email search directly in the results without opening each account; long addresses do not force the table wider.
+- **Interface review:** The email remains selectable and included in the link's accessible text; blank legacy emails simply leave the username line.
+- **Checked:** The focused admin-list and route suite passed all 11 tests; full `npm test` passed all 227 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Require explicit alternative text intent for fallback images
 
 - **Reviewed:** Every `ImageWithFallback` JSX call site, nearby brand/course/certificate text, fallback content, and the image component's TypeScript contract.
