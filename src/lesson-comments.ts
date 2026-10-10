@@ -10,3 +10,8 @@ export function getNewLessonComments(existing: LessonComment[], incoming: Lesson
   }
   return additions;
 }
+
+export function addLessonCommentToPage(existing: LessonComment[], comment: LessonComment, pageSize: number) {
+  if (existing.some((current) => current.id === comment.id)) return existing;
+  return [comment, ...existing].slice(0, Math.max(existing.length, pageSize));
+}

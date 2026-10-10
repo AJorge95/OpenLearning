@@ -6,7 +6,7 @@ import { AppSelect, Button, CourseCard, CourseCover, CurriculumModule, EmptyStat
 import { formatCountLabel } from './count-label';
 import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from './course-navigation';
 import { summarizeCourseProgress } from './course-progress';
-import { getNewLessonComments } from './lesson-comments';
+import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
 import { tryEnterFullscreen } from './video-fullscreen';
 import { useAuth } from './auth-context';
 import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt } from './types';
@@ -781,7 +781,7 @@ export function CoursePlayerPage() {
     setCommentPostedNotice(null);
     setFeedbackError(null);
     try {
-      await api.post<{ comment: LessonComment; total: number }>(
+      const response = await api.post<{ comment: LessonComment; total: number }>(
         `/api/lessons/${requestedLessonId}/comments`, { body: submittedDraft },
       );
       setCommentDrafts((current) => {
@@ -796,7 +796,15 @@ export function CoursePlayerPage() {
         commentPageControllerRef.current?.abort();
         commentPageControllerRef.current = null;
         setCommentsLoading(false);
-        setFeedbackRefreshVersion((version) => version + 1);
+        if (feedback?.lessonId === requestedLessonId) {
+          setFeedback((current) => current?.lessonId === requestedLessonId ? {
+            ...current,
+            comments: addLessonCommentToPage(current.comments, response.comment, current.pageSize),
+            total: response.total,
+          } : current);
+        } else {
+          setFeedbackRefreshVersion((version) => version + 1);
+        }
       }
     } catch (cause) {
       if (routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) {
