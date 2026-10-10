@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Activity, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, Filter, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload, UsersRound } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, Filter, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload, UsersRound } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
@@ -1814,6 +1814,12 @@ export function AdminSettingsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
+  const [resetState, setResetState] = useState<{ pending: boolean; phase?: 'preparing' | 'ready'; confirmationId?: string; backupLocation?: string; expiresAt?: number }>({ pending: false });
+  const [resetPhrase, setResetPhrase] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetStatusLoaded, setResetStatusLoaded] = useState(false);
   useEffect(() => { setName(platformName); setIcon(platformIcon); setIconEdited(false); setPalette(themePalette); setProtocol(connectionProtocol); setAllowRegistration(registrationEnabled); setUserLimitValue(String(userLimit)); }, [platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, userLimit]);
   useEffect(() => {
     let active = true;
@@ -1831,6 +1837,14 @@ export function AdminSettingsPage() {
       if (registeredUserCountControllerRef.current === controller) registeredUserCountControllerRef.current = null;
     };
   }, [registeredUserCountRetryVersion]);
+  useEffect(() => {
+    let active = true;
+    api.get<{ pending: boolean; phase?: 'preparing' | 'ready'; confirmationId?: string; backupLocation?: string; expiresAt?: number }>('/api/admin/platform-reset')
+      .then((result) => { if (active) setResetState(result); })
+      .catch((cause) => { if (active) setResetError(cause instanceof ApiError ? cause.message : 'Reset status could not be loaded.'); })
+      .finally(() => { if (active) setResetStatusLoaded(true); });
+    return () => { active = false; };
+  }, []);
   useEffect(() => {
     document.documentElement.dataset.palette = palette;
     return () => { document.documentElement.dataset.palette = themePalette; };
@@ -1863,6 +1877,38 @@ export function AdminSettingsPage() {
     } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Settings could not be saved.'); }
     finally { setSaving(false); }
   }
+  async function prepareReset() {
+    setResetError(''); setResetSuccess(''); setResetBusy(true);
+    try {
+      const result = await api.post<typeof resetState>('/api/admin/platform-reset/prepare');
+      setResetState(result); setResetPhrase('');
+    } catch (cause) { setResetError(cause instanceof ApiError ? cause.message : 'A backup could not be created, so nothing was reset.'); }
+    finally { setResetBusy(false); }
+  }
+  async function cancelReset() {
+    if (!resetState.confirmationId) return;
+    setResetError(''); setResetBusy(true);
+    try {
+      await api.post('/api/admin/platform-reset/cancel', { confirmationId: resetState.confirmationId });
+      setResetState({ pending: false }); setResetPhrase('');
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'platform_reset_confirmation_invalid') { setResetState({ pending: false }); setResetPhrase(''); }
+      setResetError(cause instanceof ApiError ? cause.message : 'The pending reset could not be canceled.');
+    }
+    finally { setResetBusy(false); }
+  }
+  async function confirmReset() {
+    if (!resetState.confirmationId || resetPhrase !== 'RESET') return;
+    setResetError(''); setResetBusy(true);
+    try {
+      await api.post('/api/admin/platform-reset/confirm', { confirmationId: resetState.confirmationId, confirmationPhrase: resetPhrase });
+      setResetSuccess('The platform has been reset. Redirecting you to sign in…');
+      window.setTimeout(() => window.location.assign('/login'), 900);
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'platform_reset_confirmation_invalid') { setResetState({ pending: false }); setResetPhrase(''); }
+      setResetError(cause instanceof ApiError ? cause.message : 'The platform could not be reset. Your backup remains available.'); setResetBusy(false);
+    }
+  }
   const parsedAccountLimit = Number(userLimitValue);
   const accountLimit = Number.isFinite(parsedAccountLimit) && parsedAccountLimit > 0 ? Math.floor(parsedAccountLimit) : 0;
   const accountUsagePercent = accountLimit > 0 && registeredUserCount !== null
@@ -1894,6 +1940,26 @@ export function AdminSettingsPage() {
       <div className="settings-card-footer"><span>Database and media paths remain managed through the server environment.</span><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</Button></div>
       </fieldset>
     </form>
+    <section className="platform-reset-card" aria-labelledby="platform-reset-heading">
+      <div className="platform-reset-heading"><span className="platform-reset-icon"><AlertTriangle size={19} aria-hidden="true" /></span><div><h2 id="platform-reset-heading">Reset platform</h2><p>Remove learning content and account data, then restore platform settings to their defaults.</p></div></div>
+      <div className="platform-reset-content">
+        {resetError && <Notice>{resetError}</Notice>}
+        {resetSuccess && <Notice kind="success">{resetSuccess}</Notice>}
+        {!resetState.pending && <>
+          <p>This keeps your administrator account and the audit and system logs. Courses, course media, learner accounts, progress, certificates, paths, competencies, and custom registration fields will be removed.</p>
+          <p>A full database and course-media backup will be created and verified before the final confirmation appears. The backup is retained under the server data directory.</p>
+          <Button type="button" variant="danger" onClick={prepareReset} disabled={resetBusy || !resetStatusLoaded}>{resetBusy ? 'Preparing backup…' : 'Create backup and begin reset'}</Button>
+        </>}
+        {resetState.pending && resetState.phase === 'preparing' && <div className="platform-reset-pending" role="status" aria-live="polite"><strong>{resetState.confirmationId ? 'Creating and verifying your backup…' : 'Another administrator is creating and verifying a backup…'}</strong><span>Platform requests are paused until the administrator confirms or preparation ends.</span></div>}
+        {resetState.pending && resetState.phase === 'ready' && resetState.confirmationId && <div className="platform-reset-confirmation">
+          <div className="platform-reset-backup"><strong>Verified backup</strong><code>{resetState.backupLocation}</code><span>This backup will remain available even if you cancel the reset.</span></div>
+          <label htmlFor="platform-reset-phrase">Type RESET to confirm<input id="platform-reset-phrase" autoComplete="off" value={resetPhrase} onChange={(event) => setResetPhrase(event.target.value)} disabled={resetBusy} /></label>
+          {resetState.expiresAt && <small>This confirmation expires at {new Date(resetState.expiresAt).toLocaleTimeString()}.</small>}
+          <div className="platform-reset-actions"><Button type="button" variant="secondary" onClick={cancelReset} disabled={resetBusy}>{resetBusy ? 'Please wait…' : 'Cancel reset'}</Button><Button type="button" variant="danger" onClick={confirmReset} disabled={resetBusy || resetPhrase !== 'RESET'}>{resetBusy ? 'Resetting…' : 'Reset platform'}</Button></div>
+        </div>}
+        {resetState.pending && !resetState.confirmationId && resetState.phase !== 'preparing' && <div className="platform-reset-pending" role="status"><strong>Another administrator is preparing a platform reset.</strong><span>Platform requests are temporarily paused.</span></div>}
+      </div>
+    </section>
   </div>;
 }
 
