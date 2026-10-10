@@ -403,13 +403,18 @@ test('course detail reuses its published version in the progress summary', async
       VALUES ('${courseId}-lesson', '${courseId}-module', 'Lesson', 0);
     INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
       VALUES ('${courseId}-version', '${courseId}', '${storageCourseId}', 1, 'admin-1');
+    INSERT INTO lesson_progress (user_id, lesson_id, completed_at)
+      VALUES ('learner-active', '${courseId}-lesson', '2026-10-10 12:00:00');
   `);
 
   const originalPrepare = database.prepare;
   let summaryVersionQueryCount = 0;
+  const preparedSql = [];
   try {
     database.prepare = (sql) => {
-      if (sql.includes('SELECT v.course_id, v.id, v.storage_course_id, v.version_number')) summaryVersionQueryCount += 1;
+      const normalizedSql = sql.replace(/\s+/g, ' ').trim();
+      preparedSql.push(normalizedSql);
+      if (normalizedSql.includes('SELECT v.course_id, v.id, v.storage_course_id, v.version_number')) summaryVersionQueryCount += 1;
       return originalPrepare.call(database, sql);
     };
 
@@ -417,10 +422,22 @@ test('course detail reuses its published version in the progress summary', async
     assert.equal(response.status, 200);
     const { course } = await response.json();
     assert.equal(course.versionNumber, 1);
+    assert.equal(course.completedLessons, 1);
+    assert.equal(course.progress, 100);
     assert.equal(course.modules[0].lessons[0].id, `${courseId}-lesson`);
+    assert.equal(course.modules[0].lessons[0].completed, true);
     assert.equal(summaryVersionQueryCount, 0, 'expected the preloaded version to serve the progress summary');
+    const duplicateProgressQueries = preparedSql.filter((sql) => [
+      'SELECT l.id, COALESCE(l.stable_id, l.id) AS stable_id FROM lessons l JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?',
+      'SELECT q.id, COALESCE(q.stable_id, q.id) AS stable_id FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?',
+      'SELECT target_version_id FROM course_learning_state WHERE user_id = ? AND course_id = ?',
+      'SELECT l.id, COALESCE(l.stable_id, l.id) AS stable_id FROM lesson_progress p',
+      'SELECT DISTINCT q.id, COALESCE(q.stable_id, q.id) AS stable_id FROM quiz_attempts a',
+    ].some((prefix) => sql.startsWith(prefix)));
+    assert.deepEqual(duplicateProgressQueries, [], 'expected the summary progress reads to be reused for course detail state');
   } finally {
     database.prepare = originalPrepare;
+    database.prepare('DELETE FROM lesson_progress WHERE lesson_id = ?').run(`${courseId}-lesson`);
     database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
   }
 });
