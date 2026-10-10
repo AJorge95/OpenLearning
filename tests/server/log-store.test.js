@@ -148,3 +148,34 @@ test('audit retention recounts after the caller transaction rolls back a write',
     { count: 10_000, oldestId: oldestSeedId + 1, newestId: recoveredId },
   );
 });
+
+test('reuses prepared insert statements for repeated audit and system log writes', () => {
+  const originalPrepare = database.prepare;
+  let auditInsertPreparations = 0;
+  let systemInsertPreparations = 0;
+  database.prepare = (sql) => {
+    const normalized = sql.replace(/\s+/g, ' ').trim();
+    if (normalized.startsWith('INSERT INTO audit_logs')) auditInsertPreparations += 1;
+    if (normalized.startsWith('INSERT INTO system_logs')) systemInsertPreparations += 1;
+    return originalPrepare.call(database, sql);
+  };
+  let auditIds;
+  let systemIds;
+  try {
+    auditIds = [
+      logStore.writeAuditLog({ action: 'test.cached_one', entityType: 'test', summary: 'Cached audit one' }),
+      logStore.writeAuditLog({ action: 'test.cached_two', entityType: 'test', summary: 'Cached audit two' }),
+    ];
+    systemIds = [
+      logStore.writeSystemLog('info', 'test', 'Cached system one'),
+      logStore.writeSystemLog('info', 'test', 'Cached system two'),
+    ];
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.ok(auditIds.every(Number.isFinite));
+  assert.ok(systemIds.every(Number.isFinite));
+  assert.equal(auditInsertPreparations, 0);
+  assert.equal(systemInsertPreparations, 0);
+});

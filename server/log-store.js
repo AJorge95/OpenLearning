@@ -4,6 +4,11 @@ const maxAuditRows = 10_000;
 const maxSystemRows = 5_000;
 const auditRetention = { table: 'audit_logs', maximum: maxAuditRows, count: null, trimStatement: null };
 const systemRetention = { table: 'system_logs', maximum: maxSystemRows, count: null, trimStatement: null };
+const auditInsertStatement = db.prepare(`INSERT INTO audit_logs
+      (actor_user_id, actor_username, action, entity_type, entity_id, summary, details_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`);
+const systemInsertStatement = db.prepare(`INSERT INTO system_logs (level, source, message, details_json)
+      VALUES (?, ?, ?, ?)`);
 const credentialAssignmentPattern = /((?:"|')?(?:password|secret|token|cookie|session|authorization|api[_-]?key|private[_-]?key)(?:"|')?\s*[=:]\s*)(?:(?:Bearer|Basic)\s+)?("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;]+)/gi;
 
 function insertRetainedRow(retention, insert) {
@@ -62,9 +67,7 @@ function safeDetails(value, redactCredentialValues = false) {
 
 export function writeAuditLog({ actor = null, action, entityType, entityId = null, summary, details = {} }) {
   try {
-    const result = insertRetainedRow(auditRetention, () => db.prepare(`INSERT INTO audit_logs
-      (actor_user_id, actor_username, action, entity_type, entity_id, summary, details_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    const result = insertRetainedRow(auditRetention, () => auditInsertStatement
       .run(actor?.id || null, String(actor?.username || 'System').slice(0, 80), String(action).slice(0, 80),
         String(entityType).slice(0, 80), entityId === null ? null : String(entityId).slice(0, 120),
         String(summary).slice(0, 500), safeDetails(details)));
@@ -78,8 +81,7 @@ export function writeAuditLog({ actor = null, action, entityType, entityId = nul
 export function writeSystemLog(level, source, message, details = {}) {
   try {
     const safeMessage = redactCredentialText(message);
-    const result = insertRetainedRow(systemRetention, () => db.prepare(`INSERT INTO system_logs (level, source, message, details_json)
-      VALUES (?, ?, ?, ?)`)
+    const result = insertRetainedRow(systemRetention, () => systemInsertStatement
       .run(['info', 'warn', 'error'].includes(level) ? level : 'info', String(source).slice(0, 80),
         safeMessage.slice(0, 1000), safeDetails(details, true)));
     return Number(result.lastInsertRowid);
