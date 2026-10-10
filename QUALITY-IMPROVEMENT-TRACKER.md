@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Invalidate in-flight CSRF refreshes across auth changes
+
+- **Reviewed:** The API client’s shared CSRF refresh promise and the auth provider’s token clearing after sign-in, sign-up, setup, and sign-out.
+- **Improvement:** Give CSRF state a generation. Clearing it now also detaches the in-flight refresh, and a response from an older generation waits for the current token instead of caching or returning its stale value. Add a deferred-response regression that failed before the change.
+- **Why it helps:** Writes and retried uploads that overlap a session transition no longer receive a token from the previous session and spend their retry budget on a known-stale credential.
+- **Interface review:** No rendered controls changed. Existing auth forms retain their current loading, error, and retry behavior.
+- **Checked:** The new regression failed before the fix and passed afterward. Full `npm test` passed all 201 tests; `npx tsc --noEmit`, `npm run build`, `node --check src/api.test.js`, and `git diff --check` passed.
+
 ## 2026-10-10 — Align custom registration date boundaries
 
 - **Reviewed:** The browser’s native date-input range against server-side calendar-date validation for custom registration fields.
