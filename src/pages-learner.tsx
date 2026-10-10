@@ -7,6 +7,7 @@ import { formatCountLabel } from './count-label';
 import { nextCourseActivity, nextCourseActivityAfterLesson } from './course-navigation';
 import { summarizeCourseProgress } from './course-progress';
 import { getNewLessonComments } from './lesson-comments';
+import { tryEnterFullscreen } from './video-fullscreen';
 import { useAuth } from './auth-context';
 import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt } from './types';
 
@@ -490,6 +491,7 @@ export function CoursePlayerPage() {
   const [saving, setSaving] = useState(false);
   const [railOpen, setRailOpen] = useState(true);
   const [videoError, setVideoError] = useState(false);
+  const [fullscreenError, setFullscreenError] = useState('');
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [videoMuted, setVideoMuted] = useState(false);
   const [videoVolume, setVideoVolume] = useState(1);
@@ -571,7 +573,7 @@ export function CoursePlayerPage() {
       courseRequestControllerRef.current = null;
     };
   }, [courseId, courseLoadRetryVersion]);
-  useEffect(() => { setVideoError(false); }, [courseId, lessonId]);
+  useEffect(() => { setVideoError(false); setFullscreenError(''); }, [courseId, lessonId]);
   useEffect(() => {
     const requestSequence = ++feedbackSequenceRef.current;
     const controller = new AbortController();
@@ -998,6 +1000,16 @@ export function CoursePlayerPage() {
     setVideoVolume(volume);
   }
 
+  async function enterVideoFullscreen() {
+    const requestedCourseId = courseId;
+    const requestedLessonId = lessonId;
+    setFullscreenError('');
+    const result = await tryEnterFullscreen(videoRef.current);
+    if (routeCourseIdRef.current !== requestedCourseId || routeLessonIdRef.current !== requestedLessonId) return;
+    if (result === 'unsupported') setFullscreenError('Full-screen video is not supported by this browser.');
+    else if (result === 'failed') setFullscreenError('The browser could not open full screen. Try again.');
+  }
+
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading lesson…</div>;
   if (!course || !current) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
   if (watchRequired && current.locked) {
@@ -1043,10 +1055,11 @@ export function CoursePlayerPage() {
         <div className="video-watch-progress" role="progressbar" aria-label="Video watched; seeking is disabled" aria-valuemin={0} aria-valuemax={Math.max(1, videoDuration)} aria-valuenow={Math.min(videoPosition, videoDuration)}><span style={{ width: `${videoDuration ? Math.min(100, videoPosition / videoDuration * 100) : 0}%` }} /></div>
         <button className="video-control-button" type="button" aria-label={videoMuted ? 'Unmute video' : 'Mute video'} aria-pressed={videoMuted} onClick={() => updateVolume(videoMuted ? videoVolume || 1 : 0)}>{videoMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
         <input className="video-volume-control" type="range" min="0" max="1" step="0.05" value={videoMuted ? 0 : videoVolume} aria-label="Video volume" onChange={(event) => updateVolume(Number(event.target.value))} />
-        <button className="video-control-button" type="button" aria-label="Enter full screen" onClick={() => { void videoRef.current?.requestFullscreen?.(); }}><Maximize size={17} /></button>
+        <button className="video-control-button" type="button" aria-label="Enter full screen" onClick={() => { void enterVideoFullscreen(); }}><Maximize size={17} /></button>
       </div>}
       {watchRequired && current.hasVideo && <p className={`video-watch-guidance ${watchedForCurrent ? 'is-watched' : ''}`} role="status" aria-live="polite">{!watchReadyForCurrent ? 'Preparing lesson playback…' : watchedForCurrent ? 'Full video watched. Mark this lesson complete to continue.' : 'Watch the full video to unlock lesson completion. Manual seeking and speed changes are disabled.'}</p>}
       {videoError && <div className="player-video-error" role="alert"><p>The video could not be loaded. Retry, or contact your course administrator if it still will not play.</p><Button type="button" variant="secondary" onClick={retryVideo}>Retry video</Button></div>}
+      {fullscreenError && <div className="player-video-error" role="alert">{fullscreenError}</div>}
       {watchError && <div className="player-video-error" role="alert">{watchError}</div>}
       <div className="player-controls-row">
         <button className="button button-secondary" type="button" disabled={!previous} onClick={() => previous && navigate(`/courses/${course.id}/learn/${previous.id}`)}><ArrowLeft size={17} />Previous lesson</button>

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Explain when learner video cannot enter full screen
+
+- **Reviewed:** The learner video’s fullscreen control, browser API failure behavior, route-change state cleanup, and existing player error styling.
+- **Improvement:** Handle unsupported and rejected fullscreen requests, show a concise accessible alert, and add focused coverage for successful, unsupported, and failed requests.
+- **Why it helps:** Learners now get an explanation when the browser cannot open full screen instead of a silent no-op or unhandled rejection.
+- **Backend review:** This is a browser playback interaction; the existing course and watch-progress APIs do not need a change.
+- **Checked:** The focused fullscreen helper tests passed (3/3); full `npm test` passed all 209 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. In the local signed-in lesson player, the fullscreen control ran without an error alert; the in-app browser did not expose a fullscreen element, so native fullscreen entry is not claimed as verified.
+
 ## 2026-10-10 — Protect structured request-body error responses
 
 - **Reviewed:** Express JSON parsing and error mapping, the production 1 MB body limit, the shared client `ApiError` parser, and form-level error display.
@@ -1357,7 +1365,7 @@
 - **Reviewed:** The reported account-details screenshot shows a wrapping `<label>` wider than its role selector. Current source uses a non-label control group capped to 240px on desktop, with a full-width mobile override.
 - **Result:** No duplicate code change. The adjacent-click fix and its desktop/mobile interaction check are already recorded in “Keep adjacent clicks outside the role selector” below.
 - **Why no change:** Reintroducing a wide label or wrapper would restore the click-through area; changing the selector width again would duplicate the existing constraint.
-- **Checked:** The new screenshot’s target path still names a `<label>`, while both the current source and served Vite module render a non-interactive `div.account-role-control`; the role control and selector are capped at 240px on desktop and full-width on mobile. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The active browser session is at `/login`, so I could not retest this signed-in page live. Reload the admin tab to load the current markup; the existing interaction check records adjacent clicks leaving the menu closed, trigger clicks opening it, and Escape closing it.
+- **Checked:** The supplied screenshot’s target path names a `<label>`, while current source and the served Vite module render a `div.account-role-control`. On 2026-10-10, the signed-in local admin route at 1999×1244 showed a 152px role group and trigger with no wrapping label. Opening the menu, then clicking 6px to the right in the 13px gap before the account button, closed it (`aria-expanded=false`; no menu remained). The screenshot path therefore reflects stale markup; no further width change is warranted. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
 
 ## 2026-10-09 — Document account and registration behavior
 
