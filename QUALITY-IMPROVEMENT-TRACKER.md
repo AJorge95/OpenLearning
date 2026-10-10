@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Skip setup work for pre-cancelled uploads
+
+- **Reviewed:** The shared XHR upload helper’s abort signal, multipart body construction, CSRF token refresh, upload call sites, and existing editor cancellation/error handling.
+- **Improvement:** Reject an upload whose abort signal is already cancelled before constructing `FormData` or fetching a CSRF token. Add a regression that confirms no form body, token request, or XHR is started.
+- **Why it helps:** Leaving a page or cancelling before an upload begins no longer triggers avoidable setup requests or retains the selected file in a new multipart body.
+- **Interface review:** Existing upload controls already connect their cancellation state to `AbortController`; no markup or visual changes were needed.
+- **Checked:** All 4 API-client tests passed; full `npm test` passed all 197 tests; `npx tsc --noEmit`, `npm run build`, `node --check src/api.test.js`, and `git diff --check` passed.
+
 ## 2026-10-10 — Recheck overlapping authentication refreshes
 
 - **Reviewed:** Auth-provider startup and retry sequencing, overlapping `refresh()` calls, auth-state revision guards around sign-in/setup/sign-out, the startup error/retry screen, and existing auth/session tracker decisions.
