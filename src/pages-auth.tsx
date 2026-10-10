@@ -55,6 +55,8 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
           type={field.type === 'date' ? 'date' : 'text'}
           required={field.required}
           maxLength={field.type === 'text' ? 2000 : undefined}
+          min={field.type === 'date' ? '0001-01-01' : undefined}
+          max={field.type === 'date' ? '9999-12-31' : undefined}
           value={typeof values[field.id] === 'string' ? values[field.id] as string : ''}
           aria-invalid={invalidFieldId === field.id || undefined}
           aria-describedby={invalidFieldId === field.id ? 'registration-form-error' : undefined}
