@@ -512,7 +512,6 @@ export function CoursePlayerPage() {
   const commentSavingLessonIdsRef = useRef(new Set<string>());
   const [commentsLoading, setCommentsLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const watchedUntilRef = useRef(0);
   const playbackPositionRef = useRef(0);
   const watchStartedLessonRef = useRef<string | null>(null);
   const videoStartPromiseRef = useRef<Promise<void> | null>(null);
@@ -614,7 +613,9 @@ export function CoursePlayerPage() {
   const current = lessons[currentIndex];
   const previous = currentIndex > 0 ? lessons[currentIndex - 1] : null;
   const nextActivityAfterCurrent = current ? nextCourseActivityAfterLesson(modules, current.id) : null;
-  const watchRequired = user?.role === 'learner';
+  // Every authenticated viewer of the learning player must use verified
+  // playback. Staff can still edit course media in the management interface.
+  const watchRequired = Boolean(current?.hasVideo);
   const watchReadyForCurrent = watchProgress.lessonId === lessonId && watchProgress.ready;
   const watchedForCurrent = watchProgress.lessonId === lessonId && watchProgress.complete;
   const lessonCanBeCompleted = !watchRequired || current?.completed || watchedForCurrent;
@@ -631,7 +632,6 @@ export function CoursePlayerPage() {
     videoStartPromiseRef.current = null;
     watchStartedLessonRef.current = null;
     lastProgressReportAtRef.current = 0;
-    watchedUntilRef.current = 0;
     playbackPositionRef.current = 0;
     setWatchError('');
     setVideoPlaying(false);
@@ -657,7 +657,6 @@ export function CoursePlayerPage() {
       .then((result) => {
         if (controller.signal.aborted || routeLessonIdRef.current !== requestedLessonId) return;
         const resumeAt = result.complete ? 0 : result.watchedUntilSeconds;
-        watchedUntilRef.current = result.watchedUntilSeconds;
         playbackPositionRef.current = resumeAt;
         setVideoPosition(resumeAt);
         setWatchProgress({ lessonId: requestedLessonId, ready: true, required: result.required, started: false,
@@ -674,6 +673,15 @@ export function CoursePlayerPage() {
       if (watchRequestControllerRef.current === controller) watchRequestControllerRef.current = null;
     };
   }, [courseId, lessonId, watchRequired, current?.locked, current?.completed]);
+
+  useEffect(() => {
+    if (!watchRequired) return;
+    const pauseWhenHidden = () => {
+      if (document.visibilityState === 'hidden') videoRef.current?.pause();
+    };
+    document.addEventListener('visibilitychange', pauseWhenHidden);
+    return () => document.removeEventListener('visibilitychange', pauseWhenHidden);
+  }, [watchRequired]);
 
   useEffect(() => {
     const routeKey = `${courseId}:${lessonId}`;
@@ -884,7 +892,6 @@ export function CoursePlayerPage() {
               `/api/lessons/${requestedLessonId}/watch-progress/start`, {},
             ).then((result) => {
               if (routeLessonIdRef.current === requestedLessonId) {
-                watchedUntilRef.current = result.watchedUntilSeconds;
                 playbackPositionRef.current = result.watchedUntilSeconds;
                 watchStartedLessonRef.current = requestedLessonId;
                 lastProgressReportAtRef.current = Date.now();
@@ -923,16 +930,17 @@ export function CoursePlayerPage() {
       setWatchProgress((previousProgress) => previousProgress.lessonId === requestedLessonId
         ? { ...previousProgress, ...result, started: true, ready: true }
         : previousProgress);
-      watchedUntilRef.current = Math.max(watchedUntilRef.current, result.watchedUntilSeconds);
-      if (!result.accepted) {
+      if (result.accepted) {
+        playbackPositionRef.current = Math.max(playbackPositionRef.current, result.watchedUntilSeconds);
+      } else {
         const videoElement = videoRef.current;
-        if (videoElement && videoElement.currentTime > result.watchedUntilSeconds) {
+        playbackPositionRef.current = result.watchedUntilSeconds;
+        if (videoElement && Math.abs(videoElement.currentTime - result.watchedUntilSeconds) > 0.15) {
           videoElement.pause();
           videoElement.currentTime = result.watchedUntilSeconds;
-          playbackPositionRef.current = result.watchedUntilSeconds;
           setVideoPosition(result.watchedUntilSeconds);
           setVideoPlaying(false);
-          setWatchError('Forward seeking is disabled. Continue from the last watched point.');
+          setWatchError('Manual seeking or accelerated playback was rejected. Continue from the last server-verified position.');
         }
       }
     }).catch((cause) => {
@@ -951,18 +959,29 @@ export function CoursePlayerPage() {
       setVideoDuration(Number.isFinite(video.duration) ? video.duration : 0);
       return;
     }
-    playbackPositionRef.current = Math.max(playbackPositionRef.current, position);
-    watchedUntilRef.current = Math.max(watchedUntilRef.current, position);
     setVideoDuration(Number.isFinite(video.duration) ? video.duration : 0);
     reportVideoProgress();
   }
 
   function guardVideoSeek(event: React.SyntheticEvent<HTMLVideoElement>) {
     const video = event.currentTarget;
-    if (!watchRequired || video.currentTime <= playbackPositionRef.current + 0.15) return;
-    video.currentTime = playbackPositionRef.current;
-    setVideoPosition(playbackPositionRef.current);
-    setWatchError('You need to watch the video in order. Forward seeking is disabled.');
+    if (!watchRequired || !watchReadyForCurrent
+      || Math.abs(video.currentTime - playbackPositionRef.current) <= 0.15) return;
+    const attemptedPosition = video.currentTime;
+    const requestedLessonId = lessonId;
+    if (watchStartedLessonRef.current === requestedLessonId) {
+      progressReportChainRef.current = progressReportChainRef.current.catch(() => undefined).then(async () => {
+        if (routeLessonIdRef.current !== requestedLessonId
+          || watchStartedLessonRef.current !== requestedLessonId) return;
+        await api.put(`/api/lessons/${requestedLessonId}/watch-progress`, { positionSeconds: attemptedPosition });
+      }).catch(() => undefined);
+    }
+    const verifiedPosition = playbackPositionRef.current;
+    video.pause();
+    video.currentTime = verifiedPosition;
+    setVideoPosition(verifiedPosition);
+    setVideoPlaying(false);
+    setWatchError('Manual seeking is disabled. Continue from the last server-verified position.');
   }
 
   function enforceNormalPlaybackRate(event: React.SyntheticEvent<HTMLVideoElement>) {
@@ -1026,7 +1045,7 @@ export function CoursePlayerPage() {
         <input className="video-volume-control" type="range" min="0" max="1" step="0.05" value={videoMuted ? 0 : videoVolume} aria-label="Video volume" onChange={(event) => updateVolume(Number(event.target.value))} />
         <button className="video-control-button" type="button" aria-label="Enter full screen" onClick={() => { void videoRef.current?.requestFullscreen?.(); }}><Maximize size={17} /></button>
       </div>}
-      {watchRequired && current.hasVideo && <p className={`video-watch-guidance ${watchedForCurrent ? 'is-watched' : ''}`} role="status" aria-live="polite">{!watchReadyForCurrent ? 'Preparing lesson playback…' : watchedForCurrent ? 'Full video watched. Mark this lesson complete to continue.' : 'Watch the full video to unlock lesson completion. Forward seeking and speed changes are disabled.'}</p>}
+      {watchRequired && current.hasVideo && <p className={`video-watch-guidance ${watchedForCurrent ? 'is-watched' : ''}`} role="status" aria-live="polite">{!watchReadyForCurrent ? 'Preparing lesson playback…' : watchedForCurrent ? 'Full video watched. Mark this lesson complete to continue.' : 'Watch the full video to unlock lesson completion. Manual seeking and speed changes are disabled.'}</p>}
       {videoError && <div className="player-video-error" role="alert"><p>The video could not be loaded. Retry, or contact your course administrator if it still will not play.</p><Button type="button" variant="secondary" onClick={retryVideo}>Retry video</Button></div>}
       {watchError && <div className="player-video-error" role="alert">{watchError}</div>}
       <div className="player-controls-row">

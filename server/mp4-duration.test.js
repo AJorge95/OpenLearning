@@ -36,6 +36,50 @@ function movieHeaderV1(timeScale, duration) {
   return makeBox('mvhd', payload);
 }
 
+function fragmentedMovieMetadata(timeScale, defaultSampleDuration = 0) {
+  const trackHeader = Buffer.alloc(24);
+  trackHeader.writeUInt32BE(1, 12);
+  const mediaHeader = Buffer.alloc(20);
+  mediaHeader.writeUInt32BE(timeScale, 12);
+  const handler = Buffer.alloc(24);
+  handler.write('vide', 8, 4, 'ascii');
+  const trackExtends = Buffer.alloc(24);
+  trackExtends.writeUInt32BE(1, 4);
+  trackExtends.writeUInt32BE(defaultSampleDuration, 12);
+
+  return makeBox('moov', Buffer.concat([
+    movieHeaderV0(timeScale, 0),
+    makeBox('trak', Buffer.concat([
+      makeBox('tkhd', trackHeader),
+      makeBox('mdia', Buffer.concat([
+        makeBox('mdhd', mediaHeader),
+        makeBox('hdlr', handler),
+      ])),
+    ])),
+    makeBox('mvex', makeBox('trex', trackExtends)),
+  ]));
+}
+
+function movieFragment(decodeStart, sampleDurations, { useDefaults = false } = {}) {
+  const trackHeader = Buffer.alloc(useDefaults ? 12 : 8);
+  if (useDefaults) trackHeader.writeUInt32BE(0x000008, 0);
+  trackHeader.writeUInt32BE(1, 4);
+  if (useDefaults) trackHeader.writeUInt32BE(sampleDurations[0], 8);
+
+  const timing = Buffer.alloc(8);
+  timing.writeUInt32BE(0, 0);
+  timing.writeUInt32BE(decodeStart, 4);
+
+  const run = Buffer.alloc(useDefaults ? 8 : 8 + sampleDurations.length * 4);
+  run.writeUInt32BE(useDefaults ? 0 : 0x000100, 0);
+  run.writeUInt32BE(sampleDurations.length, 4);
+  if (!useDefaults) sampleDurations.forEach((duration, index) => run.writeUInt32BE(duration, 8 + index * 4));
+
+  return makeBox('moof', makeBox('traf', Buffer.concat([
+    makeBox('tfhd', trackHeader), makeBox('tfdt', timing), makeBox('trun', run),
+  ])));
+}
+
 async function readFixture(name, boxes) {
   const filePath = path.join(fixtureDirectory, name);
   await fs.writeFile(filePath, Buffer.concat(boxes));
@@ -96,4 +140,43 @@ test('rejects zero-scale, unsupported, and overlong movie headers', async () => 
   assert.equal(await readFixture('zero-timescale.mp4', [makeBox('moov', movieHeaderV0(0, 5_000))]), null);
   assert.equal(await readFixture('unsupported-version.mp4', [makeBox('moov', unsupported)]), null);
   assert.equal(await readFixture('overlong.mp4', [makeBox('moov', movieHeaderV0(1, 24 * 60 * 60 + 1))]), null);
+});
+
+test('reads duration across fragmented video samples', async () => {
+  const duration = await readFixture('fragmented.mp4', [
+    makeBox('ftyp', Buffer.from('iso6')),
+    fragmentedMovieMetadata(1_000),
+    movieFragment(0, [1_000, 1_500]),
+    makeBox('mdat', Buffer.alloc(16)),
+    movieFragment(2_500, [2_500, 3_000]),
+    makeBox('mdat', Buffer.alloc(16)),
+  ]);
+
+  assert.equal(duration, 8);
+});
+
+test('uses fragmented movie default sample durations when runs omit them', async () => {
+  const duration = await readFixture('fragmented-defaults.mp4', [
+    fragmentedMovieMetadata(90_000, 45_000),
+    movieFragment(0, [45_000, 45_000], { useDefaults: true }),
+  ]);
+
+  assert.equal(duration, 1);
+});
+
+test('rejects malformed fragmented sample timing', async () => {
+  const invalidRun = Buffer.alloc(12);
+  invalidRun.writeUInt32BE(0x000100, 0);
+  invalidRun.writeUInt32BE(2, 4);
+  invalidRun.writeUInt32BE(1_000, 8);
+  const fragment = makeBox('moof', makeBox('traf', Buffer.concat([
+    makeBox('tfhd', Buffer.from([0, 0, 0, 0, 0, 0, 0, 1])),
+    makeBox('tfdt', Buffer.from([0, 0, 0, 0, 0, 0, 0, 0])),
+    makeBox('trun', invalidRun),
+  ])));
+  const duration = await readFixture('fragmented-malformed.mp4', [
+    fragmentedMovieMetadata(1_000), fragment,
+  ]);
+
+  assert.equal(duration, null);
 });

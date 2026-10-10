@@ -92,6 +92,7 @@ test('watch progress starts empty and validates the verified video duration', ()
   assert.deepEqual(lessonWatch.getLessonWatchProgress(learner, 'watch-lesson', 120), {
     required: true, watchedUntilSeconds: 0, durationSeconds: 120, complete: false,
   });
+  assert.equal(lessonWatch.getLessonWatchProgress({ id: 'preview-admin', role: 'admin' }, 'watch-lesson', 120).required, true);
 
   for (const duration of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 24 * 60 * 60 + 1]) {
     assertApiError(() => lessonWatch.beginLessonWatch(learner, 'watch-lesson', duration), 422, 'video_duration_unavailable');
@@ -140,9 +141,39 @@ test('watch progress rejects fast forward jumps and retains the watched high-wat
 
     advance(1_000);
     const movedBack = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 4);
-    assert.equal(movedBack.accepted, true);
+    assert.equal(movedBack.accepted, false);
     assert.equal(movedBack.watchedUntilSeconds, 6);
     assert.equal(lessonWatch.lessonVideoWasWatched(learner.id, 'watch-lesson'), false);
+  });
+});
+
+test('watch telemetry counts credible playback and rate-limits rejected seek alerts', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  withFakeClock(3_000_000, (advance) => {
+    lessonWatch.beginLessonWatch(learner, 'watch-lesson', 100);
+    advance(4_000);
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 4).accepted, true);
+
+    advance(1_000);
+    const firstRejectedSeek = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 2);
+    assert.equal(firstRejectedSeek.accepted, false);
+    assert.equal(firstRejectedSeek.anomaly, 'backward_seek');
+    assert.equal(firstRejectedSeek.shouldLogAnomaly, true);
+    assert.equal(firstRejectedSeek.rejectedAttemptCount, 1);
+
+    advance(1_000);
+    const throttledRejectedSeek = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 2);
+    assert.equal(throttledRejectedSeek.shouldLogAnomaly, false);
+    assert.equal(throttledRejectedSeek.rejectedAttemptCount, 2);
+
+    const telemetry = database.prepare(`SELECT watched_seconds, rejected_seek_count, last_rejected_position_seconds
+      FROM lesson_watch_telemetry WHERE user_id = ? AND lesson_id = ?`).get(learner.id, 'watch-lesson');
+    assert.deepEqual(telemetry, { watched_seconds: 4, rejected_seek_count: 2, last_rejected_position_seconds: 2 });
+
+    advance(60_000);
+    const alertAfterCooldown = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 2);
+    assert.equal(alertAfterCooldown.shouldLogAnomaly, true);
+    assert.equal(alertAfterCooldown.rejectedAttemptCount, 3);
   });
 });
 

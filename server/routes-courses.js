@@ -122,7 +122,6 @@ function requireWatchableLesson(lessonId, user) {
   if (!lesson) fail(404, 'Lesson not found.', 'not_found');
   requireCourseViewer(lesson.id, user);
   if (lesson.status !== 'published' || !lesson.media_id) fail(404, 'Lesson video is not available.', 'not_found');
-  if (user.role !== 'learner') fail(403, 'Only learners have required video progress.', 'forbidden');
   if (!isLessonUnlocked(lessonId, user)) fail(423, 'Complete the previous lesson before opening this one.', 'lesson_locked');
   return lesson;
 }
@@ -290,7 +289,7 @@ courseRouter.get('/lessons/:lessonId/watch-progress', async (req, res) => {
   if (req.currentUser.role === 'learner' && !isLessonUnlocked(lesson.lesson_id, req.currentUser)) {
     fail(423, 'Complete the previous lesson before opening this one.', 'lesson_locked');
   }
-  const duration = req.currentUser.role === 'learner' ? await verifiedVideoDuration(lesson) : 0;
+  const duration = await verifiedVideoDuration(lesson);
   res.json(getLessonWatchProgress(req.currentUser, lesson.lesson_id, duration));
 });
 
@@ -302,7 +301,32 @@ courseRouter.post('/lessons/:lessonId/watch-progress/start', async (req, res) =>
 
 courseRouter.put('/lessons/:lessonId/watch-progress', (req, res) => {
   const lesson = requireWatchableLesson(req.params.lessonId, req.currentUser);
-  res.json(recordLessonWatchProgress(req.currentUser, lesson.lesson_id, req.body?.positionSeconds));
+  const progress = recordLessonWatchProgress(req.currentUser, lesson.lesson_id, req.body?.positionSeconds);
+  if (progress.shouldLogAnomaly) {
+    writeSystemLog('warn', 'lesson-watch', 'Rejected implausible video progress', {
+      userId: req.currentUser.id,
+      username: req.currentUser.username,
+      role: req.currentUser.role,
+      courseId: lesson.id,
+      lessonId: lesson.lesson_id,
+      anomaly: progress.anomaly,
+      reportedPositionSeconds: progress.reportedPositionSeconds,
+      lastAcceptedPositionSeconds: progress.lastAcceptedPositionSeconds,
+      maximumCrediblePositionSeconds: progress.maximumCrediblePositionSeconds,
+      rejectedAttemptCount: progress.rejectedAttemptCount,
+      watchedSeconds: progress.watchedSeconds,
+      durationSeconds: progress.durationSeconds,
+    });
+  }
+  const response = { ...progress };
+  delete response.shouldLogAnomaly;
+  delete response.anomaly;
+  delete response.reportedPositionSeconds;
+  delete response.lastAcceptedPositionSeconds;
+  delete response.maximumCrediblePositionSeconds;
+  delete response.rejectedAttemptCount;
+  delete response.watchedSeconds;
+  res.json(response);
 });
 
 courseRouter.get('/manage/courses/:courseId', requireStaff, (req, res) => {
@@ -1258,7 +1282,7 @@ courseRouter.put('/lessons/:lessonId/completion', (req, res) => {
     if (req.currentUser.role === 'learner' && !isLessonUnlocked(lesson.lesson_id, req.currentUser)) {
       fail(423, 'Complete the previous lesson before opening this one.', 'lesson_locked');
     }
-    if (req.currentUser.role === 'learner' && !alreadyCompleted && !lessonVideoWasWatched(req.currentUser.id, lesson.lesson_id)) {
+    if (!alreadyCompleted && !lessonVideoWasWatched(req.currentUser.id, lesson.lesson_id)) {
       fail(409, 'Watch the full lesson video before marking it complete.', 'video_watch_required');
     }
     enrollLearner(lesson.id, req.currentUser.id);
@@ -1266,7 +1290,30 @@ courseRouter.put('/lessons/:lessonId/completion', (req, res) => {
     syncLearnerPathsForCourse(lesson.id, req.currentUser.id);
     return issueCertificateIfComplete(lesson.id, req.currentUser);
   });
-  const certificate = completeLesson.immediate();
+  let certificate;
+  try {
+    certificate = completeLesson.immediate();
+  } catch (error) {
+    if (error?.code === 'video_watch_required') {
+      const lesson = courseFromLesson(req.params.lessonId);
+      if (lesson) {
+        const watchProgress = getLessonWatchProgress(req.currentUser, lesson.lesson_id);
+        const watchedSeconds = db.prepare(`SELECT watched_seconds FROM lesson_watch_telemetry
+          WHERE user_id = ? AND lesson_id = ?`).get(req.currentUser.id, lesson.lesson_id)?.watched_seconds ?? 0;
+        writeSystemLog('warn', 'lesson-watch', 'Rejected lesson completion before verified video watch', {
+          userId: req.currentUser.id,
+          username: req.currentUser.username,
+          role: req.currentUser.role,
+          courseId: lesson.id,
+          lessonId: lesson.lesson_id,
+          watchedSeconds,
+          watchedUntilSeconds: watchProgress.watchedUntilSeconds,
+          durationSeconds: watchProgress.durationSeconds,
+        });
+      }
+    }
+    throw error;
+  }
   res.json({ completed: true, certificate });
 });
 

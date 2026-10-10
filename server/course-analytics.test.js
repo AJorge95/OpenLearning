@@ -24,6 +24,7 @@ let database;
 let server;
 let summarizeCourses;
 let editableCourse;
+let isLessonUnlocked;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -57,7 +58,7 @@ before(async () => {
   });
 
   ({ db: database } = await import('./db.js'));
-  const [{ courseRouter }, { programsRouter }, { errorHandler }, { courseSummaries }, { editableCourse: createEditableCourse }] = await Promise.all([
+  const [{ courseRouter }, { programsRouter }, { errorHandler }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse }] = await Promise.all([
     import('./routes-courses.js'),
     import('./routes-programs.js'),
     import('./http.js'),
@@ -65,6 +66,7 @@ before(async () => {
     import('./course-versioning.js'),
   ]);
   summarizeCourses = courseSummaries;
+  isLessonUnlocked = checkLessonUnlocked;
   editableCourse = createEditableCourse;
   database.exec(`
     INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES
@@ -267,6 +269,51 @@ test('analytics count each eligible learner once and report course-wide completi
   assert.equal(disabled.quizProgress[0].passed, false);
   assert.equal(disabled.lastActivityAt, '2026-10-03 12:00:00');
   assert.equal(result.learners.some((learner) => learner.id === 'learner-unassigned'), false);
+});
+
+test('lesson order is enforced for learners while course managers can preview later lessons', () => {
+  database.prepare(`INSERT INTO lessons (id, module_id, title, position)
+    VALUES ('lesson-analytics-following', 'module-analytics', 'Following lesson', 1)`).run();
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
+    VALUES ('learner-preview-check', 'learner_preview_check', 'preview-check@example.invalid', 'not-used', 'learner', 0)`).run();
+
+  try {
+    assert.equal(isLessonUnlocked('lesson-analytics-following', {
+      id: 'learner-preview-check', role: 'learner',
+    }), false);
+    assert.equal(isLessonUnlocked('lesson-analytics-following', { id: 'admin-1', role: 'admin' }), true);
+  } finally {
+    database.prepare('DELETE FROM users WHERE id = ?').run('learner-preview-check');
+    database.prepare('DELETE FROM lessons WHERE id = ?').run('lesson-analytics-following');
+  }
+});
+
+test('course managers must verify video watch before completing lessons in the player', async () => {
+  database.prepare(`INSERT INTO media_files
+    (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+    VALUES ('media-admin-watch-check', 'course-analytics', 'lesson.mp4', 'lesson.mp4', 'video/mp4', 16, 'video')`).run();
+  database.prepare('UPDATE lessons SET media_id = ? WHERE id = ?').run('media-admin-watch-check', 'lesson-analytics');
+
+  try {
+    const response = await fetch(apiUrl('/lessons/lesson-analytics/completion'), {
+      method: 'PUT', headers: userHeaders('admin-1'),
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).code, 'video_watch_required');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM lesson_progress WHERE user_id = ? AND lesson_id = ?')
+      .get('admin-1', 'lesson-analytics').count, 0);
+
+    const log = database.prepare(`SELECT details_json FROM system_logs
+      WHERE source = 'lesson-watch' AND message = 'Rejected lesson completion before verified video watch'
+      ORDER BY id DESC LIMIT 1`).get();
+    assert.equal(JSON.parse(log.details_json).role, 'admin');
+  } finally {
+    database.prepare('DELETE FROM lesson_progress WHERE user_id = ? AND lesson_id = ?').run('admin-1', 'lesson-analytics');
+    database.prepare('DELETE FROM system_logs WHERE source = ? AND message = ?')
+      .run('lesson-watch', 'Rejected lesson completion before verified video watch');
+    database.prepare('UPDATE lessons SET media_id = NULL WHERE id = ?').run('lesson-analytics');
+    database.prepare('DELETE FROM media_files WHERE id = ?').run('media-admin-watch-check');
+  }
 });
 
 test('course analytics use published version content without creating an edit revision', async () => {
