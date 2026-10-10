@@ -299,6 +299,40 @@ test('platform setting changes roll back when their required audit entry cannot 
     WHERE action = 'platform.settings_updated'`).get().count, originalAuditCount + 1);
 });
 
+test('platform settings reject truncated icons even when their first bytes match the declared image type', async () => {
+  const settingValue = (key) => database.prepare('SELECT value FROM app_settings WHERE key = ?').get(key)?.value ?? null;
+  const originalName = settingValue('platform_name');
+  const originalIcon = settingValue('platform_icon');
+  const originalVersion = settingValue('platform_icon_version');
+  const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'platform.settings_updated'`).get().count;
+  const truncatedWebp = Buffer.alloc(12);
+  truncatedWebp.write('RIFF', 0, 'ascii');
+  truncatedWebp.writeUInt32LE(4, 4);
+  truncatedWebp.write('WEBP', 8, 'ascii');
+  const malformedIcons = [
+    ['png', Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])],
+    ['jpeg', Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
+    ['webp', truncatedWebp],
+  ];
+
+  for (const [type, bytes] of malformedIcons) {
+    const response = await fetch(apiUrl('/admin/settings'), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ platformName: 'Icon validation test', platformIcon: `data:image/${type};base64,${bytes.toString('base64')}` }),
+    });
+    assert.equal(response.status, 400, type);
+    assert.equal((await response.json()).code, 'invalid_platform_icon', type);
+  }
+
+  assert.equal(settingValue('platform_name'), originalName);
+  assert.equal(settingValue('platform_icon'), originalIcon);
+  assert.equal(settingValue('platform_icon_version'), originalVersion);
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'platform.settings_updated'`).get().count, originalAuditCount);
+});
+
 test('account changes and session revocations roll back when their required audit entry cannot be written', async () => {
   database.prepare(`INSERT INTO sessions (sid, session_data, expires_at, user_id) VALUES (?, ?, ?, ?)`)
     .run('account-update-session', JSON.stringify({ userId: 'registration-fields-role-target' }), Date.now() + 60_000, 'registration-fields-role-target');

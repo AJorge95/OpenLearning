@@ -25,6 +25,9 @@ const defaultPalette = 'violet';
 const paletteIds = new Set(['violet', 'ocean', 'forest', 'rose', 'amber']);
 const maxBrandIconBytes = 512 * 1024;
 const maxUserLimit = 1_000_000;
+const brandIconPngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const brandIconJpegStart = Buffer.from([0xff, 0xd8, 0xff]);
+const brandIconJpegEnd = Buffer.from([0xff, 0xd9]);
 
 function defaultConnectionProtocol() {
   return config.nodeEnv === 'production' ? 'https' : 'http';
@@ -113,6 +116,38 @@ function parseUserLimit(value) {
   return value;
 }
 
+function platformIconBytesMatchType(type, bytes) {
+  if (type === 'png') {
+    if (bytes.length < 45
+      || !bytes.subarray(0, brandIconPngSignature.length).equals(brandIconPngSignature)
+      || bytes.readUInt32BE(8) !== 13
+      || bytes.toString('ascii', 12, 16) !== 'IHDR'
+      || bytes.readUInt32BE(16) === 0
+      || bytes.readUInt32BE(20) === 0) return false;
+    const trailer = bytes.subarray(bytes.length - 12);
+    return trailer.readUInt32BE(0) === 0 && trailer.toString('ascii', 4, 8) === 'IEND';
+  }
+  if (type === 'jpeg') {
+    return bytes.length >= 5 && bytes.subarray(0, 3).equals(brandIconJpegStart)
+      && bytes.lastIndexOf(brandIconJpegEnd) >= Math.max(0, bytes.length - 4096);
+  }
+  if (type === 'webp') {
+    if (bytes.length < 20 || bytes.toString('ascii', 0, 4) !== 'RIFF'
+      || bytes.toString('ascii', 8, 12) !== 'WEBP') return false;
+    const riffSize = bytes.readUInt32LE(4);
+    const riffEnd = riffSize + 8;
+    const firstChunkType = bytes.toString('ascii', 12, 16);
+    const firstChunkSize = bytes.readUInt32LE(16);
+    const paddedChunkSize = firstChunkSize + (firstChunkSize % 2);
+    return riffSize >= 12 && riffSize % 2 === 0 && riffEnd <= bytes.length
+      && ['VP8 ', 'VP8L', 'VP8X'].includes(firstChunkType)
+      && firstChunkSize > 0
+      && (firstChunkType !== 'VP8X' || firstChunkSize === 10)
+      && 20 + paddedChunkSize <= riffEnd;
+  }
+  return false;
+}
+
 function parsePlatformIcon(value) {
   if (value === null) return null;
   if (typeof value !== 'string' || value.length > Math.ceil(maxBrandIconBytes * 4 / 3) + 64) {
@@ -124,10 +159,9 @@ function parsePlatformIcon(value) {
   if (bytes.length === 0 || bytes.length > maxBrandIconBytes || bytes.toString('base64') !== match[2]) {
     fail(400, 'The platform icon must be a valid image no larger than 512 KB.', 'invalid_platform_icon');
   }
-  const isPng = match[1] === 'png' && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-  const isJpeg = match[1] === 'jpeg' && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes.at(-2) === 0xff && bytes.at(-1) === 0xd9;
-  const isWebp = match[1] === 'webp' && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP';
-  if (!isPng && !isJpeg && !isWebp) fail(400, 'The selected file does not match a supported image format.', 'invalid_platform_icon');
+  if (!platformIconBytesMatchType(match[1], bytes)) {
+    fail(400, 'The selected file does not match a supported image format.', 'invalid_platform_icon');
+  }
   return value;
 }
 
