@@ -186,9 +186,10 @@ test('the administrator role selector keeps clicks inside its visible trigger', 
   const styles = fs.readFileSync(path.join(sourceDirectory, 'styles.css'), 'utf8');
 
   assert.deepEqual(controls, [{ visibleLabel: 'Platform role', accessibleName: 'Platform role' }]);
+  assert.match(styles, /\.account-role-control\s*\{[^}]*flex:\s*0\s+0\s+9rem;[^}]*width:\s*9rem;/);
   assert.match(styles, /\.account-role-control\s*\{\s*pointer-events:\s*none;\s*\}/);
   assert.match(styles, /\.account-role-control\s+\.app-select-trigger\s*\{\s*pointer-events:\s*auto;\s*\}/);
-  assert.match(styles, /\.account-role-control\s*>\s*\.app-select\s*\{\s*width:\s*9rem;\s*max-width:\s*100%;\s*\}/);
+  assert.match(styles, /\.account-role-control\s*>\s*\.app-select\s*\{\s*width:\s*100%;\s*max-width:\s*100%;\s*\}/);
   assert.match(styles, /\.account-control-row \.account-role-control\s*\{\s*flex-basis:\s*auto;\s*width:\s*100%;\s*max-width:\s*none;\s*\}/);
 });
 

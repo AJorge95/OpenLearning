@@ -1,5 +1,21 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Keep the account role selector aligned with its field width
+
+- **Reviewed:** The reported admin account page, selector hit area, desktop and mobile layout, and the live DOM against the attached comment target.
+- **Improvement:** Make the selector root fill its fixed-width field instead of repeating the same `9rem` width in both places. Extend the selector regression check to require a fixed desktop field and a full-width selector root, with the existing mobile full-width override.
+- **Why it helps:** The selector button and its field share one width source, so the clickable control tracks the visible field as the layout changes. The refreshed route uses a separate field container and custom combobox; the attached screenshot’s `label` target does not match the current page structure.
+- **Interface review:** At 1280×720, the field, selector root, and trigger each measured 144px. At 390×844, each measured 311px and the document stayed within the viewport. The trigger opened the menu, Escape closed it, and hit-testing in the neighboring gap resolved to the account row rather than the selector. The account remained active and the browser console had no warnings or errors.
+- **Checked:** Focused client tests passed (6/6); full `npm test` passed all 249 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-10 — Wrap long learning-path titles and descriptions
+
+- **Reviewed:** Learning-path card heading styles and the 160-character title and long-description inputs.
+- **Improvement:** Allow titles and descriptions to wrap at any character when they contain an unbroken string.
+- **Why it helps:** Long URLs, IDs, or other unspaced text stay inside their card instead of forcing horizontal overflow at narrow widths.
+- **Interface review:** The learning-path route rendered meaningful content and the heading rule was present. No path cards exist in the current data, so long card text could not be visually instantiated.
+- **Checked:** The focused layout regression passed as part of the 249-test suite; `npm run build`, `npx tsc --noEmit`, and `git diff --check` passed.
+
 ## 2026-10-10 — Keep editor navigation available during settings integration
 
 - **Reviewed:** The uncommitted platform-reset settings integration, its server request gate and backup/rollback flow, and the existing course-editor navigation handlers.
