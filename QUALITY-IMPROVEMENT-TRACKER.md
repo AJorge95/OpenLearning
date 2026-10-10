@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse the published version in course detail summaries
+
+- **Reviewed:** Course detail assembly, which loaded the latest published version once for the summary and again for recompletion progress.
+- **Improvement:** Pass the already loaded version into the summary builder so it can skip its separate latest-version query.
+- **Why it helps:** Learner and staff course detail requests avoid one redundant database query while retaining the same version-aware progress and completion state.
+- **Interface review:** No visible change; the route still returns the current version number and its lesson content.
+- **Checked:** The focused course analytics/versioning suite passed (69/69); the detail-route regression confirms the preloaded version supplies the summary without a separate latest-version query. Full `npm test` passed all 260 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Load the published course row with one version lookup
 
 - **Reviewed:** The course payload path that selects the latest published version and then fetches its stored course row.

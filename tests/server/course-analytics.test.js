@@ -389,6 +389,42 @@ test('current published course loads the latest storage course and falls back to
   }
 });
 
+test('course detail reuses its published version in the progress summary', async () => {
+  const courseId = 'course-detail-version-reuse';
+  const storageCourseId = `${courseId}-v1`;
+  database.exec(`
+    INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+      VALUES ('${courseId}', 'Version reuse course', 'public', 'published', 'admin-1', 'admin-1');
+    INSERT INTO courses (id, title, visibility, status, created_by, updated_by, logical_course_id)
+      VALUES ('${storageCourseId}', 'Version reuse course', 'public', 'published', 'admin-1', 'admin-1', '${courseId}');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('${courseId}-module', '${storageCourseId}', 'Module', 0);
+    INSERT INTO lessons (id, module_id, title, position)
+      VALUES ('${courseId}-lesson', '${courseId}-module', 'Lesson', 0);
+    INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+      VALUES ('${courseId}-version', '${courseId}', '${storageCourseId}', 1, 'admin-1');
+  `);
+
+  const originalPrepare = database.prepare;
+  let summaryVersionQueryCount = 0;
+  try {
+    database.prepare = (sql) => {
+      if (sql.includes('SELECT v.course_id, v.id, v.storage_course_id, v.version_number')) summaryVersionQueryCount += 1;
+      return originalPrepare.call(database, sql);
+    };
+
+    const response = await fetch(apiUrl(`/courses/${courseId}`), { headers: userHeaders('learner-active') });
+    assert.equal(response.status, 200);
+    const { course } = await response.json();
+    assert.equal(course.versionNumber, 1);
+    assert.equal(course.modules[0].lessons[0].id, `${courseId}-lesson`);
+    assert.equal(summaryVersionQueryCount, 0, 'expected the preloaded version to serve the progress summary');
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('course list exposes the current review status for unpublished revisions', async () => {
   const courseId = 'course-review-list';
   try {
