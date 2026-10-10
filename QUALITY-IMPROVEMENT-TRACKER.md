@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Preserve course-delete success when media cleanup fails
+
+- **Reviewed:** Archived-course deletion transaction, post-delete media removal and system logging, the confirmation-based course-editor action, and the existing audit-failure rollback test.
+- **Improvement:** Return the deleted course ID with its media directory from the transaction and use that captured ID when recording post-commit cleanup failures.
+- **Why it helps:** A filesystem error after the course and audit record are committed no longer triggers a second `ReferenceError` while logging, so staff receive a successful deletion response and operators retain the cleanup failure details.
+- **Interface review:** The destructive action has a clear irreversible warning, a confirmation prompt, a pending label, and an `aria-busy` state; no separate UI change was warranted.
+- **Checked:** Both focused course-deletion cases passed. The regression forces media-directory removal to fail and verifies the route returns `204`, the course stays deleted, and the system log contains the course ID and filesystem error details. Full `npm test` passed all 167 cases; `npx tsc --noEmit`, `npm run build`, `node --check server/routes-courses.js`, and `git diff --check` passed.
+
 ## 2026-10-10 — Skip no-op registration-form saves
 
 - **Reviewed:** Registration-field normalization, recovery from invalid stored configuration, audit rollback behavior, and the settings editor's labels, validation descriptions, focus handling, and mobile layout.

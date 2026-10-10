@@ -616,14 +616,14 @@ courseRouter.delete('/manage/courses/:courseId', requireStaff, async (req, res) 
     const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.deleted', entityType: 'course', entityId: course.id,
       summary: `Permanently deleted course: ${course.title}` });
     if (!auditId) fail(500, 'Course could not be deleted because the audit log is unavailable.', 'audit_unavailable');
-    return directory;
+    return { courseId: course.id, directory };
   });
-  const directory = deleteCourse.immediate();
+  const { courseId, directory } = deleteCourse.immediate();
   try {
     await fs.promises.rm(directory, { recursive: true, force: true });
   } catch (error) {
     writeSystemLog('error', 'media', 'Course records were deleted but media cleanup failed', {
-      courseId: course.id,
+      courseId,
       errorName: String(error?.name || 'Error').slice(0, 100),
       errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
     });

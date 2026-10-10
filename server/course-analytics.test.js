@@ -1917,6 +1917,37 @@ test('course deletion preserves records and media when its audit entry cannot be
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.deleted' AND entity_id = 'course-delete-audit'").get().count, 1);
 });
 
+test('course deletion logs media cleanup failures without reporting the committed delete as failed', async () => {
+  const courseId = 'course-delete-cleanup-failure';
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Archived cleanup failure course', 'archived', 'admin-1', 'admin-1')`).run(courseId);
+  const originalRemove = fs.promises.rm;
+  fs.promises.rm = async (target, options) => {
+    if (target === path.join(fixtureDirectory, 'course-media', courseId)) {
+      const error = new Error('media directory could not be removed');
+      error.code = 'EACCES';
+      throw error;
+    }
+    return originalRemove(target, options);
+  };
+
+  try {
+    const response = await fetch(apiUrl(`/manage/courses/${courseId}`), {
+      method: 'DELETE',
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(response.status, 204);
+    assert.equal(database.prepare('SELECT id FROM courses WHERE id = ?').get(courseId), undefined);
+    const log = database.prepare(`SELECT level, source, message, details_json FROM system_logs
+      WHERE message = 'Course records were deleted but media cleanup failed' ORDER BY id DESC LIMIT 1`).get();
+    assert.equal(log.level, 'error');
+    assert.equal(log.source, 'media');
+    assert.deepEqual(JSON.parse(log.details_json), { courseId, errorName: 'Error', errorCode: 'EACCES' });
+  } finally {
+    fs.promises.rm = originalRemove;
+  }
+});
+
 test('module deletion preserves its content and files when its audit entry cannot be saved', async () => {
   database.exec(`
     INSERT INTO courses (id, title, status, created_by, updated_by)
