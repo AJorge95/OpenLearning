@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Recheck admin select hit area and media uploads
+
+- **Reviewed:** The account-details role select structure and pointer target, the screenshot's older label selector, media upload signature validation and temporary-file cleanup, and replacement behavior when audit writes fail.
+- **Result:** No code change. The current role control uses a non-label wrapper and limits pointer events to the select trigger. Upload routes already reject invalid file signatures, remove rejected temporary files, and preserve prior media when the replacement audit fails.
+- **Why no change:** The current source and existing regressions cover the reported click-boundary issue and the reviewed upload failure paths; a duplicate fix would not improve behavior.
+- **Checked:** `node --test src/app-select-navigation.test.js src/app-select-position.test.js src/app-select-label.test.js server/media-routes.test.js` passed all 20 tests. A fresh rendered browser check was unavailable: no browser tab was exposed, the Browser plugin is not installed in this session, and Playwright is not a project dependency. The supplied selector points to the older label markup.
+
 ## 2026-10-10 — Bound MP4 metadata scanning work
 
 - **Reviewed:** The 2 GiB configurable media-upload limit, the learner watch-progress and playback-start routes, the uncached-duration parser path, the fragmented MP4 top-level box loop, and the existing admin role-select hit-area fix.
