@@ -165,15 +165,28 @@ function completedForPath(courseId, userId, completionCache) {
     const resetRequired = Boolean(version && state?.target_version_id === version.id);
     const lessons = db.prepare(`SELECT l.id, l.stable_id FROM lessons l JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?`).all(contentId);
     const quizzes = db.prepare(`SELECT q.id, q.stable_id FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?`).all(contentId);
-    const lessonDone = db.prepare(`SELECT 1 FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id
-      WHERE p.user_id = ? AND (? = l.id OR (? = 0 AND l.stable_id = ?)) LIMIT 1`);
     if (!lessons.length && !quizzes.length) return false;
-    for (const lesson of lessons) if (!lessonDone.get(userId, lesson.id, resetRequired ? 1 : 0, lesson.stable_id)) return false;
-    const quizDone = db.prepare(`SELECT 1 FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-      JOIN course_modules m ON m.id = q.module_id WHERE a.user_id = ? AND a.passed = 1
-        AND (? = q.id OR (? = 0 AND q.stable_id = ?)) LIMIT 1`);
-    for (const quiz of quizzes) if (!quizDone.get(userId, quiz.id, resetRequired ? 1 : 0, quiz.stable_id)) return false;
-    return true;
+    const lessonHistory = db.prepare(`SELECT l.id, l.stable_id FROM lesson_progress p
+      JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id
+      JOIN courses c ON c.id = m.course_id
+      WHERE p.user_id = ? AND (c.id = ? OR c.logical_course_id = ?)`)
+      .all(userId, courseId, courseId);
+    const quizHistory = db.prepare(`SELECT DISTINCT q.id, q.stable_id FROM quiz_attempts a
+      JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id
+      JOIN courses c ON c.id = m.course_id
+      WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)`)
+      .all(userId, courseId, courseId);
+    const completedLessonIds = new Set(lessonHistory.map((lesson) => lesson.id));
+    const completedLessonStableIds = new Set(lessonHistory.map((lesson) => lesson.stable_id));
+    const passedQuizIds = new Set(quizHistory.map((quiz) => quiz.id));
+    const passedQuizStableIds = new Set(quizHistory.map((quiz) => quiz.stable_id));
+    const hasCompletedLesson = (lesson) => resetRequired
+      ? completedLessonIds.has(lesson.id)
+      : completedLessonStableIds.has(lesson.stable_id);
+    const hasPassedQuiz = (quiz) => resetRequired
+      ? passedQuizIds.has(quiz.id)
+      : passedQuizStableIds.has(quiz.stable_id);
+    return lessons.every(hasCompletedLesson) && quizzes.every(hasPassedQuiz);
   });
 }
 
