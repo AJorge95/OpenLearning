@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Name competency status actions
+
+- **Reviewed:** Competency Map rows, their status toggle actions, nearby labels, and the responsive row layout.
+- **Improvement:** Give each toggle an accessible name that includes the competency and intended action; while saving, announce the competency being updated.
+- **Why it helps:** Screen-reader users can distinguish repeated “Deactivate” and “Reactivate” controls when moving through the page’s button list, and receive useful context during the pending state.
+- **Interface review:** Visible button text and existing desktop/mobile layout remain unchanged; the control’s accessible name carries the row context.
+- **Checked:** The focused accessibility test passed; full `npm test` passed all 238 tests; `npm run build` and `git diff --check` passed. `npx tsc --noEmit` still reports TS18047 in the separately edited `src/components.tsx:430`. Rendered browser interaction was not checked because Browser is unavailable and Playwright is not installed in this repository.
+
 ## 2026-10-10 — Explain password requirements in the user-list reset dialog
 
 - **Reviewed:** Administrator password-reset entry points, password length validation, and existing accessible guidance in account creation and account details.
