@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Recheck the reported account-role selector boundary
+
+- **Reviewed:** The reported admin account page, its custom role selector’s trigger and wrapper widths, and the actual pointer target beside the control.
+- **Result:** The existing selector trigger measures 144×44 px. The wrapper ignores pointer events outside the trigger, so adjacent whitespace is not part of the clickable control.
+- **Why it helps:** Only the visible role selector opens its option list; nearby space cannot trigger it accidentally.
+- **Interface review:** At 1280×720, clicking 3 px to the right hit the account-control row and left the menu closed. Clicking the trigger opened the role options, and clicking the same outside gap closed them.
+- **Checked:** The rendered page had meaningful content, the role menu opened and closed as expected, and the browser console had no warnings or errors. No code change was needed because the reported behavior was not reproducible in the current page.
+
 ## 2026-10-10 — Disambiguate quiz editor controls for screen readers
 
 - **Reviewed:** A rendered course editor with two module quizzes, where repeated question, answer-choice, save, and removal controls shared generic accessible names.
