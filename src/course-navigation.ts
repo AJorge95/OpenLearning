@@ -1,6 +1,10 @@
-import type { CourseModule } from './types';
+import type { CourseModule, Role } from './types';
 
 export type CourseActivity = { type: 'lesson'; id: string } | { type: 'quiz'; id: string };
+
+export function shouldEnrollBeforeCourseActivity(role: Role | null | undefined): boolean {
+  return role === 'learner';
+}
 
 export function nextCourseActivityAfterLesson(modules: CourseModule[] | undefined, lessonId: string): CourseActivity | null {
   let foundCurrentLesson = false;

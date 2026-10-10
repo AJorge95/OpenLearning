@@ -261,7 +261,6 @@ courseRouter.get('/manage/courses', requireStaff, (req, res) => {
 
 courseRouter.get('/courses/:courseId', (req, res) => {
   const course = requireCourseViewer(req.params.courseId, req.currentUser);
-  if (course.status === 'published') enrollLearner(course.id, req.currentUser.id);
   res.json({ course: getCoursePayload(course, req.currentUser) });
 });
 

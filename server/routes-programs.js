@@ -190,7 +190,6 @@ programsRouter.get('/learning-paths/:pathId', (req, res) => {
   if (!path) fail(404, 'Learning path not found.', 'not_found');
   const enrollment = db.prepare('SELECT 1 FROM learning_path_enrollments WHERE path_id = ? AND user_id = ?').get(path.id, req.currentUser.id);
   if (!['admin', 'moderator'].includes(req.currentUser.role) && !enrollment && !selfEnrollmentPathIsAvailable(path.id)) fail(404, 'Learning path not found.', 'not_found');
-  if (enrollment) syncUnlockedPathStates(path.id, req.currentUser.id);
   res.json({ path: pathPayload(path, req.currentUser) });
 });
 
@@ -305,7 +304,11 @@ programsRouter.patch('/manage/learning-paths/:pathId', requireStaff, (req, res) 
     if (!changed) return current;
     db.prepare(`UPDATE learning_paths SET title = ?, description = ?, self_enrollment = ?, status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(title, description, selfEnrollment ? 1 : 0, status, req.currentUser.id, current.id);
-    if (coursesChanged) savePathCourses(current.id, courses);
+    if (coursesChanged) {
+      savePathCourses(current.id, courses);
+      const enrolledLearners = db.prepare('SELECT user_id FROM learning_path_enrollments WHERE path_id = ?').all(current.id);
+      for (const enrollment of enrolledLearners) syncUnlockedPathStates(current.id, enrollment.user_id);
+    }
     logAudit(req.currentUser, 'path.updated', 'learning_path', current.id, `Updated learning path: ${title}`, { status, selfEnrollment, courseCount: courses.length });
     return db.prepare('SELECT * FROM learning_paths WHERE id = ?').get(current.id);
   });
@@ -567,4 +570,3 @@ programsRouter.post('/manage/courses/:courseId/versions/:versionId/restore', req
   });
   res.json(restore.immediate());
 });
-

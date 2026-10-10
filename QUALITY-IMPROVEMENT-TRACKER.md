@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Keep course and path detail reads side-effect free
+
+- **Reviewed:** Course and learning-path detail GET routes, learner enrollment entry points, course curriculum links, staff preview access, and path-state synchronization after course changes.
+- **Improvement:** Keep detail reads free of enrollment or path-state writes; create course enrollment only when a learner starts or opens an activity. Staff can preview content without enrolling. Reconcile enrolled path states when a manager changes the path courses, and narrow quiz access to a stable local value so TypeScript can verify the new curriculum click handler.
+- **Why it helps:** Reloading or previewing a detail page no longer changes learner records, while learners still enroll before entering lessons or quizzes and path state remains current after edits.
+- **Checked:** The focused course-navigation and detail-route tests passed; full `npm test` passed all 242 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The local staff-preview flow was rendered and exercised.
+
 ## 2026-10-10 — Clear legacy decoration from the certificate accent
 
 - **Reviewed:** The older certificate pseudo-element rule and the later certificate style that reuses `::before` as a full-width accent, including the print override.
