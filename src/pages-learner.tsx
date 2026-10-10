@@ -514,6 +514,7 @@ export function CoursePlayerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const watchedUntilRef = useRef(0);
   const playbackPositionRef = useRef(0);
+  const watchStartedLessonRef = useRef<string | null>(null);
   const videoStartPromiseRef = useRef<Promise<void> | null>(null);
   const progressReportChainRef = useRef<Promise<void>>(Promise.resolve());
   const lastProgressReportAtRef = useRef(0);
@@ -628,6 +629,7 @@ export function CoursePlayerPage() {
     watchRequestControllerRef.current?.abort();
     watchRequestControllerRef.current = controller;
     videoStartPromiseRef.current = null;
+    watchStartedLessonRef.current = null;
     lastProgressReportAtRef.current = 0;
     watchedUntilRef.current = 0;
     playbackPositionRef.current = 0;
@@ -883,6 +885,9 @@ export function CoursePlayerPage() {
             ).then((result) => {
               if (routeLessonIdRef.current === requestedLessonId) {
                 watchedUntilRef.current = result.watchedUntilSeconds;
+                playbackPositionRef.current = result.watchedUntilSeconds;
+                watchStartedLessonRef.current = requestedLessonId;
+                lastProgressReportAtRef.current = Date.now();
                 setWatchProgress({ ...result, lessonId: requestedLessonId, ready: true, started: true });
               }
             }).finally(() => { videoStartPromiseRef.current = null; });
@@ -898,14 +903,19 @@ export function CoursePlayerPage() {
 
   function reportVideoProgress(force = false) {
     const video = videoRef.current;
+    const requestedLessonId = lessonId;
     if (!watchRequired || !video || !watchReadyForCurrent || current?.locked
+      || watchStartedLessonRef.current !== requestedLessonId
       || !Number.isFinite(video.duration) || video.duration <= 0) return;
     const now = Date.now();
     if (!force && now - lastProgressReportAtRef.current < 4000) return;
     lastProgressReportAtRef.current = now;
-    const requestedLessonId = lessonId;
-    const positionSeconds = Math.min(video.currentTime, video.duration);
     progressReportChainRef.current = progressReportChainRef.current.catch(() => undefined).then(async () => {
+      if (routeLessonIdRef.current !== requestedLessonId
+        || watchStartedLessonRef.current !== requestedLessonId) return;
+      const activeVideo = videoRef.current;
+      if (!activeVideo || !Number.isFinite(activeVideo.duration) || activeVideo.duration <= 0) return;
+      const positionSeconds = Math.min(activeVideo.currentTime, activeVideo.duration);
       const result = await api.put<Omit<LessonWatchProgress, 'lessonId' | 'ready' | 'started'> & { accepted: boolean }>(
         `/api/lessons/${requestedLessonId}/watch-progress`, { positionSeconds },
       );
@@ -939,11 +949,6 @@ export function CoursePlayerPage() {
     setVideoPosition(position);
     if (!watchRequired) {
       setVideoDuration(Number.isFinite(video.duration) ? video.duration : 0);
-      return;
-    }
-    const maximumNaturalPosition = playbackPositionRef.current + 1.35;
-    if (position > maximumNaturalPosition) {
-      video.currentTime = playbackPositionRef.current;
       return;
     }
     playbackPositionRef.current = Math.max(playbackPositionRef.current, position);
