@@ -1,0 +1,219 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import test from 'node:test';
+import ts from 'typescript';
+import { fileURLToPath } from 'node:url';
+
+const sourceDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
+
+function jsxTagName(tagName) {
+  return ts.isIdentifier(tagName) ? tagName.text : '';
+}
+
+function labelWrappedAppSelects(sourceFile) {
+  const violations = [];
+
+  function visit(node, insideLabel = false) {
+    if (ts.isJsxElement(node)) {
+      const tagName = jsxTagName(node.openingElement.tagName);
+      if (tagName === 'AppSelect' && insideLabel) violations.push(node.openingElement);
+      const childIsInsideLabel = insideLabel || tagName === 'label';
+      node.children.forEach((child) => visit(child, childIsInsideLabel));
+      return;
+    }
+
+    if (ts.isJsxSelfClosingElement(node)) {
+      if (jsxTagName(node.tagName) === 'AppSelect' && insideLabel) violations.push(node);
+      return;
+    }
+
+    ts.forEachChild(node, (child) => visit(child, insideLabel));
+  }
+
+  visit(sourceFile);
+  return violations;
+}
+
+function stringJsxAttribute(openingElement, name) {
+  const attribute = openingElement.attributes.properties.find((property) => (
+    ts.isJsxAttribute(property) && property.name.text === name
+  ));
+  return attribute && ts.isJsxAttribute(attribute) && ts.isStringLiteral(attribute.initializer)
+    ? attribute.initializer.text : '';
+}
+
+function catalogFilterLabels(sourceFile) {
+  const controls = [];
+
+  function visit(node) {
+    if (ts.isJsxElement(node)) {
+      const classNames = stringJsxAttribute(node.openingElement, 'className').split(/\s+/);
+      if (classNames.includes('catalog-filter-control')) {
+        const label = node.children.find((child) => ts.isJsxElement(child)
+          && stringJsxAttribute(child.openingElement, 'className') === 'catalog-filter-label');
+        const select = node.children.find((child) => ts.isJsxSelfClosingElement(child)
+          && jsxTagName(child.tagName) === 'AppSelect');
+        if (label && select) {
+          controls.push({
+            visibleLabel: label.children.filter(ts.isJsxText).map((child) => child.text.trim()).join(' ').trim(),
+            accessibleName: stringJsxAttribute(select, 'ariaLabel'),
+          });
+        }
+        return;
+      }
+      node.children.forEach(visit);
+      return;
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return controls;
+}
+
+function appSelectFieldLabels(sourceFile) {
+  const controls = [];
+
+  function visit(node) {
+    if (ts.isJsxElement(node)) {
+      const classNames = stringJsxAttribute(node.openingElement, 'className').split(/\s+/);
+      if (classNames.includes('app-select-field')) {
+        const label = node.children.find((child) => ts.isJsxElement(child)
+          && jsxTagName(child.openingElement.tagName) === 'span');
+        const select = node.children.find((child) => ts.isJsxSelfClosingElement(child)
+          && jsxTagName(child.tagName) === 'AppSelect');
+        if (label && select) {
+          const ariaLabel = select.attributes.properties.find((property) => (
+            ts.isJsxAttribute(property) && property.name.text === 'ariaLabel'
+          ));
+          let expression = ariaLabel && ts.isJsxAttribute(ariaLabel) ? ariaLabel.initializer : undefined;
+          if (expression && ts.isJsxExpression(expression)) expression = expression.expression;
+          let accessibleName = '';
+          if (expression && ts.isStringLiteralLike(expression)) accessibleName = expression.text;
+          else if (expression && ts.isTemplateExpression(expression)) {
+            accessibleName = [expression.head.text, ...expression.templateSpans.map((span) => span.literal.text)].join('');
+          }
+          controls.push({
+            visibleLabel: label.children.filter(ts.isJsxText).map((child) => child.text).join(' ').replace(/\s+/g, ' ').trim(),
+            accessibleName,
+            location: `${path.basename(sourceFile.fileName)}:${sourceFile.getLineAndCharacterOfPosition(select.getStart(sourceFile)).line + 1}`,
+          });
+        }
+        return;
+      }
+      node.children.forEach(visit);
+      return;
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return controls;
+}
+
+function accountRoleControls(sourceFile) {
+  const controls = [];
+
+  function visit(node) {
+    if (ts.isJsxElement(node)) {
+      const rowClasses = stringJsxAttribute(node.openingElement, 'className').split(/\s+/);
+      if (rowClasses.includes('account-control-row')) {
+        const field = node.children.find((child) => ts.isJsxElement(child)
+          && stringJsxAttribute(child.openingElement, 'className').split(/\s+/).includes('account-role-control'));
+        const label = field?.children.find((child) => ts.isJsxElement(child)
+          && jsxTagName(child.openingElement.tagName) === 'span');
+        const select = field?.children.find((child) => ts.isJsxSelfClosingElement(child)
+          && jsxTagName(child.tagName) === 'AppSelect');
+        if (label && select) {
+          controls.push({
+            visibleLabel: label.children.filter(ts.isJsxText).map((child) => child.text).join(' ').trim(),
+            accessibleName: stringJsxAttribute(select, 'ariaLabel'),
+          });
+        }
+        return;
+      }
+      node.children.forEach(visit);
+      return;
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return controls;
+}
+
+function collectTsxFiles(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) return collectTsxFiles(entryPath);
+    return entry.isFile() && entry.name.endsWith('.tsx') ? [entryPath] : [];
+  });
+}
+
+test('the AppSelect label guard detects a wrapped custom control', () => {
+  const source = ts.createSourceFile(
+    'fixture.tsx',
+    'const field = <label>Role <AppSelect ariaLabel="Role" /></label>;',
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+
+  assert.equal(labelWrappedAppSelects(source).length, 1);
+});
+
+test('AppSelect controls are not nested inside native labels', () => {
+  const violations = collectTsxFiles(sourceDirectory).flatMap((filePath) => {
+    const source = fs.readFileSync(filePath, 'utf8');
+    const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    return labelWrappedAppSelects(sourceFile).map((node) => {
+      const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+      return `${path.relative(sourceDirectory, filePath)}:${line + 1}`;
+    });
+  });
+
+  assert.deepEqual(violations, [], `AppSelect must use a separate field container instead of a wrapping label:\n${violations.join('\n')}`);
+});
+
+test('the administrator role selector keeps clicks inside its visible trigger', () => {
+  const pageSource = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
+  const sourceFile = ts.createSourceFile('pages-manage.tsx', pageSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const controls = accountRoleControls(sourceFile);
+  const styles = fs.readFileSync(path.join(sourceDirectory, 'styles.css'), 'utf8');
+
+  assert.deepEqual(controls, [{ visibleLabel: 'Platform role', accessibleName: 'Platform role' }]);
+  assert.match(styles, /\.account-role-control\s*\{\s*pointer-events:\s*none;\s*\}/);
+  assert.match(styles, /\.account-role-control\s+\.app-select-trigger\s*\{\s*pointer-events:\s*auto;\s*\}/);
+  assert.match(styles, /\.account-role-control\s*>\s*\.app-select\s*\{\s*width:\s*9rem;\s*max-width:\s*100%;\s*\}/);
+  assert.match(styles, /\.account-control-row \.account-role-control\s*\{\s*flex-basis:\s*auto;\s*width:\s*100%;\s*max-width:\s*none;\s*\}/);
+});
+
+test('catalog filter accessible names contain their visible labels', () => {
+  const source = fs.readFileSync(path.join(sourceDirectory, 'pages-learner.tsx'), 'utf8');
+  const sourceFile = ts.createSourceFile('pages-learner.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const controls = catalogFilterLabels(sourceFile);
+
+  assert.equal(controls.length, 2);
+  for (const { visibleLabel, accessibleName } of controls) {
+    assert.ok(accessibleName.toLocaleLowerCase().includes(visibleLabel.toLocaleLowerCase()),
+      `The “${visibleLabel}” filter is announced as “${accessibleName}”.`);
+  }
+});
+
+test('form AppSelect accessible names contain their visible field labels', () => {
+  const controls = collectTsxFiles(sourceDirectory).flatMap((filePath) => {
+    const source = fs.readFileSync(filePath, 'utf8');
+    const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    return appSelectFieldLabels(sourceFile);
+  });
+
+  assert.ok(controls.length > 0, 'Expected to find AppSelect controls in labeled form fields.');
+  for (const { visibleLabel, accessibleName, location } of controls) {
+    assert.ok(accessibleName.toLocaleLowerCase().includes(visibleLabel.toLocaleLowerCase()),
+      `${location}: the “${visibleLabel}” field is announced as “${accessibleName}”.`);
+  }
+});

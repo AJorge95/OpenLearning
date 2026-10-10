@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Validate password confirmation before submission and centralize tests
+
+- **Reviewed:** Password confirmation in setup, registration, self-service changes, and administrator account creation and resets; existing server-side mismatch validation; and the current test-file layout.
+- **Improvement:** Reuse a client-side password-confirmation check across all six forms so mismatches show the existing error before an API request. Moved all 40 test files into `tests/client` and `tests/server`; the existing `npm test` discovery now runs them from the dedicated test tree.
+- **Why it helps:** Users get immediate, consistent feedback without a needless round trip, and tests have one predictable home while preserving client/server grouping. Server validation remains authoritative.
+- **Interface review:** Existing labels, password hints, error announcements, and responsive layouts remain in place; only submit-time validation behavior changed.
+- **Checked:** The focused password/account/session tests passed (8 tests); full `npm test` passed all 221 tests after relocation; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Make API connection failures consistent and retryable
 
 - **Reviewed:** Shared API fetch and response-body handling, CSRF setup and retries, request cancellation, and account-detail load recovery.

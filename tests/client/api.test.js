@@ -1,0 +1,240 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { ApiError, api } from '../../src/api.ts';
+
+function jsonResponse(value, status = 200) {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function restoreFetch(t) {
+  const originalFetch = globalThis.fetch;
+  api.clearCsrf();
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    api.clearCsrf();
+  });
+}
+
+test('coalesces CSRF refreshes and retries concurrent writes once with the fresh token', async (t) => {
+  restoreFetch(t);
+  let csrfRequests = 0;
+  const writeTokens = [];
+  const writeAttempts = new Map();
+  globalThis.fetch = async (input, options = {}) => {
+    const path = String(input);
+    if (path === '/api/csrf') {
+      csrfRequests += 1;
+      return jsonResponse({ token: csrfRequests === 1 ? 'initial-token' : 'fresh-token' });
+    }
+
+    const attempt = (writeAttempts.get(path) || 0) + 1;
+    writeAttempts.set(path, attempt);
+    const token = new Headers(options.headers).get('X-CSRF-Token');
+    writeTokens.push(token);
+    if (token === 'initial-token') return jsonResponse({ code: 'csrf_invalid', error: 'Refresh the page.' }, 403);
+    return jsonResponse({ path, saved: true });
+  };
+
+  const results = await Promise.all([
+    api.post('/api/first', { value: 1 }),
+    api.post('/api/second', { value: 2 }),
+  ]);
+
+  assert.deepEqual(results, [
+    { path: '/api/first', saved: true },
+    { path: '/api/second', saved: true },
+  ]);
+  assert.equal(csrfRequests, 2);
+  assert.deepEqual([...writeAttempts.values()], [2, 2]);
+  assert.deepEqual(writeTokens.sort(), ['fresh-token', 'fresh-token', 'initial-token', 'initial-token']);
+});
+
+test('clearing CSRF state during refresh prevents the old session token from being reused', async (t) => {
+  restoreFetch(t);
+  const responses = [];
+  let csrfRequests = 0;
+  globalThis.fetch = async () => {
+    csrfRequests += 1;
+    const request = new Promise((resolve) => { responses.push(resolve); });
+    return request;
+  };
+
+  const oldSessionRefresh = api.refreshCsrf();
+  api.clearCsrf();
+  const newSessionRefresh = api.refreshCsrf();
+  const requestsAfterClear = responses.length;
+
+  const responseFor = (token) => jsonResponse({ token });
+  responses[0](responseFor('old-session-token'));
+  if (responses[1]) responses[1](responseFor('new-session-token'));
+  const [oldRefreshResult, newRefreshResult] = await Promise.all([oldSessionRefresh, newSessionRefresh]);
+
+  assert.equal(requestsAfterClear, 2);
+  assert.equal(oldRefreshResult, 'new-session-token');
+  assert.equal(newRefreshResult, 'new-session-token');
+  assert.equal(csrfRequests, 2);
+});
+
+test('returns a repeated CSRF rejection after one retry instead of looping', async (t) => {
+  restoreFetch(t);
+  let csrfRequests = 0;
+  let writeRequests = 0;
+  globalThis.fetch = async (input) => {
+    if (String(input) === '/api/csrf') {
+      csrfRequests += 1;
+      return jsonResponse({ token: `token-${csrfRequests}` });
+    }
+    writeRequests += 1;
+    return jsonResponse({ code: 'csrf_invalid', error: 'Refresh the page.' }, 403);
+  };
+
+  await assert.rejects(api.post('/api/action', { value: 1 }), (error) => (
+    error instanceof ApiError && error.status === 403 && error.code === 'csrf_invalid'
+  ));
+  assert.equal(csrfRequests, 2);
+  assert.equal(writeRequests, 2);
+});
+
+test('reports a stable invalid-response error for non-JSON API responses', async (t) => {
+  restoreFetch(t);
+  globalThis.fetch = async () => new Response('<html>Not an API response</html>', {
+    status: 200,
+    headers: { 'content-type': 'text/html' },
+  });
+
+  await assert.rejects(api.get('/api/data'), (error) => (
+    error instanceof ApiError && error.status === 200 && error.code === 'invalid_response'
+  ));
+});
+
+test('normalizes API connection failures into a stable retryable error', async (t) => {
+  restoreFetch(t);
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+
+  await assert.rejects(api.get('/api/data'), (error) => (
+    error instanceof ApiError
+    && error.status === 0
+    && error.code === 'network_error'
+    && error.message === 'The server could not be reached. Check your connection and try again.'
+  ));
+});
+
+test('normalizes connection failures while starting a write session', async (t) => {
+  restoreFetch(t);
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+
+  await assert.rejects(api.post('/api/action', { value: 1 }), (error) => (
+    error instanceof ApiError && error.status === 0 && error.code === 'network_error'
+  ));
+});
+
+test('keeps aborted API requests as AbortError', async (t) => {
+  restoreFetch(t);
+  const abortError = new DOMException('The request was aborted.', 'AbortError');
+  globalThis.fetch = async () => { throw abortError; };
+
+  await assert.rejects(api.get('/api/data'), (error) => error === abortError);
+});
+
+test('normalizes connection loss while reading an API response', async (t) => {
+  restoreFetch(t);
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    text: async () => { throw new TypeError('Connection closed'); },
+  });
+
+  await assert.rejects(api.get('/api/data'), (error) => (
+    error instanceof ApiError && error.status === 0 && error.code === 'network_error'
+  ));
+});
+
+test('does not construct or send an upload when its signal is already aborted', async (t) => {
+  restoreFetch(t);
+  const originalFormData = globalThis.FormData;
+  const originalXhr = globalThis.XMLHttpRequest;
+  let fetchRequests = 0;
+  let formDataConstructed = false;
+  let xhrConstructed = false;
+  globalThis.fetch = async () => {
+    fetchRequests += 1;
+    return jsonResponse({ token: 'unused-token' });
+  };
+  globalThis.FormData = class {
+    constructor() { formDataConstructed = true; }
+    append() {}
+  };
+  globalThis.XMLHttpRequest = class {
+    constructor() { xhrConstructed = true; }
+  };
+  t.after(() => {
+    globalThis.FormData = originalFormData;
+    if (originalXhr === undefined) delete globalThis.XMLHttpRequest;
+    else globalThis.XMLHttpRequest = originalXhr;
+  });
+
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(api.upload('/api/upload', {}, new Blob(['test']), () => {}, { signal: controller.signal }), (error) => (
+    error.name === 'AbortError'
+  ));
+  assert.equal(fetchRequests, 0);
+  assert.equal(formDataConstructed, false);
+  assert.equal(xhrConstructed, false);
+});
+
+test('rejects promptly without multipart creation when cancelled while fetching the CSRF token', async (t) => {
+  restoreFetch(t);
+  const originalFormData = globalThis.FormData;
+  const originalXhr = globalThis.XMLHttpRequest;
+  let resolveCsrfResponse;
+  let fetchRequests = 0;
+  let formDataConstructed = false;
+  let xhrConstructed = false;
+  const csrfResponse = new Promise((resolve) => { resolveCsrfResponse = resolve; });
+  globalThis.fetch = async () => {
+    fetchRequests += 1;
+    return csrfResponse;
+  };
+  globalThis.FormData = class {
+    constructor() { formDataConstructed = true; }
+    append() {}
+  };
+  globalThis.XMLHttpRequest = class {
+    constructor() { xhrConstructed = true; }
+  };
+  t.after(() => {
+    globalThis.FormData = originalFormData;
+    if (originalXhr === undefined) delete globalThis.XMLHttpRequest;
+    else globalThis.XMLHttpRequest = originalXhr;
+  });
+
+  const controller = new AbortController();
+  const upload = api.upload('/api/upload', {}, new Blob(['test']), () => {}, { signal: controller.signal });
+  const outcomePromise = upload.then(
+    () => ({ fulfilled: true }),
+    (error) => ({ fulfilled: false, error }),
+  );
+  assert.equal(fetchRequests, 1);
+  controller.abort();
+  let timeoutId;
+  const rejectedPromptly = await Promise.race([
+    outcomePromise.then(() => true),
+    new Promise((resolve) => { timeoutId = setTimeout(() => resolve(false), 50); }),
+  ]);
+  clearTimeout(timeoutId);
+  resolveCsrfResponse(jsonResponse({ token: 'unused-token' }));
+  const outcome = await outcomePromise;
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(rejectedPromptly, true);
+  assert.equal(outcome.fulfilled, false);
+  assert.equal(outcome.error.name, 'AbortError');
+  assert.equal(fetchRequests, 1);
+  assert.equal(formDataConstructed, false);
+  assert.equal(xhrConstructed, false);
+});
