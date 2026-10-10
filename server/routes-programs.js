@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireObjectBody, requireStaff } from './http.js';
-import { courseSummaries, courseSummary, ensureCourseLearningState } from './course-service.js';
+import { courseSummaries, courseSummary, ensureCourseLearningStateWithStatus } from './course-service.js';
 import { courseVersionHistory, logicalCourseId, publishRevision, restoreCourseVersion } from './course-versioning.js';
 import { writeAuditLog } from './log-store.js';
 import { textSearchPredicate } from './sql.js';
@@ -73,9 +73,9 @@ export function syncUnlockedPathStates(pathId, userId) {
     const unlocked = !row.requires_previous || row.position === 0 || allEarlierCoursesCompleted;
     let summary = summaries[index];
     if (unlocked) {
-      ensureCourseLearningState(row.course_id, userId);
+      const { state, created } = ensureCourseLearningStateWithStatus(row.course_id, userId);
       // Creating a state can activate a version's required-recompletion reset.
-      summary = courseSummary(row, user);
+      if (created && state?.target_version_id) summary = courseSummary(row, user);
     }
     allEarlierCoursesCompleted = allEarlierCoursesCompleted && summary.completed;
   }
