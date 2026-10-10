@@ -114,6 +114,38 @@ function appSelectFieldLabels(sourceFile) {
   return controls;
 }
 
+function accountRoleControls(sourceFile) {
+  const controls = [];
+
+  function visit(node) {
+    if (ts.isJsxElement(node)) {
+      const rowClasses = stringJsxAttribute(node.openingElement, 'className').split(/\s+/);
+      if (rowClasses.includes('account-control-row')) {
+        const field = node.children.find((child) => ts.isJsxElement(child)
+          && stringJsxAttribute(child.openingElement, 'className').split(/\s+/).includes('account-role-control'));
+        const label = field?.children.find((child) => ts.isJsxElement(child)
+          && jsxTagName(child.openingElement.tagName) === 'span');
+        const select = field?.children.find((child) => ts.isJsxSelfClosingElement(child)
+          && jsxTagName(child.tagName) === 'AppSelect');
+        if (label && select) {
+          controls.push({
+            visibleLabel: label.children.filter(ts.isJsxText).map((child) => child.text).join(' ').trim(),
+            accessibleName: stringJsxAttribute(select, 'ariaLabel'),
+          });
+        }
+        return;
+      }
+      node.children.forEach(visit);
+      return;
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return controls;
+}
+
 function collectTsxFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = path.join(directory, entry.name);
@@ -145,6 +177,19 @@ test('AppSelect controls are not nested inside native labels', () => {
   });
 
   assert.deepEqual(violations, [], `AppSelect must use a separate field container instead of a wrapping label:\n${violations.join('\n')}`);
+});
+
+test('the administrator role selector keeps clicks inside its visible trigger', () => {
+  const pageSource = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
+  const sourceFile = ts.createSourceFile('pages-manage.tsx', pageSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const controls = accountRoleControls(sourceFile);
+  const styles = fs.readFileSync(path.join(sourceDirectory, 'styles.css'), 'utf8');
+
+  assert.deepEqual(controls, [{ visibleLabel: 'Platform role', accessibleName: 'Platform role' }]);
+  assert.match(styles, /\.account-role-control\s*\{\s*pointer-events:\s*none;\s*\}/);
+  assert.match(styles, /\.account-role-control\s+\.app-select-trigger\s*\{\s*pointer-events:\s*auto;\s*\}/);
+  assert.match(styles, /\.account-role-control\s*>\s*\.app-select\s*\{\s*width:\s*9rem;\s*max-width:\s*100%;\s*\}/);
+  assert.match(styles, /\.account-control-row \.account-role-control\s*\{\s*flex-basis:\s*auto;\s*width:\s*100%;\s*max-width:\s*none;\s*\}/);
 });
 
 test('catalog filter accessible names contain their visible labels', () => {
