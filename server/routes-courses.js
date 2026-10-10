@@ -14,11 +14,13 @@ import { certificatePayload, findCourseCertificate, issueCertificateIfComplete }
 import { syncUnlockedPathStates } from './routes-programs.js';
 import { beginLessonWatch, getLessonWatchProgress, lessonVideoWasWatched, recordLessonWatchProgress } from './lesson-watch.js';
 import { readMp4Duration } from './mp4-duration.js';
+import { createVideoDurationReader } from './video-duration-reader.js';
 
 export const courseRouter = Router();
 courseRouter.use(requireAuth);
 const COURSE_PAGE_SIZE = 24;
 const MAX_COURSE_PAGE = 100_000;
+const readCachedVideoDuration = createVideoDurationReader(readMp4Duration);
 
 function paginationWindow(total, value, requestedPageSize = COURSE_PAGE_SIZE) {
   const requestedPage = pageQuery(value, MAX_COURSE_PAGE);
@@ -135,7 +137,7 @@ async function verifiedVideoDuration(lesson) {
   const filePath = path.resolve(base, media.file_name);
   if (!filePath.startsWith(`${base}${path.sep}`)) fail(404, 'Lesson video is not available.', 'not_found');
   let duration;
-  try { duration = await readMp4Duration(filePath); }
+  try { duration = await readCachedVideoDuration(media.id, filePath); }
   catch { fail(422, 'This video duration could not be verified. Contact your course administrator.', 'video_duration_unavailable'); }
   if (!Number.isFinite(duration) || duration <= 0) {
     fail(422, 'This video duration could not be verified. Contact your course administrator.', 'video_duration_unavailable');
