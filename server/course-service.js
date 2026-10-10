@@ -32,12 +32,12 @@ function progressForStorage(logicalId, contentId, user, version) {
   return { completedLessonIds, passedQuizIds };
 }
 
-export function courseSummaries(courses, user) {
+export function courseSummaries(courses, user, preloadedVersionsByCourse) {
   if (!courses.length) return [];
   const logicalIdsByCourse = courses.map((course) => course.logical_course_id || course.id);
   const logicalIds = [...new Set(logicalIdsByCourse)];
   const logicalPlaceholders = logicalIds.map(() => '?').join(', ');
-  const latestVersionsByCourse = new Map(db.prepare(`
+  const latestVersionsByCourse = preloadedVersionsByCourse ?? new Map(db.prepare(`
     SELECT v.course_id, v.id, v.storage_course_id, v.version_number
     FROM course_versions v
     JOIN (
@@ -152,17 +152,18 @@ export function courseSummaries(courses, user) {
   });
 }
 
-export function courseSummary(course, user) {
-  return courseSummaries([course], user)[0];
+export function courseSummary(course, user, preloadedVersionsByCourse) {
+  return courseSummaries([course], user, preloadedVersionsByCourse)[0];
 }
 
 export function getCoursePayload(course, user, { includeAnswers = false, storageCourseId } = {}) {
   const logicalId = course.logical_course_id || course.id;
   const editingCopy = Boolean(course.logical_course_id && includeAnswers);
+  const version = publishedVersion(logicalId);
   const content = storageCourseId ? db.prepare('SELECT * FROM courses WHERE id = ?').get(storageCourseId)
     : editingCopy ? course : currentPublishedCourse(logicalId) || course;
   const rootCourse = db.prepare('SELECT * FROM courses WHERE id = ?').get(logicalId) || course;
-  const summary = courseSummary(rootCourse, user);
+  const summary = courseSummary(rootCourse, user, new Map([[logicalId, version]]));
   const resultSummary = editingCopy ? { ...summary, title: course.title, description: course.description,
     category: course.category, visibility: course.visibility,
     completionWindowDays: course.completion_window_days ?? null,
@@ -170,7 +171,6 @@ export function getCoursePayload(course, user, { includeAnswers = false, storage
     reviewStatus: db.prepare('SELECT review_status FROM course_revisions WHERE course_id = ?').get(logicalId)?.review_status || 'draft',
   } : summary;
   const contentId = content.id;
-  const version = publishedVersion(logicalId);
   const versionProgress = progressForStorage(logicalId, contentId, user, version);
   const lessonResources = new Map();
   for (const resource of db.prepare(`
