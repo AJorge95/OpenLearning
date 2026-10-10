@@ -545,6 +545,8 @@ export function CoursePlayerPage() {
   const videoRecoveryTimerRef = useRef<number | null>(null);
   const autoVideoRecoveryLessonRef = useRef<string | null>(null);
   const watchStartedLessonRef = useRef<string | null>(null);
+  const pendingVisibilityResumeLessonRef = useRef<{ lessonId: string; positionSeconds: number } | null>(null);
+  const reportVideoProgressRef = useRef<(force?: boolean, positionOverride?: number) => void>(() => {});
   const videoStartPromiseRef = useRef<Promise<void> | null>(null);
   const progressReportChainRef = useRef<Promise<void>>(Promise.resolve());
   const lastProgressReportAtRef = useRef(0);
@@ -681,6 +683,7 @@ export function CoursePlayerPage() {
     playbackPositionRef.current = 0;
     videoReloadingRef.current = false;
     pendingVideoResumeRef.current = null;
+    pendingVisibilityResumeLessonRef.current = null;
     autoVideoRecoveryLessonRef.current = null;
     if (videoStallTimerRef.current !== null) window.clearTimeout(videoStallTimerRef.current);
     videoStallTimerRef.current = null;
@@ -731,15 +734,6 @@ export function CoursePlayerPage() {
       if (watchRequestControllerRef.current === controller) watchRequestControllerRef.current = null;
     };
   }, [courseId, lessonId, watchRequired, current?.locked, current?.completed]);
-
-  useEffect(() => {
-    if (!watchRequired) return;
-    const pauseWhenHidden = () => {
-      if (document.visibilityState === 'hidden') videoRef.current?.pause();
-    };
-    document.addEventListener('visibilitychange', pauseWhenHidden);
-    return () => document.removeEventListener('visibilitychange', pauseWhenHidden);
-  }, [watchRequired]);
 
   useEffect(() => {
     const routeKey = `${courseId}:${lessonId}`;
@@ -1015,6 +1009,34 @@ export function CoursePlayerPage() {
     setWatchError('');
     try {
       if (video.paused) {
+        if (pendingVisibilityResumeLessonRef.current?.lessonId === lessonId) {
+          const requestedLessonId = lessonId;
+          // A backgrounded tab can pause or reset its media clock while the
+          // pause checkpoint is still in flight. Let that write settle, then
+          // restore the server-verified position before honoring Play.
+          await progressReportChainRef.current.catch(() => undefined);
+          if (routeLessonIdRef.current !== requestedLessonId) return;
+          const savedProgress = await api.get<Omit<LessonWatchProgress, 'lessonId' | 'ready' | 'started'>>(
+            `/api/lessons/${requestedLessonId}/watch-progress`,
+          );
+          if (routeLessonIdRef.current !== requestedLessonId) return;
+          let resumePosition = savedProgress.lastPositionSeconds;
+          let resumeProgress = savedProgress;
+          if (savedProgress.complete) {
+            // A fully watched lesson may be replayed from the start.
+            resumeProgress = await api.post<Omit<LessonWatchProgress, 'lessonId' | 'ready'>>(
+              `/api/lessons/${requestedLessonId}/watch-progress/start`, {},
+            );
+            resumePosition = resumeProgress.lastPositionSeconds;
+          }
+          if (routeLessonIdRef.current !== requestedLessonId) return;
+          playbackPositionRef.current = resumePosition;
+          watchStartedLessonRef.current = requestedLessonId;
+          video.currentTime = resumePosition;
+          setVideoPosition(resumePosition);
+          setWatchProgress({ ...resumeProgress, lessonId: requestedLessonId, ready: true, started: true });
+          lastProgressReportAtRef.current = Date.now();
+        }
         if (video.ended) {
           if (!videoStartPromiseRef.current) {
             const requestedLessonId = lessonId;
@@ -1056,7 +1078,7 @@ export function CoursePlayerPage() {
     }
   }
 
-  function reportVideoProgress(force = false) {
+  function reportVideoProgress(force = false, positionOverride?: number) {
     const video = videoRef.current;
     const requestedLessonId = lessonId;
     if (!watchRequired || !video || !watchReadyForCurrent || current?.locked
@@ -1066,14 +1088,16 @@ export function CoursePlayerPage() {
     const now = Date.now();
     if (!force && now - lastProgressReportAtRef.current < 4000) return;
     lastProgressReportAtRef.current = now;
+    // Capture at event time. Reading currentTime later in the serialized queue
+    // can observe a browser reset after a tab was hidden and resumed.
+    const reportedPositionSeconds = Math.min(positionOverride ?? video.currentTime, video.duration);
     progressReportChainRef.current = progressReportChainRef.current.catch(() => undefined).then(async () => {
       if (routeLessonIdRef.current !== requestedLessonId
         || watchStartedLessonRef.current !== requestedLessonId) return;
       const activeVideo = videoRef.current;
       if (!activeVideo || !Number.isFinite(activeVideo.duration) || activeVideo.duration <= 0) return;
-      const positionSeconds = Math.min(activeVideo.currentTime, activeVideo.duration);
       const result = await api.put<Omit<LessonWatchProgress, 'lessonId' | 'ready' | 'started'> & { accepted: boolean }>(
-        `/api/lessons/${requestedLessonId}/watch-progress`, { positionSeconds },
+        `/api/lessons/${requestedLessonId}/watch-progress`, { positionSeconds: reportedPositionSeconds },
       );
       if (routeLessonIdRef.current !== requestedLessonId) return;
       setWatchProgress((previousProgress) => previousProgress.lessonId === requestedLessonId
@@ -1108,6 +1132,23 @@ export function CoursePlayerPage() {
       }
     });
   }
+
+  reportVideoProgressRef.current = reportVideoProgress;
+
+  useEffect(() => {
+    if (!watchRequired) return;
+    const pauseWhenHidden = () => {
+      const video = videoRef.current;
+      if (document.visibilityState === 'hidden' && video && !video.paused && !video.ended) {
+        const positionSeconds = video.currentTime;
+        pendingVisibilityResumeLessonRef.current = { lessonId, positionSeconds };
+        video.pause();
+        reportVideoProgressRef.current(true, positionSeconds);
+      }
+    };
+    document.addEventListener('visibilitychange', pauseWhenHidden);
+    return () => document.removeEventListener('visibilitychange', pauseWhenHidden);
+  }, [watchRequired, lessonId]);
 
   function updateVideoPosition() {
     const video = videoRef.current;
@@ -1251,6 +1292,9 @@ export function CoursePlayerPage() {
           onRateChange={enforceNormalPlaybackRate}
           onPlay={() => setVideoPlaying(true)}
           onPlaying={() => {
+            if (pendingVisibilityResumeLessonRef.current?.lessonId === lessonId) {
+              pendingVisibilityResumeLessonRef.current = null;
+            }
             videoReloadingRef.current = false;
             if (videoRecoveryTimerRef.current !== null) window.clearTimeout(videoRecoveryTimerRef.current);
             videoRecoveryTimerRef.current = null;
@@ -1264,7 +1308,7 @@ export function CoursePlayerPage() {
           onPause={() => {
             setVideoPlaying(false);
             if (!videoReloadingRef.current) clearVideoStallState();
-            if (watchRequired) reportVideoProgress(true);
+            if (watchRequired && pendingVisibilityResumeLessonRef.current?.lessonId !== lessonId) reportVideoProgress(true);
           }}
           onEnded={() => { clearVideoStallState(); setVideoPlaying(false); reportVideoProgress(true); }}
           onClick={() => { if (watchRequired) void toggleVideoPlayback(); }}
