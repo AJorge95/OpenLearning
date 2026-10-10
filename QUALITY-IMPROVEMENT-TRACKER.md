@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Enforce password length for legacy usernames
+
+- **Reviewed:** Shared credential validation, administrator password resets, and self-service password changes for accounts whose stored usernames predate current username rules.
+- **Improvement:** Extract password-only validation and use it in both password-change routes. Account creation still validates both username and password, while password changes no longer infer which rule failed by matching an English error prefix.
+- **Why it helps:** Legacy usernames remain recoverable, but they cannot cause the username-first validator to skip the 12–256 character password requirement.
+- **Backend review:** Rejected short-password requests leave the existing password hash unchanged; existing reset auditing and session revocation behavior is preserved.
+- **Checked:** The focused registration/account route suite passed all 17 tests, including new admin-reset and self-service regressions; full `npm test` passed all 240 tests; `npm run build`, `node --check` on the changed server modules, and `git diff --check` passed. `npx tsc --noEmit` still reports TS18047 in the separately modified `src/components.tsx:430`.
+
 ## 2026-10-10 — Name competency status actions
 
 - **Reviewed:** Competency Map rows, their status toggle actions, nearby labels, and the responsive row layout.

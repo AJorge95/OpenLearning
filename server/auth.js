@@ -35,6 +35,10 @@ export function validateCredentials(username, password) {
   if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(normalized)) {
     return 'Username must be 3–32 characters using letters, numbers, dots, underscores, or hyphens.';
   }
+  return validatePassword(password);
+}
+
+export function validatePassword(password) {
   if (typeof password !== 'string' || password.length < 12 || password.length > 256) {
     return 'Password must be between 12 and 256 characters.';
   }
