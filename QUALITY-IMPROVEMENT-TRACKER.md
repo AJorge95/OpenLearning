@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Skip redundant course ID resolution for published versions
+
+- **Reviewed:** Course detail assembly, which passed a known canonical ID to `publishedVersion()` and re-queried `courses` to resolve that same ID.
+- **Improvement:** Add a canonical-ID version lookup and use it from `getCoursePayload()`; keep the general resolver for callers that may pass a revision, module, lesson, or quiz ID.
+- **Why it helps:** Learner and staff course detail reads avoid one database lookup while the access check and arbitrary-ID callers retain their existing resolution behavior.
+- **Interface review:** No visible change; course version, progress, and content responses remain unchanged.
+- **Checked:** The course-detail regression confirms one logical-ID lookup remains for access checking, with no duplicate lookup for version selection. The focused course analytics/versioning suite passed (69/69); full `npm test` passed all 262 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Match the administrator role menu to its trigger width
 
 - **Reviewed:** The reported account-role control and the open custom-select menu. The live trigger measured 144px while its menu was 220px wide, extending 76px beyond the visible field.
