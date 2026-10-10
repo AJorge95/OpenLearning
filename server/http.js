@@ -177,15 +177,15 @@ function completedForPath(courseId, userId, completionCache) {
       WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)`)
       .all(userId, courseId, courseId);
     const completedLessonIds = new Set(lessonHistory.map((lesson) => lesson.id));
-    const completedLessonStableIds = new Set(lessonHistory.map((lesson) => lesson.stable_id));
+    const completedLessonStableIds = new Set(lessonHistory.map((lesson) => lesson.stable_id ?? lesson.id));
     const passedQuizIds = new Set(quizHistory.map((quiz) => quiz.id));
-    const passedQuizStableIds = new Set(quizHistory.map((quiz) => quiz.stable_id));
+    const passedQuizStableIds = new Set(quizHistory.map((quiz) => quiz.stable_id ?? quiz.id));
     const hasCompletedLesson = (lesson) => resetRequired
       ? completedLessonIds.has(lesson.id)
-      : completedLessonStableIds.has(lesson.stable_id);
+      : completedLessonStableIds.has(lesson.stable_id ?? lesson.id);
     const hasPassedQuiz = (quiz) => resetRequired
       ? passedQuizIds.has(quiz.id)
-      : passedQuizStableIds.has(quiz.stable_id);
+      : passedQuizStableIds.has(quiz.stable_id ?? quiz.id);
     return lessons.every(hasCompletedLesson) && quizzes.every(hasPassedQuiz);
   });
 }
