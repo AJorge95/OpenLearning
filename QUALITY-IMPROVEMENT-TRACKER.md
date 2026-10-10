@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse prerequisite-completion statements per access check
+
+- **Reviewed:** Path authorization's `completedForPath` check prepared six unchanged version, state, content, and progress-history statements separately for each prerequisite course.
+- **Improvement:** Lazily prepare those statements once in the request-scoped course-access checker and reuse them across prerequisite courses; single-course checks retain lazy preparation.
+- **Why it helps:** Paths with several prerequisite courses avoid repeated SQL compilation without caching completion results beyond the request or changing version/recompletion rules.
+- **Interface review:** No visible change; access results and course response shapes are unchanged.
+- **Checked:** A two-prerequisite regression verifies the private target unlocks when both lessons are complete, each statement is prepared once in the checker, and a fresh checker denies access after enrollment removal. The calendar regression still counts shared history-query executions. The focused course-analytics suite passed (74/74); full `npm test` passed all 270 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reuse enrolled-path lookups during course access checks
 
 - **Reviewed:** Private-course authorization performs the same parameterized enrolled-path lookup once per distinct course checked by a request-scoped access checker.

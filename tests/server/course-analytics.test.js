@@ -1965,7 +1965,17 @@ test('calendar path access caches completion checks shared by private deadlines'
   let prerequisiteHistoryReads = 0;
   database.prepare = (sql) => {
     if (sql.includes('FROM lesson_progress p') && sql.includes('c.id = ? OR c.logical_course_id = ?')) {
-      prerequisiteHistoryReads += 1;
+      const statement = originalPrepare.call(database, sql);
+      return new Proxy(statement, {
+        get(target, property) {
+          if (property === 'all') return (...parameters) => {
+            prerequisiteHistoryReads += 1;
+            return target.all(...parameters);
+          };
+          const value = Reflect.get(target, property, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
     }
     return originalPrepare.call(database, sql);
   };
@@ -3152,4 +3162,68 @@ test('course access reuses the enrolled-path lookup across private courses', () 
   }
 
   assert.equal(enrolledPathQueryPreparations, 0);
+});
+
+test('course access reuses prerequisite-completion statements across courses', () => {
+  const courseIds = ['path-completion-query-course-one', 'path-completion-query-course-two'];
+  const targetCourseId = 'path-completion-query-target';
+  const prerequisiteQueryPreparations = new Map([
+    'SELECT v.id, v.storage_course_id FROM course_versions v WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT 1',
+    'SELECT target_version_id FROM course_learning_state WHERE user_id = ? AND course_id = ?',
+    'SELECT l.id, l.stable_id FROM lessons l JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?',
+    'SELECT q.id, q.stable_id FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?',
+    'SELECT l.id, l.stable_id FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE p.user_id = ? AND (c.id = ? OR c.logical_course_id = ?)',
+    'SELECT DISTINCT q.id, q.stable_id FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = m.course_id WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)',
+  ].map((query) => [query, 0]));
+  database.exec(`
+    INSERT INTO courses (id, title, status, visibility, created_by, updated_by) VALUES
+      ('${courseIds[0]}', 'Completed prerequisite one', 'published', 'public', 'admin-1', 'admin-1'),
+      ('${courseIds[1]}', 'Completed prerequisite two', 'published', 'public', 'admin-1', 'admin-1'),
+      ('${targetCourseId}', 'Private prerequisite target', 'published', 'private', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position) VALUES
+      ('path-completion-query-module-one', '${courseIds[0]}', 'Module one', 0),
+      ('path-completion-query-module-two', '${courseIds[1]}', 'Module two', 0);
+    INSERT INTO lessons (id, module_id, title, position) VALUES
+      ('path-completion-query-lesson-one', 'path-completion-query-module-one', 'Lesson one', 0),
+      ('path-completion-query-lesson-two', 'path-completion-query-module-two', 'Lesson two', 0);
+    INSERT INTO lesson_progress (user_id, lesson_id) VALUES
+      ('learner-active', 'path-completion-query-lesson-one'),
+      ('learner-active', 'path-completion-query-lesson-two');
+    INSERT INTO learning_paths (id, title, status, created_by, updated_by)
+      VALUES ('path-completion-query-path', 'Completion query path', 'published', 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+      ('path-completion-query-step-one', 'path-completion-query-path', '${courseIds[0]}', 0, 0),
+      ('path-completion-query-step-two', 'path-completion-query-path', '${courseIds[1]}', 1, 1),
+      ('path-completion-query-target', 'path-completion-query-path', '${targetCourseId}', 2, 1);
+    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by)
+      VALUES ('path-completion-query-enrollment', 'path-completion-query-path', 'learner-active', 'assigned', 'admin-1');
+  `);
+
+  const originalPrepare = database.prepare;
+  database.prepare = (sql) => {
+    const query = sql.replace(/\s+/g, ' ').trim();
+    if (prerequisiteQueryPreparations.has(query)) prerequisiteQueryPreparations.set(query, prerequisiteQueryPreparations.get(query) + 1);
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    const targetCourse = originalPrepare.call(database, 'SELECT * FROM courses WHERE id = ?').get(targetCourseId);
+    const canView = createCourseAccessChecker({ id: 'learner-active', role: 'learner', disabled: 0 });
+    assert.equal(canView(targetCourse), true);
+    originalPrepare.call(database, 'DELETE FROM learning_path_enrollments WHERE id = ?').run('path-completion-query-enrollment');
+    const canViewAfterEnrollmentRemoval = createCourseAccessChecker({ id: 'learner-active', role: 'learner', disabled: 0 });
+    assert.equal(canViewAfterEnrollmentRemoval(targetCourse), false);
+  } finally {
+    database.prepare = originalPrepare;
+    originalPrepare.call(database, 'DELETE FROM learning_path_enrollments WHERE id = ?').run('path-completion-query-enrollment');
+    originalPrepare.call(database, 'DELETE FROM learning_paths WHERE id = ?').run('path-completion-query-path');
+    originalPrepare.call(database, `DELETE FROM lesson_progress WHERE lesson_id IN
+      (SELECT l.id FROM lessons l JOIN course_modules m ON m.id = l.module_id WHERE m.course_id IN (?, ?))`)
+      .run(...courseIds);
+    originalPrepare.call(database, 'DELETE FROM courses WHERE id IN (?, ?, ?)').run(...courseIds, targetCourseId);
+  }
+
+  for (const [query, preparations] of prerequisiteQueryPreparations) {
+    assert.equal(preparations, 1, `Expected one prepared statement for ${query}.`);
+  }
 });
