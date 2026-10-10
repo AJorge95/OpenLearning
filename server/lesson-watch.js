@@ -7,25 +7,60 @@ const progressClockToleranceSeconds = 0.5;
 const maximumHeartbeatCreditSeconds = 8;
 const suspiciousWatchLogIntervalMs = 60_000;
 
+const readLessonCompletionStatement = db.prepare('SELECT 1 FROM lesson_progress WHERE user_id = ? AND lesson_id = ?');
+const readWatchRecordStatement = db.prepare(`SELECT progress.watched_until_seconds,
+    COALESCE(telemetry.watched_seconds, progress.watched_until_seconds) AS watched_seconds,
+    progress.duration_seconds, progress.last_position_seconds, progress.last_heartbeat_at,
+    COALESCE(telemetry.rejected_seek_count, 0) AS rejected_seek_count,
+    telemetry.last_rejected_position_seconds, COALESCE(telemetry.last_rejected_at, 0) AS last_rejected_at,
+    COALESCE(telemetry.last_alerted_at, 0) AS last_alerted_at,
+    EXISTS (SELECT 1 FROM lesson_progress completed
+      WHERE completed.user_id = progress.user_id AND completed.lesson_id = progress.lesson_id) AS completed
+  FROM lesson_watch_progress AS progress
+  LEFT JOIN lesson_watch_telemetry AS telemetry ON telemetry.user_id = progress.user_id AND telemetry.lesson_id = progress.lesson_id
+  WHERE progress.user_id = ? AND progress.lesson_id = ?`);
+const beginWatchStatement = db.prepare(`INSERT INTO lesson_watch_progress
+  (user_id, lesson_id, watched_until_seconds, duration_seconds, last_position_seconds, last_heartbeat_at)
+  VALUES (?, ?, 0, ?, 0, ?)
+  ON CONFLICT(user_id, lesson_id) DO UPDATE SET
+    last_position_seconds = lesson_watch_progress.watched_until_seconds,
+    duration_seconds = excluded.duration_seconds,
+    last_heartbeat_at = excluded.last_heartbeat_at,
+    updated_at = CURRENT_TIMESTAMP`);
+const upsertWatchedSecondsStatement = db.prepare(`INSERT INTO lesson_watch_telemetry (user_id, lesson_id, watched_seconds)
+  VALUES (?, ?, ?)
+  ON CONFLICT(user_id, lesson_id) DO UPDATE SET
+    watched_seconds = MAX(lesson_watch_telemetry.watched_seconds, excluded.watched_seconds),
+    updated_at = CURRENT_TIMESTAMP`);
+const setWatchedSecondsStatement = db.prepare(`INSERT INTO lesson_watch_telemetry (user_id, lesson_id, watched_seconds)
+  VALUES (?, ?, ?)
+  ON CONFLICT(user_id, lesson_id) DO UPDATE SET
+    watched_seconds = excluded.watched_seconds,
+    updated_at = CURRENT_TIMESTAMP`);
+const rejectWatchPositionStatement = db.prepare(`INSERT INTO lesson_watch_telemetry
+  (user_id, lesson_id, rejected_seek_count, last_rejected_position_seconds, last_rejected_at)
+  VALUES (?, ?, 1, ?, ?)
+  ON CONFLICT(user_id, lesson_id) DO UPDATE SET
+    rejected_seek_count = lesson_watch_telemetry.rejected_seek_count + 1,
+    last_rejected_position_seconds = excluded.last_rejected_position_seconds,
+    last_rejected_at = excluded.last_rejected_at,
+    updated_at = CURRENT_TIMESTAMP`);
+const markWatchAnomalyAlertedStatement = db.prepare(`UPDATE lesson_watch_telemetry SET last_alerted_at = ?, updated_at = CURRENT_TIMESTAMP
+  WHERE user_id = ? AND lesson_id = ?`);
+const updateWatchProgressStatement = db.prepare(`UPDATE lesson_watch_progress SET watched_until_seconds = ?, duration_seconds = ?,
+  last_position_seconds = ?, last_heartbeat_at = ?, updated_at = CURRENT_TIMESTAMP
+  WHERE user_id = ? AND lesson_id = ?`);
+
 function readLessonCompletion(userId, lessonId) {
-  return Boolean(db.prepare('SELECT 1 FROM lesson_progress WHERE user_id = ? AND lesson_id = ?')
-    .get(userId, lessonId));
+  return Boolean(readLessonCompletionStatement.get(userId, lessonId));
 }
 
 function watchRecord(userId, lessonId) {
-  return db.prepare(`SELECT progress.watched_until_seconds,
-      COALESCE(telemetry.watched_seconds, progress.watched_until_seconds) AS watched_seconds,
-      progress.duration_seconds, progress.last_position_seconds, progress.last_heartbeat_at,
-      COALESCE(telemetry.rejected_seek_count, 0) AS rejected_seek_count,
-      telemetry.last_rejected_position_seconds, COALESCE(telemetry.last_rejected_at, 0) AS last_rejected_at,
-      COALESCE(telemetry.last_alerted_at, 0) AS last_alerted_at
-    FROM lesson_watch_progress AS progress
-    LEFT JOIN lesson_watch_telemetry AS telemetry ON telemetry.user_id = progress.user_id AND telemetry.lesson_id = progress.lesson_id
-    WHERE progress.user_id = ? AND progress.lesson_id = ?`).get(userId, lessonId);
+  return readWatchRecordStatement.get(userId, lessonId);
 }
 
 function responseFor(user, lessonId, row = watchRecord(user.id, lessonId), knownDuration = 0) {
-  const completed = readLessonCompletion(user.id, lessonId);
+  const completed = row ? Boolean(row.completed) : readLessonCompletion(user.id, lessonId);
   return {
     required: true,
     watchedUntilSeconds: row?.watched_until_seconds ?? 0,
@@ -49,19 +84,8 @@ export function beginLessonWatch(user, lessonId, durationSeconds) {
     fail(409, 'The video duration changed. Reload the lesson before continuing.', 'watch_duration_changed');
   }
   const now = Date.now();
-  db.prepare(`INSERT INTO lesson_watch_progress
-    (user_id, lesson_id, watched_until_seconds, duration_seconds, last_position_seconds, last_heartbeat_at)
-    VALUES (?, ?, 0, ?, 0, ?)
-    ON CONFLICT(user_id, lesson_id) DO UPDATE SET
-      last_position_seconds = lesson_watch_progress.watched_until_seconds,
-      duration_seconds = excluded.duration_seconds,
-      last_heartbeat_at = excluded.last_heartbeat_at,
-      updated_at = CURRENT_TIMESTAMP`).run(user.id, lessonId, durationSeconds, now);
-  db.prepare(`INSERT INTO lesson_watch_telemetry (user_id, lesson_id, watched_seconds)
-    VALUES (?, ?, ?)
-    ON CONFLICT(user_id, lesson_id) DO UPDATE SET
-      watched_seconds = MAX(lesson_watch_telemetry.watched_seconds, excluded.watched_seconds),
-      updated_at = CURRENT_TIMESTAMP`).run(user.id, lessonId, existing?.watched_until_seconds ?? 0);
+  beginWatchStatement.run(user.id, lessonId, durationSeconds, now);
+  upsertWatchedSecondsStatement.run(user.id, lessonId, existing?.watched_until_seconds ?? 0);
   return responseFor(user, lessonId, undefined, durationSeconds);
 }
 
@@ -83,20 +107,19 @@ export function recordLessonWatchProgress(user, lessonId, position) {
   const movedBackward = position < row.last_position_seconds - progressClockToleranceSeconds;
   const movedTooFarForward = position > maximumPosition + progressClockToleranceSeconds;
   if (movedBackward || movedTooFarForward) {
-    db.prepare(`INSERT INTO lesson_watch_telemetry
-      (user_id, lesson_id, rejected_seek_count, last_rejected_position_seconds, last_rejected_at)
-      VALUES (?, ?, 1, ?, ?)
-      ON CONFLICT(user_id, lesson_id) DO UPDATE SET
-        rejected_seek_count = lesson_watch_telemetry.rejected_seek_count + 1,
-        last_rejected_position_seconds = excluded.last_rejected_position_seconds,
-        last_rejected_at = excluded.last_rejected_at,
-        updated_at = CURRENT_TIMESTAMP`).run(user.id, lessonId, position, now);
-    const attempts = watchRecord(user.id, lessonId);
-    const shouldLogAnomaly = now - attempts.last_alerted_at >= suspiciousWatchLogIntervalMs;
+    rejectWatchPositionStatement.run(user.id, lessonId, position, now);
+    const rejectedSeekCount = row.rejected_seek_count + 1;
+    const shouldLogAnomaly = now - row.last_alerted_at >= suspiciousWatchLogIntervalMs;
     if (shouldLogAnomaly) {
-      db.prepare(`UPDATE lesson_watch_telemetry SET last_alerted_at = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = ? AND lesson_id = ?`).run(now, user.id, lessonId);
+      markWatchAnomalyAlertedStatement.run(now, user.id, lessonId);
     }
+    const attempts = {
+      ...row,
+      rejected_seek_count: rejectedSeekCount,
+      last_rejected_position_seconds: position,
+      last_rejected_at: now,
+      last_alerted_at: shouldLogAnomaly ? now : row.last_alerted_at,
+    };
     return {
       ...responseFor(user, lessonId, attempts),
       accepted: false,
@@ -117,22 +140,21 @@ export function recordLessonWatchProgress(user, lessonId, position) {
   const watchedUntil = Math.max(row.watched_until_seconds, acceptedPosition);
   const watchedSeconds = Math.min(row.duration_seconds, row.watched_seconds
     + Math.max(0, acceptedPosition - row.last_position_seconds));
-  const update = db.prepare(`UPDATE lesson_watch_progress SET watched_until_seconds = ?, duration_seconds = ?,
-    last_position_seconds = ?, last_heartbeat_at = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE user_id = ? AND lesson_id = ?`);
-  update.run(watchedUntil, row.duration_seconds, acceptedPosition, now, user.id, lessonId);
-  db.prepare(`INSERT INTO lesson_watch_telemetry (user_id, lesson_id, watched_seconds)
-    VALUES (?, ?, ?)
-    ON CONFLICT(user_id, lesson_id) DO UPDATE SET
-      watched_seconds = excluded.watched_seconds,
-      updated_at = CURRENT_TIMESTAMP`).run(user.id, lessonId, watchedSeconds);
-  const updated = watchRecord(user.id, lessonId);
+  updateWatchProgressStatement.run(watchedUntil, row.duration_seconds, acceptedPosition, now, user.id, lessonId);
+  setWatchedSecondsStatement.run(user.id, lessonId, watchedSeconds);
+  const updated = {
+    ...row,
+    watched_until_seconds: watchedUntil,
+    watched_seconds: watchedSeconds,
+    last_position_seconds: acceptedPosition,
+    last_heartbeat_at: now,
+  };
   return { ...responseFor(user, lessonId, updated), accepted: true };
 }
 
 export function lessonVideoWasWatched(userId, lessonId) {
-  if (readLessonCompletion(userId, lessonId)) return true;
   const row = watchRecord(userId, lessonId);
-  return Boolean(row && row.duration_seconds > 0
+  const completed = row ? Boolean(row.completed) : readLessonCompletion(userId, lessonId);
+  return completed || Boolean(row && row.duration_seconds > 0
     && row.watched_until_seconds >= row.duration_seconds - completionToleranceSeconds);
 }

@@ -103,6 +103,26 @@ test('watch progress starts empty and validates the verified video duration', ()
   });
 });
 
+test('reuses prepared statements for active video heartbeats', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  withFakeClock(1_000_000, (advance) => {
+    lessonWatch.beginLessonWatch(learner, 'watch-lesson', 100);
+    let prepareCalls = 0;
+    const originalPrepare = database.prepare;
+    database.prepare = function countedPrepare(...args) {
+      prepareCalls += 1;
+      return Reflect.apply(originalPrepare, this, args);
+    };
+    try {
+      advance(1_000);
+      assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 1).accepted, true);
+    } finally {
+      database.prepare = originalPrepare;
+    }
+    assert.equal(prepareCalls, 0);
+  });
+});
+
 test('watch progress requires a started video and rejects invalid positions', () => {
   const learner = { id: 'watch-learner', role: 'learner' };
   assertApiError(() => lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 1), 409, 'watch_not_started');
@@ -228,6 +248,14 @@ test('near-complete playback unlocks lesson completion and saved completion rema
   });
 
   database.prepare('INSERT INTO lesson_progress (user_id, lesson_id) VALUES (?, ?)').run(learner.id, 'watch-lesson');
+  assert.equal(lessonWatch.lessonVideoWasWatched(learner.id, 'watch-lesson'), true);
+});
+
+test('saved lesson completion remains recognized without a watch-progress row', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  database.prepare('INSERT INTO lesson_progress (user_id, lesson_id) VALUES (?, ?)').run(learner.id, 'watch-lesson');
+
+  assert.equal(lessonWatch.getLessonWatchProgress(learner, 'watch-lesson', 100).complete, true);
   assert.equal(lessonWatch.lessonVideoWasWatched(learner.id, 'watch-lesson'), true);
 });
 
