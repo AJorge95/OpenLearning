@@ -3067,3 +3067,46 @@ test('course access reuses complete canonical rows supplied by list queries', ()
   assert.equal(logicalCoursePreparations, 0);
   assert.equal(canonicalCoursePreparations, 0);
 });
+
+test('course access reuses the prerequisite query across enrolled paths', () => {
+  const targetCourseId = 'path-prerequisite-query-target';
+  const prerequisiteCourseId = 'path-prerequisite-query-prerequisite';
+  database.exec(`
+    INSERT INTO courses (id, title, status, visibility, created_by, updated_by) VALUES
+      ('${prerequisiteCourseId}', 'Unfinished prerequisite', 'published', 'public', 'admin-1', 'admin-1'),
+      ('${targetCourseId}', 'Private path target', 'published', 'private', 'admin-1', 'admin-1');
+    INSERT INTO learning_paths (id, title, status, created_by, updated_by) VALUES
+      ('path-prerequisite-query-one', 'Prerequisite query one', 'published', 'admin-1', 'admin-1'),
+      ('path-prerequisite-query-two', 'Prerequisite query two', 'published', 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+      ('path-prerequisite-query-one-first', 'path-prerequisite-query-one', '${prerequisiteCourseId}', 0, 0),
+      ('path-prerequisite-query-one-target', 'path-prerequisite-query-one', '${targetCourseId}', 1, 1),
+      ('path-prerequisite-query-two-first', 'path-prerequisite-query-two', '${prerequisiteCourseId}', 0, 0),
+      ('path-prerequisite-query-two-target', 'path-prerequisite-query-two', '${targetCourseId}', 1, 1);
+    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by) VALUES
+      ('path-prerequisite-query-enrollment-one', 'path-prerequisite-query-one', 'learner-active', 'assigned', 'admin-1'),
+      ('path-prerequisite-query-enrollment-two', 'path-prerequisite-query-two', 'learner-active', 'assigned', 'admin-1');
+  `);
+
+  const originalPrepare = database.prepare;
+  let prerequisiteQueryPreparations = 0;
+  database.prepare = (sql) => {
+    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT prior.course_id FROM learning_path_courses prior WHERE prior.path_id = ? AND prior.position < ? ORDER BY prior.position') {
+      prerequisiteQueryPreparations += 1;
+    }
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    const targetCourse = originalPrepare.call(database, 'SELECT * FROM courses WHERE id = ?').get(targetCourseId);
+    const canView = createCourseAccessChecker({ id: 'learner-active', role: 'learner', disabled: 0 });
+    assert.equal(canView(targetCourse), false);
+  } finally {
+    database.prepare = originalPrepare;
+    originalPrepare.call(database, 'DELETE FROM learning_path_enrollments WHERE id LIKE ?').run('path-prerequisite-query-enrollment-%');
+    originalPrepare.call(database, 'DELETE FROM learning_paths WHERE id LIKE ?').run('path-prerequisite-query-%');
+    originalPrepare.call(database, 'DELETE FROM courses WHERE id IN (?, ?)').run(targetCourseId, prerequisiteCourseId);
+  }
+
+  assert.equal(prerequisiteQueryPreparations, 0);
+});

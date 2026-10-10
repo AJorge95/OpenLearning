@@ -20,6 +20,8 @@ const requestBodyErrors = new Map([
 ]);
 const currentUserStatement = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?');
 const courseGrantStatement = db.prepare('SELECT 1 FROM course_grants WHERE course_id = ? AND user_id = ?');
+const pathPrerequisiteCoursesStatement = db.prepare(`SELECT prior.course_id
+  FROM learning_path_courses prior WHERE prior.path_id = ? AND prior.position < ? ORDER BY prior.position`);
 
 export function fail(status, message, code) {
   throw new ApiError(status, message, code);
@@ -209,9 +211,7 @@ function hasUnlockedPathAccess(courseId, userId, cache) {
       WHERE e.user_id = ? AND pc.course_id = ? AND lp.status = 'published'`).all(userId, courseId);
     for (const path of paths) {
       if (!path.requires_previous || path.position === 0) return true;
-      const prerequisites = db.prepare(`SELECT prior.course_id
-        FROM learning_path_courses prior WHERE prior.path_id = ? AND prior.position < ? ORDER BY prior.position`)
-        .all(path.path_id, path.position);
+      const prerequisites = pathPrerequisiteCoursesStatement.all(path.path_id, path.position);
       if (prerequisites.every((step) => completedForPath(step.course_id, userId, cache?.pathCompletion))) return true;
     }
     return false;
