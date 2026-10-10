@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse SQL statements for video watch heartbeats
+
+- **Reviewed:** The learner video progress endpoint, which reports a heartbeat every four seconds, and the watch-progress reads and writes performed for accepted and rejected positions.
+- **Improvement:** Prepare the watch, telemetry, and progress statements once when the watch service loads. Include saved completion in the watch-row query and derive the response from the values just written instead of fetching the row again.
+- **Why it helps:** Heartbeats avoid repeated SQL preparation and a redundant database read while keeping seek rejection, watched-time accounting, completion state, and alert throttling intact.
+- **Interface review:** The existing player continues to send progress every four seconds and exposes verified progress through its accessible progress indicator; no visible player change was needed.
+- **Checked:** The focused watch suite passed all 9 tests, including statement reuse, saved-completion fallback, seek handling, and watched-time behavior. Full `npm test` passed all 246 tests; `npm run build` and `git diff --check` passed. `npx tsc --noEmit` still reports 3 errors in separate uncommitted settings/course-editor edits in `src/pages-manage.tsx`.
+
 ## 2026-10-10 — Recheck the reported account-role selector boundary
 
 - **Reviewed:** The reported admin account page, its custom role selector’s trigger and wrapper widths, and the actual pointer target beside the control.
