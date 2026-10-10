@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Match course filter names to visible labels
+
+- **Reviewed:** The learner catalog's category and sort controls, their visible labels and combobox accessible names, and the custom-select structure regression.
+- **Improvement:** Name the sort combobox “Sort by” to match its visible label, and cover label-in-name consistency for both catalog filters.
+- **Why it helps:** Learners can find the sort control by the words shown beside it, including with speech input, and screen-reader output stays aligned with the interface.
+- **Checked:** The focused AppSelect label tests, full test suite, TypeScript check, production build, and `git diff --check` passed. The refreshed authenticated `/courses` page exposes the corrected combobox name in its accessibility tree.
+
 ## 2026-10-10 — Keep version snapshots out of the learner catalog
 
 - **Reviewed:** The canonical-course filters in the catalog result and category queries, plus the existing versioned-course data model.
