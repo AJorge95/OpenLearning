@@ -24,6 +24,7 @@ const isolatedConfig = {
 const previousConfig = new Map(Object.keys(isolatedConfig).map((key) => [key, process.env[key]]));
 let fixtureDirectory;
 let database;
+let serverConfig;
 let migrateDatabase;
 let server;
 let sessionStore;
@@ -60,6 +61,7 @@ before(async () => {
     MEDIA_ROOT: path.join(fixtureDirectory, 'course-media'),
   });
 
+  ({ config: serverConfig } = await import('../../server/config.js'));
   ({ db: database, migrateDatabase } = await import('../../server/db.js'));
   const { authRouter } = await import('../../server/routes-auth.js');
   const { adminRouter } = await import('../../server/routes-admin.js');
@@ -422,7 +424,28 @@ test('initial setup rejects missing or incorrect operator bootstrap credentials 
 
   const statusResponse = await fetch(apiUrl('/setup/status'), { headers: { connection: 'close' } });
   assert.equal(statusResponse.status, 200);
-  assert.equal(Object.hasOwn(await statusResponse.json(), 'setupToken'), false);
+  const setupStatus = await statusResponse.json();
+  assert.equal(setupStatus.setupAvailable, true);
+  assert.equal(Object.hasOwn(setupStatus, 'setupToken'), false);
+
+  const configuredSetupToken = serverConfig.setupToken;
+  serverConfig.setupToken = '';
+  try {
+    const unavailableResponse = await fetch(apiUrl('/setup'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ setupToken: configuredSetupToken }),
+    });
+    assert.equal(unavailableResponse.status, 503);
+    assert.deepEqual(await unavailableResponse.json(), {
+      error: 'Initial setup is unavailable because no bootstrap credential is configured.',
+      code: 'setup_credential_unavailable',
+    });
+    const unavailableStatusResponse = await fetch(apiUrl('/setup/status'), { headers: { connection: 'close' } });
+    assert.equal((await unavailableStatusResponse.json()).setupAvailable, false);
+  } finally {
+    serverConfig.setupToken = configuredSetupToken;
+  }
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, 0);
   assert.deepEqual(database.prepare('SELECT key, value FROM app_settings ORDER BY key').all(), appSettingsBefore);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'platform.setup'").get().count, 0);

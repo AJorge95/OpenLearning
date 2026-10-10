@@ -14,6 +14,7 @@ interface AuthContextValue {
   registrationAvailable: boolean;
   userLimit: number;
   configured: boolean;
+  setupAvailable: boolean;
   loading: boolean;
   startupError: string | null;
   retryStartup: () => Promise<void>;
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [registrationAvailable, setRegistrationAvailableState] = useState(true);
   const [userLimit, setUserLimitState] = useState(0);
   const [configured, setConfigured] = useState(false);
+  const [setupAvailable, setSetupAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [startupError, setStartupError] = useState<string | null>(null);
   const startupRequestId = useRef(0);
@@ -53,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (requestId !== refreshRequestId.current || stateRevision !== authStateRevision.current) return;
     authStateRevision.current += 1;
     setConfigured(setup.configured);
+    setSetupAvailable(setup.setupAvailable);
     setPlatformNameState(me.platformName || setup.platformName || 'OpenLearning');
     setPlatformIconState(me.platformIcon ?? setup.platformIcon ?? null);
     setThemePaletteState(me.themePalette || setup.themePalette || DEFAULT_PALETTE);
@@ -133,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     api.clearCsrf();
     setUser(result.user);
     setConfigured(true);
+    setSetupAvailable(false);
     setPlatformNameState(result.platformName);
     setPlatformIconState(result.platformIcon ?? null);
     setThemePaletteState(result.themePalette || DEFAULT_PALETTE);
@@ -169,8 +173,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
-    user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationAvailable, userLimit, configured, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings,
-  }), [user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationAvailable, userLimit, configured, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings]);
+    user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationAvailable, userLimit, configured, setupAvailable, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings,
+  }), [user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationAvailable, userLimit, configured, setupAvailable, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

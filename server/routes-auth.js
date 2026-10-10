@@ -218,7 +218,8 @@ authRouter.get('/branding/icon', (_req, res) => {
 });
 
 authRouter.get('/setup/status', (_req, res) => {
-  res.json({ configured: setupComplete(), ...getPlatformConfiguration() });
+  const configured = setupComplete();
+  res.json({ configured, setupAvailable: !configured && Boolean(config.setupToken), ...getPlatformConfiguration() });
 });
 
 authRouter.get('/registration-fields', (_req, res) => {

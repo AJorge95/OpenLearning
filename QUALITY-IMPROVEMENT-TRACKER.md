@@ -8,6 +8,14 @@
 - **Interface review:** The wizard validates token length before submission and explains that the credential comes from the server operator.
 - **Checked:** Focused auth/setup route tests passed all 10 tests; full `npm test` passed all 242 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The browser rendering of the setup wizard was not rechecked in this cycle.
 
+## 2026-10-10 — Explain when first-run setup is unavailable
+
+- **Reviewed:** Setup status reporting, auth-context initialization, and the first-run wizard when the server has no bootstrap credential.
+- **Improvement:** Return a boolean `setupAvailable` status without exposing the credential, pass it into the wizard, and replace the unusable form with a clear instruction to configure `SETUP_TOKEN` when setup is unavailable.
+- **Why it helps:** Operators see the required server-side step before entering account details, and public setup status still contains no secret.
+- **Interface review:** The unavailable state uses the existing setup panel and a focused page heading; no form is shown while setup is disabled.
+- **Checked:** Focused auth/setup route tests passed all 10 tests; full `npm test` passed all 242 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered browser QA was unavailable because this workspace has no Playwright executable; the route contract and production build were validated instead.
+
 ## 2026-10-10 — Keep course and path detail reads side-effect free
 
 - **Reviewed:** Course and learning-path detail GET routes, learner enrollment entry points, course curriculum links, staff preview access, and path-state synchronization after course changes.
