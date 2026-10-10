@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Associate the account role label with its selector
+
+- **Reviewed:** The account-detail Platform role field uses a separate visible label and custom combobox so clicks outside the trigger do not open it, but the label was not programmatically connected to the control.
+- **Improvement:** Give the combobox a stable control ID, associate the visible label through `htmlFor`, and make only the label text and trigger pointer targets inside the otherwise non-interactive field wrapper.
+- **Why it helps:** The label can focus/open the intended control and exposes a native label relationship without restoring the oversized parent-label hit area.
+- **Interface review:** The separate label and bounded trigger remain in place. The local browser refused this page under its URL policy, so the label-click behavior was not visually verified in this cycle.
+- **Backend review:** No backend change was indicated; account-role updates and validation are unchanged.
+- **Checked:** The AppSelect label/accessibility regressions and JSX/CSS hit-area assertions passed (5/5); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered label-click behavior remains unverified because the browser denied the local page.
+
 ## 2026-10-11 — Cycle custom-select typeahead across repeated letters
 
 - **Reviewed:** The shared `AppSelect` keyboard typeahead searches from the active option, but repeating a key such as “a” fell back to the same first match instead of cycling through options with that initial. The component is used for administrator role filters and learner/course controls.
