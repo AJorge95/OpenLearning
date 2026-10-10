@@ -35,6 +35,44 @@ function labelWrappedAppSelects(sourceFile) {
   return violations;
 }
 
+function stringJsxAttribute(openingElement, name) {
+  const attribute = openingElement.attributes.properties.find((property) => (
+    ts.isJsxAttribute(property) && property.name.text === name
+  ));
+  return attribute && ts.isJsxAttribute(attribute) && ts.isStringLiteral(attribute.initializer)
+    ? attribute.initializer.text : '';
+}
+
+function catalogFilterLabels(sourceFile) {
+  const controls = [];
+
+  function visit(node) {
+    if (ts.isJsxElement(node)) {
+      const classNames = stringJsxAttribute(node.openingElement, 'className').split(/\s+/);
+      if (classNames.includes('catalog-filter-control')) {
+        const label = node.children.find((child) => ts.isJsxElement(child)
+          && stringJsxAttribute(child.openingElement, 'className') === 'catalog-filter-label');
+        const select = node.children.find((child) => ts.isJsxSelfClosingElement(child)
+          && jsxTagName(child.tagName) === 'AppSelect');
+        if (label && select) {
+          controls.push({
+            visibleLabel: label.children.filter(ts.isJsxText).map((child) => child.text.trim()).join(' ').trim(),
+            accessibleName: stringJsxAttribute(select, 'ariaLabel'),
+          });
+        }
+        return;
+      }
+      node.children.forEach(visit);
+      return;
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return controls;
+}
+
 function collectTsxFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = path.join(directory, entry.name);
@@ -66,4 +104,16 @@ test('AppSelect controls are not nested inside native labels', () => {
   });
 
   assert.deepEqual(violations, [], `AppSelect must use a separate field container instead of a wrapping label:\n${violations.join('\n')}`);
+});
+
+test('catalog filter accessible names contain their visible labels', () => {
+  const source = fs.readFileSync(path.join(sourceDirectory, 'pages-learner.tsx'), 'utf8');
+  const sourceFile = ts.createSourceFile('pages-learner.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const controls = catalogFilterLabels(sourceFile);
+
+  assert.equal(controls.length, 2);
+  for (const { visibleLabel, accessibleName } of controls) {
+    assert.ok(accessibleName.toLocaleLowerCase().includes(visibleLabel.toLocaleLowerCase()),
+      `The “${visibleLabel}” filter is announced as “${accessibleName}”.`);
+  }
 });

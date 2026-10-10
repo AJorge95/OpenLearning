@@ -172,7 +172,7 @@ export function CatalogPage() {
     <div className="catalog-tools">
       <div className="filter-controls">
         <div className="select-wrap catalog-filter-control"><span className="catalog-filter-label">Category</span><AppSelect className="app-select--filter" ariaLabel="Course category" leadingIcon={<Filter size={16} />} value={category} onChange={setCategory} options={[{ value: 'All courses', label: 'All courses' }, ...categories.filter((item) => item !== 'All courses').map((item) => ({ value: item, label: item }))]} /></div>
-        <div className="select-wrap catalog-filter-control catalog-filter-control--sort"><span className="catalog-filter-label">Sort by</span><AppSelect className="app-select--filter" ariaLabel="Sort courses" leadingIcon={<ArrowDownUp size={16} />} value={sort} onChange={setSort} options={[{ value: 'recent', label: 'Recently updated' }, { value: 'title', label: 'Course title' }]} /></div>
+        <div className="select-wrap catalog-filter-control catalog-filter-control--sort"><span className="catalog-filter-label">Sort by</span><AppSelect className="app-select--filter" ariaLabel="Sort by" leadingIcon={<ArrowDownUp size={16} />} value={sort} onChange={setSort} options={[{ value: 'recent', label: 'Recently updated' }, { value: 'title', label: 'Course title' }]} /></div>
       </div>
       <form className="search-field" onSubmit={(event) => { event.preventDefault(); load({ query: query.trim(), category, sort }); }}>
         <Search size={19} /><input ref={searchInputRef} aria-label="Search courses" placeholder="Search courses" maxLength={120} value={query} onChange={(event) => setQuery(event.target.value)} /><button type="submit" aria-label="Submit search"><ArrowRight size={17} /></button>
