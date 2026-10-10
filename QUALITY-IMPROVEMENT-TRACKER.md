@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Keep version snapshots out of the learner catalog
+
+- **Reviewed:** The canonical-course filters in the catalog result and category queries, plus the existing versioned-course data model.
+- **Improvement:** Add an isolated API regression proving a published version snapshot cannot duplicate a learner-facing course or add a snapshot-only category.
+- **Why it helps:** Future catalog changes will preserve the single visible course identity while keeping filters aligned with actual learner choices.
+- **Checked:** The course route suite and full test suite passed after adding the regression; `git diff --check` passed.
+
 ## 2026-10-10 — Show course revision review state in the course list
 
 - **Reviewed:** The course list’s unpublished-change badge, the revision review workflow, existing review status types, and the current course list API payload.
