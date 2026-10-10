@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Show password guidance on account reset
+
+- **Reviewed:** The account-details password reset form, password length constraints in `server/auth.js`, and the existing signup, account-creation, and self-service password guidance.
+- **Improvement:** Show “Use at least 12 characters” below the new-password field and connect it with `aria-describedby`, keeping the visible field label concise.
+- **Why it helps:** Administrators can choose a valid password before submitting instead of learning the minimum only from browser or server validation.
+- **Backend review:** `validateCredentials` already enforces 12–256 characters for reset passwords; no backend change was needed.
+- **Checked:** The focused structure/accessibility test passed; full `npm test` passed all 210 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The signed-in local account page rendered the hint at 1280×720 with the description reference resolved and no console warnings or errors. At 390×844, the page had no horizontal overflow and the hint remained visible after scrolling it into view.
+
 ## 2026-10-10 — Recheck unfinished markers and backend catch paths
 
 - **Reviewed:** Source for `TODO`, `FIXME`, `HACK`, and `XXX` markers and empty catches in the server and client; the session migration and media file-validation cleanup paths.
