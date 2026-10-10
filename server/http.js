@@ -20,6 +20,9 @@ const requestBodyErrors = new Map([
 ]);
 const currentUserStatement = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?');
 const courseGrantStatement = db.prepare('SELECT 1 FROM course_grants WHERE course_id = ? AND user_id = ?');
+const courseByIdStatement = db.prepare('SELECT * FROM courses WHERE id = ?');
+const canonicalCourseStatement = db.prepare('SELECT * FROM courses WHERE id = ? AND logical_course_id IS NULL');
+const activeCourseVersionStatement = db.prepare('SELECT storage_course_id FROM course_versions WHERE course_id = ? ORDER BY version_number DESC LIMIT 1');
 const enrolledCoursePathsStatement = db.prepare(`SELECT lp.id AS path_id, lp.status, pc.position, pc.requires_previous
   FROM learning_path_enrollments e JOIN learning_paths lp ON lp.id = e.path_id
   JOIN learning_path_courses pc ON pc.path_id = lp.id
@@ -145,11 +148,11 @@ function canViewCourseWithCache(course, user, cache) {
   const canonical = cachedValue(cache?.canonical, courseId,
     () => hasLoadedCanonicalAccessFields
       ? course
-      : db.prepare('SELECT * FROM courses WHERE id = ? AND logical_course_id IS NULL').get(courseId));
+      : canonicalCourseStatement.get(courseId));
   if (!canonical || canonical.status !== 'published') return false;
   if (course.logical_course_id) {
     const active = cachedValue(cache?.activeVersions, courseId,
-      () => db.prepare('SELECT storage_course_id FROM course_versions WHERE course_id = ? ORDER BY version_number DESC LIMIT 1').get(courseId));
+      () => activeCourseVersionStatement.get(courseId));
     if (active?.storage_course_id !== course.id) return false;
   }
   if (canonical.visibility === 'public') return true;
@@ -236,7 +239,7 @@ function hasUnlockedPathAccess(courseId, userId, cache) {
 }
 
 export function courseById(courseId) {
-  return db.prepare('SELECT * FROM courses WHERE id = ?').get(courseId);
+  return courseByIdStatement.get(courseId);
 }
 
 export function requireCourseManager(courseId, user) {
