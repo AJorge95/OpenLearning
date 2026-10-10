@@ -10,6 +10,7 @@ import { accountName, accountNames } from './account-names.js';
 import { issueCompletedCertificatesForUser } from './certificate-service.js';
 import { courseSummaries } from './course-service.js';
 import { normalizeRegistrationFields, readRegistrationFields, saveRegistrationFields } from './registration-fields.js';
+import { adminPasswordResetLimiter } from './rate-limits.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -281,7 +282,7 @@ adminRouter.patch('/users/:userId', (req, res) => {
   }, certificatesIssued });
 });
 
-adminRouter.put('/users/:userId/password', async (req, res) => {
+adminRouter.put('/users/:userId/password', adminPasswordResetLimiter, async (req, res) => {
   const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(req.params.userId);
   if (!user) fail(404, 'User not found.', 'not_found');
   const { password, confirmPassword } = req.body || {};

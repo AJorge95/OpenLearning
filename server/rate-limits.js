@@ -12,6 +12,18 @@ export const passwordChangeLimiter = rateLimit({
   }),
 });
 
+export const adminPasswordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  keyGenerator: (req) => `user:${req.currentUser.id}`,
+  handler: (_req, res) => res.status(429).json({
+    error: 'Too many administrator password resets. Please wait before trying again.',
+    code: 'rate_limited',
+  }),
+});
+
 export const learnerCommentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,
