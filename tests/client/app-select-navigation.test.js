@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { findEnabledAppSelectIndex } from '../../src/app-select-navigation.ts';
+import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex } from '../../src/app-select-navigation.ts';
 
 const options = [{}, { disabled: true }, {}];
 
@@ -24,4 +24,31 @@ test('custom-select End navigation finds the last enabled option', () => {
 test('custom-select navigation keeps its empty and all-disabled fallbacks', () => {
   assert.equal(findEnabledAppSelectIndex([], 0), 0);
   assert.equal(findEnabledAppSelectIndex([{ disabled: true }, { disabled: true }], 1, -1), 0);
+});
+
+test('custom-select typeahead matches case-insensitively, wraps, and skips disabled options', () => {
+  const labeledOptions = [
+    { label: 'Alpha' },
+    { label: 'Another' },
+    { label: 'Archived', disabled: true },
+    { label: 'Beta' },
+  ];
+
+  assert.equal(findAppSelectTypeaheadIndex(labeledOptions, 3, 'a'), 0);
+  assert.equal(findAppSelectTypeaheadIndex(labeledOptions, 2, 'a'), 0);
+  assert.equal(findAppSelectTypeaheadIndex(labeledOptions, 0, 'an'), 1);
+});
+
+test('custom-select repeated-letter typeahead cycles from the active option', () => {
+  const labeledOptions = [
+    { label: 'Administrator' },
+    { label: 'Another role' },
+    { label: 'Archived role', disabled: true },
+    { label: 'Learner' },
+  ];
+
+  assert.equal(findAppSelectTypeaheadIndex(labeledOptions, 0, 'aa', true), 1);
+  assert.equal(findAppSelectTypeaheadIndex(labeledOptions, 1, 'aa', true), 0);
+  assert.equal(findAppSelectTypeaheadIndex(labeledOptions, 0, 'zz'), -1);
+  assert.equal(findAppSelectTypeaheadIndex(labeledOptions, 0, ''), -1);
 });

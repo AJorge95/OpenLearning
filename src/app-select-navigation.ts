@@ -1,4 +1,5 @@
 export type AppSelectNavigationOption = { disabled?: boolean };
+export type AppSelectTypeaheadOption = AppSelectNavigationOption & { label: string };
 
 export function findEnabledAppSelectIndex(
   options: readonly AppSelectNavigationOption[],
@@ -11,4 +12,23 @@ export function findEnabledAppSelectIndex(
     if (!options[index].disabled) return index;
   }
   return 0;
+}
+
+export function findAppSelectTypeaheadIndex(
+  options: readonly AppSelectTypeaheadOption[],
+  start: number,
+  prefix: string,
+  cycleRepeatedCharacter = false,
+) {
+  if (!options.length || !prefix) return -1;
+  const characters = Array.from(prefix);
+  const needle = cycleRepeatedCharacter ? characters.at(-1) ?? '' : prefix;
+  const normalizedNeedle = needle.toLocaleLowerCase();
+  const firstIndex = cycleRepeatedCharacter ? start + 1 : start;
+  for (let offset = 0; offset < options.length; offset += 1) {
+    const index = ((firstIndex + offset) % options.length + options.length) % options.length;
+    const option = options[index];
+    if (!option.disabled && option.label.toLocaleLowerCase().startsWith(normalizedNeedle)) return index;
+  }
+  return -1;
 }

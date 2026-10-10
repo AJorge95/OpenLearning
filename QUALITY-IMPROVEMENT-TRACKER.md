@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Cycle custom-select typeahead across repeated letters
+
+- **Reviewed:** The shared `AppSelect` keyboard typeahead searches from the active option, but repeating a key such as “a” fell back to the same first match instead of cycling through options with that initial. The component is used for administrator role filters and learner/course controls.
+- **Improvement:** Extract the case-insensitive typeahead lookup, skip disabled options, wrap at the ends, and advance from the active item when the search buffer contains the same repeated character.
+- **Why it helps:** Keyboard users can quickly cycle through repeated-initial options while the selector retains existing prefix search and disabled-option behavior.
+- **Interface review:** The admin user-list Role combobox was checked in the local browser; typing “a” twice opens the menu with “Administrators” active after “All roles.”
+- **Backend review:** Checked API response handling and file-stream error behavior; no backend change was indicated by this pass.
+- **Checked:** Focused AppSelect navigation tests passed (7/7); local browser confirmed the active option; full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Verify platform reset request draining
 
 - **Reviewed:** Reset preparation waits for in-flight API and media responses to finish, then blocks new requests until the administrator confirms or cancels.
