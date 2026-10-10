@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Validate WebP cover RIFF chunk bounds
+
+- **Reviewed:** WebP cover upload signatures and rejection cleanup, plus the reported administrator role-selector hit area.
+- **Improvement:** Check the declared RIFF extent, supported first image chunk, and padded chunk bounds before accepting a WebP cover. Reject header-only and truncated chunks while retaining support for complete VP8 image chunks.
+- **Why it helps:** A MIME-matched 12-byte prefix can no longer be stored as a course cover, and malformed chunk lengths are rejected before media or audit records are written.
+- **Interface review:** The current account-details markup uses a separate `.account-role-control` container, and its visible trigger matches the container width (152px on desktop, 311px at 390px). In both layouts the menu opened from the trigger and closed after a click to its right; no additional UI change was warranted.
+- **Checked:** All 8 `server/media-routes.test.js` cases passed, including malformed and complete WebP route cases. Full `npm test`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Desktop and 390px browser checks showed the account remains Active and produced no console warnings or errors.
+
 ## 2026-10-10 — Protect lesson-watch clock-tolerance boundaries
 
 - **Reviewed:** The in-progress media-clock tolerance and queued player heartbeat changes, plus existing lesson-watch validation and completion-boundary tests.

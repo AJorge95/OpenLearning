@@ -127,6 +127,46 @@ test('rejects a truncated PNG cover and removes the temporary upload', async () 
   assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
 });
 
+test('rejects truncated WebP RIFF headers and image chunks without saving media', async () => {
+  const courseMediaDirectory = path.dirname(captionPath);
+  const originalFiles = (await fs.readdir(courseMediaDirectory)).sort();
+  const originalMediaCount = database.prepare('SELECT COUNT(*) AS count FROM media_files').get().count;
+  const originalAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.cover_uploaded'").get().count;
+  const headerOnlyWebp = Buffer.alloc(12);
+  headerOnlyWebp.write('RIFF', 0, 'ascii');
+  headerOnlyWebp.writeUInt32LE(4, 4);
+  headerOnlyWebp.write('WEBP', 8, 'ascii');
+  const truncatedImageChunkWebp = Buffer.alloc(20);
+  truncatedImageChunkWebp.write('RIFF', 0, 'ascii');
+  truncatedImageChunkWebp.writeUInt32LE(12, 4);
+  truncatedImageChunkWebp.write('WEBP', 8, 'ascii');
+  truncatedImageChunkWebp.write('VP8 ', 12, 'ascii');
+  truncatedImageChunkWebp.writeUInt32LE(4, 16);
+
+  for (const [filename, contents] of [
+    ['header-only-cover.webp', headerOnlyWebp],
+    ['truncated-chunk-cover.webp', truncatedImageChunkWebp],
+  ]) {
+    const form = new FormData();
+    form.set('kind', 'cover');
+    form.set('file', new File([contents], filename, { type: 'image/webp' }));
+
+    const response = await fetch(apiUrl('/manage/courses/course-caption-audit/media'), {
+      method: 'POST',
+      headers: { 'x-test-user': 'admin-media', connection: 'close' },
+      body: form,
+    });
+
+    assert.equal(response.status, 400, filename);
+    assert.equal((await response.json()).code, 'invalid_media_type', filename);
+  }
+
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM media_files').get().count, originalMediaCount);
+  assert.equal(database.prepare("SELECT cover_media_id FROM courses WHERE id = 'course-caption-audit'").get().cover_media_id, null);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.cover_uploaded'").get().count, originalAuditCount);
+  assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
+});
+
 test('cover replacement preserves the old image when its audit event cannot be saved', async () => {
   const courseId = 'course-caption-audit';
   const previousFileName = 'original-cover.png';
@@ -398,4 +438,27 @@ test('caption removal preserves its record and file when its audit event cannot 
   assert.equal(database.prepare("SELECT id FROM lesson_captions WHERE id = 'caption-audit'").get(), undefined);
   await assert.rejects(fs.stat(captionPath), { code: 'ENOENT' });
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.caption_removed' AND entity_id = 'lesson-caption-audit'").get().count, initialAuditCount + 1);
+});
+
+test('accepts a WebP cover with a complete RIFF image chunk', async () => {
+  const webpContents = Buffer.from('UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v89WAAAAA==', 'base64');
+  const form = new FormData();
+  form.set('kind', 'cover');
+  form.set('file', new File([webpContents], 'valid-cover.webp', { type: 'image/webp' }));
+
+  const response = await fetch(apiUrl('/manage/courses/course-caption-audit/media'), {
+    method: 'POST',
+    headers: { 'x-test-user': 'admin-media', connection: 'close' },
+    body: form,
+  });
+
+  assert.equal(response.status, 201);
+  const { media } = await response.json();
+  assert.equal(media.kind, 'cover');
+  assert.equal(media.name, 'valid-cover.webp');
+  assert.equal(media.bytes, webpContents.length);
+  assert.equal(database.prepare("SELECT cover_media_id FROM courses WHERE id = 'course-caption-audit'").get().cover_media_id, media.id);
+  const storedMedia = database.prepare('SELECT file_name FROM media_files WHERE id = ?').get(media.id);
+  assert.ok(storedMedia);
+  assert.deepEqual(await fs.readFile(path.join(path.dirname(captionPath), storedMedia.file_name)), webpContents);
 });
