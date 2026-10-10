@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse the learning-path prerequisite query
+
+- **Reviewed:** Private-course access checks that iterate the learner's enrolled paths and compiled the same prerequisite-course query again for every locked path.
+- **Improvement:** Prepare the parameterized prerequisite query once with the other shared course-access statements and reuse it for each path and step position.
+- **Why it helps:** Learners enrolled in several paths avoid repeated SQLite statement compilation during authorization, while each path still loads and checks its own prerequisites.
+- **Interface review:** No visible change. The reported account-role selector already uses a bounded non-label control in the current workspace; its existing hit-area fix remains tracked separately.
+- **Checked:** A two-path regression confirms private access remains denied while the prerequisite is incomplete and verifies the request no longer prepares the repeated SELECT. The focused course-analytics suite passed (72/72); full `npm test` passed all 268 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reuse course rows for calendar visibility checks
 
 - **Reviewed:** The calendar joins each deadline to its course and passes that row to the access checker. It selected status and visibility but omitted `logical_course_id`, forcing two more course reads for private deadlines.
