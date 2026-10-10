@@ -155,6 +155,18 @@ function requireFeedbackLesson(lessonId, user) {
   return lesson;
 }
 
+function lessonReactionSummary(lessonId, userId) {
+  const summary = db.prepare(`SELECT
+    COUNT(CASE WHEN reaction = 'like' THEN 1 END) AS likes,
+    COUNT(CASE WHEN reaction = 'dislike' THEN 1 END) AS dislikes,
+    MAX(CASE WHEN user_id = ? THEN reaction END) AS user_reaction
+    FROM lesson_reactions WHERE lesson_id = ?`).get(userId, lessonId);
+  return {
+    reaction: summary.user_reaction || null,
+    counts: { like: summary.likes, dislike: summary.dislikes },
+  };
+}
+
 courseRouter.get('/courses', (req, res) => {
   const query = textField(req.query.q, 'Search', 120);
   const category = textField(req.query.category, 'Category', 100);
@@ -1169,17 +1181,10 @@ courseRouter.delete('/manage/courses/:courseId/access/:userId', requireStaff, (r
 
 courseRouter.get('/lessons/:lessonId/feedback', (req, res) => {
   const lesson = requireFeedbackLesson(req.params.lessonId, req.currentUser);
-  const counts = { like: 0, dislike: 0 };
   const isLearner = req.currentUser.role === 'learner';
-  if (isLearner) {
-    for (const row of db.prepare('SELECT reaction, COUNT(*) AS count FROM lesson_reactions WHERE lesson_id = ? GROUP BY reaction').all(lesson.lesson_id)) {
-      counts[row.reaction] = row.count;
-    }
-  }
-  const reaction = isLearner
-    ? db.prepare('SELECT reaction FROM lesson_reactions WHERE lesson_id = ? AND user_id = ?')
-      .get(lesson.lesson_id, req.currentUser.id)?.reaction || null
-    : null;
+  const summary = isLearner
+    ? lessonReactionSummary(lesson.lesson_id, req.currentUser.id)
+    : { reaction: null, counts: { like: 0, dislike: 0 } };
   const requestedPage = pageQuery(req.query.page);
   const pageSize = 20;
   const total = db.prepare('SELECT COUNT(*) AS count FROM lesson_comments WHERE lesson_id = ?').get(lesson.lesson_id).count;
@@ -1190,8 +1195,8 @@ courseRouter.get('/lessons/:lessonId/feedback', (req, res) => {
     .all(lesson.lesson_id, pageSize, (page - 1) * pageSize);
   res.json({
     lessonId: lesson.lesson_id,
-    reaction,
-    counts,
+    reaction: summary.reaction,
+    counts: summary.counts,
     comments: comments.map((comment) => ({ id: comment.id, body: comment.body, username: comment.username, createdAt: comment.created_at })),
     total,
     page,
@@ -1213,11 +1218,8 @@ courseRouter.put('/lessons/:lessonId/reaction', learnerReactionLimiter, (req, re
         ON CONFLICT(lesson_id, user_id) DO UPDATE SET reaction = excluded.reaction, updated_at = CURRENT_TIMESTAMP`)
         .run(lesson.lesson_id, req.currentUser.id, reaction);
     }
-    const counts = { like: 0, dislike: 0 };
-    for (const row of db.prepare('SELECT reaction, COUNT(*) AS count FROM lesson_reactions WHERE lesson_id = ? GROUP BY reaction').all(lesson.lesson_id)) {
-      counts[row.reaction] = row.count;
-    }
-    return { reaction, counts };
+    const summary = lessonReactionSummary(lesson.lesson_id, req.currentUser.id);
+    return { reaction, counts: summary.counts };
   });
   res.json(saveReaction.immediate());
 });
