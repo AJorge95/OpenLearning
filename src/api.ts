@@ -242,7 +242,7 @@ export const api = {
 };
 
 export async function getSetupStatus() {
-  return api.get<{ configured: boolean } & PlatformConfiguration>('/api/setup/status');
+  return api.get<{ configured: boolean; setupAvailable: boolean } & PlatformConfiguration>('/api/setup/status');
 }
 
 export async function getMe() {

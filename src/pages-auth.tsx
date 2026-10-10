@@ -70,7 +70,7 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
 }
 
 export function SetupPage() {
-  const { completeSetup, configured, user, connectionProtocol: initialProtocol, registrationEnabled: initialRegistrationEnabled, userLimit: initialUserLimit } = useAuth();
+  const { completeSetup, configured, setupAvailable, user, connectionProtocol: initialProtocol, registrationEnabled: initialRegistrationEnabled, userLimit: initialUserLimit } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2>(1);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -99,6 +99,13 @@ export function SetupPage() {
   }, [step]);
 
   if (configured) return <Navigate to={user ? '/courses' : '/login'} replace />;
+  if (!setupAvailable) return <main id="main-content" tabIndex={-1} className="setup-page">
+    <section className="setup-panel">
+      <span className="setup-mark"><BookOpenMark /></span>
+      <h1>Initial setup is unavailable</h1>
+      <p>Ask the server operator to configure the private <code>SETUP_TOKEN</code> before creating the administrator account.</p>
+    </section>
+  </main>;
 
   function continueToAccessSettings(event: React.FormEvent) {
     event.preventDefault();
