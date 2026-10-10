@@ -110,6 +110,49 @@ test('reports a stable invalid-response error for non-JSON API responses', async
   ));
 });
 
+test('normalizes API connection failures into a stable retryable error', async (t) => {
+  restoreFetch(t);
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+
+  await assert.rejects(api.get('/api/data'), (error) => (
+    error instanceof ApiError
+    && error.status === 0
+    && error.code === 'network_error'
+    && error.message === 'The server could not be reached. Check your connection and try again.'
+  ));
+});
+
+test('normalizes connection failures while starting a write session', async (t) => {
+  restoreFetch(t);
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+
+  await assert.rejects(api.post('/api/action', { value: 1 }), (error) => (
+    error instanceof ApiError && error.status === 0 && error.code === 'network_error'
+  ));
+});
+
+test('keeps aborted API requests as AbortError', async (t) => {
+  restoreFetch(t);
+  const abortError = new DOMException('The request was aborted.', 'AbortError');
+  globalThis.fetch = async () => { throw abortError; };
+
+  await assert.rejects(api.get('/api/data'), (error) => error === abortError);
+});
+
+test('normalizes connection loss while reading an API response', async (t) => {
+  restoreFetch(t);
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    text: async () => { throw new TypeError('Connection closed'); },
+  });
+
+  await assert.rejects(api.get('/api/data'), (error) => (
+    error instanceof ApiError && error.status === 0 && error.code === 'network_error'
+  ));
+});
+
 test('does not construct or send an upload when its signal is already aborted', async (t) => {
   restoreFetch(t);
   const originalFormData = globalThis.FormData;
