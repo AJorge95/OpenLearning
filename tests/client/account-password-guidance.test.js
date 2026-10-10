@@ -73,3 +73,39 @@ test('account password reset explains and announces the password length requirem
   assert.equal(attributeExpression(input, 'minLength'), '12');
   assert.equal(attributeExpression(input, 'maxLength'), '256');
 });
+
+test('administrator password-reset dialog explains and announces the password length requirement', () => {
+  const source = fs.readFileSync(pagePath, 'utf8');
+  const sourceFile = ts.createSourceFile(pagePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const resetForms = [];
+
+  function visit(node) {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText() === 'form'
+      && stringAttribute(node, 'className') === 'form-stack'
+      && attributeExpression(node, 'onSubmit') === 'resetPassword') {
+      resetForms.push(node);
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  assert.equal(resetForms.length, 1, 'expected one password-reset dialog form');
+
+  const passwordField = resetForms[0].children.find((child) => ts.isJsxElement(child)
+    && child.openingElement.tagName.getText() === 'label'
+    && child.getText(sourceFile).startsWith('<label>New password'));
+  assert.ok(passwordField, 'expected a labeled new-password field');
+
+  const input = passwordField.children.find((child) => ts.isJsxSelfClosingElement(child)
+    && jsxTagName(child) === 'input');
+  const hint = passwordField.children.find((child) => ts.isJsxElement(child)
+    && jsxTagName(child) === 'small');
+  assert.ok(input && hint, 'expected a password input and visible requirement hint');
+
+  const describedBy = attributeExpression(input, 'aria-describedby');
+  const hintId = attributeExpression(hint, 'id');
+  assert.equal(describedBy, hintId);
+  assert.equal(hint.getText(sourceFile).replace(/<[^>]+>/g, '').trim(), 'Use at least 12 characters.');
+  assert.equal(attributeExpression(input, 'minLength'), '12');
+  assert.equal(attributeExpression(input, 'maxLength'), '256');
+});
