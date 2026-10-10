@@ -292,6 +292,27 @@ test('course list exposes the current review status for unpublished revisions', 
   }
 });
 
+test('learner catalog hides version snapshots from results and categories', async () => {
+  const courseId = 'course-catalog-root';
+  try {
+    database.prepare(`INSERT INTO courses (id, title, category, visibility, status, created_by, updated_by)
+      VALUES (?, 'Version snapshot catalog course', 'Canonical Catalog', 'public', 'published', 'admin-1', 'admin-1')`).run(courseId);
+    database.prepare(`INSERT INTO courses (id, title, category, visibility, status, created_by, updated_by, logical_course_id)
+      VALUES ('course-catalog-snapshot', 'Version snapshot catalog course', 'Snapshot only', 'public', 'published', 'admin-1', 'admin-1', ?)`)
+      .run(courseId);
+
+    const response = await fetch(apiUrl('/courses?q=Version%20snapshot%20catalog'), { headers: userHeaders('learner-active') });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.total, 1);
+    assert.deepEqual(result.courses.map((course) => course.id), [courseId]);
+    assert.ok(result.categories.includes('Canonical Catalog'));
+    assert.equal(result.categories.includes('Snapshot only'), false);
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('course analytics eligibility reads course memberships before learner accounts', () => {
   const plan = database.prepare(`EXPLAIN QUERY PLAN SELECT u.id, u.username, u.disabled FROM (
     SELECT user_id AS id FROM enrollments WHERE course_id = ?
