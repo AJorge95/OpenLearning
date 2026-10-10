@@ -153,6 +153,34 @@ test('normalizes connection loss while reading an API response', async (t) => {
   ));
 });
 
+test('reports upload connection loss consistently and warns that completion is uncertain', async (t) => {
+  restoreFetch(t);
+  const originalXhr = globalThis.XMLHttpRequest;
+  let sentBody;
+  globalThis.fetch = async () => jsonResponse({ token: 'upload-token' });
+  globalThis.XMLHttpRequest = class {
+    upload = {};
+    open(method, url) { this.method = method; this.url = url; }
+    setRequestHeader() {}
+    send(body) {
+      sentBody = body;
+      this.onerror?.();
+    }
+  };
+  t.after(() => {
+    if (originalXhr === undefined) delete globalThis.XMLHttpRequest;
+    else globalThis.XMLHttpRequest = originalXhr;
+  });
+
+  await assert.rejects(api.upload('/api/upload', {}, new Blob(['lesson handout']), () => {}), (error) => (
+    error instanceof ApiError
+    && error.status === 0
+    && error.code === 'network_error'
+    && error.message === 'The upload connection was interrupted. Reload the course editor to check whether the file was added before retrying.'
+  ));
+  assert.ok(sentBody instanceof FormData);
+});
+
 test('does not construct or send an upload when its signal is already aborted', async (t) => {
   restoreFetch(t);
   const originalFormData = globalThis.FormData;
