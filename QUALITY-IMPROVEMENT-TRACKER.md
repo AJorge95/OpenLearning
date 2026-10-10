@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Tighten the administrator role selector hit area
+
+- **Reviewed:** The live account-details role control, its visible trigger width, desktop flex row, and leftover selectors for the former wrapping-label layout.
+- **Improvement:** Reduced the fixed desktop role control from 9.5rem to 9rem, removed the obsolete label-specific width and pointer rules, and kept the wrapper non-interactive so only the combobox opens the menu. The mobile rule still expands the control to the available width.
+- **Why it helps:** Clicking beside the compact control no longer opens the role list, while the trigger remains keyboard accessible and the adjacent account action stays separate.
+- **Checked:** In the local admin account page, a click 10px beyond the visible right edge left the menu closed; the trigger opened it and Escape closed it. Focused AppSelect structure/position tests, TypeScript, the production build, and `git diff --check` passed.
+
 ## 2026-10-10 — Keep null stable IDs distinct in path completion
 
 - **Reviewed:** The lesson and quiz insertion paths, nullable `stable_id` columns, and the batched prerequisite history sets added in the preceding cycle.
