@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Guard custom selects against label hit areas
+
+- **Reviewed:** The repeated account-role dropdown report, the existing separate field-container fix, and all TSX usages of the button-based `AppSelect`.
+- **Improvement:** Add an AST regression that scans TSX files and fails if `AppSelect` is nested inside a native `<label>`, plus a fixture proving the guard detects that structure.
+- **Why it helps:** A future label wrapper cannot silently make blank label space activate the custom dropdown again.
+- **Backend review:** Checked API request/CSRF handling, readiness checks, HTTP error mapping, and media upload validation/rollback. Those paths already have focused safeguards; no additional backend change was justified in this cycle.
+- **Checked:** Focused AST regression, full `npm test`, TypeScript check, production build, and `git diff --check`.
+
 ## 2026-10-10 — Test the bounded MP4 duration parser
 
 - **Reviewed:** The MP4 box scanner used to verify uploaded lesson-video durations before enforcing watch progress.
