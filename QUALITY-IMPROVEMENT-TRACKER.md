@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse canonical rows in course access checks
+
+- **Reviewed:** Learner and competency list routes pass complete course rows into the access checker, which then re-resolved each root course ID and selected that same root row again.
+- **Improvement:** Derive the logical ID from a loaded row and reuse it as the canonical record when the row includes the root course’s status and visibility. Partial rows and version snapshots keep their database-backed canonical lookup.
+- **Why it helps:** Bulk access checks avoid two redundant course reads per canonical course without weakening current visibility checks for versioned content.
+- **Interface review:** No visible change; public/private access, grant checks, path prerequisites, and version snapshot rules are unchanged.
+- **Checked:** A regression confirms complete root rows skip both redundant course SELECTs while remaining visible under current learner permissions. The focused course analytics suite passed (71/71); full `npm test` passed all 267 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reuse the private-course grant query
 
 - **Reviewed:** Course access checks for private courses. The request-scoped checker caches each course’s grant result, but distinct private courses still prepared the same grant SELECT separately.

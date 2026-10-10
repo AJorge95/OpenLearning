@@ -28,6 +28,7 @@ let readCurrentPublishedCourse;
 let isLessonUnlocked;
 let syncPathStates;
 let hasCourseGrant;
+let createCourseAccessChecker;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -61,7 +62,7 @@ before(async () => {
   });
 
   ({ db: database } = await import('../../server/db.js'));
-  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler, hasCourseGrant: checkCourseGrant }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests }] = await Promise.all([
+  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler, hasCourseGrant: checkCourseGrant, createCourseAccessChecker: makeCourseAccessChecker }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests }] = await Promise.all([
     import('../../server/routes-courses.js'),
     import('../../server/routes-programs.js'),
     import('../../server/http.js'),
@@ -74,6 +75,7 @@ before(async () => {
   editableCourse = createEditableCourse;
   readCurrentPublishedCourse = currentPublishedCourseForTests;
   hasCourseGrant = checkCourseGrant;
+  createCourseAccessChecker = makeCourseAccessChecker;
   database.exec(`
     INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES
       ('admin-1', 'admin', 'admin@example.invalid', 'not-used', 'admin', 0),
@@ -429,8 +431,8 @@ test('course detail reuses its published version in the progress summary', async
     assert.equal(course.modules[0].lessons[0].id, `${courseId}-lesson`);
     assert.equal(course.modules[0].lessons[0].completed, true);
     assert.equal(summaryVersionQueryCount, 0, 'expected the preloaded version to serve the progress summary');
-    assert.equal(preparedSql.filter((sql) => sql.startsWith('SELECT id, logical_course_id FROM courses WHERE id = ?')).length, 1,
-      'expected course access to resolve the logical ID once without repeating it for the published version lookup');
+    assert.equal(preparedSql.filter((sql) => sql.startsWith('SELECT id, logical_course_id FROM courses WHERE id = ?')).length, 0,
+      'expected course access to use the loaded root row without resolving its logical ID again');
     assert.equal(preparedSql.some((sql) => sql.startsWith('SELECT * FROM courses WHERE id = COALESCE(')), false,
       'expected the course row lookup to reuse the preloaded storage course ID');
     assert.equal(preparedSql.filter((sql) => sql === 'SELECT * FROM courses WHERE id = ?').length, 2,
@@ -3021,4 +3023,31 @@ test('course access grant lookup reuses its query and sees grant changes immedia
   }
 
   assert.equal(grantQueryPreparations, 0);
+});
+
+test('course access reuses complete canonical rows supplied by list queries', () => {
+  const course = database.prepare('SELECT * FROM courses WHERE id = ?').get('course-analytics');
+  assert.equal(course.logical_course_id, null);
+  assert.equal(typeof course.status, 'string');
+  assert.equal(typeof course.visibility, 'string');
+
+  const originalPrepare = database.prepare;
+  let logicalCoursePreparations = 0;
+  let canonicalCoursePreparations = 0;
+  database.prepare = (sql) => {
+    const normalized = sql.replace(/\s+/g, ' ').trim();
+    if (normalized === 'SELECT id, logical_course_id FROM courses WHERE id = ?') logicalCoursePreparations += 1;
+    if (normalized === 'SELECT * FROM courses WHERE id = ? AND logical_course_id IS NULL') canonicalCoursePreparations += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    const canView = createCourseAccessChecker({ id: 'learner-active', role: 'learner', disabled: 0 });
+    assert.equal(canView(course), true);
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.equal(logicalCoursePreparations, 0);
+  assert.equal(canonicalCoursePreparations, 0);
 });
