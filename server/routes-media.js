@@ -177,11 +177,25 @@ async function fileSignatureMatchesKind(file, kind) {
       return tail.subarray(0, tailBytes).lastIndexOf(Buffer.from([0xff, 0xd9])) !== -1;
     }
     if (ext === '.webp') {
-      const header = Buffer.alloc(12);
-      return size >= header.length
-        && (await fileHandle.read(header, 0, header.length, 0)).bytesRead === header.length
-        && header.toString('ascii', 0, 4) === 'RIFF'
-        && header.toString('ascii', 8, 12) === 'WEBP';
+      const header = Buffer.alloc(20);
+      if (size < header.length
+        || (await fileHandle.read(header, 0, header.length, 0)).bytesRead !== header.length
+        || header.toString('ascii', 0, 4) !== 'RIFF'
+        || header.toString('ascii', 8, 12) !== 'WEBP') return false;
+
+      const riffSize = header.readUInt32LE(4);
+      const riffEnd = riffSize + 8;
+      const firstChunkType = header.toString('ascii', 12, 16);
+      const firstChunkSize = header.readUInt32LE(16);
+      const paddedChunkSize = firstChunkSize + (firstChunkSize % 2);
+      const supportedFirstChunk = ['VP8 ', 'VP8L', 'VP8X'].includes(firstChunkType);
+      return riffSize >= 12
+        && riffSize % 2 === 0
+        && riffEnd <= size
+        && supportedFirstChunk
+        && firstChunkSize > 0
+        && (firstChunkType !== 'VP8X' || firstChunkSize === 10)
+        && header.length + paddedChunkSize <= riffEnd;
     }
     return false;
   } catch {
