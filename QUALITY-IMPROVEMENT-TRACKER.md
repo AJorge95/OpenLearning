@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Bound MP4 metadata scanning work
+
+- **Reviewed:** The 2 GiB configurable media-upload limit, the learner watch-progress and playback-start routes, the uncached-duration parser path, the fragmented MP4 top-level box loop, and the existing admin role-select hit-area fix.
+- **Improvement:** Stop MP4 duration inspection after 200,000 top-level boxes, returning the existing unavailable-duration result for files beyond that bound.
+- **Why it helps:** A file made from a very large number of tiny boxes can no longer trigger an excessive sequence of file reads whenever its duration is requested. Normal fragmented uploads retain room for roughly one-second fragments across the parser's 24-hour duration limit. The existing role-select wrapper and trigger bounds still prevent clicks beside the trigger from opening the menu.
+- **Checked:** The focused MP4 suite passed all 8 cases, including the 200,000-box bound regression; `npm test` passed all 187 tests, `npx tsc --noEmit` and `npm run build` passed, both changed server files passed `node --check`, and `git diff --check` passed. No browser rendering was needed for this backend-only change.
+
 ## 2026-10-10 — Record credible lesson-watch telemetry
 
 - **Reviewed:** Lesson video progress, server-side heartbeat validation, completion checks, staff course-preview access, migration history, the learner player’s seek and background-tab behavior, and the README’s course-role descriptions.

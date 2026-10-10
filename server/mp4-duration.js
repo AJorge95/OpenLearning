@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 
 const maximumMetadataBytes = 128 * 1024 * 1024;
 const maximumFragmentBytes = 16 * 1024 * 1024;
+const maximumTopLevelBoxes = 200_000;
 const maximumDurationSeconds = 24 * 60 * 60;
 
 async function readAt(handle, length, position) {
@@ -219,8 +220,9 @@ export async function readMp4Duration(filePath) {
   try {
     const { size } = await handle.stat();
     let offset = 0;
+    let topLevelBoxCount = 0;
     let fragmentedMovie = null;
-    while (offset + 8 <= size) {
+    while (offset + 8 <= size && topLevelBoxCount < maximumTopLevelBoxes) {
       const header = await readAt(handle, 16, offset);
       if (!header) break;
       const size32 = header.readUInt32BE(0);
@@ -249,7 +251,9 @@ export async function readMp4Duration(filePath) {
         if (!fragment || !updateFragmentedTrackDurations(fragment, fragmentedMovie)) return null;
       }
       offset += boxSize;
+      topLevelBoxCount += 1;
     }
+    if (offset + 8 <= size) return null;
     return fragmentedMovie ? durationFromFragments(fragmentedMovie) : null;
   } finally {
     await handle.close();

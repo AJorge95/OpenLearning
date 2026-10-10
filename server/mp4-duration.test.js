@@ -155,6 +155,20 @@ test('reads duration across fragmented video samples', async () => {
   assert.equal(duration, 8);
 });
 
+test('stops scanning files with excessive top-level boxes', async () => {
+  const maximumTopLevelBoxes = 200_000;
+  const fillerBox = makeBox('free', Buffer.alloc(8));
+  const filler = Buffer.alloc(fillerBox.length * (maximumTopLevelBoxes - 1));
+  for (let offset = 0; offset < filler.length; offset += fillerBox.length) fillerBox.copy(filler, offset);
+  const duration = await readFixture('excessive-boxes.mp4', [
+    fragmentedMovieMetadata(1_000),
+    movieFragment(0, [1_000]),
+    filler,
+  ]);
+
+  assert.equal(duration, null);
+});
+
 test('uses fragmented movie default sample durations when runs omit them', async () => {
   const duration = await readFixture('fragmented-defaults.mp4', [
     fragmentedMovieMetadata(90_000, 45_000),
