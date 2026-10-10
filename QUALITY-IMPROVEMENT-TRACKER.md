@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Avoid repeated failed video-duration scans
+
+- **Reviewed:** The MP4 scan bounds, the learner duration lookup on watch-progress and playback-start requests, the database cache for verified durations, and media replacement's unique file and media IDs.
+- **Improvement:** Share in-flight duration reads by media ID and cache unsupported or malformed duration results for five minutes in a 256-entry least-recently-used cache. Keep valid-duration persistence in `media_files.duration_seconds`; do not cache filesystem errors so transient failures can retry.
+- **Why it helps:** Reopening an unsupported video no longer repeats the same bounded file scan on every request, and concurrent viewers share one parse. The time and entry limits keep the process cache self-expiring and bounded.
+- **Checked:** The four focused duration-reader tests passed for request coalescing, negative-cache expiry, LRU eviction, and retry after file-read errors. `npm test` passed all 191 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Live video playback was not exercised.
+
 ## 2026-10-10 — Recheck admin select hit area and media uploads
 
 - **Reviewed:** The account-details role select structure and pointer target, the screenshot's older label selector, media upload signature validation and temporary-file cleanup, and replacement behavior when audit writes fail.
