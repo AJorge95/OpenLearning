@@ -3051,6 +3051,14 @@ test('course access grant lookup reuses its query and sees grant changes immedia
   assert.equal(grantQueryPreparations, 0);
 });
 
+test('learning-path course lookups have a course-first covering index', () => {
+  const queryPlan = database.prepare(`EXPLAIN QUERY PLAN
+    SELECT path_id FROM learning_path_courses WHERE course_id = ?`).all('path-index-probe');
+
+  assert.ok(queryPlan.some((row) => row.detail.includes('USING COVERING INDEX learning_path_courses_course_path')),
+    `Expected course lookup to use the course-first index, received: ${queryPlan.map((row) => row.detail).join('; ')}`);
+});
+
 test('course access reuses complete canonical rows supplied by list queries', () => {
   const course = database.prepare('SELECT * FROM courses WHERE id = ?').get('course-analytics');
   assert.equal(course.logical_course_id, null);

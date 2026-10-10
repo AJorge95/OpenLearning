@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Index course-based learning-path lookups
+
+- **Reviewed:** Course privacy/archive checks, learning-path course membership queries, course deletion cascades, and the existing path-first indexes on `learning_path_courses`.
+- **Improvement:** Add schema migration 32 with a covering `(course_id, path_id)` index so course-first lookups can seek directly to their path rows.
+- **Why it helps:** Course membership checks and foreign-key cascades avoid scanning every learning-path step as the platform grows.
+- **Interface review:** No visible changes; course, path, and learner layouts remain unchanged.
+- **Checked:** A query-plan regression confirms course-ID lookups use the new covering index. The focused course/migration suites passed (85/85); `npm run build` and `npx tsc --noEmit` passed. Full `npm test` passed 270/271 tests; the remaining failure is the separate uncommitted video-rewind response change adding `lastPositionSeconds` while its existing test still expects the prior response shape. `git diff --check` passed.
+
 ## 2026-10-10 — Reuse prerequisite-completion statements per access check
 
 - **Reviewed:** Path authorization's `completedForPath` check prepared six unchanged version, state, content, and progress-history statements separately for each prerequisite course.
