@@ -21,7 +21,7 @@ export function getAppSelectVerticalPosition(
   const safeViewportHeight = Math.max(1, viewportHeight);
   const margin = Math.min(12, Math.max(0, (safeViewportHeight - 1) / 2));
   const availableHeight = Math.max(1, safeViewportHeight - margin * 2);
-  const desiredHeight = Math.min(280, optionCount * 40 + 12, availableHeight);
+  const desiredHeight = Math.min(280, optionCount * 41 + 11, availableHeight);
   const roomBelow = Math.max(0, safeViewportHeight - trigger.bottom - margin);
   const roomAbove = Math.max(0, trigger.top - margin);
   const openAbove = roomBelow < desiredHeight && roomAbove > roomBelow;
