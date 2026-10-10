@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Load the published course row with one version lookup
+
+- **Reviewed:** The course payload path that selects the latest published version and then fetches its stored course row.
+- **Improvement:** Resolve the latest `storage_course_id` in a subquery while selecting the course row, with the canonical course as the no-version fallback.
+- **Why it helps:** Course rendering avoids a repeated logical-course lookup, a separate version query, and a separate course query while returning the same full course record.
+- **Interface review:** No visible change; the course payload retains the current published course’s title and content. The indexed `(course_id, version_number DESC)` lookup remains in use.
+- **Checked:** The focused course analytics/versioning suite passed (68/68), including latest-version selection, no-version fallback, and a two-statement lookup. Full `npm test` passed all 259 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Keep the course editor details grid inside tablet viewports
 
 - **Reviewed:** The course editor’s three-column details grid and its available width across desktop, tablet, and phone layouts.
