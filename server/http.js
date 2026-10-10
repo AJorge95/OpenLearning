@@ -169,30 +169,46 @@ export function createCourseAccessChecker(user) {
     grants: new Map(),
     pathAccess: new Map(),
     pathCompletion: new Map(),
+    pathCompletionStatements: null,
   };
   return (course) => canViewCourseWithCache(course, user, cache);
 }
 
-function completedForPath(courseId, userId, completionCache) {
-  return cachedValue(completionCache, courseId, () => {
-    const version = db.prepare(`SELECT v.id, v.storage_course_id FROM course_versions v
-      WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT 1`).get(courseId);
-    const contentId = version?.storage_course_id || courseId;
-    const state = db.prepare('SELECT target_version_id FROM course_learning_state WHERE user_id = ? AND course_id = ?').get(userId, courseId);
-    const resetRequired = Boolean(version && state?.target_version_id === version.id);
-    const lessons = db.prepare(`SELECT l.id, l.stable_id FROM lessons l JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?`).all(contentId);
-    const quizzes = db.prepare(`SELECT q.id, q.stable_id FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?`).all(contentId);
-    if (!lessons.length && !quizzes.length) return false;
-    const lessonHistory = db.prepare(`SELECT l.id, l.stable_id FROM lesson_progress p
+function pathCompletionStatements(cache) {
+  if (cache?.pathCompletionStatements) return cache.pathCompletionStatements;
+  const statements = {
+    version: db.prepare(`SELECT v.id, v.storage_course_id FROM course_versions v
+      WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT 1`),
+    state: db.prepare('SELECT target_version_id FROM course_learning_state WHERE user_id = ? AND course_id = ?'),
+    lessons: db.prepare(`SELECT l.id, l.stable_id FROM lessons l
+      JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?`),
+    quizzes: db.prepare(`SELECT q.id, q.stable_id FROM quizzes q
+      JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?`),
+    lessonHistory: db.prepare(`SELECT l.id, l.stable_id FROM lesson_progress p
       JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id
       JOIN courses c ON c.id = m.course_id
-      WHERE p.user_id = ? AND (c.id = ? OR c.logical_course_id = ?)`)
-      .all(userId, courseId, courseId);
-    const quizHistory = db.prepare(`SELECT DISTINCT q.id, q.stable_id FROM quiz_attempts a
+      WHERE p.user_id = ? AND (c.id = ? OR c.logical_course_id = ?)`),
+    quizHistory: db.prepare(`SELECT DISTINCT q.id, q.stable_id FROM quiz_attempts a
       JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id
       JOIN courses c ON c.id = m.course_id
-      WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)`)
-      .all(userId, courseId, courseId);
+      WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)`),
+  };
+  if (cache) cache.pathCompletionStatements = statements;
+  return statements;
+}
+
+function completedForPath(courseId, userId, cache) {
+  return cachedValue(cache?.pathCompletion, courseId, () => {
+    const statements = pathCompletionStatements(cache);
+    const version = statements.version.get(courseId);
+    const contentId = version?.storage_course_id || courseId;
+    const state = statements.state.get(userId, courseId);
+    const resetRequired = Boolean(version && state?.target_version_id === version.id);
+    const lessons = statements.lessons.all(contentId);
+    const quizzes = statements.quizzes.all(contentId);
+    if (!lessons.length && !quizzes.length) return false;
+    const lessonHistory = statements.lessonHistory.all(userId, courseId, courseId);
+    const quizHistory = statements.quizHistory.all(userId, courseId, courseId);
     const completedLessonIds = new Set(lessonHistory.map((lesson) => lesson.id));
     const completedLessonStableIds = new Set(lessonHistory.map((lesson) => lesson.stable_id ?? lesson.id));
     const passedQuizIds = new Set(quizHistory.map((quiz) => quiz.id));
@@ -213,7 +229,7 @@ function hasUnlockedPathAccess(courseId, userId, cache) {
     for (const path of paths) {
       if (!path.requires_previous || path.position === 0) return true;
       const prerequisites = pathPrerequisiteCoursesStatement.all(path.path_id, path.position);
-      if (prerequisites.every((step) => completedForPath(step.course_id, userId, cache?.pathCompletion))) return true;
+      if (prerequisites.every((step) => completedForPath(step.course_id, userId, cache))) return true;
     }
     return false;
   });
