@@ -1214,7 +1214,7 @@ export function CourseEditorPage() {
     {error && <Notice>{error}</Notice>}{notice && <Notice kind="success">{notice}</Notice>}
     <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{movingCurriculumItems.size ? 'Updating course content order…' : ''}</p>
     <p className="course-editing-note">{courseEditingNote(course.status, course.visibility)}</p>
-    <section className="editor-section course-details-form">
+    <section className="editor-section course-details-form" aria-label="Course details">
       <div className="editor-field-grid"><label className="field-wide">Course title<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} placeholder="Give your course a clear title" disabled={saving} /></label>
         <label>Category<input value={category} maxLength={100} onChange={(event) => setCategory(event.target.value)} placeholder="e.g. Professional development" disabled={saving} /></label>
         <fieldset className="visibility-field" disabled={saving}><legend>Visibility</legend><label><input type="radio" name="visibility" checked={visibility === 'public'} onChange={() => setVisibility('public')} />Public</label><label><input type="radio" name="visibility" checked={visibility === 'private'} onChange={() => setVisibility('private')} />Private</label></fieldset>

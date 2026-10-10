@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Name the course-details region
+
+- **Reviewed:** Course editor section structure, field labels and focus styles, narrow-screen layout, and the course update route's object-body, validation, versioning, and audit behavior.
+- **Improvement:** Give the course-details section the accessible name “Course details”, matching the named publication-settings section beside it.
+- **Why it helps:** Screen-reader users can navigate directly to the course metadata group while the visible layout remains unchanged.
+- **Backend review:** Course update validation and audit writes already cover the relevant fields; no backend change was warranted in this cycle.
+- **Checked:** The focused TSX structure regression passed; it asserts the course-details section remains a single region with the expected accessible name. Full `npm test` passed all 168 cases; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Preserve course-delete success when media cleanup fails
 
 - **Reviewed:** Archived-course deletion transaction, post-delete media removal and system logging, the confirmation-based course-editor action, and the existing audit-failure rollback test.
