@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reuse course-manager content resolvers
+
+- **Reviewed:** `requireCourseManager()` resolves module, lesson, and quiz IDs to their owning course through three fixed join queries that were prepared on each editor request.
+- **Improvement:** Prepare the three content-ID lookups once with the other HTTP course statements and use them for manager checks.
+- **Why it helps:** Opening a course editor from its module, lesson, or quiz avoids recompiling the same ownership query while each call still reads current course data.
+- **Interface review:** No visible change; editor access and stale-revision checks keep their existing behavior.
+- **Checked:** A regression resolves module, lesson, and quiz IDs, observes a course title update on a later call, and verifies none of the ownership lookups is prepared per request. Focused course analytics tests passed (79/79); `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Full `npm test` still has the one known `lastPositionSeconds` response mismatch in the separate uncommitted video-rewind change.
+
 ## 2026-10-11 — Reuse course-access row statements
 
 - **Reviewed:** `courseById()` and learner course visibility checks, which repeatedly prepared fixed lookups for a course row, its canonical root, and its active published storage version.
