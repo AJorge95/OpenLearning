@@ -3,6 +3,7 @@ import type { PlatformConfiguration } from './branding';
 
 let csrfToken: string | null = null;
 let csrfRefreshPromise: Promise<string> | null = null;
+let csrfGeneration = 0;
 
 export class ApiError extends Error {
   status: number;
@@ -54,12 +55,14 @@ async function errorFromResponse(response: Response) {
 
 async function refreshCsrf(): Promise<string> {
   if (csrfRefreshPromise) return csrfRefreshPromise;
+  const generation = csrfGeneration;
   const pending = (async () => {
     const response = await fetch('/api/csrf', { credentials: 'same-origin' });
     if (!response.ok) throw new ApiError(response.status, 'Unable to start a secure session. Refresh and try again.');
     if (!isJsonContentType(response.headers.get('content-type') || '')) throw invalidResponse(response.status);
     const data = parseJsonObject(await response.text(), response.status);
     if (typeof data.token !== 'string' || !data.token) throw invalidResponse(response.status);
+    if (generation !== csrfGeneration) return ensureCsrf();
     csrfToken = data.token;
     return csrfToken;
   })();
@@ -131,7 +134,11 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => request<T>(path, json('PATCH', body)),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   refreshCsrf,
-  clearCsrf: () => { csrfToken = null; },
+  clearCsrf: () => {
+    csrfGeneration += 1;
+    csrfToken = null;
+    csrfRefreshPromise = null;
+  },
   upload: async <T>(path: string, fields: Record<string, string>, file: File, onProgress: (value: number) => void, options: Pick<RequestInit, 'signal'> = {}): Promise<T> => {
     if (options.signal?.aborted) throw uploadAbortError();
     const token = await waitForAbort(ensureCsrf(), options.signal);

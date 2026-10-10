@@ -52,6 +52,32 @@ test('coalesces CSRF refreshes and retries concurrent writes once with the fresh
   assert.deepEqual(writeTokens.sort(), ['fresh-token', 'fresh-token', 'initial-token', 'initial-token']);
 });
 
+test('clearing CSRF state during refresh prevents the old session token from being reused', async (t) => {
+  restoreFetch(t);
+  const responses = [];
+  let csrfRequests = 0;
+  globalThis.fetch = async () => {
+    csrfRequests += 1;
+    const request = new Promise((resolve) => { responses.push(resolve); });
+    return request;
+  };
+
+  const oldSessionRefresh = api.refreshCsrf();
+  api.clearCsrf();
+  const newSessionRefresh = api.refreshCsrf();
+  const requestsAfterClear = responses.length;
+
+  const responseFor = (token) => jsonResponse({ token });
+  responses[0](responseFor('old-session-token'));
+  if (responses[1]) responses[1](responseFor('new-session-token'));
+  const [oldRefreshResult, newRefreshResult] = await Promise.all([oldSessionRefresh, newSessionRefresh]);
+
+  assert.equal(requestsAfterClear, 2);
+  assert.equal(oldRefreshResult, 'new-session-token');
+  assert.equal(newRefreshResult, 'new-session-token');
+  assert.equal(csrfRequests, 2);
+});
+
 test('returns a repeated CSRF rejection after one retry instead of looping', async (t) => {
   restoreFetch(t);
   let csrfRequests = 0;
