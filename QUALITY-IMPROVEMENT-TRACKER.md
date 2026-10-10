@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Bound administrator password reset work
+
+- **Reviewed:** The administrator reset route, its scrypt hashing cost, per-user rate-limit conventions, and how account details display API errors.
+- **Improvement:** Limit each authenticated administrator to 20 password reset attempts per 15 minutes, returning a stable `429 rate_limited` response before the reset handler runs.
+- **Why it helps:** Rapid repeated requests can no longer trigger unbounded password-hash work for one administrator account; separate administrators keep independent quotas.
+- **Interface review:** The account-details page already renders API error messages in its shared notice area, so the retryable limit response needs no new markup.
+- **Checked:** Focused rate-limit and admin-route tests passed (18 tests), including the 20-request boundary, admin isolation, and real route mounting. Full `npm test` passed all 212 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Show password guidance on account reset
 
 - **Reviewed:** The account-details password reset form, password length constraints in `server/auth.js`, and the existing signup, account-creation, and self-service password guidance.

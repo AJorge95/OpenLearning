@@ -25,6 +25,7 @@ let database;
 let setSetting;
 let verifyPassword;
 let registrationFields;
+let adminPasswordResetLimiter;
 let server;
 
 const fieldDefinitions = [
@@ -78,6 +79,7 @@ before(async () => {
   ({ db: database, setSetting } = await import('./db.js'));
   ({ verifyPassword } = await import('./auth.js'));
   registrationFields = await import('./registration-fields.js');
+  ({ adminPasswordResetLimiter } = await import('./rate-limits.js'));
   const { authRouter } = await import('./routes-auth.js');
   const { adminRouter } = await import('./routes-admin.js');
   const { errorHandler } = await import('./http.js');
@@ -453,6 +455,32 @@ test('administrator password resets and session revocations roll back when audit
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get('password-reset-session').count, 0);
   assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
     WHERE action = 'account.password_reset' AND entity_id = ?`).get(userId).count, originalAuditCount + 1);
+});
+
+test('administrator password reset route throttles requests per admin before target lookup', async () => {
+  const limiterKey = 'user:registration-fields-admin';
+  adminPasswordResetLimiter.resetKey(limiterKey);
+  const requestReset = () => fetch(apiUrl('/admin/users/missing-password-target/password'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ password: 'not-a-valid-reset', confirmPassword: 'different' }),
+  });
+
+  try {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const response = await requestReset();
+      assert.equal(response.status, 404);
+    }
+
+    const limitedResponse = await requestReset();
+    assert.equal(limitedResponse.status, 429);
+    assert.deepEqual(await limitedResponse.json(), {
+      error: 'Too many administrator password resets. Please wait before trying again.',
+      code: 'rate_limited',
+    });
+  } finally {
+    adminPasswordResetLimiter.resetKey(limiterKey);
+  }
 });
 
 test('administrator account creation rolls back when its required audit entry cannot be written', async () => {
