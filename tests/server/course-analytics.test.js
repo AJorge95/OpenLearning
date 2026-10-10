@@ -1895,11 +1895,27 @@ test('calendar hides private course deadlines after access is revoked', async ()
   `);
 
   async function calendarItems() {
-    const response = await fetch(apiUrl('/calendar?from=2099-01-01&to=2099-01-01'), {
-      headers: userHeaders('learner-calendar'),
-    });
-    assert.equal(response.status, 200);
-    return (await response.json()).items;
+    const originalPrepare = database.prepare;
+    let logicalCoursePreparations = 0;
+    let canonicalCoursePreparations = 0;
+    database.prepare = (sql) => {
+      const normalized = sql.replace(/\s+/g, ' ').trim();
+      if (normalized === 'SELECT id, logical_course_id FROM courses WHERE id = ?') logicalCoursePreparations += 1;
+      if (normalized === 'SELECT * FROM courses WHERE id = ? AND logical_course_id IS NULL') canonicalCoursePreparations += 1;
+      return originalPrepare.call(database, sql);
+    };
+
+    try {
+      const response = await fetch(apiUrl('/calendar?from=2099-01-01&to=2099-01-01'), {
+        headers: userHeaders('learner-calendar'),
+      });
+      assert.equal(response.status, 200);
+      assert.equal(logicalCoursePreparations, 0);
+      assert.equal(canonicalCoursePreparations, 0);
+      return (await response.json()).items;
+    } finally {
+      database.prepare = originalPrepare;
+    }
   }
 
   assert.deepEqual(await calendarItems(), []);

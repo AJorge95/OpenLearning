@@ -389,7 +389,7 @@ programsRouter.get('/calendar', (req, res) => {
   if (rangeDays > MAX_CALENDAR_RANGE_DAYS) fail(400, `Calendar date range must be ${MAX_CALENDAR_RANGE_DAYS} days or fewer.`, 'validation_error');
   // Stored timestamps use ISO `T` or SQLite's space separator, both before this inclusive-day sentinel.
   const endExclusive = `${to}Z`;
-  const items = db.prepare(`SELECT s.course_id AS id, s.course_id, s.deadline_at, s.started_at, c.title, c.category, c.visibility, c.status
+  const items = db.prepare(`SELECT s.course_id AS id, s.course_id, s.deadline_at, s.started_at, c.title, c.category, c.visibility, c.status, c.logical_course_id
     FROM course_learning_state s JOIN courses c ON c.id = s.course_id
     WHERE s.user_id = ? AND s.deadline_at >= ? AND s.deadline_at < ?
       AND c.status = 'published' ORDER BY s.deadline_at, c.title COLLATE NOCASE`).all(req.currentUser.id, from, endExclusive);
