@@ -255,7 +255,7 @@ export function CourseManagementPage() {
         <td><div className="table-course"><span className="table-thumb"><ImageWithFallback src={course.coverUrl} className="table-cover-image" alt="" loading="lazy" decoding="async" fallback={<BookOpen size={20} />} /></span><div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category}</small></div></div></td>
         <td><span className="owner-cell"><UserInitial username={course.owner || ''} />{course.owner}</span></td>
         <td><VisibilityLabel visibility={course.visibility} /></td>
-        <td><CourseStatus status={course.status} /></td>
+        <td><div className="course-list-status"><CourseStatus status={course.status} />{course.hasUnpublishedChanges && <span className="program-status draft">Draft changes</span>}</div></td>
         <td><DateText value={course.updatedAt} /></td>
         <td><div className="table-actions"><Link className="text-action" to={`/manage/courses/${course.id}/edit`}>Edit</Link><Link className="text-action" to={`/manage/courses/${course.id}/analytics`}>Analytics</Link><CourseRowMenu course={course} busyAction={busyAction} onStatusChange={changeStatus} onDelete={deleteCourse} /></div></td>
         </tr>;
