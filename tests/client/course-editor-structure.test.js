@@ -54,3 +54,16 @@ test('quiz editor actions include quiz and question context in accessible names'
   assert.ok(ariaLabels.some((label) => label.includes('No changes to ${quizContext}')));
   assert.ok(ariaLabels.some((label) => label.includes('Remove question ${questionIndex + 1} from ${quizContext}')));
 });
+
+test('course details grid changes to two columns before tablet overflow', () => {
+  const styles = fs.readFileSync(path.join(sourceDirectory, 'styles.css'), 'utf8');
+  const tabletLayout = styles.match(/@media\s*\(max-width:\s*1140px\)\s*\{([^}]*)\}/);
+  const mobileRule = '.editor-field-grid { display: flex; flex-direction: column;';
+  const mobileRuleIndex = styles.indexOf(mobileRule);
+  const mobileBreakpointIndex = styles.lastIndexOf('@media (max-width: 720px)', mobileRuleIndex);
+
+  assert.ok(tabletLayout, 'expected a tablet breakpoint for the course details grid');
+  assert.match(tabletLayout[1], /\.editor-field-grid\s*\{\s*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.ok(mobileBreakpointIndex >= 0, 'expected the existing phone layout override');
+  assert.ok(mobileRuleIndex > mobileBreakpointIndex, 'expected the phone override inside its breakpoint');
+});
