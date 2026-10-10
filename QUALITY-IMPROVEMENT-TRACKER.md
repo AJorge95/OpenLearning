@@ -3,10 +3,10 @@
 ## 2026-10-10 — Skip unchanged certificate-name submissions
 
 - **Reviewed:** Account-detail form semantics and responsive layout, certificate-name normalization and certificate issuance, and the account update route's validation, no-op handling, session behavior, and audit writes.
-- **Improvement:** Disable the certificate-name save action and show “No changes” when the first and last names match their saved values after trimming and collapsing whitespace.
-- **Why it helps:** Staff can see when there is nothing to save, avoid an unnecessary request, and keep spacing-only edits from appearing as meaningful changes.
+- **Improvement:** Keep the certificate-name save action disabled until the current account's names are loaded; afterward, show “No changes” when the draft matches the saved names after trimming and collapsing whitespace.
+- **Why it helps:** Staff can see when there is nothing to save, avoid an unnecessary request, and never see an enabled save action against an uninitialized draft.
 - **Backend review:** The account PATCH route already normalizes names, skips unchanged database and audit writes, and only issues updated certificates when profile names change; no backend change was warranted in this cycle.
-- **Checked:** The focused account-detail structure regression passed. Full `npm test` passed all 169 cases; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+- **Checked:** The focused account-detail structure regression passed. Browser interaction confirmed the role selector opens only from its trigger and closes after an outside click at desktop and 390px mobile widths; no console warnings or errors appeared. Full `npm test` passed all 169 cases; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
 
 ## 2026-10-10 — Name the course-details region
 

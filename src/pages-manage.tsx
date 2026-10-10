@@ -1659,6 +1659,7 @@ export function AdminUserDetailsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [profileFirstName, setProfileFirstName] = useState('');
   const [profileLastName, setProfileLastName] = useState('');
+  const [profileNamesUserId, setProfileNamesUserId] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -1679,6 +1680,7 @@ export function AdminUserDetailsPage() {
     if (!account || account.user.id !== userId) return;
     setProfileFirstName(account.user.firstName || '');
     setProfileLastName(account.user.lastName || '');
+    setProfileNamesUserId(account.user.id);
   }, [account?.user.id, account?.user.firstName, account?.user.lastName, userId]);
   useEffect(() => {
     setError(''); setSuccess(''); setSavingAction(null); setPassword(''); setConfirmPassword('');
@@ -1700,6 +1702,11 @@ export function AdminUserDetailsPage() {
         updatedAt: response.user.updatedAt ?? current.user.updatedAt,
         isCurrentUser: current.user.isCurrentUser,
       } } : current);
+      if (changes.firstName !== undefined || changes.lastName !== undefined) {
+        setProfileFirstName(response.user.firstName || '');
+        setProfileLastName(response.user.lastName || '');
+        setProfileNamesUserId(response.user.id);
+      }
       if (signedInUser?.id === response.user.id && (signedInUser.role !== response.user.role || signedInUser.disabled !== response.user.disabled
         || signedInUser.firstName !== response.user.firstName || signedInUser.lastName !== response.user.lastName)) {
         try { await refresh(); }
@@ -1743,8 +1750,9 @@ export function AdminUserDetailsPage() {
   if (loading || (account && account.user.id !== userId)) return <div className="management-page page-loading" role="status" aria-live="polite">Loading account details…</div>;
   if (!account) return <div className="management-page">{error && <div className="account-list-error"><Notice>{error}</Notice>{canRetryLoad && <Button type="button" variant="secondary" onClick={() => setLoadRetryVersion((version) => version + 1)}>Try again</Button>}</div>}<Link className="back-link" to="/admin/users"><ArrowLeft size={17} />Back to users</Link></div>;
   const { user, courses, registrationFields } = account;
-  const certificateNameChanged = normalizeAccountNameDraft(profileFirstName) !== (user.firstName || '')
-    || normalizeAccountNameDraft(profileLastName) !== (user.lastName || '');
+  const certificateNameReady = profileNamesUserId === user.id;
+  const certificateNameChanged = certificateNameReady && (normalizeAccountNameDraft(profileFirstName) !== (user.firstName || '')
+    || normalizeAccountNameDraft(profileLastName) !== (user.lastName || ''));
   return <div className="management-page account-details-page">
     <div className="breadcrumbs"><Link to="/admin/users">Users</Link><span>/</span><span>{user.username}</span></div>
     <PageHeading title={user.username} subtitle="Account controls, enrolled courses, and learning activity." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} />Back to users</Link>} />
@@ -1752,7 +1760,7 @@ export function AdminUserDetailsPage() {
     <section className="account-detail-grid">
       <article className="account-detail-card account-overview-card"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><small>Account overview</small></div></div><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span></div>
         <dl className="account-meta-list"><div><dt>Email</dt><dd>{user.email || 'Not provided'}</dd></div><div><dt>User ID</dt><dd>{user.id}</dd></div><div><dt>Created</dt><dd><DateText value={user.createdAt} /></dd></div><div><dt>Last login</dt><dd>{user.lastLoginAt ? <DateTimeText value={user.lastLoginAt} /> : 'Not recorded'}</dd></div><div><dt>Last updated</dt><dd><DateText value={user.updatedAt} /></dd></div><div><dt>Courses assigned or enrolled</dt><dd>{account.total}</dd></div></dl>
-        <form className="account-profile-form form-stack" onSubmit={saveAccountName} aria-busy={savingAction === 'account'}><div><h3>Certificate name</h3><p>Set the first and last name shown on this user’s certificates.</p></div><div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={profileFirstName} onChange={(event) => setProfileFirstName(event.target.value)} disabled={saving} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={profileLastName} onChange={(event) => setProfileLastName(event.target.value)} disabled={saving} /></label></div><Button type="submit" variant="secondary" disabled={saving || !certificateNameChanged}>{savingAction === 'account' ? 'Saving…' : certificateNameChanged ? 'Save certificate name' : 'No changes'}</Button></form>
+        <form className="account-profile-form form-stack" onSubmit={saveAccountName} aria-busy={savingAction === 'account'}><div><h3>Certificate name</h3><p>Set the first and last name shown on this user’s certificates.</p></div><div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={profileFirstName} onChange={(event) => setProfileFirstName(event.target.value)} disabled={saving} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={profileLastName} onChange={(event) => setProfileLastName(event.target.value)} disabled={saving} /></label></div><Button type="submit" variant="secondary" disabled={saving || !certificateNameReady || !certificateNameChanged}>{savingAction === 'account' ? 'Saving…' : !certificateNameReady ? 'Loading…' : certificateNameChanged ? 'Save certificate name' : 'No changes'}</Button></form>
         {registrationFields.length > 0 && <section className="account-registration-fields"><h3>Registration details</h3><dl>{registrationFields.map((field) => <div key={field.id}><dt>{field.label}</dt><dd>{typeof field.value === 'boolean' ? field.value ? 'Yes' : 'No' : field.value || 'Not provided'}</dd></div>)}</dl></section>}
         <div className="account-control-row" aria-busy={savingAction === 'account'}><div className="account-role-control"><span>Platform role</span><AppSelect<Role> ariaLabel="Platform role" value={user.role} disabled={saving} onChange={(role) => updateAccount({ role })} options={[{ value: 'learner', label: 'Learner' }, { value: 'moderator', label: 'Moderator' }, { value: 'admin', label: 'Administrator' }]} /></div><Button variant={user.disabled ? 'secondary' : 'danger'} onClick={() => updateAccount({ disabled: !user.disabled })} disabled={saving} aria-busy={savingAction === 'account'}>{savingAction === 'account' ? 'Saving account…' : user.disabled ? 'Enable account' : 'Disable account'}</Button>{savingAction === 'account' && <span className="sr-only" role="status" aria-live="polite">Saving account settings…</span>}</div>
       </article>

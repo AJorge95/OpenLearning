@@ -40,8 +40,9 @@ test('certificate-name save is disabled when normalized names are unchanged', ()
   assert.equal(profileForms.length, 1, 'expected one certificate-name form');
   assert.equal(saveButtons.length, 1, 'expected one certificate-name submit button');
   assert.equal(jsxAttribute(saveButtons[0], 'disabled')?.initializer?.expression?.getText(sourceFile),
-    'saving || !certificateNameChanged');
-  assert.match(saveButtons[0].getText(sourceFile), /certificateNameChanged \? 'Save certificate name' : 'No changes'/);
+    'saving || !certificateNameReady || !certificateNameChanged');
+  assert.match(saveButtons[0].getText(sourceFile), /!certificateNameReady \? 'Loading…' : certificateNameChanged \? 'Save certificate name' : 'No changes'/);
+  assert.match(source, /const certificateNameReady = profileNamesUserId === user\.id/);
   assert.match(source, /normalizeAccountNameDraft\(profileFirstName\).*user\.firstName/);
   assert.match(source, /normalizeAccountNameDraft\(profileLastName\).*user\.lastName/);
 });
