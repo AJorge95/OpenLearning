@@ -427,6 +427,8 @@ test('course detail reuses its published version in the progress summary', async
     assert.equal(course.modules[0].lessons[0].id, `${courseId}-lesson`);
     assert.equal(course.modules[0].lessons[0].completed, true);
     assert.equal(summaryVersionQueryCount, 0, 'expected the preloaded version to serve the progress summary');
+    assert.equal(preparedSql.some((sql) => sql.startsWith('SELECT * FROM courses WHERE id = COALESCE(')), false,
+      'expected the course row lookup to reuse the preloaded storage course ID');
     const duplicateProgressQueries = preparedSql.filter((sql) => [
       'SELECT l.id, COALESCE(l.stable_id, l.id) AS stable_id FROM lessons l JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?',
       'SELECT q.id, COALESCE(q.stable_id, q.id) AS stable_id FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?',

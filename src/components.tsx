@@ -232,7 +232,7 @@ export function Button({ children, variant = 'primary', className = '', type = '
 
 export type AppSelectOption<T extends string | number> = { value: T; label: string; disabled?: boolean };
 
-export function AppSelect<T extends string | number>({ value, options, onChange, ariaLabel, describedBy, controlId, invalid = false, className = '', disabled = false, leadingIcon }: {
+export function AppSelect<T extends string | number>({ value, options, onChange, ariaLabel, describedBy, controlId, invalid = false, className = '', disabled = false, leadingIcon, matchTriggerWidth = false }: {
   value: T;
   options: AppSelectOption<T>[];
   onChange: (value: T) => void;
@@ -243,6 +243,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   className?: string;
   disabled?: boolean;
   leadingIcon?: React.ReactNode;
+  matchTriggerWidth?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -268,7 +269,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
     const trigger = triggerRef.current;
     if (trigger) {
       const rect = trigger.getBoundingClientRect();
-      const { left, width } = getAppSelectHorizontalPosition(rect, window.innerWidth);
+      const { left, width } = getAppSelectHorizontalPosition(rect, window.innerWidth, matchTriggerWidth ? rect.width : undefined);
       const { top, maxHeight } = getAppSelectVerticalPosition(rect, window.innerHeight, options.length);
       setPosition({ top, left, width, maxHeight });
     }

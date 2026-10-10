@@ -1,5 +1,21 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Match the administrator role menu to its trigger width
+
+- **Reviewed:** The reported account-role control and the open custom-select menu. The live trigger measured 144px while its menu was 220px wide, extending 76px beyond the visible field.
+- **Improvement:** Add an opt-in `matchTriggerWidth` setting to `AppSelect` and enable it for the account-details role selector.
+- **Why it helps:** The role list now ends at the visible field edge, so a click just to the right closes the menu instead of landing in its wider overflow area. Other selects keep their existing minimum menu width.
+- **Interface review:** On `/admin/users/baf4c6ba-14ec-43b5-aa03-35fa279ef970` at 1280×720, the role trigger and menu both measured 144px. The “Administrator” option fit without clipping. The trigger opened the list; clicking 10px to its right closed it without changing the selected role. The browser console had no warnings or errors.
+- **Checked:** Focused AppSelect tests passed (9/9); full `npm test` passed all 262 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
+## 2026-10-10 — Reuse the preloaded storage ID in course details
+
+- **Reviewed:** Course detail assembly, which loaded the published version and then resolved the same logical course ID and latest storage row again.
+- **Improvement:** Fetch the detail row directly with the storage ID from the already-loaded published version, retaining the logical-course ID as the no-version fallback.
+- **Why it helps:** Published course details avoid a repeated logical-course resolution and latest-version lookup while preserving the current row and fallback behavior.
+- **Interface review:** No visible change; the detail payload keeps the same published version and progress behavior.
+- **Checked:** The focused course analytics/versioning suite passed (69/69), including a regression against the repeated course-row lookup. Full `npm test` passed all 262 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Allow the document shell to fit narrow phone viewports
 
 - **Reviewed:** The 320px course-editor render and the global `html` and `body` minimum-width rules.

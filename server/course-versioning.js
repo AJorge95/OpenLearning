@@ -128,6 +128,10 @@ export function currentPublishedCourse(courseId) {
   )`).get(id, id);
 }
 
+export function currentPublishedCourseForVersion(logicalCourseIdValue, version) {
+  return db.prepare('SELECT * FROM courses WHERE id = ?').get(version?.storage_course_id || logicalCourseIdValue) ?? null;
+}
+
 export function courseVersionHistory(courseId) {
   const id = logicalCourseId(courseId) || courseId;
   return db.prepare(`SELECT v.*, u.username AS publisher, c.title

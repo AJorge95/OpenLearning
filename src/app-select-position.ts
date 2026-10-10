@@ -1,11 +1,12 @@
 export function getAppSelectHorizontalPosition(
   trigger: Pick<DOMRect, 'left' | 'width'>,
   viewportWidth: number,
+  minimumWidth = 220,
 ) {
   const safeViewportWidth = Math.max(1, viewportWidth);
   const margin = Math.min(12, Math.max(0, (safeViewportWidth - 1) / 2));
   const maxWidth = Math.max(1, safeViewportWidth - margin * 2);
-  const width = Math.min(Math.max(trigger.width, 220), maxWidth);
+  const width = Math.min(Math.max(trigger.width, minimumWidth), maxWidth);
   const maxLeft = safeViewportWidth - width - margin;
   const left = Math.max(margin, Math.min(trigger.left, maxLeft));
 
