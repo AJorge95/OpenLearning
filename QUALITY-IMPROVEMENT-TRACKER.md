@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Validate platform icon uploads and describe file guidance
+
+- **Reviewed:** The platform icon picker’s visible format/size guidance and file input, the settings API’s data-URL and image-signature validation, and whether invalid icon updates can write settings or audit records.
+- **Improvement:** Associate the upload’s visible PNG/JPG/WebP and 512 KB guidance with the file input using `aria-describedby`. Strengthen server checks for PNG headers and end chunks, JPEG boundaries, and WebP RIFF/chunk sizes; add regressions proving truncated inputs are rejected without changing branding or audit history.
+- **Why it helps:** Assistive technology announces the file requirements with the upload control, and signature-only or truncated payloads can no longer be saved as platform branding.
+- **Checked:** The focused icon and settings tests passed (14 tests); full `npm test` passed all 193 tests; `npx tsc --noEmit`, `npm run build`, changed-file `node --check`, and `git diff --check` passed. Playwright using installed Chrome rendered `/admin/settings` at 1440px and 390px, verified the hint association and icon preview interaction, found no horizontal overflow, and reported no console warnings or errors. This was local mocked-admin coverage, not production validation.
+
 ## 2026-10-10 — Avoid repeated failed video-duration scans
 
 - **Reviewed:** The MP4 scan bounds, the learner duration lookup on watch-progress and playback-start requests, the database cache for verified durations, and media replacement's unique file and media IDs.
