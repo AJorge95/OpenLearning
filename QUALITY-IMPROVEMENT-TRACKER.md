@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Skip no-op registration-form saves
+
+- **Reviewed:** Registration-field normalization, recovery from invalid stored configuration, audit rollback behavior, and the settings editor's labels, validation descriptions, focus handling, and mobile layout.
+- **Improvement:** Normalize the submitted form and compare it with the current valid configuration before writing the setting or audit event; invalid stored configurations still use the existing recovery save path.
+- **Why it helps:** Resaving equivalent fields no longer creates misleading platform-change history or performs a redundant settings write, while valid configuration recovery remains available.
+- **Interface review:** The editor has labeled inputs, contextual validation, focus-to-error behavior, a disabled saving fieldset, and a single-column mobile layout; no separate UI change was warranted in this cycle.
+- **Checked:** All 12 focused `server/registration-fields.test.js` tests passed. The regression injects setting-update and audit-insert failures, then verifies whitespace-equivalent fields still succeed without either write; the existing invalid-configuration recovery case also passed. Full `npm test` passed all 166 cases; `npx tsc --noEmit`, `npm run build`, `node --check server/routes-admin.js`, and `git diff --check` passed.
+
 ## 2026-10-10 — Validate learning-path patches and skip no-op writes
 
 - **Reviewed:** Learning-path edit validation and audit behavior, plus the editor's labeled fields, grouped course selector, keyboard focus styles, and responsive single-column layout.

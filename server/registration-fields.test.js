@@ -200,6 +200,40 @@ test('invalid stored registration fields pause public signup and stay recoverabl
   assert.deepEqual(registrationFields.getRegistrationFields(), fieldDefinitions);
 });
 
+test('saving equivalent registration fields skips setting writes and audit events', async () => {
+  const currentSetting = database.prepare('SELECT value FROM app_settings WHERE key = ?').get('registration_fields').value;
+  const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'platform.registration_fields_updated'`).get().count;
+  database.exec(`
+    CREATE TRIGGER fail_registration_fields_setting_update
+      BEFORE UPDATE ON app_settings WHEN OLD.key = 'registration_fields'
+      BEGIN SELECT RAISE(ABORT, 'setting write'); END;
+    CREATE TRIGGER fail_registration_fields_noop_audit
+      BEFORE INSERT ON audit_logs WHEN NEW.action = 'platform.registration_fields_updated'
+      BEGIN SELECT RAISE(ABORT, 'audit write'); END;
+  `);
+
+  try {
+    const equivalentFields = fieldDefinitions.map((field) => ({
+      ...field,
+      label: ` ${field.label} `,
+      options: field.options.map((option) => ` ${option} `),
+    }));
+    const response = await fetch(apiUrl('/admin/registration-fields'), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ fields: equivalentFields }),
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).fields, fieldDefinitions);
+    assert.equal(database.prepare('SELECT value FROM app_settings WHERE key = ?').get('registration_fields').value, currentSetting);
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+      WHERE action = 'platform.registration_fields_updated'`).get().count, originalAuditCount);
+  } finally {
+    database.exec('DROP TRIGGER fail_registration_fields_setting_update; DROP TRIGGER fail_registration_fields_noop_audit;');
+  }
+});
+
 test('registration field saves roll back when the required audit entry cannot be written', async () => {
   const originalFields = registrationFields.getRegistrationFields();
   const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
