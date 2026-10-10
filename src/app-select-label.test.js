@@ -73,6 +73,47 @@ function catalogFilterLabels(sourceFile) {
   return controls;
 }
 
+function appSelectFieldLabels(sourceFile) {
+  const controls = [];
+
+  function visit(node) {
+    if (ts.isJsxElement(node)) {
+      const classNames = stringJsxAttribute(node.openingElement, 'className').split(/\s+/);
+      if (classNames.includes('app-select-field')) {
+        const label = node.children.find((child) => ts.isJsxElement(child)
+          && jsxTagName(child.openingElement.tagName) === 'span');
+        const select = node.children.find((child) => ts.isJsxSelfClosingElement(child)
+          && jsxTagName(child.tagName) === 'AppSelect');
+        if (label && select) {
+          const ariaLabel = select.attributes.properties.find((property) => (
+            ts.isJsxAttribute(property) && property.name.text === 'ariaLabel'
+          ));
+          let expression = ariaLabel && ts.isJsxAttribute(ariaLabel) ? ariaLabel.initializer : undefined;
+          if (expression && ts.isJsxExpression(expression)) expression = expression.expression;
+          let accessibleName = '';
+          if (expression && ts.isStringLiteralLike(expression)) accessibleName = expression.text;
+          else if (expression && ts.isTemplateExpression(expression)) {
+            accessibleName = [expression.head.text, ...expression.templateSpans.map((span) => span.literal.text)].join('');
+          }
+          controls.push({
+            visibleLabel: label.children.filter(ts.isJsxText).map((child) => child.text).join(' ').replace(/\s+/g, ' ').trim(),
+            accessibleName,
+            location: `${path.basename(sourceFile.fileName)}:${sourceFile.getLineAndCharacterOfPosition(select.getStart(sourceFile)).line + 1}`,
+          });
+        }
+        return;
+      }
+      node.children.forEach(visit);
+      return;
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return controls;
+}
+
 function collectTsxFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = path.join(directory, entry.name);
@@ -115,5 +156,19 @@ test('catalog filter accessible names contain their visible labels', () => {
   for (const { visibleLabel, accessibleName } of controls) {
     assert.ok(accessibleName.toLocaleLowerCase().includes(visibleLabel.toLocaleLowerCase()),
       `The “${visibleLabel}” filter is announced as “${accessibleName}”.`);
+  }
+});
+
+test('form AppSelect accessible names contain their visible field labels', () => {
+  const controls = collectTsxFiles(sourceDirectory).flatMap((filePath) => {
+    const source = fs.readFileSync(filePath, 'utf8');
+    const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    return appSelectFieldLabels(sourceFile);
+  });
+
+  assert.ok(controls.length > 0, 'Expected to find AppSelect controls in labeled form fields.');
+  for (const { visibleLabel, accessibleName, location } of controls) {
+    assert.ok(accessibleName.toLocaleLowerCase().includes(visibleLabel.toLocaleLowerCase()),
+      `${location}: the “${visibleLabel}” field is announced as “${accessibleName}”.`);
   }
 });

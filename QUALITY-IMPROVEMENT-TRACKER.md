@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Match form select names to visible labels
+
+- **Reviewed:** Shared `AppSelect` field containers, their visible labels and accessible names, the registration-field editor, and the repeated account-role hit-area report.
+- **Improvement:** Name each registration field-type combobox “Field type for field N” and add a source regression that checks every `.app-select-field` control’s accessible name contains its visible label.
+- **Why it helps:** Speech-input and screen-reader users can refer to the “Field type” wording shown on screen, and future form selects are checked for the same mismatch.
+- **Account-role recheck:** No duplicate code change was needed. The current admin route renders a bounded non-label control; the wrapper and trigger both measured 152px, and a click just beyond the trigger left its menu closed. The annotated screenshot still describes the older label markup.
+- **Checked:** The new regression first failed on “Field type” versus “Type for field …”, then passed after the accessible name was corrected. All 4 focused AppSelect label tests passed. The local `/admin/settings/registration-fields` page exposed the combobox as “Field type for field 1”; the added field remained unsaved. `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The full suite currently has three failures in `server/last-login.test.js` and `server/lesson-watch.test.js` against separate in-progress backend edits; those files were left untouched. The connected Chrome extension disconnected during the role-control recheck, so current-turn console and Escape checks were unavailable.
+
 ## 2026-10-10 — Keep analytics tied to published course content
 
 - **Reviewed:** The in-progress analytics route change, the course revision creation path, and existing versioned-course analytics coverage.
