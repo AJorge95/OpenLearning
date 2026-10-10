@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
-import { AppSelect, Button, PalettePicker, PlatformBrand, PlatformIconPicker } from './components';
+import { AppSelect, Button, ImageWithFallback, PalettePicker, PlatformBrand, PlatformIconPicker } from './components';
 import { findMissingRequiredRegistrationField } from './registration-fields';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
@@ -142,7 +142,7 @@ export function SetupPage() {
   return (
     <main id="main-content" tabIndex={-1} className="setup-page">
       <section className="setup-panel">
-        <span className="setup-mark">{platformIcon ? <img src={platformIcon} alt="Platform icon preview" /> : <BookOpenMark />}</span>
+        <span className="setup-mark"><ImageWithFallback src={platformIcon} className="setup-mark-image" alt="Platform icon preview" fallback={<BookOpenMark />} /></span>
         <div className="setup-step-label">Step {step} of 2</div>
         {step === 1 ? <>
           <h1 ref={stepHeadingRef} tabIndex={-1}>Set up your learning platform</h1>

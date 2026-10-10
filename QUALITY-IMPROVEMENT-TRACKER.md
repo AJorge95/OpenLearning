@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Preserve the setup mark when an uploaded icon cannot decode
+
+- **Reviewed:** The setup wizard's platform mark, the icon picker's decode-error handling, the shared `ImageWithFallback` component, and server-side icon validation.
+- **Improvement:** Render the setup mark through `ImageWithFallback`, using the built-in book mark when an icon cannot be decoded.
+- **Why it helps:** A mislabeled or damaged image can pass the browser's MIME and file-read checks, then fail to render. The picker already reports that failure; the setup header now also stays visually intact instead of showing a broken-image icon.
+- **Backend review:** `/api/setup` validates the encoded payload, image signature, size, and dimensions before saving, so no backend change was needed.
+- **Checked:** `npm test` passed all 205 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The configured local app redirects `/setup` to `/login`, so the wizard's decode-error state could not be exercised in the authenticated browser. The fallback uses the same shared component already used by the picker and platform branding.
+
 ## 2026-10-10 — Match account-list empty states to active filters
 
 - **Reviewed:** The admin account search and role filter, the query used for pagination and role changes, the empty table message, and the `/api/admin/users` query validation and page limit.
