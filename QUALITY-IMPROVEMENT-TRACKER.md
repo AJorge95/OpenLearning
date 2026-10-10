@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Protect platform reset backup and rollback guarantees
+
+- **Reviewed:** The platform reset flow pauses requests, backs up SQLite and course media, requires confirmation, and restores media when the reset transaction fails; the committed flow had no dedicated server tests.
+- **Improvement:** Add isolated server regressions for verified backup contents and cancellation, exact-phrase confirmation and retained administrator/log data, default settings, and database/media restoration after an audit failure.
+- **Why it helps:** Future changes to this destructive workflow must preserve the recovery backup, user-visible confirmation boundary, and rollback behavior across both database and media storage.
+- **Interface review:** No visible changes; the existing backup review, confirmation phrase, and pending states remain unchanged.
+- **Checked:** `node --test tests/server/platform-reset.test.js` passed (3/3); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Cover authorized video rewind progress
 
 - **Reviewed:** The video rewind path preserves the watched high-water mark while moving the playback position back, and the response contract reports playback position separately from accumulated watch telemetry.
