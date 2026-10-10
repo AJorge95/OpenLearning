@@ -23,6 +23,9 @@ const courseGrantStatement = db.prepare('SELECT 1 FROM course_grants WHERE cours
 const courseByIdStatement = db.prepare('SELECT * FROM courses WHERE id = ?');
 const canonicalCourseStatement = db.prepare('SELECT * FROM courses WHERE id = ? AND logical_course_id IS NULL');
 const activeCourseVersionStatement = db.prepare('SELECT storage_course_id FROM course_versions WHERE course_id = ? ORDER BY version_number DESC LIMIT 1');
+const courseByModuleIdStatement = db.prepare('SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id WHERE m.id = ?');
+const courseByLessonIdStatement = db.prepare('SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN lessons l ON l.module_id = m.id WHERE l.id = ?');
+const courseByQuizIdStatement = db.prepare('SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN quizzes q ON q.module_id = m.id WHERE q.id = ?');
 const enrolledCoursePathsStatement = db.prepare(`SELECT lp.id AS path_id, lp.status, pc.position, pc.requires_previous
   FROM learning_path_enrollments e JOIN learning_paths lp ON lp.id = e.path_id
   JOIN learning_path_courses pc ON pc.path_id = lp.id
@@ -246,9 +249,9 @@ export function requireCourseManager(courseId, user) {
   if (!user || !['admin', 'moderator'].includes(user.role)) fail(403, 'You do not have permission to manage courses.', 'forbidden');
   let course = courseById(courseId);
   if (!course) {
-    course = db.prepare(`SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id WHERE m.id = ?`).get(courseId)
-      ?? db.prepare(`SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN lessons l ON l.module_id = m.id WHERE l.id = ?`).get(courseId)
-      ?? db.prepare(`SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN quizzes q ON q.module_id = m.id WHERE q.id = ?`).get(courseId);
+    course = courseByModuleIdStatement.get(courseId)
+      ?? courseByLessonIdStatement.get(courseId)
+      ?? courseByQuizIdStatement.get(courseId);
   }
   if (!course) fail(404, 'Course not found.', 'not_found');
   const logicalId = course.logical_course_id || course.id;

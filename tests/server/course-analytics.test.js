@@ -31,6 +31,7 @@ let hasCourseGrant;
 let createCourseAccessChecker;
 let canViewCourse;
 let readCourseById;
+let requireCourseManagerForTests;
 let logicalCourseId;
 let publishedVersionForLogicalCourse;
 
@@ -66,7 +67,7 @@ before(async () => {
   });
 
   ({ db: database } = await import('../../server/db.js'));
-  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler, hasCourseGrant: checkCourseGrant, createCourseAccessChecker: makeCourseAccessChecker, canViewCourse: checkCourseVisibility, courseById: readCourseByIdForTests }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests, logicalCourseId: resolveLogicalCourseId, publishedVersionForLogicalCourse: readPublishedVersionForLogicalCourse }] = await Promise.all([
+  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler, hasCourseGrant: checkCourseGrant, createCourseAccessChecker: makeCourseAccessChecker, canViewCourse: checkCourseVisibility, courseById: readCourseByIdForTests, requireCourseManager: checkRequireCourseManager }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests, logicalCourseId: resolveLogicalCourseId, publishedVersionForLogicalCourse: readPublishedVersionForLogicalCourse }] = await Promise.all([
     import('../../server/routes-courses.js'),
     import('../../server/routes-programs.js'),
     import('../../server/http.js'),
@@ -82,6 +83,7 @@ before(async () => {
   createCourseAccessChecker = makeCourseAccessChecker;
   canViewCourse = checkCourseVisibility;
   readCourseById = readCourseByIdForTests;
+  requireCourseManagerForTests = checkRequireCourseManager;
   logicalCourseId = resolveLogicalCourseId;
   publishedVersionForLogicalCourse = readPublishedVersionForLogicalCourse;
   database.exec(`
@@ -3193,6 +3195,46 @@ test('course row and version-access lookups reuse prepared statements and read c
   }
 
   assert.equal(watchedPreparations, 0, 'course-access and row lookups should be prepared once when the module loads');
+});
+
+test('course manager resolves module, lesson, and quiz IDs with prepared lookups', () => {
+  const courseId = 'manager-content-lookup-course';
+  const moduleId = 'manager-content-lookup-module';
+  const lessonId = 'manager-content-lookup-lesson';
+  const quizId = 'manager-content-lookup-quiz';
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Manager lookup course', 'published', 'admin-1', 'admin-1')`).run(courseId);
+  database.prepare(`INSERT INTO course_modules (id, course_id, title, position)
+    VALUES (?, ?, 'Manager lookup module', 0)`).run(moduleId, courseId);
+  database.prepare(`INSERT INTO lessons (id, module_id, title, position)
+    VALUES (?, ?, 'Manager lookup lesson', 0)`).run(lessonId, moduleId);
+  database.prepare(`INSERT INTO quizzes (id, module_id, title, pass_mark)
+    VALUES (?, ?, 'Manager lookup quiz', 70)`).run(quizId, moduleId);
+
+  const lookupQueries = new Set([
+    'SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id WHERE m.id = ?',
+    'SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN lessons l ON l.module_id = m.id WHERE l.id = ?',
+    'SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN quizzes q ON q.module_id = m.id WHERE q.id = ?',
+  ]);
+  const originalPrepare = database.prepare;
+  let lookupPreparations = 0;
+  database.prepare = (sql) => {
+    if (lookupQueries.has(sql.replace(/\s+/g, ' ').trim())) lookupPreparations += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    const administrator = { id: 'admin-1', role: 'admin' };
+    assert.equal(requireCourseManagerForTests(moduleId, administrator)?.id, courseId);
+    originalPrepare.call(database, "UPDATE courses SET title = 'Updated manager lookup course' WHERE id = ?").run(courseId);
+    assert.equal(requireCourseManagerForTests(lessonId, administrator)?.title, 'Updated manager lookup course');
+    assert.equal(requireCourseManagerForTests(quizId, administrator)?.id, courseId);
+  } finally {
+    database.prepare = originalPrepare;
+    originalPrepare.call(database, 'DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+
+  assert.equal(lookupPreparations, 0, 'content-ID course lookups should reuse statements prepared when HTTP helpers load');
 });
 
 test('course access reuses complete canonical rows supplied by list queries', () => {
