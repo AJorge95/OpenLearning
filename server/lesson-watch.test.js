@@ -146,6 +146,38 @@ test('watch progress rejects fast forward jumps and retains the watched high-wat
   });
 });
 
+test('small media-clock leads are accepted without accumulating extra watched time', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  withFakeClock(1_500_000, (advance) => {
+    lessonWatch.beginLessonWatch(learner, 'watch-lesson', 100);
+
+    advance(4_000);
+    const first = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 4.25);
+    assert.equal(first.accepted, true);
+    assert.equal(first.watchedUntilSeconds, 4);
+    assert.equal(database.prepare(`SELECT last_position_seconds FROM lesson_watch_progress
+      WHERE user_id = ? AND lesson_id = ?`).get(learner.id, 'watch-lesson').last_position_seconds, 4);
+
+    advance(4_000);
+    const second = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 8.5);
+    assert.equal(second.accepted, true);
+    assert.equal(second.watchedUntilSeconds, 8);
+    const acceptedHeartbeat = database.prepare(`SELECT last_heartbeat_at FROM lesson_watch_progress
+      WHERE user_id = ? AND lesson_id = ?`).get(learner.id, 'watch-lesson').last_heartbeat_at;
+
+    advance(4_000);
+    const tooFarAhead = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 12.51);
+    assert.equal(tooFarAhead.accepted, false);
+    assert.equal(tooFarAhead.watchedUntilSeconds, 8);
+    assert.equal(database.prepare(`SELECT last_heartbeat_at FROM lesson_watch_progress
+      WHERE user_id = ? AND lesson_id = ?`).get(learner.id, 'watch-lesson').last_heartbeat_at, acceptedHeartbeat);
+
+    const toleratedRetry = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 12.5);
+    assert.equal(toleratedRetry.accepted, true);
+    assert.equal(toleratedRetry.watchedUntilSeconds, 12);
+  });
+});
+
 test('near-complete playback unlocks lesson completion and saved completion remains recognized', () => {
   const learner = { id: 'watch-learner', role: 'learner' };
   withFakeClock(2_000_000, (advance) => {
