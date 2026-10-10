@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Protect first-run setup with a private bootstrap credential
+
+- **Reviewed:** First-run setup flow, environment configuration, account registration conflicts, and authentication rate-limit coverage.
+- **Improvement:** Require a configured 32–256 character `SETUP_TOKEN` to create the initial administrator, compare credentials with a constant-time digest check, and return a generic conflict for duplicate usernames or emails, including uniqueness races. Add the password-style token field and setup guidance to the wizard and deployment docs.
+- **Why it helps:** An unconfigured instance cannot be claimed without the operator’s private bootstrap credential, and public registration no longer reveals whether a username or email is already registered.
+- **Interface review:** The wizard validates token length before submission and explains that the credential comes from the server operator.
+- **Checked:** Focused auth/setup route tests passed all 10 tests; full `npm test` passed all 242 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The browser rendering of the setup wizard was not rechecked in this cycle.
+
 ## 2026-10-10 — Keep course and path detail reads side-effect free
 
 - **Reviewed:** Course and learning-path detail GET routes, learner enrollment entry points, course curriculum links, staff preview access, and path-state synchronization after course changes.

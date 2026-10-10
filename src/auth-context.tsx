@@ -20,7 +20,7 @@ interface AuthContextValue {
   refresh: () => Promise<void>;
   signIn: (username: string, password: string) => Promise<void>;
   signUp: (email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => Promise<void>;
-  completeSetup: (platformName: string, email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => Promise<void>;
+  completeSetup: (platformName: string, email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, setupToken: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => Promise<void>;
   signOut: () => Promise<void>;
   setBranding: (name: string, themePalette: BrandingPalette, platformIcon: string | null) => void;
   setPlatformAccessSettings: (connectionProtocol: ConnectionProtocol, registrationEnabled: boolean, registrationAvailable: boolean, userLimit: number) => void;
@@ -125,9 +125,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRegistrationAvailableState(result.registrationAvailable);
   }, []);
 
-  const completeSetup = useCallback(async (name: string, email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => {
+  const completeSetup = useCallback(async (name: string, email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, setupToken: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => {
     const result = await api.post<{ user: User } & PlatformConfiguration>('/api/setup', {
-      platformName: name, email, firstName, lastName, username, password, confirmPassword, ...configuration,
+      platformName: name, email, firstName, lastName, username, password, confirmPassword, setupToken, ...configuration,
     });
     authStateRevision.current += 1;
     api.clearCsrf();

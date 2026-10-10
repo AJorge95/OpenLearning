@@ -40,6 +40,8 @@ For deployment, set `NODE_ENV=production` and replace `SESSION_SECRET` in `.env`
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
+Before first-run setup, set `SETUP_TOKEN` in `.env` to a separate random value of at least 32 characters (the same Node command can generate one). Keep it private and enter it in the setup wizard over localhost or HTTPS. After setup succeeds, remove the token from `.env` and restart the server; setup is then permanently closed by the database's configured state.
+
 The example secret is rejected in production. If HTTPS is terminated by a reverse proxy, set `TRUST_PROXY=true` so secure session cookies work through that proxy. Then build and start the application:
 
 ```sh
@@ -47,7 +49,7 @@ npm run build
 npm start
 ```
 
-Open `http://localhost:3000`. On the first launch, the two-step setup wizard asks for the platform name, optional icon and color palette, initial administrator credentials, public connection protocol, and registration policy. Setup can only be completed once. When registration is enabled, new accounts receive the learner role. Administrators can update branding, protocol, registration access, and the account cap from **Settings**. A limit of `0` means unlimited accounts; a positive limit counts all accounts, including administrators and moderators.
+Open `http://localhost:3000`. On the first launch, the two-step setup wizard asks for the bootstrap token, platform name, optional icon and color palette, initial administrator credentials, public connection protocol, and registration policy. Setup can only be completed once. When registration is enabled, new accounts receive the learner role. Administrators can update branding, protocol, registration access, and the account cap from **Settings**. A limit of `0` means unlimited accounts; a positive limit counts all accounts, including administrators and moderators.
 
 Service monitors can use `/healthz` to check that the HTTP process is responding. `/readyz` reports ready only when SQLite has a schema-migration version, setup is complete (`setup_complete = '1'`), and at least one administrator account exists. It returns HTTP 503 when any readiness check fails or while the server is draining during shutdown.
 
@@ -99,6 +101,7 @@ Environment variables can be set in `.env` or in the process environment:
 | `MAX_UPLOAD_BYTES` | `2147483648` | Maximum size for a single uploaded video, cover, or lesson document, as a positive whole number of bytes. Invalid values stop startup. |
 | `REQUEST_TIMEOUT_MS` | `300000` | Maximum time in milliseconds for Node to receive an entire HTTP request, from 1 to 2147483647. Set a larger value for slower large uploads; invalid values stop startup. |
 | `SESSION_SECRET` | Development-only value | Session signing secret. Production requires at least 32 characters; use a random secret and keep it private. |
+| `SETUP_TOKEN` | Unset | Private, random first-run administrator bootstrap credential, required only until initial setup succeeds. When set, it must contain 32 to 256 characters. |
 | `TRUST_PROXY` | `false` | Accepts `true` or `false` (case-insensitive). Set `true` only behind a trusted reverse proxy that sets forwarding headers; other non-empty values stop startup. |
 
 `DB_PATH` and `MEDIA_ROOT` are independent overrides. The example leaves them unset so changing `DATA_DIR` moves the database and media together. Set either override explicitly when you need to store it elsewhere.

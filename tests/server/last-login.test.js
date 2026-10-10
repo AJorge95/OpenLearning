@@ -15,6 +15,7 @@ const isolatedConfig = {
   DB_PATH: '',
   MEDIA_ROOT: '',
   SESSION_SECRET: 'isolated-last-login-tests',
+  SETUP_TOKEN: 'isolated-setup-bootstrap-token-with-at-least-32-chars',
   TRUST_PROXY: 'false',
   PORT: '3000',
   MAX_UPLOAD_BYTES: '2147483648',
@@ -396,6 +397,37 @@ test('migration 31 preserves telemetry already present in a version-30 database'
   }
 });
 
+test('initial setup rejects missing or incorrect operator bootstrap credentials without writing setup state', async () => {
+  const appSettingsBefore = database.prepare('SELECT key, value FROM app_settings ORDER BY key').all();
+  const request = (setupToken) => fetch(apiUrl('/setup'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({
+      ...(setupToken === undefined ? {} : { setupToken }),
+      platformName: 'Unauthorized Setup',
+      username: 'unauthorized_setup',
+      email: 'unauthorized.setup@example.invalid',
+      firstName: 'Unauthorized',
+      lastName: 'Setup',
+      password: 'UnauthorizedSetupPassphrase-2026',
+      confirmPassword: 'UnauthorizedSetupPassphrase-2026',
+    }),
+  });
+
+  for (const credential of [undefined, 'incorrect-bootstrap-credential']) {
+    const response = await request(credential);
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: 'The bootstrap credential is invalid.', code: 'invalid_setup_token' });
+  }
+
+  const statusResponse = await fetch(apiUrl('/setup/status'), { headers: { connection: 'close' } });
+  assert.equal(statusResponse.status, 200);
+  assert.equal(Object.hasOwn(await statusResponse.json(), 'setupToken'), false);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, 0);
+  assert.deepEqual(database.prepare('SELECT key, value FROM app_settings ORDER BY key').all(), appSettingsBefore);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'platform.setup'").get().count, 0);
+});
+
 test('initial setup rolls back its administrator and settings when the audit entry cannot be written', async () => {
   const originalConsoleError = console.error;
   console.error = () => {};
@@ -409,6 +441,7 @@ test('initial setup rolls back its administrator and settings when the audit ent
       method: 'POST',
       headers: { 'content-type': 'application/json', connection: 'close' },
       body: JSON.stringify({
+        setupToken: isolatedConfig.SETUP_TOKEN,
         platformName: 'Audit Rollback Test',
         username: 'setup_audit',
         email: 'setup.audit@example.invalid',
@@ -448,6 +481,7 @@ test('setup, registration, and successful sign-in record last login for admin de
     method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify({
+      setupToken: isolatedConfig.SETUP_TOKEN,
       platformName: 'Last Login Test',
       username: 'admin_last_login',
       email: 'admin.last-login@example.invalid',
@@ -462,6 +496,31 @@ test('setup, registration, and successful sign-in record last login for admin de
   const adminId = setup.user.id;
   const setupLastLogin = database.prepare('SELECT last_login_at FROM users WHERE id = ?').get(adminId).last_login_at;
   assert.match(setupLastLogin, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+
+  const registrationCollision = async ({ username, email }) => {
+    const response = await fetch(apiUrl('/auth/register'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        username,
+        email,
+        firstName: 'Collision',
+        lastName: 'Probe',
+        password: 'CollisionProbePassphrase-2026',
+        confirmPassword: 'CollisionProbePassphrase-2026',
+      }),
+    });
+    assert.equal(response.status, 409);
+    return response.json();
+  };
+  const userCountBeforeCollisions = database.prepare('SELECT COUNT(*) AS count FROM users').get().count;
+  const usernameCollision = await registrationCollision({ username: 'ADMIN_LAST_LOGIN', email: 'unused.username@example.invalid' });
+  const emailCollision = await registrationCollision({ username: 'unused_email', email: 'ADMIN.LAST-LOGIN@EXAMPLE.INVALID' });
+  const bothCollisions = await registrationCollision({ username: 'admin_last_login', email: 'admin.last-login@example.invalid' });
+  assert.deepEqual(usernameCollision, { error: 'An account with those details could not be registered.', code: 'registration_conflict' });
+  assert.deepEqual(emailCollision, usernameCollision);
+  assert.deepEqual(bothCollisions, usernameCollision);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, userCountBeforeCollisions);
 
   const registrationResponse = await fetch(apiUrl('/auth/register'), {
     method: 'POST',
