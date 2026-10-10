@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse prepared statements for audit and system logs
+
+- **Reviewed:** Audit and system log call sites across authentication, course management, and account workflows. Each event prepared its insert SQL anew before writing.
+- **Improvement:** Prepare each log insert once after the database schema loads, then reuse those statements for all writes. Retention counting, trimming, redaction, and transaction behavior remain unchanged.
+- **Why it helps:** Frequent audit and system events skip repeated SQL compilation, reducing overhead on request paths that record activity.
+- **Interface review:** No visible change; log entry shape, retention limits, ordering, and credential redaction are unchanged.
+- **Checked:** Focused log-store tests passed (4/4), including a regression proving repeated writes do not prepare either insert again. Full `npm test` passed all 264 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Skip repeated course resolution in certificate lookup
 
 - **Reviewed:** Certificate lookup and issuance, which resolved the logical course ID and then passed it to the general published-version resolver, repeating the course-ID query.
