@@ -3110,3 +3110,46 @@ test('course access reuses the prerequisite query across enrolled paths', () => 
 
   assert.equal(prerequisiteQueryPreparations, 0);
 });
+
+test('course access reuses the enrolled-path lookup across private courses', () => {
+  const courseIds = ['enrolled-path-query-course-one', 'enrolled-path-query-course-two'];
+  database.exec(`
+    INSERT INTO courses (id, title, status, visibility, created_by, updated_by) VALUES
+      ('${courseIds[0]}', 'Path course one', 'published', 'private', 'admin-1', 'admin-1'),
+      ('${courseIds[1]}', 'Path course two', 'published', 'private', 'admin-1', 'admin-1');
+    INSERT INTO learning_paths (id, title, status, created_by, updated_by)
+      VALUES ('enrolled-path-query-path', 'Enrolled path query', 'published', 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+      ('enrolled-path-query-step-one', 'enrolled-path-query-path', '${courseIds[0]}', 0, 0),
+      ('enrolled-path-query-step-two', 'enrolled-path-query-path', '${courseIds[1]}', 1, 0);
+    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by)
+      VALUES ('enrolled-path-query-enrollment', 'enrolled-path-query-path', 'learner-active', 'assigned', 'admin-1');
+  `);
+
+  const originalPrepare = database.prepare;
+  let enrolledPathQueryPreparations = 0;
+  database.prepare = (sql) => {
+    if (sql.replace(/\s+/g, ' ').trim() === `SELECT lp.id AS path_id, lp.status, pc.position, pc.requires_previous FROM learning_path_enrollments e JOIN learning_paths lp ON lp.id = e.path_id JOIN learning_path_courses pc ON pc.path_id = lp.id WHERE e.user_id = ? AND pc.course_id = ? AND lp.status = 'published'`) {
+      enrolledPathQueryPreparations += 1;
+    }
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    const canView = createCourseAccessChecker({ id: 'learner-active', role: 'learner', disabled: 0 });
+    const firstCourse = originalPrepare.call(database, 'SELECT * FROM courses WHERE id = ?').get(courseIds[0]);
+    const secondCourse = originalPrepare.call(database, 'SELECT * FROM courses WHERE id = ?').get(courseIds[1]);
+    assert.equal(canView(firstCourse), true);
+    assert.equal(canView(secondCourse), true);
+    originalPrepare.call(database, 'DELETE FROM learning_path_enrollments WHERE id = ?').run('enrolled-path-query-enrollment');
+    const canViewAfterEnrollmentRemoval = createCourseAccessChecker({ id: 'learner-active', role: 'learner', disabled: 0 });
+    assert.equal(canViewAfterEnrollmentRemoval(secondCourse), false);
+  } finally {
+    database.prepare = originalPrepare;
+    originalPrepare.call(database, 'DELETE FROM learning_path_enrollments WHERE id = ?').run('enrolled-path-query-enrollment');
+    originalPrepare.call(database, 'DELETE FROM learning_paths WHERE id = ?').run('enrolled-path-query-path');
+    originalPrepare.call(database, 'DELETE FROM courses WHERE id IN (?, ?)').run(...courseIds);
+  }
+
+  assert.equal(enrolledPathQueryPreparations, 0);
+});
