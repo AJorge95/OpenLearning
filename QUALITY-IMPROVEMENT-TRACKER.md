@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Cover authorized video rewind progress
+
+- **Reviewed:** The video rewind path preserves the watched high-water mark while moving the playback position back, and the response contract reports playback position separately from accumulated watch telemetry.
+- **Improvement:** Update the progress response expectations for `lastPositionSeconds` and add regression coverage for rewind bounds, rewind-before-start rejection, replayed content, and watch-credit resuming only after the prior high-water mark.
+- **Why it helps:** The test suite now protects the behavior introduced by the video rewind feature, including its anti-replay accounting and the distinction between public progress fields and stored telemetry.
+- **Interface review:** No visible change; the browser-facing player contract is unchanged by this test-only update.
+- **Checked:** `node --test tests/server/lesson-watch.test.js` passed (11/11); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Reuse course-manager content resolvers
 
 - **Reviewed:** `requireCourseManager()` resolves module, lesson, and quiz IDs to their owning course through three fixed join queries that were prepared on each editor request.
