@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse the current-user query across requests
+
+- **Reviewed:** The authentication middleware, which prepares the same account lookup for each signed-in request. This middleware runs before the protected API routes.
+- **Improvement:** Prepare the account SELECT once and execute it for each request, keeping role and disabled-state reads current.
+- **Why it helps:** Signed-in requests avoid repeated SQL compilation without caching account data or delaying role changes and account disablement.
+- **Interface review:** No visible change; route authorization still sees the current account role and disabled state.
+- **Checked:** An isolated SQLite regression verifies repeated middleware calls do not re-prepare the SELECT and immediately observe a role change and account disablement. The focused test passed (1/1); full `npm test` passed all 265 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reuse prepared statements for audit and system logs
 
 - **Reviewed:** Audit and system log call sites across authentication, course management, and account workflows. Each event prepared its insert SQL anew before writing.
