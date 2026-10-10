@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep lesson controls inside narrow screens
+
+- **Reviewed:** The lesson player's watch-control bar at 320–400px. Its fixed play, rewind, time, mute, volume, and full-screen controls overflowed the available width and made the whole page 382px wide at a 320px viewport.
+- **Improvement:** Use a compact two-row grid for screens up to 400px, keeping the watch progress and mute controls on the first row and the volume slider and full-screen button aligned below. Preserve the existing one-row controls above that breakpoint.
+- **Why it helps:** Learners can reach every playback control on narrow phones without horizontal page scrolling or a clipped control target.
+- **Interface review:** Kept the volume slider and accessible labels, sized the progress track to the available width, and left playback state and course progress untouched during browser checks.
+- **Backend review:** No API or progress-tracking change was needed; the verified watch endpoint and controls remain unchanged.
+- **Checked:** In-app browser at 320px, 390px, 400px, and 401px: document and control bar widths stayed within the viewport, with the layout switching at the intended breakpoint. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Recover video playback from the right resume point
 
 - **Reviewed:** Video retry stored a resume position for every player, but the metadata handler only applied pending retries inside the watch-tracked branch. Ordinary videos could reload without resuming; retry eligibility also relied on a stale `started` flag without confirming its lesson ID. Recovery status copy claimed server-verified progress even for videos without watch tracking.
