@@ -124,15 +124,16 @@ function accountRoleControls(sourceFile) {
         const field = node.children.find((child) => ts.isJsxElement(child)
           && stringJsxAttribute(child.openingElement, 'className').split(/\s+/).includes('account-role-control'));
         const label = field?.children.find((child) => ts.isJsxElement(child)
-          && jsxTagName(child.openingElement.tagName) === 'label');
+          && jsxTagName(child.openingElement.tagName) === 'span');
         const select = field?.children.find((child) => ts.isJsxSelfClosingElement(child)
           && jsxTagName(child.tagName) === 'AppSelect');
         if (label && select) {
           controls.push({
             visibleLabel: label.children.filter(ts.isJsxText).map((child) => child.text).join(' ').trim(),
-            labelFor: stringJsxAttribute(label.openingElement, 'htmlFor'),
+            labelId: stringJsxAttribute(label.openingElement, 'id'),
             controlId: stringJsxAttribute(select, 'controlId'),
             accessibleName: stringJsxAttribute(select, 'ariaLabel'),
+            labelledBy: stringJsxAttribute(select, 'ariaLabelledBy'),
           });
         }
         return;
@@ -190,15 +191,17 @@ test('the administrator role selector keeps clicks inside its visible trigger', 
 
   assert.deepEqual(controls, [{
     visibleLabel: 'Platform role',
-    labelFor: 'account-platform-role',
+    labelId: 'account-platform-role-label',
     controlId: 'account-platform-role',
     accessibleName: 'Platform role',
+    labelledBy: 'account-platform-role-label',
   }]);
-  assert.match(pageSource, /ariaLabel="Platform role" matchTriggerWidth/);
+  assert.match(pageSource, /ariaLabel="Platform role"[^>]*matchTriggerWidth/);
   assert.match(componentSource, /app-select-menu--match-trigger/);
+  assert.match(componentSource, /aria-labelledby=\{ariaLabelledBy\}/);
   assert.match(styles, /\.account-role-control\s*\{[^}]*flex:\s*0\s+0\s+9rem;[^}]*width:\s*9rem;/);
   assert.match(styles, /\.account-role-control\s*\{\s*pointer-events:\s*none;\s*\}/);
-  assert.match(styles, /\.account-role-control\s*>\s*label\s*\{\s*pointer-events:\s*auto;\s*cursor:\s*pointer;\s*\}/);
+  assert.doesNotMatch(styles, /\.account-role-control\s*>\s*label\s*\{[^}]*pointer-events:\s*auto;/);
   assert.match(styles, /\.account-role-control\s+\.app-select-trigger\s*\{\s*pointer-events:\s*auto;\s*\}/);
   assert.match(styles, /\.account-role-control\s*>\s*\.app-select\s*\{\s*width:\s*100%;\s*max-width:\s*100%;\s*\}/);
   assert.match(styles, /\.account-control-row \.account-role-control\s*\{\s*flex-basis:\s*auto;\s*width:\s*100%;\s*max-width:\s*none;\s*\}/);

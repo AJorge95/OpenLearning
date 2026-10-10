@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Limit role-menu activation to its trigger
+
+- **Reviewed:** The account role field used a native label connected to the custom combobox, and CSS made that label a pointer target. Clicking anywhere in the label's hit area could open the menu outside the visible select trigger.
+- **Improvement:** Render the visible field name as a non-interactive span and expose it through `aria-labelledby`; retain pointer events only on the actual combobox trigger.
+- **Why it helps:** The dropdown opens only when users activate the select itself, while assistive technology still receives the visible field name.
+- **Interface review:** Kept the existing 9rem desktop width, trigger-matched menu, and responsive full-width behavior. Browser verification remains unavailable under the current local-page URL policy.
+- **Backend review:** No role-update endpoint change was indicated; server authorization and audit handling are unchanged.
+- **Checked:** AppSelect label/hit-area regressions, full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Show missing custom-select values accurately
 
 - **Reviewed:** `AppSelect` falls back to `options[0]` for display when its controlled value is absent. The audit log filter builds action options from current log rows, so refreshed options can omit an older selected action while the filter value remains unchanged.
