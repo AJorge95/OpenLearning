@@ -2,15 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 
 const cloneId = () => randomUUID();
+const courseIdentityByIdStatement = db.prepare('SELECT id, logical_course_id FROM courses WHERE id = ?');
+const courseIdentityByModuleStatement = db.prepare(`SELECT c.id, c.logical_course_id FROM courses c
+  JOIN course_modules m ON m.course_id = c.id WHERE m.id = ?`);
+const courseIdentityByLessonStatement = db.prepare(`SELECT c.id, c.logical_course_id FROM courses c
+  JOIN course_modules m ON m.course_id = c.id JOIN lessons l ON l.module_id = m.id WHERE l.id = ?`);
+const courseIdentityByQuizStatement = db.prepare(`SELECT c.id, c.logical_course_id FROM courses c
+  JOIN course_modules m ON m.course_id = c.id JOIN quizzes q ON q.module_id = m.id WHERE q.id = ?`);
 
 export function logicalCourseId(courseId) {
-  const row = db.prepare('SELECT id, logical_course_id FROM courses WHERE id = ?').get(courseId)
-    ?? db.prepare(`SELECT c.id, c.logical_course_id FROM courses c
-      JOIN course_modules m ON m.course_id = c.id WHERE m.id = ?`).get(courseId)
-    ?? db.prepare(`SELECT c.id, c.logical_course_id FROM courses c
-      JOIN course_modules m ON m.course_id = c.id JOIN lessons l ON l.module_id = m.id WHERE l.id = ?`).get(courseId)
-    ?? db.prepare(`SELECT c.id, c.logical_course_id FROM courses c
-      JOIN course_modules m ON m.course_id = c.id JOIN quizzes q ON q.module_id = m.id WHERE q.id = ?`).get(courseId);
+  const row = courseIdentityByIdStatement.get(courseId)
+    ?? courseIdentityByModuleStatement.get(courseId)
+    ?? courseIdentityByLessonStatement.get(courseId)
+    ?? courseIdentityByQuizStatement.get(courseId);
   return row ? (row.logical_course_id || row.id) : null;
 }
 

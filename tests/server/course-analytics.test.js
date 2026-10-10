@@ -29,6 +29,7 @@ let isLessonUnlocked;
 let syncPathStates;
 let hasCourseGrant;
 let createCourseAccessChecker;
+let logicalCourseId;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -62,7 +63,7 @@ before(async () => {
   });
 
   ({ db: database } = await import('../../server/db.js'));
-  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler, hasCourseGrant: checkCourseGrant, createCourseAccessChecker: makeCourseAccessChecker }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests }] = await Promise.all([
+  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler, hasCourseGrant: checkCourseGrant, createCourseAccessChecker: makeCourseAccessChecker }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests, logicalCourseId: resolveLogicalCourseId }] = await Promise.all([
     import('../../server/routes-courses.js'),
     import('../../server/routes-programs.js'),
     import('../../server/http.js'),
@@ -76,6 +77,7 @@ before(async () => {
   readCurrentPublishedCourse = currentPublishedCourseForTests;
   hasCourseGrant = checkCourseGrant;
   createCourseAccessChecker = makeCourseAccessChecker;
+  logicalCourseId = resolveLogicalCourseId;
   database.exec(`
     INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES
       ('admin-1', 'admin', 'admin@example.invalid', 'not-used', 'admin', 0),
@@ -380,13 +382,13 @@ test('current published course loads the latest storage course and falls back to
     const course = readCurrentPublishedCourse(courseId);
     assert.equal(course?.id, currentStorageId);
     assert.equal(course?.title, 'Current title');
-    assert.equal(preparedStatementCount, 2, 'expected one logical-ID lookup and one combined current-course lookup');
+    assert.equal(preparedStatementCount, 1, 'expected only the combined current-course lookup to be prepared per call');
 
     preparedStatementCount = 0;
     const unversionedCourse = readCurrentPublishedCourse(unversionedCourseId);
     assert.equal(unversionedCourse?.id, unversionedCourseId);
     assert.equal(unversionedCourse?.title, 'Unversioned course');
-    assert.equal(preparedStatementCount, 2, 'expected one logical-ID lookup and one current-course lookup');
+    assert.equal(preparedStatementCount, 1, 'expected only the current-course lookup to be prepared per call');
   } finally {
     database.prepare = originalPrepare;
     database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(courseId, unversionedCourseId);
@@ -3057,6 +3059,47 @@ test('learning-path course lookups have a course-first covering index', () => {
 
   assert.ok(queryPlan.some((row) => row.detail.includes('USING COVERING INDEX learning_path_courses_course_path')),
     `Expected course lookup to use the course-first index, received: ${queryPlan.map((row) => row.detail).join('; ')}`);
+});
+
+test('logical course ID resolution reuses its prepared course and content lookups', () => {
+  const rootId = 'logical-identity-prepared-root';
+  const moduleId = 'logical-identity-prepared-module';
+  const lessonId = 'logical-identity-prepared-lesson';
+  const quizId = 'logical-identity-prepared-quiz';
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Logical identity resolver', 'published', 'admin-1', 'admin-1')`).run(rootId);
+  database.prepare(`INSERT INTO course_modules (id, course_id, title, position)
+    VALUES (?, ?, 'Logical identity module', 0)`).run(moduleId, rootId);
+  database.prepare(`INSERT INTO lessons (id, module_id, title, position)
+    VALUES (?, ?, 'Logical identity lesson', 0)`).run(lessonId, moduleId);
+  database.prepare(`INSERT INTO quizzes (id, module_id, title, pass_mark)
+    VALUES (?, ?, 'Logical identity quiz', 70)`).run(quizId, moduleId);
+
+  const lookupQueries = new Set([
+    'SELECT id, logical_course_id FROM courses WHERE id = ?',
+    'SELECT c.id, c.logical_course_id FROM courses c JOIN course_modules m ON m.course_id = c.id WHERE m.id = ?',
+    'SELECT c.id, c.logical_course_id FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN lessons l ON l.module_id = m.id WHERE l.id = ?',
+    'SELECT c.id, c.logical_course_id FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN quizzes q ON q.module_id = m.id WHERE q.id = ?',
+  ]);
+  const originalPrepare = database.prepare;
+  let lookupPreparations = 0;
+  database.prepare = (sql) => {
+    if (lookupQueries.has(sql.replace(/\s+/g, ' ').trim())) lookupPreparations += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    assert.equal(logicalCourseId(rootId), rootId);
+    assert.equal(logicalCourseId(moduleId), rootId);
+    assert.equal(logicalCourseId(lessonId), rootId);
+    assert.equal(logicalCourseId(quizId), rootId);
+    assert.equal(logicalCourseId('missing-course-identity'), null);
+  } finally {
+    database.prepare = originalPrepare;
+    originalPrepare.call(database, 'DELETE FROM courses WHERE id = ?').run(rootId);
+  }
+
+  assert.equal(lookupPreparations, 0, 'course identity lookups should be prepared once when the module loads');
 });
 
 test('course access reuses complete canonical rows supplied by list queries', () => {
