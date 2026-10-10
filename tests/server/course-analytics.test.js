@@ -560,12 +560,14 @@ test('course summaries batch database reads and preserve progress across version
 
 test('learning-path state synchronization reuses completed course summaries for existing states', () => {
   const pathId = 'path-sync-summary-batch';
+  const secondPathId = `${pathId}-second`;
   const courseIds = [1, 2, 3].map((number) => `${pathId}-course-${number}`);
   const moduleIds = courseIds.map((courseId) => `${courseId}-module`);
   const lessonIds = courseIds.map((courseId) => `${courseId}-lesson`);
   database.exec(`
     INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
-      VALUES ('${pathId}', 'Summary batching', 'published', 0, 'admin-1', 'admin-1');
+      VALUES ('${pathId}', 'Summary batching', 'published', 0, 'admin-1', 'admin-1'),
+      ('${secondPathId}', 'Summary batching shared path', 'published', 0, 'admin-1', 'admin-1');
   `);
   const addCourse = database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
     VALUES (?, ?, 'published', 'admin-1', 'admin-1')`);
@@ -582,6 +584,7 @@ test('learning-path state synchronization reuses completed course summaries for 
     addCompletion.run('learner-active', lessonIds[index], `2026-10-0${index + 1} 10:00:00`);
     addState.run('learner-active', courseId);
     addPathCourse.run(`${pathId}-step-${index + 1}`, pathId, courseId, index, index === 0 ? 0 : 1);
+    addPathCourse.run(`${secondPathId}-step-${index + 1}`, secondPathId, courseId, index, index === 0 ? 0 : 1);
   }
 
   let singleCourseSummaryReads = 0;
@@ -603,10 +606,10 @@ test('learning-path state synchronization reuses completed course summaries for 
     return originalPrepare.call(database, sql);
   };
   try {
-    syncPathStates(pathId, 'learner-active');
+    syncPathStates([pathId, secondPathId], 'learner-active');
   } finally {
     delete database.prepare;
-    database.prepare('DELETE FROM learning_paths WHERE id = ?').run(pathId);
+    database.prepare('DELETE FROM learning_paths WHERE id IN (?, ?)').run(pathId, secondPathId);
     database.prepare(`DELETE FROM courses WHERE id IN (${courseIds.map(() => '?').join(', ')})`).run(...courseIds);
   }
 
@@ -647,7 +650,7 @@ test('learning-path synchronization refreshes progress when a new state requires
   `);
 
   try {
-    syncPathStates(pathId, 'learner-active');
+    syncPathStates([pathId], 'learner-active');
     const state = database.prepare('SELECT target_version_id FROM course_learning_state WHERE user_id = ? AND course_id = ?')
       .get('learner-active', courseId);
     assert.equal(state.target_version_id, `${courseId}-version-2`);

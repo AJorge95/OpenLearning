@@ -64,20 +64,32 @@ function splitIntoBatches(values, size) {
   return batches;
 }
 
-export function syncUnlockedPathStates(pathId, userId) {
-  const rows = pathCourseRows(pathId);
+export function syncUnlockedPathStates(pathIds, userId) {
   const user = { id: userId, role: 'learner', disabled: false };
-  const summaries = courseSummaries(rows, user);
-  let allEarlierCoursesCompleted = true;
-  for (const [index, row] of rows.entries()) {
-    const unlocked = !row.requires_previous || row.position === 0 || allEarlierCoursesCompleted;
-    let summary = summaries[index];
-    if (unlocked) {
-      const { state, created } = ensureCourseLearningStateWithStatus(row.course_id, userId);
-      // Creating a state can activate a version's required-recompletion reset.
-      if (created && state?.target_version_id) summary = courseSummary(row, user);
+  const statesByCourse = new Map();
+  for (const pathId of pathIds) {
+    const rows = pathCourseRows(pathId);
+    const summaries = courseSummaries(rows, user);
+    let allEarlierCoursesCompleted = true;
+    for (const [index, row] of rows.entries()) {
+      const unlocked = !row.requires_previous || row.position === 0 || allEarlierCoursesCompleted;
+      let summary = summaries[index];
+      if (unlocked) {
+        const logicalId = row.logical_course_id || row.course_id;
+        let state;
+        let created = false;
+        if (statesByCourse.has(logicalId)) state = statesByCourse.get(logicalId);
+        else {
+          const ensured = ensureCourseLearningStateWithStatus(row.course_id, userId);
+          state = ensured.state;
+          created = ensured.created;
+          statesByCourse.set(logicalId, state);
+        }
+        // Creating a state can activate a version's required-recompletion reset.
+        if (created && state?.target_version_id) summary = courseSummary(row, user);
+      }
+      allEarlierCoursesCompleted = allEarlierCoursesCompleted && summary.completed;
     }
-    allEarlierCoursesCompleted = allEarlierCoursesCompleted && summary.completed;
   }
 }
 
@@ -178,7 +190,7 @@ programsRouter.post('/learning-paths/:pathId/enroll', (req, res) => {
     }
     const result = db.prepare(`INSERT OR IGNORE INTO learning_path_enrollments (id, path_id, user_id, enrollment_source)
       VALUES (?, ?, ?, 'self')`).run(randomUUID(), path.id, req.currentUser.id);
-    syncUnlockedPathStates(path.id, req.currentUser.id);
+    syncUnlockedPathStates([path.id], req.currentUser.id);
     if (result.changes) logAudit(req.currentUser, 'path.enrolled', 'learning_path', path.id, `Enrolled in learning path: ${path.title}`);
     return pathPayload(path, req.currentUser);
   });
@@ -307,7 +319,7 @@ programsRouter.patch('/manage/learning-paths/:pathId', requireStaff, (req, res) 
     if (coursesChanged) {
       savePathCourses(current.id, courses);
       const enrolledLearners = db.prepare('SELECT user_id FROM learning_path_enrollments WHERE path_id = ?').all(current.id);
-      for (const enrollment of enrolledLearners) syncUnlockedPathStates(current.id, enrollment.user_id);
+      for (const enrollment of enrolledLearners) syncUnlockedPathStates([current.id], enrollment.user_id);
     }
     logAudit(req.currentUser, 'path.updated', 'learning_path', current.id, `Updated learning path: ${title}`, { status, selfEnrollment, courseCount: courses.length });
     return db.prepare('SELECT * FROM learning_paths WHERE id = ?').get(current.id);
@@ -325,7 +337,7 @@ programsRouter.post('/manage/learning-paths/:pathId/assignments', requireStaff, 
     if (!learner) fail(404, 'Active learner not found.', 'learner_not_found');
     const inserted = db.prepare(`INSERT OR IGNORE INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by)
       VALUES (?, ?, ?, 'assigned', ?)`).run(randomUUID(), path.id, learner.id, req.currentUser.id);
-    syncUnlockedPathStates(path.id, learner.id);
+    syncUnlockedPathStates([path.id], learner.id);
     if (inserted.changes) logAudit(req.currentUser, 'path.assigned', 'learning_path', path.id, `Assigned ${learner.username} to learning path: ${path.title}`, { learnerId: learner.id });
   });
   result.immediate();
