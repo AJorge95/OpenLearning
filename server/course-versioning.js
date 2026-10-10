@@ -9,6 +9,10 @@ const courseIdentityByLessonStatement = db.prepare(`SELECT c.id, c.logical_cours
   JOIN course_modules m ON m.course_id = c.id JOIN lessons l ON l.module_id = m.id WHERE l.id = ?`);
 const courseIdentityByQuizStatement = db.prepare(`SELECT c.id, c.logical_course_id FROM courses c
   JOIN course_modules m ON m.course_id = c.id JOIN quizzes q ON q.module_id = m.id WHERE q.id = ?`);
+const publishedVersionLookupStatement = db.prepare(`SELECT v.*, c.title, c.description, c.category, c.visibility, c.status,
+    c.cover_media_id, c.created_by, c.updated_by, c.updated_at, c.completion_window_days
+  FROM course_versions v JOIN courses c ON c.id = v.storage_course_id
+  WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT 1`);
 
 export function logicalCourseId(courseId) {
   const row = courseIdentityByIdStatement.get(courseId)
@@ -19,10 +23,7 @@ export function logicalCourseId(courseId) {
 }
 
 export function publishedVersionForLogicalCourse(logicalCourseIdValue) {
-  return db.prepare(`SELECT v.*, c.title, c.description, c.category, c.visibility, c.status,
-      c.cover_media_id, c.created_by, c.updated_by, c.updated_at, c.completion_window_days
-    FROM course_versions v JOIN courses c ON c.id = v.storage_course_id
-    WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT 1`).get(logicalCourseIdValue) ?? null;
+  return publishedVersionLookupStatement.get(logicalCourseIdValue) ?? null;
 }
 
 export function publishedVersion(courseId) {

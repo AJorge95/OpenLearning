@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reuse the published-version lookup statement
+
+- **Reviewed:** `publishedVersionForLogicalCourse()` runs for course payloads and certificate checks, preparing the same parameterized latest-version query each time.
+- **Improvement:** Prepare that fixed query once when course versioning loads and execute it for each requested logical course. Add a regression that inserts a newer version between calls.
+- **Why it helps:** Course and certificate reads avoid repeated SQL compilation while still observing newly published versions immediately.
+- **Interface review:** No visible change; the matched-width account-role menu remains readable and closes when clicking outside the trigger.
+- **Checked:** The latest-version regression returns version one, then sees version two without preparing the query again. Focused course analytics/certificate tests passed (84/84); `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Full `npm test` has one separate failure in `lesson-watch.test.js`: the uncommitted video-rewind response adds `lastPositionSeconds` while that test expects the prior response shape.
+
 ## 2026-10-11 — Keep the matched-width role menu readable
 
 - **Reviewed:** The administrator account-role selector at the live 1280×720 viewport, its trigger/menu bounds, option text wrapping, and pointer targets immediately to the right.
