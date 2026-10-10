@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep the matched-width role menu readable
+
+- **Reviewed:** The administrator account-role selector at the live 1280×720 viewport, its trigger/menu bounds, option text wrapping, and pointer targets immediately to the right.
+- **Improvement:** Keep matched-width menus at the trigger width, tighten option spacing so long role names fit, and size the menu for its actual option rows before scrolling is needed.
+- **Why it helps:** “Administrator” stays on one line without widening the menu into the adjacent click area; a click 10px beyond the trigger still closes the list.
+- **Interface review:** The refreshed account route uses a separate visible field label and combobox. The trigger and menu both measure 144px; the selected label measures one line (18.2px high), and the menu has no overflow scrollbar. The trigger opens the list and a click to its right closes it.
+- **Checked:** The account route remained visible after reload and the browser console had no warnings or errors. Focused AppSelect tests passed (10/10); the combined analytics/certificate/AppSelect tests passed (93/93); `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Full `npm test` has one unrelated failure: the separate uncommitted video-rewind response adds `lastPositionSeconds` while its existing test still expects the prior response shape.
+
 ## 2026-10-11 — Reuse logical course identity statements
 
 - **Reviewed:** `logicalCourseId()` resolves a course, module, lesson, or quiz through four fixed SQLite queries, preparing each statement again on every invocation.

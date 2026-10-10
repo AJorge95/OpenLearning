@@ -23,6 +23,12 @@ test('can match a custom-select menu width to its trigger', () => {
   assert.ok(position.left + position.width <= 320);
 });
 
+test('allocates enough height for a short option list before enabling scrolling', () => {
+  const position = getAppSelectVerticalPosition({ top: 338, bottom: 382 }, 720, 3);
+
+  assert.deepEqual(position, { top: 388, maxHeight: 134 });
+});
+
 test('caps the menu height to the room on the better side of a short viewport', () => {
   const position = getAppSelectVerticalPosition({ top: 50, bottom: 94 }, 120, 3);
 
