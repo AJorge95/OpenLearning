@@ -90,7 +90,7 @@ after(() => {
 test('watch progress starts empty and validates the verified video duration', () => {
   const learner = { id: 'watch-learner', role: 'learner' };
   assert.deepEqual(lessonWatch.getLessonWatchProgress(learner, 'watch-lesson', 120), {
-    required: true, watchedUntilSeconds: 0, durationSeconds: 120, complete: false,
+    required: true, watchedUntilSeconds: 0, lastPositionSeconds: 0, durationSeconds: 120, complete: false,
   });
   assert.equal(lessonWatch.getLessonWatchProgress({ id: 'preview-admin', role: 'admin' }, 'watch-lesson', 120).required, true);
 
@@ -99,7 +99,7 @@ test('watch progress starts empty and validates the verified video duration', ()
   }
 
   assert.deepEqual(lessonWatch.beginLessonWatch(learner, 'watch-lesson', 120), {
-    required: true, watchedUntilSeconds: 0, durationSeconds: 120, complete: false,
+    required: true, watchedUntilSeconds: 0, lastPositionSeconds: 0, durationSeconds: 120, complete: false,
   });
 });
 
@@ -131,6 +131,63 @@ test('watch progress requires a started video and rejects invalid positions', ()
   for (const position of [-1, Number.NaN, Number.POSITIVE_INFINITY, 61]) {
     assertApiError(() => lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', position), 400, 'invalid_watch_progress');
   }
+});
+
+test('video rewind requires a started player and stays within a backward 30-second window', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  assertApiError(() => lessonWatch.rewindLessonWatch(learner, 'watch-lesson', 0), 409, 'watch_not_started');
+
+  withFakeClock(2_500_000, (advance) => {
+    lessonWatch.beginLessonWatch(learner, 'watch-lesson', 60);
+    for (const position of [-1, Number.NaN, Number.POSITIVE_INFINITY, 61]) {
+      assertApiError(() => lessonWatch.rewindLessonWatch(learner, 'watch-lesson', position), 400, 'invalid_watch_progress');
+    }
+
+    for (const position of [8, 16, 24, 32]) {
+      advance(8_000);
+      assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', position).accepted, true);
+    }
+
+    assertApiError(() => lessonWatch.rewindLessonWatch(learner, 'watch-lesson', 1), 422, 'invalid_video_rewind');
+    assertApiError(() => lessonWatch.rewindLessonWatch(learner, 'watch-lesson', 32), 422, 'invalid_video_rewind');
+    const rewound = lessonWatch.rewindLessonWatch(learner, 'watch-lesson', 2);
+    assert.equal(rewound.lastPositionSeconds, 2);
+    assert.equal(rewound.watchedUntilSeconds, 32);
+    assertApiError(() => lessonWatch.rewindLessonWatch(learner, 'watch-lesson', 30), 422, 'invalid_video_rewind');
+  });
+});
+
+test('authorized rewinds preserve the high-water mark without crediting replayed seconds', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  const watchedSeconds = () => database.prepare(`SELECT watched_seconds FROM lesson_watch_telemetry
+    WHERE user_id = ? AND lesson_id = ?`).get(learner.id, 'watch-lesson').watched_seconds;
+
+  withFakeClock(2_750_000, (advance) => {
+    lessonWatch.beginLessonWatch(learner, 'watch-lesson', 100);
+    advance(4_000);
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 4).watchedUntilSeconds, 4);
+    assert.equal(watchedSeconds(), 4);
+    advance(4_000);
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 8).watchedUntilSeconds, 8);
+    assert.equal(watchedSeconds(), 8);
+
+    const rewound = lessonWatch.rewindLessonWatch(learner, 'watch-lesson', 0);
+    assert.equal(rewound.lastPositionSeconds, 0);
+    assert.equal(rewound.watchedUntilSeconds, 8);
+    assert.equal(watchedSeconds(), 8);
+
+    advance(4_000);
+    const replayed = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 4);
+    assert.equal(replayed.watchedUntilSeconds, 8);
+    assert.equal(watchedSeconds(), 8);
+    advance(4_000);
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 8).watchedUntilSeconds, 8);
+    assert.equal(watchedSeconds(), 8);
+    advance(4_000);
+    const pastHighWater = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 12);
+    assert.equal(pastHighWater.watchedUntilSeconds, 12);
+    assert.equal(watchedSeconds(), 12);
+  });
 });
 
 test('watch progress rejects fast forward jumps and retains the watched high-water mark', () => {
