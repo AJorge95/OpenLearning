@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Guard the administrator role selector's click boundary
+
+- **Reviewed:** The repeated browser report, the annotated `label` target, the current account-details markup and styles, and the selector's live trigger and wrapper hit areas.
+- **Improvement:** Added a regression test that keeps the account role field in a separate labeled container, constrains its desktop width, makes only the visible trigger receive pointer events, and preserves the full-width mobile rule.
+- **Why it helps:** The selector cannot regain a wide label hit area during later styling changes, and the compact control remains usable on small screens.
+- **Interface review:** The supplied selector path points to an older native-label wrapper; the served page renders `.account-role-control` as a separate `div`, with the trigger measuring 144px.
+- **Checked:** On the signed-in local admin account page, clicking 10px beyond the 144px trigger kept the menu closed; the trigger opened it, Escape closed it, and the same outside click closed it. The page rendered meaningful content with no browser console warnings or errors. All 214 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Align README capabilities with shipped access rules
 
 - **Reviewed:** The feature summary, role permissions, private-course checks, path self-enrollment filter, staff routes, competency mappings, course versions, and calendar deadlines.
