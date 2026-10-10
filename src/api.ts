@@ -116,6 +116,8 @@ export const api = {
   clearCsrf: () => { csrfToken = null; },
   upload: async <T>(path: string, fields: Record<string, string>, file: File, onProgress: (value: number) => void, options: Pick<RequestInit, 'signal'> = {}): Promise<T> => {
     if (options.signal?.aborted) throw new DOMException('Upload cancelled.', 'AbortError');
+    const token = await ensureCsrf();
+    if (options.signal?.aborted) throw new DOMException('Upload cancelled.', 'AbortError');
     const body = new FormData();
     for (const [key, value] of Object.entries(fields)) body.append(key, value);
     body.append('file', file);
@@ -174,7 +176,7 @@ export const api = {
       try { xhr.send(body); }
       catch (error) { removeAbortListener(); reject(error); }
     });
-    return send(await ensureCsrf(), false);
+    return send(token, false);
   },
 };
 

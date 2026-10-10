@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Defer multipart creation until upload authorization is ready
+
+- **Reviewed:** The upload helper after pre-cancel handling, the shared CSRF refresh’s asynchronous boundary, multipart construction, retry behavior, and the upload consumers’ abort signals.
+- **Improvement:** Wait for the CSRF token and recheck cancellation before constructing the multipart body. Add a deferred-token regression proving that cancellation during token acquisition creates neither `FormData` nor an XHR.
+- **Why it helps:** A page change or cancellation while session setup is pending no longer retains the selected file in a body that will never be sent.
+- **Interface review:** Upload controls already abort when their owning view or request is replaced; no visual or markup change was needed.
+- **Checked:** All 5 API-client tests passed; full `npm test` passed all 198 tests; `npx tsc --noEmit`, `npm run build`, `node --check src/api.test.js`, and `git diff --check` passed.
+
 ## 2026-10-10 — Skip setup work for pre-cancelled uploads
 
 - **Reviewed:** The shared XHR upload helper’s abort signal, multipart body construction, CSRF token refresh, upload call sites, and existing editor cancellation/error handling.
