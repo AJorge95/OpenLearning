@@ -128,9 +128,18 @@ function cachedValue(cache, key, load) {
 function canViewCourseWithCache(course, user, cache) {
   if (!course || !user || user.disabled) return false;
   if (user.role === 'admin' || user.role === 'moderator') return true;
-  const courseId = logicalCourseId(course.id) || course.id;
+  const hasLoadedCourseIdentity = Object.hasOwn(course, 'logical_course_id')
+    && (course.logical_course_id === null || typeof course.logical_course_id === 'string');
+  const courseId = hasLoadedCourseIdentity
+    ? course.logical_course_id || course.id
+    : logicalCourseId(course.id) || course.id;
+  const hasLoadedCanonicalAccessFields = course.logical_course_id === null
+    && typeof course.status === 'string'
+    && typeof course.visibility === 'string';
   const canonical = cachedValue(cache?.canonical, courseId,
-    () => db.prepare('SELECT * FROM courses WHERE id = ? AND logical_course_id IS NULL').get(courseId));
+    () => hasLoadedCanonicalAccessFields
+      ? course
+      : db.prepare('SELECT * FROM courses WHERE id = ? AND logical_course_id IS NULL').get(courseId));
   if (!canonical || canonical.status !== 'published') return false;
   if (course.logical_course_id) {
     const active = cachedValue(cache?.activeVersions, courseId,
