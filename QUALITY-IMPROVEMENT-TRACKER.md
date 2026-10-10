@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Keep analytics tied to published course content
+
+- **Reviewed:** The in-progress analytics route change, the course revision creation path, and existing versioned-course analytics coverage.
+- **Improvement:** Resolve analytics to the canonical course and active published version without entering the draft-creating edit path; add an API regression for the active lesson IDs and absence of a new revision.
+- **Why it helps:** Opening a read-only analytics page cannot silently create an editable course copy or report metrics for draft content.
+- **Checked:** The focused course route suite and full test suite passed; `git diff --check` passed.
+
 ## 2026-10-10 — Match course filter names to visible labels
 
 - **Reviewed:** The learner catalog's category and sort controls, their visible labels and combobox accessible names, and the custom-select structure regression.

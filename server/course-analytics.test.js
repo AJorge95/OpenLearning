@@ -269,6 +269,34 @@ test('analytics count each eligible learner once and report course-wide completi
   assert.equal(result.learners.some((learner) => learner.id === 'learner-unassigned'), false);
 });
 
+test('course analytics use published version content without creating an edit revision', async () => {
+  const courseId = 'course-analytics-current-version';
+  const storageCourseId = 'course-analytics-current-storage';
+  try {
+    database.prepare(`INSERT INTO courses (id, title, category, visibility, status, created_by, updated_by)
+      VALUES (?, 'Versioned analytics course', 'Analytics', 'public', 'published', 'admin-1', 'admin-1')`).run(courseId);
+    database.prepare(`INSERT INTO courses (id, title, category, visibility, status, created_by, updated_by, logical_course_id)
+      VALUES (?, 'Versioned analytics course', 'Analytics', 'public', 'published', 'admin-1', 'admin-1', ?)`)
+      .run(storageCourseId, courseId);
+    database.prepare(`INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('module-analytics-current-version', ?, 'Published module', 0)`).run(storageCourseId);
+    database.prepare(`INSERT INTO lessons (id, module_id, title, position)
+      VALUES ('lesson-analytics-current-version', 'module-analytics-current-version', 'Published lesson', 0)`).run();
+    database.prepare(`INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+      VALUES ('version-analytics-current-version', ?, ?, 1, 'admin-1')`).run(courseId, storageCourseId);
+
+    const response = await fetch(apiUrl(`/manage/courses/${courseId}/analytics`), { headers: userHeaders('admin-1') });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.course.id, courseId);
+    assert.equal(result.course.title, 'Versioned analytics course');
+    assert.deepEqual(result.lessonMetrics.map((lesson) => lesson.id), ['lesson-analytics-current-version']);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_revisions WHERE course_id = ?').get(courseId).count, 0);
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('course list exposes the current review status for unpublished revisions', async () => {
   const courseId = 'course-review-list';
   try {

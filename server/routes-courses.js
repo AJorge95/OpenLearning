@@ -311,14 +311,23 @@ courseRouter.get('/manage/courses/:courseId', requireStaff, (req, res) => {
 });
 
 courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res) => {
-  const course = requireCourseManager(req.params.courseId, req.currentUser);
+  const courseId = logicalCourseId(req.params.courseId) || req.params.courseId;
+  const catalogCourse = canonicalCourse(courseId);
+  if (!catalogCourse) fail(404, 'Course not found.', 'not_found');
+  const latestPublishedVersion = publishedVersion(courseId);
+  // Analytics describe the content learners can currently access. Resolving the
+  // editable copy here created a draft as a side effect and detached the
+  // response identity and lesson IDs from the published course.
+  const course = latestPublishedVersion
+    ? db.prepare('SELECT * FROM courses WHERE id = ?').get(latestPublishedVersion.storage_course_id)
+    : catalogCourse;
   const pageSize = 50;
   const eligibleLearners = `SELECT u.id, u.username, u.disabled FROM (
     SELECT user_id AS id FROM enrollments WHERE course_id = ?
     UNION SELECT user_id FROM course_grants WHERE course_id = ?
   ) member CROSS JOIN users u ON u.id = member.id WHERE u.role = 'learner'`;
   const learnerTotals = db.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(disabled), 0) AS disabled_count
-    FROM (${eligibleLearners})`).get(course.id, course.id);
+    FROM (${eligibleLearners})`).get(courseId, courseId);
   const { page, pageSize: responsePageSize, offset } = paginationWindow(learnerTotals.total, req.query.page, pageSize);
   const learnerRows = db.prepare(`
     WITH eligible AS (${eligibleLearners})
@@ -327,7 +336,7 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
     LEFT JOIN enrollments e ON e.course_id = ? AND e.user_id = eligible.id
     LEFT JOIN course_grants g ON g.course_id = ? AND g.user_id = eligible.id
     ORDER BY eligible.username COLLATE NOCASE, eligible.id ASC LIMIT ? OFFSET ?
-  `).all(course.id, course.id, course.id, course.id, responsePageSize, offset);
+  `).all(courseId, courseId, courseId, courseId, responsePageSize, offset);
   const lessons = db.prepare(`
     SELECT l.id, l.title, l.position, m.id AS module_id, m.title AS module_title, m.position AS module_position
     FROM lessons l JOIN course_modules m ON m.id = l.module_id
@@ -376,7 +385,7 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
       COALESCE(SUM(lesson_completions), 0) AS lesson_completions,
       COALESCE(SUM(quiz_attempts), 0) AS quiz_attempts
     FROM learner_progress
-  `).get(course.id, course.id, course.id, course.id,
+  `).get(courseId, courseId, course.id, course.id,
     requiredItemCount, requiredItemCount, requiredItemCount, requiredItemCount);
 
   const lessonCompletionCounts = db.prepare(`
@@ -389,7 +398,7 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
     LEFT JOIN eligible e ON e.id = lp.user_id
     WHERE m.course_id = ? AND (lp.user_id IS NULL OR e.id IS NOT NULL)
     GROUP BY l.id
-  `).all(course.id, course.id, course.id);
+  `).all(courseId, courseId, course.id);
   const lessonCompletionById = new Map(lessonCompletionCounts.map((row) => [row.id, row.completed_count]));
   const quizTotals = db.prepare(`
     WITH eligible AS (
@@ -409,7 +418,7 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
     FROM quizzes q JOIN course_modules m ON m.id = q.module_id
     LEFT JOIN learner_quiz lq ON lq.quiz_id = q.id
     WHERE m.course_id = ? GROUP BY q.id
-  `).all(course.id, course.id, course.id, course.id);
+  `).all(courseId, courseId, course.id, course.id);
   const quizTotalsById = new Map(quizTotals.map((row) => [row.id, row]));
 
   const progressByUser = new Map();
@@ -524,7 +533,7 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
     quizAttempts: globalProgress.quiz_attempts,
   };
   res.json({
-    course: { id: course.id, title: course.title, category: course.category, status: course.status, visibility: course.visibility },
+    course: { id: courseId, title: catalogCourse.title, category: catalogCourse.category, status: catalogCourse.status, visibility: catalogCourse.visibility },
     summary,
     lessonMetrics,
     quizMetrics,
