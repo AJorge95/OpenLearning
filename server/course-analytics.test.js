@@ -1184,6 +1184,51 @@ test('program boolean request fields reject strings without changing access sett
   assert.equal(database.prepare('SELECT self_enrollment FROM learning_paths WHERE id = ?').get(path.id).self_enrollment, 0);
 });
 
+test('learning-path patches reject arrays and skip no-op writes and audit events', async () => {
+  database.prepare(`INSERT INTO learning_paths (id, title, description, status, self_enrollment, created_by, updated_by, updated_at)
+    VALUES ('path-patch-noop-regression', 'No-op learning path', 'Description', 'draft', 0, 'admin-1', 'learner-active', '2000-01-01 00:00:00')`).run();
+  database.prepare(`INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+    VALUES ('path-patch-noop-course', 'path-patch-noop-regression', 'course-empty', 0, 0)`).run();
+  const request = async (body) => fetch(apiUrl('/manage/learning-paths/path-patch-noop-regression'), {
+    method: 'PATCH',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const savedPath = () => database.prepare('SELECT title, description, self_enrollment, status, updated_by, updated_at FROM learning_paths WHERE id = ?')
+    .get('path-patch-noop-regression');
+  const auditCount = () => database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'path.updated' AND entity_id = ?")
+    .get('path-patch-noop-regression').count;
+
+  try {
+    const initial = savedPath();
+    const invalidArray = await request([]);
+    assert.equal(invalidArray.status, 400);
+    assert.equal((await invalidArray.json()).code, 'validation_error');
+    assert.deepEqual(savedPath(), initial);
+    assert.equal(auditCount(), 0);
+
+    const emptyPatch = await request({});
+    assert.equal(emptyPatch.status, 200);
+    assert.equal((await emptyPatch.json()).path.id, 'path-patch-noop-regression');
+    const identicalPatch = await request({
+      title: 'No-op learning path', description: 'Description', status: 'draft', selfEnrollment: false,
+      courses: [{ courseId: 'course-empty', requiresPrevious: false }],
+    });
+    assert.equal(identicalPatch.status, 200);
+    assert.deepEqual(savedPath(), initial);
+    assert.equal(database.prepare('SELECT id FROM learning_path_courses WHERE path_id = ?').get('path-patch-noop-regression').id, 'path-patch-noop-course');
+    assert.equal(auditCount(), 0);
+
+    const realChange = await request({ description: 'Updated description' });
+    assert.equal(realChange.status, 200);
+    assert.equal(savedPath().description, 'Updated description');
+    assert.notEqual(savedPath().updated_at, initial.updated_at);
+    assert.equal(auditCount(), 1);
+  } finally {
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run('path-patch-noop-regression');
+  }
+});
+
 test('archiving a self-enrollment path preserves enrollments after a course becomes private', async () => {
   database.exec(`
     INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
