@@ -92,7 +92,15 @@ export async function verifyLoginPassword(password, user) {
 }
 
 export function publicUser(user) {
-  return user ? { id: user.id, username: user.username, role: user.role, disabled: Boolean(user.disabled) } : null;
+  return user ? {
+    id: user.id,
+    username: user.username,
+    email: user.email ?? null,
+    firstName: user.first_name ?? '',
+    lastName: user.last_name ?? '',
+    role: user.role,
+    disabled: Boolean(user.disabled),
+  } : null;
 }
 
 export async function regenerateSession(req, userId) {
@@ -102,9 +110,9 @@ export async function regenerateSession(req, userId) {
   await new Promise((resolve, reject) => req.session.save((error) => error ? reject(error) : resolve()));
 }
 
-export function createUser({ username, email = null, passwordHash, role = 'learner' }) {
+export function createUser({ username, email = null, firstName = '', lastName = '', passwordHash, role = 'learner' }) {
   const id = randomUUID();
-  db.prepare('INSERT INTO users (id, username, email, password_hash, role) VALUES (?, ?, ?, ?, ?)')
-    .run(id, username, email, passwordHash, role);
-  return db.prepare('SELECT id, username, email, role, disabled FROM users WHERE id = ?').get(id);
+  db.prepare('INSERT INTO users (id, username, email, first_name, last_name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, username, email, firstName, lastName, passwordHash, role);
+  return db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(id);
 }

@@ -4,6 +4,7 @@ import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
 import { AppSelect, Button, PalettePicker, PlatformBrand, PlatformIconPicker } from './components';
 import { findMissingRequiredRegistrationField } from './registration-fields';
+import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import type { RegistrationField, RegistrationFieldValues } from './types';
 
@@ -34,7 +35,7 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
         <input type="checkbox" required={field.required} checked={values[field.id] === true} onChange={(event) => onChange(field.id, event.target.checked)} disabled={disabled} />
         <span>{field.label}{field.required && <small>Required</small>}</span>
       </label>;
-      if (field.type === 'select') return <label className="registration-custom-field" key={field.id}>
+      if (field.type === 'select') return <div className="registration-custom-field" key={field.id}>
         <span>{field.label}{field.required && <small>Required</small>}</span>
         <AppSelect<string>
           controlId={`registration-field-${field.id}`}
@@ -46,7 +47,7 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
           disabled={disabled}
           options={[{ value: '', label: 'Choose an option' }, ...field.options.map((option) => ({ value: option, label: option }))]}
         />
-      </label>;
+      </div>;
       return <label className="registration-custom-field" key={field.id}>
         <span>{field.label}{field.required && <small>Required</small>}</span>
         <input
@@ -73,6 +74,8 @@ export function SetupPage() {
   const previousStepRef = useRef(step);
   const [platformName, setPlatformName] = useState('');
   const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -83,6 +86,7 @@ export function SetupPage() {
   const [userLimit, setUserLimit] = useState(String(initialUserLimit));
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const setupSubmissionInFlightRef = useRef(false);
 
   useEffect(() => {
     if (previousStepRef.current === step) return;
@@ -112,16 +116,20 @@ export function SetupPage() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (!acquireSubmissionLock(setupSubmissionInFlightRef)) return;
     setError('');
     setSaving(true);
     try {
-      await completeSetup(platformName, email, username, password, confirmPassword, {
+      await completeSetup(platformName, email, firstName, lastName, username, password, confirmPassword, {
         themePalette, platformIcon, connectionProtocol, registrationEnabled, userLimit: Number(userLimit),
       });
       navigate('/courses');
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Setup could not be completed. Try again.');
-    } finally { setSaving(false); }
+    } finally {
+      releaseSubmissionLock(setupSubmissionInFlightRef);
+      setSaving(false);
+    }
   }
 
   function choosePalette(palette: BrandingPalette) {
@@ -142,6 +150,7 @@ export function SetupPage() {
             <PlatformIconPicker value={platformIcon} onChange={setPlatformIcon} />
             <div className="branding-choice-field"><span className="branding-choice-label">Color palette</span><small>Choose the accent colors used across the platform.</small><PalettePicker value={themePalette} onChange={choosePalette} /></div>
             <label>Admin email<input required type="email" maxLength={254} autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+            <div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} /></label></div>
             <label>Admin username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
             <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} /><small>Use at least 12 characters.</small></label>
             <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
@@ -152,7 +161,7 @@ export function SetupPage() {
           <h1 ref={stepHeadingRef} tabIndex={-1}>Configure access</h1>
           <p>Choose how people connect and whether new learner accounts can be created.</p>
           <form onSubmit={submit} className="form-stack" aria-busy={saving}>
-            <label>Public connection protocol<AppSelect<ConnectionProtocol> ariaLabel="Public connection protocol" describedBy="setup-protocol-help" value={connectionProtocol} onChange={setConnectionProtocol} disabled={saving} options={[{ value: 'http', label: 'HTTP' }, { value: 'https', label: 'HTTPS' }]} /></label>
+            <div className="app-select-field"><span>Public connection protocol</span><AppSelect<ConnectionProtocol> ariaLabel="Public connection protocol" describedBy="setup-protocol-help" value={connectionProtocol} onChange={setConnectionProtocol} disabled={saving} options={[{ value: 'http', label: 'HTTP' }, { value: 'https', label: 'HTTPS' }]} /></div>
             <p id="setup-protocol-help" className="protocol-help">HTTPS requires a TLS certificate on this server or a reverse proxy. When a proxy handles TLS, set <code>TRUST_PROXY=true</code> in the server environment.</p>
             <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={registrationEnabled} onChange={(event) => setRegistrationEnabled(event.target.checked)} disabled={saving} /></label>
             <label>Maximum registered accounts<input type="number" min={0} max={1000000} step={1} required value={userLimit} onChange={(event) => setUserLimit(event.target.value)} disabled={saving} /><small>Set to 0 for no limit. The cap includes this administrator account, moderators, and learners.</small></label>
@@ -176,14 +185,17 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const submissionInFlightRef = useRef(false);
   if (configured && user) return <Navigate to="/courses" replace />;
   if (!configured) return <Navigate to="/setup" replace />;
 
   async function submit(event: React.FormEvent) {
-    event.preventDefault(); setError(''); setSaving(true);
+    event.preventDefault();
+    if (!acquireSubmissionLock(submissionInFlightRef)) return;
+    setError(''); setSaving(true);
     try { await signIn(username, password); navigate('/courses'); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Sign in failed. Try again.'); }
-    finally { setSaving(false); }
+    finally { releaseSubmissionLock(submissionInFlightRef); setSaving(false); }
   }
 
   return <AuthPanel><h1>Welcome back</h1><p className="auth-description">Sign in to continue learning.</p>
@@ -203,6 +215,8 @@ export function RegisterPage() {
   const { signUp, user, configured, registrationEnabled, registrationAvailable } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -214,11 +228,13 @@ export function RegisterPage() {
   const [invalidRegistrationFieldId, setInvalidRegistrationFieldId] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const submissionInFlightRef = useRef(false);
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     setRegistrationFieldsLoading(true);
     setRegistrationFieldsError('');
-    api.get<{ fields: RegistrationField[] }>('/api/registration-fields')
+    api.get<{ fields: RegistrationField[] }>('/api/registration-fields', { signal: controller.signal })
       .then((result) => {
         if (!active) return;
         setRegistrationFields(result.fields);
@@ -226,7 +242,7 @@ export function RegisterPage() {
       })
       .catch((cause) => { if (active) setRegistrationFieldsError(cause instanceof ApiError ? cause.message : 'Registration details could not be loaded.'); })
       .finally(() => { if (active) setRegistrationFieldsLoading(false); });
-    return () => { active = false; };
+    return () => { active = false; controller.abort(); };
   }, [registrationFieldsRetryVersion]);
   if (configured && user) return <Navigate to="/courses" replace />;
   if (!configured) return <Navigate to="/setup" replace />;
@@ -234,7 +250,8 @@ export function RegisterPage() {
   if (!registrationAvailable) return <AuthPanel><h1>Registration is closed</h1><p className="auth-description">The platform has reached its registered-account limit.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
 
   async function submit(event: React.FormEvent) {
-    event.preventDefault(); setError(''); setInvalidRegistrationFieldId('');
+    event.preventDefault();
+    setError(''); setInvalidRegistrationFieldId('');
     const missingField = findMissingRequiredRegistrationField(registrationFields, registrationFieldValues);
     if (missingField) {
       setError(`${missingField.label} is required.`);
@@ -242,15 +259,17 @@ export function RegisterPage() {
       window.requestAnimationFrame(() => document.getElementById(`registration-field-${missingField.id}`)?.focus());
       return;
     }
+    if (!acquireSubmissionLock(submissionInFlightRef)) return;
     setSaving(true);
-    try { await signUp(email, username, password, confirmPassword, registrationFieldValues); navigate('/courses'); }
+    try { await signUp(email, firstName, lastName, username, password, confirmPassword, registrationFieldValues); navigate('/courses'); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Registration failed. Try again.'); }
-    finally { setSaving(false); }
+    finally { releaseSubmissionLock(submissionInFlightRef); setSaving(false); }
   }
 
   return <AuthPanel><h1>Create your account</h1><p className="auth-description">Join your learning space and explore available courses.</p>
     <form onSubmit={submit} className="form-stack" aria-busy={saving}>
       <label>Email<input required type="email" maxLength={254} autoComplete="email" autoFocus value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} /></label>
+      <div className="account-name-fields"><label>First name <small>Required · used on certificates</small><input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} disabled={saving} /></label><label>Last name <small>Required · used on certificates</small><input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} disabled={saving} /></label></div>
       <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>Letters, numbers, dots, underscores, and hyphens.</small></label>
       {registrationFieldsLoading ? <p className="registration-fields-loading" role="status">Loading registration details…</p> : registrationFieldsError
         ? <div className="registration-fields-load-error"><p className="form-error" role="alert">{registrationFieldsError}</p><Button type="button" variant="secondary" onClick={() => setRegistrationFieldsRetryVersion((version) => version + 1)}>Retry</Button></div>
@@ -265,15 +284,48 @@ export function RegisterPage() {
 }
 
 export function AccountSecurityPage() {
-  const { refresh } = useAuth();
+  const { user, refresh } = useAuth();
+  const [firstName, setFirstName] = useState(user?.firstName || '');
+  const [lastName, setLastName] = useState(user?.lastName || '');
+  const [profileMessage, setProfileMessage] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const profileSubmissionInFlightRef = useRef(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const passwordSubmissionInFlightRef = useRef(false);
+  useEffect(() => {
+    setFirstName(user?.firstName || '');
+    setLastName(user?.lastName || '');
+  }, [user?.firstName, user?.lastName]);
+
+  async function saveProfile(event: React.FormEvent) {
+    event.preventDefault();
+    if (!acquireSubmissionLock(profileSubmissionInFlightRef)) return;
+    setProfileError(''); setProfileMessage(''); setSavingProfile(true);
+    try {
+      const result = await api.put<{ certificatesIssued: number }>('/api/auth/profile', { firstName, lastName });
+      const certificateMessage = result.certificatesIssued > 0
+        ? ` ${result.certificatesIssued} newly eligible ${result.certificatesIssued === 1 ? 'certificate is' : 'certificates are'} now in My learning.`
+        : '';
+      try {
+        await refresh();
+        setProfileMessage(result.certificatesIssued > 0 ? `Profile updated.${certificateMessage}` : 'Profile details updated.');
+      } catch {
+        setProfileMessage(`Profile details were saved, but account information could not refresh. Reload to see the updated name.${certificateMessage}`);
+      }
+    } catch (cause) { setProfileError(cause instanceof ApiError ? cause.message : 'Profile details could not be updated.'); }
+    finally { releaseSubmissionLock(profileSubmissionInFlightRef); setSavingProfile(false); }
+  }
+
   async function submit(event: React.FormEvent) {
-    event.preventDefault(); setError(''); setMessage(''); setSaving(true);
+    event.preventDefault();
+    if (!acquireSubmissionLock(passwordSubmissionInFlightRef)) return;
+    setError(''); setMessage(''); setSaving(true);
     try {
       await api.put('/api/auth/password', { currentPassword, password, confirmPassword });
       setCurrentPassword(''); setPassword(''); setConfirmPassword(''); setMessage('Your password has been updated. Other active sessions have been signed out.');
@@ -286,9 +338,18 @@ export function AccountSecurityPage() {
       const message = cause instanceof ApiError ? cause.message : 'Password could not be updated.';
       setError(authRefreshFailed ? `${message} Your sign-in status could not be refreshed. Reload before continuing.` : message);
     }
-    finally { setSaving(false); }
+    finally { releaseSubmissionLock(passwordSubmissionInFlightRef); setSaving(false); }
   }
-  return <div className="narrow-content"><div className="breadcrumbs"><Link to="/courses">Browse courses</Link><span>/</span><span>Account security</span></div><h1>Change password</h1><p className="lead-copy">Choose a new password. Other signed-in devices will be signed out after you save.</p>
+  return <div className="narrow-content account-settings-page"><div className="breadcrumbs"><Link to="/courses">Browse courses</Link><span>/</span><span>Account settings</span></div><h1>Account settings</h1><p className="lead-copy">Manage your certificate name and account password.</p>
+    <section className="account-settings-section"><h2>Profile details</h2><p>Certificates use your first and last name. Your email address is also included on certificates.</p>
+      <form className="surface-form form-stack" onSubmit={saveProfile} aria-busy={savingProfile}>
+        <label>Email<input type="email" value={user?.email || ''} readOnly aria-describedby="profile-email-help" /></label><small id="profile-email-help">Contact an administrator if you need to change your email address.</small>
+        <div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} disabled={savingProfile} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} disabled={savingProfile} /></label></div>
+        {profileMessage && <p className="form-success" role="status">{profileMessage}</p>}{profileError && <p className="form-error" role="alert">{profileError}</p>}
+        <Button type="submit" disabled={savingProfile}>{savingProfile ? 'Saving profile…' : 'Save profile details'}</Button>
+      </form>
+    </section>
+    <section className="account-settings-section"><h2>Change password</h2><p className="lead-copy">Choose a new password. Other signed-in devices will be signed out after you save.</p>
     <form className="surface-form form-stack" onSubmit={submit} aria-busy={saving}>
       <label>Current password<input type="password" required maxLength={256} autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} disabled={saving} /></label>
       <label>New password<input type="password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /><small>Use at least 12 characters.</small></label>
@@ -296,5 +357,6 @@ export function AccountSecurityPage() {
       {message && <p className="form-success" role="status">{message}</p>}{error && <p className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Update password'}</Button>
     </form>
+    </section>
   </div>;
 }

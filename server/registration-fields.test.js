@@ -179,6 +179,8 @@ test('invalid stored registration fields pause public signup and stay recoverabl
     headers: { 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify({
       email: 'invalid-config@example.invalid',
+      firstName: 'Invalid',
+      lastName: 'Config',
       username: 'invalid_config_learner',
       password: 'RegistrationPassphrase-2026',
       confirmPassword: 'RegistrationPassphrase-2026',
@@ -363,6 +365,8 @@ test('administrator account creation rolls back when its required audit entry ca
       body: JSON.stringify({
         username,
         email,
+        firstName: 'Admin',
+        lastName: 'Created',
         password: 'AdminCreatedAccountPassphrase-2026',
         confirmPassword: 'AdminCreatedAccountPassphrase-2026',
         role: 'learner',
@@ -382,14 +386,43 @@ test('administrator account creation rolls back when its required audit entry ca
     body: JSON.stringify({
       username,
       email,
+      firstName: 'Admin',
+      lastName: 'Created',
       password: 'AdminCreatedAccountPassphrase-2026',
       confirmPassword: 'AdminCreatedAccountPassphrase-2026',
       role: 'learner',
     }),
   });
   assert.equal(savedResponse.status, 201);
-  assert.equal((await savedResponse.json()).user.username, username);
+  const createdUser = (await savedResponse.json()).user;
+  assert.equal(createdUser.username, username);
+  assert.equal(createdUser.firstName, 'Admin');
+  assert.equal(createdUser.lastName, 'Created');
   assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.created'`).get().count, originalAuditCount + 1);
+});
+
+test('account profiles require valid first and last names and return the saved profile', async () => {
+  const invalidResponse = await fetch(apiUrl('/auth/profile'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ firstName: '   ', lastName: 'Admin' }),
+  });
+  assert.equal(invalidResponse.status, 400);
+  assert.equal((await invalidResponse.json()).code, 'invalid_name');
+
+  const response = await fetch(apiUrl('/auth/profile'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ firstName: '  Ana   María ', lastName: 'García' }),
+  });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.user.firstName, 'Ana María');
+  assert.equal(result.user.lastName, 'García');
+  assert.equal(result.user.email, 'admin.registration@example.invalid');
+  assert.deepEqual(database.prepare('SELECT first_name, last_name FROM users WHERE id = ?').get('registration-fields-admin'), {
+    first_name: 'Ana María', last_name: 'García',
+  });
 });
 
 test('registration answers enforce required, date, choice, checkbox, and field-version rules', () => {
@@ -421,6 +454,8 @@ test('public registration stores answer snapshots and rejects invalid submission
     headers: { 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify({
       email: 'missing-answer@example.invalid',
+      firstName: 'Missing',
+      lastName: 'Answer',
       username: 'missing_answer',
       password: 'RegistrationPassphrase-2026',
       confirmPassword: 'RegistrationPassphrase-2026',
@@ -431,11 +466,44 @@ test('public registration stores answer snapshots and rejects invalid submission
   assert.equal((await invalidResponse.json()).code, 'required_registration_field');
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get('missing_answer').count, 0);
 
+  const missingNameResponse = await fetch(apiUrl('/auth/register'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ email: 'missing-name@example.invalid', username: 'missing_name', password: 'RegistrationPassphrase-2026', confirmPassword: 'RegistrationPassphrase-2026' }),
+  });
+  assert.equal(missingNameResponse.status, 400);
+  assert.equal((await missingNameResponse.json()).code, 'invalid_name');
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get('missing_name').count, 0);
+
+  for (const [missingName, submittedNames] of [
+    ['first_name', { lastName: 'Present' }],
+    ['last_name', { firstName: 'Present' }],
+    ['first_name_whitespace', { firstName: '   ', lastName: 'Present' }],
+    ['last_name_whitespace', { firstName: 'Present', lastName: '   ' }],
+  ]) {
+    const missingRequiredName = await fetch(apiUrl('/auth/register'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        email: `${missingName}@example.invalid`,
+        username: `missing_${missingName}`,
+        password: 'RegistrationPassphrase-2026',
+        confirmPassword: 'RegistrationPassphrase-2026',
+        ...submittedNames,
+      }),
+    });
+    assert.equal(missingRequiredName.status, 400);
+    assert.equal((await missingRequiredName.json()).code, 'invalid_name');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get(`missing_${missingName}`).count, 0);
+  }
+
   const response = await fetch(apiUrl('/auth/register'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify({
       email: 'registration-fields@example.invalid',
+      firstName: 'Registration',
+      lastName: 'Learner',
       username: 'registration_fields_learner',
       password: 'RegistrationPassphrase-2026',
       confirmPassword: 'RegistrationPassphrase-2026',
@@ -450,6 +518,8 @@ test('public registration stores answer snapshots and rejects invalid submission
   assert.equal(response.status, 201);
   const { user } = await response.json();
   assert.equal(user.username, 'registration_fields_learner');
+  assert.equal(user.firstName, 'Registration');
+  assert.equal(user.lastName, 'Learner');
 
   const storedAnswers = database.prepare(`SELECT field_id, field_label, field_type, field_value, position
     FROM user_registration_field_values WHERE user_id = ? ORDER BY position`).all(user.id);
@@ -466,4 +536,53 @@ test('public registration stores answer snapshots and rejects invalid submission
   ]);
   assert.equal(database.prepare(`SELECT field_label FROM user_registration_field_values
     WHERE user_id = ? AND field_id = 'department'`).get(user.id).field_label, 'Department');
+});
+
+test('public registration rolls back account state when its required audit entry cannot be written', async () => {
+  const originalFields = registrationFields.getRegistrationFields();
+  registrationFields.saveRegistrationFields(fieldDefinitions);
+  const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'account.registered'`).get().count;
+  const originalAnswerCount = database.prepare('SELECT COUNT(*) AS count FROM user_registration_field_values').get().count;
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  database.exec(`CREATE TRIGGER fail_public_registration_audit
+    BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'account.registered'
+    BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`);
+
+  try {
+    const request = () => fetch(apiUrl('/auth/register'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        email: 'registration-audit@example.invalid',
+        firstName: 'Audit',
+        lastName: 'Learner',
+        username: 'registration_audit',
+        password: 'RegistrationPassphrase-2026',
+        confirmPassword: 'RegistrationPassphrase-2026',
+        registrationFieldValues: { department: 'Research', acknowledgement: true },
+      }),
+    });
+
+    const failedResponse = await request();
+    assert.equal(failedResponse.status, 500);
+    assert.equal((await failedResponse.json()).code, 'audit_unavailable');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get('registration_audit').count, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM user_registration_field_values').get().count, originalAnswerCount);
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.registered'`).get().count, originalAuditCount);
+
+    database.exec('DROP TRIGGER fail_public_registration_audit');
+    const successfulResponse = await request();
+    assert.equal(successfulResponse.status, 201);
+    const { user } = await successfulResponse.json();
+    assert.ok(database.prepare('SELECT last_login_at FROM users WHERE id = ?').get(user.id).last_login_at);
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+      WHERE action = 'account.registered' AND entity_id = ?`).get(user.id).count, 1);
+  } finally {
+    console.error = originalConsoleError;
+    database.exec('DROP TRIGGER IF EXISTS fail_public_registration_audit');
+    registrationFields.saveRegistrationFields(originalFields);
+  }
 });

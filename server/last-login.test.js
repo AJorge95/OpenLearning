@@ -25,6 +25,7 @@ let fixtureDirectory;
 let database;
 let migrateDatabase;
 let server;
+let sessionStore;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -64,7 +65,8 @@ before(async () => {
 
   const app = express();
   app.use(express.json());
-  app.use(session({ secret: isolatedConfig.SESSION_SECRET, resave: false, saveUninitialized: false }));
+  sessionStore = new session.MemoryStore();
+  app.use(session({ secret: isolatedConfig.SESSION_SECRET, resave: false, saveUninitialized: false, store: sessionStore }));
   app.use((req, _res, next) => {
     req.currentUser = database.prepare('SELECT id, username, role, disabled FROM users WHERE username = ?')
       .get('admin_last_login');
@@ -99,39 +101,209 @@ function apiUrl(pathname) {
   return `http://127.0.0.1:${address.port}/api${pathname}`;
 }
 
-test('migrations 16 to 18 preserve last-login history and add account fields once', () => {
+function storedSessionIds() {
+  return new Promise((resolve, reject) => sessionStore.all((error, sessions) => {
+    if (error) reject(error);
+    else resolve(Object.keys(sessions || {}).sort());
+  }));
+}
+
+test('migrations 16 to 28 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
   const migrationDb = new Database(':memory:');
   try {
+    migrationDb.pragma('foreign_keys = ON');
     migrationDb.exec(`
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       INSERT INTO schema_migrations (version) VALUES (15);
       CREATE TABLE users (id TEXT PRIMARY KEY);
-      CREATE TABLE audit_logs (actor_user_id TEXT, action TEXT, occurred_at TEXT);
+      CREATE TABLE audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        actor_user_id TEXT,
+        actor_username TEXT NOT NULL,
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT,
+        summary TEXT NOT NULL,
+        details_json TEXT NOT NULL DEFAULT '{}'
+      );
+      CREATE INDEX audit_logs_occurred ON audit_logs(occurred_at DESC, id DESC);
+      CREATE INDEX audit_logs_action ON audit_logs(action, occurred_at DESC);
+      CREATE TABLE system_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        level TEXT NOT NULL CHECK (level IN ('info', 'warn', 'error')),
+        source TEXT NOT NULL,
+        message TEXT NOT NULL,
+        details_json TEXT NOT NULL DEFAULT '{}'
+      );
+      CREATE INDEX system_logs_occurred ON system_logs(occurred_at DESC, id DESC);
+      CREATE INDEX system_logs_level ON system_logs(level, occurred_at DESC);
+      CREATE TABLE courses (id TEXT PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL, updated_by TEXT, updated_at TEXT NOT NULL);
+      CREATE TABLE media_files (
+        id TEXT PRIMARY KEY,
+        course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+        original_name TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        byte_size INTEGER NOT NULL,
+        media_kind TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE course_modules (id TEXT PRIMARY KEY);
+      CREATE TABLE lessons (id TEXT PRIMARY KEY);
+      CREATE TABLE quizzes (id TEXT PRIMARY KEY);
+      CREATE TABLE lesson_captions (
+        id TEXT PRIMARY KEY,
+        lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+        language TEXT NOT NULL CHECK (length(language) BETWEEN 2 AND 35),
+        label TEXT NOT NULL CHECK (length(label) BETWEEN 1 AND 80),
+        file_name TEXT NOT NULL UNIQUE,
+        original_name TEXT NOT NULL,
+        byte_size INTEGER NOT NULL CHECK (byte_size BETWEEN 1 AND 5242880),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(lesson_id, language)
+      );
+      CREATE TABLE course_certificates (
+        id TEXT PRIMARY KEY,
+        certificate_code TEXT NOT NULL UNIQUE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        course_id TEXT REFERENCES courses(id) ON DELETE SET NULL,
+        recipient_name TEXT NOT NULL,
+        course_title TEXT NOT NULL,
+        platform_name TEXT NOT NULL,
+        issued_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, course_id)
+      );
       INSERT INTO users (id) VALUES ('user-history'), ('user-registration'), ('user-never-signed-in');
-      INSERT INTO audit_logs (actor_user_id, action, occurred_at) VALUES
-        ('user-history', 'auth.signed_in', '2026-10-01 09:00:00'),
-        ('user-history', 'auth.signed_out', '2026-10-03 09:00:00'),
-        ('user-history', 'auth.signed_in', '2026-10-02 09:00:00'),
-        ('user-registration', 'account.registered', '2026-10-02 10:00:00'),
-        ('user-registration', 'platform.setup', '2026-10-03 10:00:00');
+      INSERT INTO audit_logs (actor_user_id, actor_username, action, entity_type, summary, occurred_at) VALUES
+        ('user-history', 'History Learner', 'auth.signed_in', 'account', 'Signed in', '2026-10-01 09:00:00'),
+        ('user-history', 'History Learner', 'auth.signed_out', 'account', 'Signed out', '2026-10-03 09:00:00'),
+        ('user-history', 'History Learner', 'auth.signed_in', 'account', 'Signed in', '2026-10-02 09:00:00'),
+        ('user-registration', 'Registration Learner', 'account.registered', 'account', 'Registered', '2026-10-02 10:00:00'),
+        ('user-registration', 'Registration Learner', 'platform.setup', 'platform', 'Set up', '2026-10-03 10:00:00');
+      INSERT INTO courses (id, title, status, updated_by, updated_at) VALUES
+        ('course-published', 'Published Course', 'published', 'user-history', '2026-10-03 10:00:00'),
+        ('course-archived', 'Archived Course', 'archived', 'user-history', '2026-10-03 11:00:00');
+      INSERT INTO course_modules (id) VALUES ('module-legacy');
+      INSERT INTO lessons (id) VALUES ('lesson-legacy'), ('lesson-legacy-copy');
+      INSERT INTO quizzes (id) VALUES ('quiz-legacy');
+      INSERT INTO lesson_captions (id, lesson_id, language, label, file_name, original_name, byte_size)
+        VALUES ('caption-legacy', 'lesson-legacy', 'en', 'English', 'shared-caption.vtt', 'captions.vtt', 20);
+      INSERT INTO course_certificates (id, certificate_code, user_id, course_id, recipient_name, course_title, platform_name)
+        VALUES
+          ('certificate-published', 'LEGACY-PUBLISHED', 'user-history', 'course-published', 'History Learner', 'Published Course', 'Learning Space'),
+          ('certificate-archived', 'LEGACY-ARCHIVED', 'user-registration', 'course-archived', 'Registration Learner', 'Archived Course', 'Learning Space');
     `);
 
     migrateDatabase(migrationDb);
-    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 18);
+    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 29);
     assert.deepEqual(migrationDb.prepare('SELECT id, last_login_at FROM users ORDER BY id').all(), [
       { id: 'user-history', last_login_at: '2026-10-02 09:00:00' },
       { id: 'user-never-signed-in', last_login_at: null },
       { id: 'user-registration', last_login_at: '2026-10-03 10:00:00' },
     ]);
+    const initialVersion = migrationDb.prepare(`SELECT id, course_id, storage_course_id, version_number
+      FROM course_versions WHERE course_id = 'course-published'`).get();
+    assert.ok(initialVersion.id);
+    assert.equal(initialVersion.course_id, 'course-published');
+    assert.equal(initialVersion.storage_course_id, 'course-published');
+    assert.equal(initialVersion.version_number, 1);
+    assert.deepEqual(migrationDb.prepare(`SELECT id, stable_id FROM course_modules WHERE id = 'module-legacy'`).get(), { id: 'module-legacy', stable_id: 'module-legacy' });
+    assert.deepEqual(migrationDb.prepare(`SELECT id, stable_id FROM lessons WHERE id = 'lesson-legacy'`).get(), { id: 'lesson-legacy', stable_id: 'lesson-legacy' });
+    assert.deepEqual(migrationDb.prepare(`SELECT id, stable_id FROM quizzes WHERE id = 'quiz-legacy'`).get(), { id: 'quiz-legacy', stable_id: 'quiz-legacy' });
+    assert.equal(migrationDb.prepare('SELECT course_version_id FROM course_certificates WHERE id = ?').get('certificate-published').course_version_id, initialVersion.id);
+    const archivedVersion = migrationDb.prepare(`SELECT id FROM course_versions WHERE course_id = 'course-archived'`).get();
+    assert.ok(archivedVersion?.id);
+    assert.equal(migrationDb.prepare('SELECT course_version_id FROM course_certificates WHERE id = ?').get('certificate-archived').course_version_id, archivedVersion.id);
+    assert.deepEqual(migrationDb.prepare('SELECT id, lesson_id, file_name FROM lesson_captions').get(), {
+      id: 'caption-legacy', lesson_id: 'lesson-legacy', file_name: 'shared-caption.vtt',
+    });
+    migrationDb.prepare(`INSERT INTO lesson_captions
+      (id, lesson_id, language, label, file_name, original_name, byte_size)
+      VALUES ('caption-legacy-copy', 'lesson-legacy-copy', 'en', 'English', 'shared-caption.vtt', 'captions.vtt', 20)`).run();
+    assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM lesson_captions WHERE file_name = 'shared-caption.vtt'").get().count, 2);
+    assert.deepEqual(migrationDb.pragma('foreign_key_check'), []);
 
     migrateDatabase(migrationDb);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 16').get().count, 1);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 17').get().count, 1);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 18').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 19').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 20').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 21').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 22').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 23').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 24').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 25').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 26').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 27').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 28').get().count, 1);
+    assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name IN ('learning_paths_active_updated', 'learning_paths_status_updated', 'courses_updated_order', 'courses_status_updated_order', 'courses_status_title_order', 'audit_logs_action', 'system_logs_level', 'course_certificates_user_issued')").get().count, 8);
     assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM pragma_table_info('users') WHERE name = 'email'").get().count, 1);
+    assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM pragma_table_info('users') WHERE name = 'first_name'").get().count, 1);
+    assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM pragma_table_info('users') WHERE name = 'last_name'").get().count, 1);
+    assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM pragma_table_info('course_certificates') WHERE name = 'recipient_email'").get().count, 1);
+    assert.deepEqual(migrationDb.prepare('SELECT recipient_name, recipient_email FROM course_certificates WHERE id = ?').get('certificate-published'), {
+      recipient_name: 'History Learner', recipient_email: '',
+    });
     assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'user_registration_field_values'").get().count, 1);
+    assert.deepEqual(migrationDb.prepare("SELECT name FROM pragma_table_info('lesson_watch_progress') ORDER BY cid").all(), [
+      { name: 'user_id' }, { name: 'lesson_id' }, { name: 'watched_until_seconds' },
+      { name: 'duration_seconds' }, { name: 'last_position_seconds' }, { name: 'last_heartbeat_at' }, { name: 'updated_at' },
+    ]);
+    assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'lesson_watch_progress_lesson'").get().count, 1);
+    assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM pragma_table_info('media_files') WHERE name = 'duration_seconds'").get().count, 1);
+    assert.deepEqual(migrationDb.pragma('foreign_key_check'), []);
   } finally {
     migrationDb.close();
+  }
+});
+
+test('initial setup rolls back its administrator and settings when the audit entry cannot be written', async () => {
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  database.exec(`CREATE TRIGGER fail_initial_setup_audit
+    BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'platform.setup'
+    BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`);
+
+  try {
+    const request = () => fetch(apiUrl('/setup'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        platformName: 'Audit Rollback Test',
+        username: 'setup_audit',
+        email: 'setup.audit@example.invalid',
+        firstName: 'Setup',
+        lastName: 'Admin',
+        password: 'SetupAuditPassphrase-2026',
+        confirmPassword: 'SetupAuditPassphrase-2026',
+      }),
+    });
+    const response = await request();
+    assert.equal(response.status, 500);
+    assert.equal((await response.json()).code, 'audit_unavailable');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get('setup_audit').count, 0);
+    assert.notEqual(database.prepare("SELECT value FROM app_settings WHERE key = 'setup_complete'").get()?.value, '1');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'platform.setup'").get().count, 0);
+
+    database.exec('DROP TRIGGER fail_initial_setup_audit');
+    database.exec(`CREATE TRIGGER fail_initial_setup_login_timestamp
+      BEFORE UPDATE OF last_login_at ON users
+      WHEN NEW.username = 'setup_audit'
+      BEGIN SELECT RAISE(ABORT, 'last login unavailable'); END`);
+    const timestampFailure = await request();
+    assert.equal(timestampFailure.status, 500);
+    assert.equal((await timestampFailure.json()).code, 'internal_error');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get('setup_audit').count, 0);
+    assert.notEqual(database.prepare("SELECT value FROM app_settings WHERE key = 'setup_complete'").get()?.value, '1');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'platform.setup'").get().count, 0);
+  } finally {
+    console.error = originalConsoleError;
+    database.exec('DROP TRIGGER IF EXISTS fail_initial_setup_audit');
+    database.exec('DROP TRIGGER IF EXISTS fail_initial_setup_login_timestamp');
   }
 });
 
@@ -143,6 +315,8 @@ test('setup, registration, and successful sign-in record last login for admin de
       platformName: 'Last Login Test',
       username: 'admin_last_login',
       email: 'admin.last-login@example.invalid',
+      firstName: 'Last',
+      lastName: 'Login',
       password: 'LastLoginPassphrase-2026',
       confirmPassword: 'LastLoginPassphrase-2026',
     }),
@@ -159,6 +333,8 @@ test('setup, registration, and successful sign-in record last login for admin de
     body: JSON.stringify({
       username: 'new_learner',
       email: 'learner.last-login@example.invalid',
+      firstName: 'New',
+      lastName: 'Learner',
       password: 'LearnerPassphrase-2026',
       confirmPassword: 'LearnerPassphrase-2026',
     }),
@@ -199,4 +375,133 @@ test('setup, registration, and successful sign-in record last login for admin de
   assert.equal(detailsResponse.status, 200);
   const details = await detailsResponse.json();
   assert.equal(details.user.lastLoginAt, lastLoginAt);
+});
+
+test('admin account course activity starts from memberships and deduplicates overlapping access', async () => {
+  const adminId = database.prepare("SELECT id FROM users WHERE username = 'admin_last_login'").get().id;
+  const courseIds = ['account-activity-enrolled', 'account-activity-overlap', 'account-activity-granted'];
+  const addCourse = database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by, updated_at)
+    VALUES (?, ?, 'published', ?, ?, ?)`);
+  const addCourses = database.transaction(() => {
+    addCourse.run(courseIds[0], 'Enrolled only', adminId, adminId, '2026-10-01 10:00:00');
+    addCourse.run(courseIds[1], 'Enrolled and granted', adminId, adminId, '2026-10-03 10:00:00');
+    addCourse.run(courseIds[2], 'Granted only', adminId, adminId, '2026-10-02 10:00:00');
+    database.prepare('INSERT INTO enrollments (id, course_id, user_id) VALUES (?, ?, ?)')
+      .run('account-activity-enrollment-1', courseIds[0], adminId);
+    database.prepare('INSERT INTO enrollments (id, course_id, user_id) VALUES (?, ?, ?)')
+      .run('account-activity-enrollment-2', courseIds[1], adminId);
+    database.prepare('INSERT INTO course_grants (id, course_id, user_id, granted_by) VALUES (?, ?, ?, ?)')
+      .run('account-activity-grant-1', courseIds[1], adminId, adminId);
+    database.prepare('INSERT INTO course_grants (id, course_id, user_id, granted_by) VALUES (?, ?, ?, ?)')
+      .run('account-activity-grant-2', courseIds[2], adminId, adminId);
+  });
+  addCourses();
+
+  try {
+    const membershipQueryPlan = database.prepare(`EXPLAIN QUERY PLAN WITH user_courses(course_id) AS (
+      SELECT course_id FROM enrollments WHERE user_id = ?
+      UNION SELECT course_id FROM course_grants WHERE user_id = ?
+    ) SELECT c.* FROM user_courses uc JOIN courses c ON c.id = uc.course_id
+      ORDER BY c.updated_at DESC, c.title COLLATE NOCASE, c.id ASC LIMIT ? OFFSET ?`)
+      .all(adminId, adminId, 50, 0).map((step) => step.detail).join('\n');
+    assert.match(membershipQueryPlan, /SEARCH enrollments USING INDEX enrollments_user \(user_id=\?\)/);
+    assert.match(membershipQueryPlan, /SEARCH course_grants USING INDEX grants_user \(user_id=\?\)/);
+    assert.doesNotMatch(membershipQueryPlan, /SCAN c/);
+
+    const response = await fetch(apiUrl(`/admin/users/${adminId}`), { headers: { connection: 'close' } });
+    assert.equal(response.status, 200);
+    const details = await response.json();
+    assert.equal(details.total, 3);
+    assert.deepEqual(details.courses.map((course) => course.id), [courseIds[1], courseIds[2], courseIds[0]]);
+  } finally {
+    database.prepare(`DELETE FROM courses WHERE id IN (${courseIds.map(() => '?').join(', ')})`).run(...courseIds);
+  }
+});
+
+test('sign-in rolls back last-login history and session when its audit entry cannot be written', async () => {
+  const user = database.prepare("SELECT id FROM users WHERE username = 'admin_last_login'").get();
+  const originalLoginAt = '2001-01-01 00:00:00';
+  database.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(originalLoginAt, user.id);
+  const originalAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'auth.signed_in' AND entity_id = ?").get(user.id).count;
+  const originalSessionIds = await storedSessionIds();
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  database.exec(`CREATE TRIGGER fail_sign_in_audit
+    BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'auth.signed_in'
+    BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`);
+
+  try {
+    const request = () => fetch(apiUrl('/auth/login'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ username: 'admin_last_login', password: 'LastLoginPassphrase-2026' }),
+    });
+
+    const failedResponse = await request();
+    assert.equal(failedResponse.status, 500);
+    assert.equal((await failedResponse.json()).code, 'audit_unavailable');
+    assert.equal(database.prepare('SELECT last_login_at FROM users WHERE id = ?').get(user.id).last_login_at, originalLoginAt);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'auth.signed_in' AND entity_id = ?").get(user.id).count, originalAuditCount);
+    assert.deepEqual(await storedSessionIds(), originalSessionIds);
+
+    database.exec('DROP TRIGGER fail_sign_in_audit');
+    const successfulResponse = await request();
+    assert.equal(successfulResponse.status, 200);
+    assert.notEqual(database.prepare('SELECT last_login_at FROM users WHERE id = ?').get(user.id).last_login_at, originalLoginAt);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'auth.signed_in' AND entity_id = ?").get(user.id).count, originalAuditCount + 1);
+  } finally {
+    console.error = originalConsoleError;
+    database.exec('DROP TRIGGER IF EXISTS fail_sign_in_audit');
+  }
+});
+
+test('self-service password changes roll back when their audit event cannot be saved', async () => {
+  const user = database.prepare("SELECT id, password_hash FROM users WHERE username = 'admin_last_login'").get();
+  const nextPassword = 'UpdatedLastLoginPassphrase-2026';
+  const otherSessionId = 'self-password-change-other-session';
+  database.prepare('INSERT INTO sessions (sid, session_data, expires_at, user_id) VALUES (?, ?, ?, ?)')
+    .run(otherSessionId, JSON.stringify({ userId: user.id }), Date.now() + 60_000, user.id);
+  const initialAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.password_changed' AND entity_id = ?").get(user.id).count;
+  database.exec(`CREATE TRIGGER reject_password_changed_audit BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'account.password_changed' BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`);
+
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  try {
+    const failedResponse = await fetch(apiUrl('/auth/password'), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        currentPassword: 'LastLoginPassphrase-2026',
+        password: nextPassword,
+        confirmPassword: nextPassword,
+      }),
+    });
+    assert.equal(failedResponse.status, 500);
+    assert.equal((await failedResponse.json()).code, 'audit_unavailable');
+    assert.equal(database.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id).password_hash, user.password_hash);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get(otherSessionId).count, 1);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.password_changed' AND entity_id = ?").get(user.id).count, initialAuditCount);
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS reject_password_changed_audit');
+    console.error = originalConsoleError;
+  }
+
+  const retryResponse = await fetch(apiUrl('/auth/password'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({
+      currentPassword: 'LastLoginPassphrase-2026',
+      password: nextPassword,
+      confirmPassword: nextPassword,
+    }),
+  });
+  assert.equal(retryResponse.status, 204);
+  const updatedPasswordHash = database.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id).password_hash;
+  const { verifyPassword } = await import('./auth.js');
+  assert.equal(await verifyPassword(nextPassword, updatedPasswordHash), true);
+  assert.equal(await verifyPassword('LastLoginPassphrase-2026', updatedPasswordHash), false);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get(otherSessionId).count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.password_changed' AND entity_id = ?").get(user.id).count, initialAuditCount + 1);
 });

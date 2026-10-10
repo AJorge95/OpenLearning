@@ -1,4 +1,4 @@
-import { Activity, BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, ClipboardList, FileText, ImagePlus, LockKeyhole, Play, Settings2, UserRound, UsersRound, LogOut, X } from 'lucide-react';
+import { Activity, BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, ClipboardList, FileText, ImagePlus, LockKeyhole, Play, Settings2, UserRound, UsersRound, LogOut, X, Route, Award } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -6,6 +6,8 @@ import { ApiError } from './api';
 import { useAuth } from './auth-context';
 import { BRAND_PALETTES, MAX_BRAND_ICON_BYTES } from './branding';
 import type { BrandingPalette } from './branding';
+import { findEnabledAppSelectIndex } from './app-select-navigation';
+import { getAppSelectHorizontalPosition, getAppSelectVerticalPosition } from './app-select-position';
 import { formatCountLabel } from './count-label';
 import type { Course, CourseModule, Lesson } from './types';
 
@@ -137,12 +139,15 @@ export function Header() {
       <nav className="topnav" aria-label="Main navigation">
         <NavLink to="/courses" end>Browse courses</NavLink>
         <NavLink to="/my-learning">My learning</NavLink>
+        <NavLink to="/learning-paths">Learning paths</NavLink>
+        <NavLink to="/competencies">Competencies</NavLink>
+        <NavLink to="/calendar">Calendar</NavLink>
       </nav>
       <details ref={userMenuRef} className="user-menu">
         <summary aria-label={user?.username ? `Open account menu for ${user.username}` : 'Open account menu'}><span className="avatar">{user?.username.slice(0, 1).toUpperCase()}</span><span className="account-name">{user?.username}</span><ChevronDown size={16} /></summary>
         <div className="user-menu-popover">
           <div className="user-menu-identity"><strong>{user?.username}</strong><span className="muted">{user?.role}</span></div>
-          <Link to="/account/security">Change password</Link>
+          <Link to="/account/security">Account settings</Link>
           {user?.role === 'admin' && <Link to="/admin/users">User management</Link>}
           {user?.role === 'admin' && <Link to="/admin/audit-log">Audit log</Link>}
           {user?.role === 'admin' && <Link to="/admin/system-log">System log</Link>}
@@ -162,15 +167,36 @@ export function AppFrame({ children }: { children?: React.ReactNode }) {
 
 export function StaffFrame() {
   const { user } = useAuth();
+  const { pathname } = useLocation();
+  const staffNavigationRef = useRef<HTMLElement>(null);
   const { submit: handleSignOut, signingOut, error: signOutError } = useSignOutAction();
+  useEffect(() => {
+    const revealActiveLink = () => {
+      const navigation = staffNavigationRef.current;
+      const activeLink = navigation?.querySelector<HTMLAnchorElement>('a[aria-current="page"]');
+      if (!navigation || !activeLink || navigation.scrollWidth <= navigation.clientWidth) return;
+      const navigationBounds = navigation.getBoundingClientRect();
+      const linkBounds = activeLink.getBoundingClientRect();
+      if (linkBounds.left < navigationBounds.left) {
+        navigation.scrollLeft += linkBounds.left - navigationBounds.left - 12;
+      } else if (linkBounds.right > navigationBounds.right) {
+        navigation.scrollLeft += linkBounds.right - navigationBounds.right + 12;
+      }
+    };
+    revealActiveLink();
+    window.addEventListener('resize', revealActiveLink);
+    return () => window.removeEventListener('resize', revealActiveLink);
+  }, [pathname]);
   return (
     <div className="staff-layout">
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <aside className="staff-sidebar">
         <PlatformBrand className="staff-brand" />
-        <nav aria-label="Management navigation">
+        <nav ref={staffNavigationRef} aria-label="Management navigation">
           <NavLink to="/manage/courses"><BookOpen size={18} />Courses</NavLink>
           {user?.role === 'admin' && <NavLink to="/admin/users"><UsersRound size={18} />Users</NavLink>}
+          <NavLink to="/manage/learning-paths"><Route size={18} />Learning paths</NavLink>
+          {user?.role === 'admin' && <NavLink to="/admin/competencies"><Award size={18} />Competencies</NavLink>}
           {user?.role === 'admin' && <NavLink to="/admin/audit-log"><ClipboardList size={18} />Audit log</NavLink>}
           {user?.role === 'admin' && <NavLink to="/admin/system-log"><Activity size={18} />System log</NavLink>}
           {user?.role === 'admin' && <NavLink to="/admin/settings"><Settings2 size={18} />Settings</NavLink>}
@@ -218,17 +244,8 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   const [position, setPosition] = useState({ top: 0, left: 0, width: 220, maxHeight: 280 });
   const selectedOption = options.find((option) => option.value === value) ?? options[0];
 
-  function findEnabledIndex(start: number, direction = 1) {
-    if (!options.length) return 0;
-    for (let offset = 0; offset < options.length; offset += 1) {
-      const index = ((start + offset * direction) % options.length + options.length) % options.length;
-      if (!options[index].disabled) return index;
-    }
-    return 0;
-  }
-
-  function focusIndex(index: number) {
-    const nextIndex = findEnabledIndex(index);
+  function focusIndex(index: number, direction: 1 | -1 = 1) {
+    const nextIndex = findEnabledAppSelectIndex(options, index, direction);
     setActiveIndex(nextIndex);
     menuRef.current?.querySelector<HTMLElement>(`#${menuId}-option-${nextIndex}`)?.scrollIntoView({ block: 'nearest' });
   }
@@ -238,27 +255,17 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
     const trigger = triggerRef.current;
     if (trigger) {
       const rect = trigger.getBoundingClientRect();
-      const margin = 12;
-      const maxWidth = Math.max(180, window.innerWidth - margin * 2);
-      const width = Math.min(Math.max(rect.width, 220), maxWidth);
-      const left = Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin));
-      const desiredHeight = Math.min(280, options.length * 40 + 12);
-      const roomBelow = window.innerHeight - rect.bottom - margin;
-      const roomAbove = rect.top - margin;
-      const openAbove = roomBelow < desiredHeight && roomAbove > roomBelow;
-      const maxHeight = Math.max(120, Math.min(280, openAbove ? roomAbove - 8 : roomBelow - 8));
-      const top = openAbove
-        ? Math.max(margin, rect.top - Math.min(desiredHeight, maxHeight) - 6)
-        : Math.min(rect.bottom + 6, window.innerHeight - Math.min(desiredHeight, maxHeight) - margin);
+      const { left, width } = getAppSelectHorizontalPosition(rect, window.innerWidth);
+      const { top, maxHeight } = getAppSelectVerticalPosition(rect, window.innerHeight, options.length);
       setPosition({ top, left, width, maxHeight });
     }
-    setActiveIndex(findEnabledIndex(startIndex));
+    setActiveIndex(findEnabledAppSelectIndex(options, startIndex));
     setOpen(true);
   }
 
   function choose(index: number) {
     const option = options[index];
-    if (!option || option.disabled) return;
+    if (disabled || !option || option.disabled) return;
     onChange(option.value);
     setOpen(false);
     triggerRef.current?.focus();
@@ -292,12 +299,13 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
       if (!open) openMenu();
-      else focusIndex(activeIndex + (event.key === 'ArrowDown' ? 1 : -1));
+      else focusIndex(activeIndex + direction, direction);
       return;
     }
-    if (event.key === 'Home' && open) { event.preventDefault(); focusIndex(0); return; }
-    if (event.key === 'End' && open) { event.preventDefault(); focusIndex(options.length - 1); return; }
+    if (event.key === 'Home' && open) { event.preventDefault(); focusIndex(0, 1); return; }
+    if (event.key === 'End' && open) { event.preventDefault(); focusIndex(options.length - 1, -1); return; }
     if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(false); return; }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -309,13 +317,17 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   }
 
   useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+
+  useEffect(() => {
     if (!open) return;
     function closeFromOutside(event: PointerEvent) {
       const target = event.target as Node;
       if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
     }
     function closeForLayoutChange(event: Event) {
-      if (menuRef.current?.contains(event.target as Node)) return;
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
       setOpen(false);
     }
     document.addEventListener('pointerdown', closeFromOutside);
@@ -333,7 +345,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   }, []);
 
   return <div ref={rootRef} className={`app-select ${className}`.trim()}>
-    <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-haspopup="listbox" aria-expanded={open} aria-controls={menuId} aria-activedescendant={open ? `${menuId}-option-${activeIndex}` : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
+    <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined} aria-activedescendant={open ? `${menuId}-option-${activeIndex}` : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
       {leadingIcon && <span className="app-select-leading" aria-hidden="true">{leadingIcon}</span>}<span className="app-select-value">{selectedOption?.label ?? 'Choose an option'}</span><ChevronDown className="app-select-chevron" size={16} aria-hidden="true" />
     </button>
     {open && createPortal(<div ref={menuRef} id={menuId} className="app-select-menu" role="listbox" aria-label={`${ariaLabel} options`} style={position}>
@@ -402,6 +414,13 @@ export function CurriculumModule({ module, selectedLessonId, courseId, compact =
 }
 
 function CurriculumLesson({ lesson, selected, courseId }: { lesson: Lesson; selected: boolean; courseId: string }) {
+  if (lesson.locked) return (
+    <div className="curriculum-item curriculum-item-locked" aria-disabled="true" title="Complete the previous lesson to unlock this lesson">
+      <span className="curriculum-icon"><LockKeyhole size={15} /></span>
+      <span className="curriculum-item-name">{lesson.title}</span>
+      <span className="curriculum-lock-label">Locked</span>
+    </div>
+  );
   return (
     <Link className={`curriculum-item ${selected ? 'selected' : ''}`} aria-current={selected ? 'page' : undefined} to={`/courses/${courseId}/learn/${lesson.id}`}>
       <span className="curriculum-icon">{lesson.completed ? <Check size={17} /> : lesson.hasVideo ? <Play size={15} /> : <FileText size={17} />}</span>

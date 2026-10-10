@@ -8,11 +8,17 @@ import { invalidateUserSessions } from './session-store.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
 import { passwordChangeLimiter } from './rate-limits.js';
 import { getRegistrationFields, normalizeRegistrationFieldValues, saveUserRegistrationFieldValues } from './registration-fields.js';
+import { accountNames } from './account-names.js';
+import { issueCompletedCertificatesForUser } from './certificate-service.js';
 
 export const authRouter = Router();
 
 function recordLastLogin(userId) {
   db.prepare('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
+}
+
+function destroySession(req) {
+  return new Promise((resolve, reject) => req.session.destroy((error) => error ? reject(error) : resolve()));
 }
 
 const defaultPalette = 'violet';
@@ -146,6 +152,7 @@ authRouter.get('/registration-fields', (_req, res) => {
 authRouter.post('/setup', async (req, res) => {
   if (setupComplete()) fail(409, 'This platform is already configured.', 'already_configured');
   const { platformName, username, password, confirmPassword } = req.body || {};
+  const { firstName, lastName } = accountNames(req.body);
   const email = normalizeEmail(req.body?.email);
   const name = parsePlatformName(platformName);
   const emailError = validateEmail(email);
@@ -168,8 +175,8 @@ authRouter.post('/setup', async (req, res) => {
     if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) {
       fail(409, 'That email address is already in use.', 'email_taken');
     }
-    db.prepare('INSERT INTO users (id, username, email, password_hash, role) VALUES (?, ?, ?, ?, ?)')
-      .run(userId, normalizeUsername(username), email, passwordHash, 'admin');
+    db.prepare('INSERT INTO users (id, username, email, first_name, last_name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(userId, normalizeUsername(username), email, firstName, lastName, passwordHash, 'admin');
     setSetting('platform_name', name);
     setSetting('theme_palette', themePalette);
     setSetting('connection_protocol', connectionProtocol);
@@ -180,20 +187,22 @@ authRouter.post('/setup', async (req, res) => {
       setSetting('platform_icon_version', randomUUID());
     }
     setSetting('setup_complete', '1');
+    recordLastLogin(userId);
+    const auditId = writeAuditLog({ actor: { id: userId, username: normalizeUsername(username) }, action: 'platform.setup', entityType: 'platform',
+      summary: 'Initial platform setup completed', details: { platformName: name, themePalette, connectionProtocol, registrationEnabled, userLimit } });
+    if (!auditId) fail(500, 'Platform setup could not be completed because the audit log is unavailable.', 'audit_unavailable');
   });
   configure.immediate();
   await regenerateSession(req, userId);
-  recordLastLogin(userId);
-  writeAuditLog({ actor: { id: userId, username: normalizeUsername(username) }, action: 'platform.setup', entityType: 'platform',
-    summary: 'Initial platform setup completed', details: { platformName: name, themePalette, connectionProtocol, registrationEnabled, userLimit } });
   writeSystemLog('info', 'setup', 'Initial platform setup completed');
-  res.status(201).json({ user: publicUser(db.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?').get(userId)), ...getPlatformConfiguration() });
+  res.status(201).json({ user: publicUser(db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(userId)), ...getPlatformConfiguration() });
 });
 
 authRouter.post('/auth/register', async (req, res) => {
   if (!setupComplete()) fail(409, 'Complete platform setup before registering.', 'setup_required');
   assertRegistrationAvailable();
   const { username, password, confirmPassword } = req.body || {};
+  const { firstName, lastName } = accountNames(req.body);
   const email = normalizeEmail(req.body?.email);
   const emailError = validateEmail(email);
   if (emailError) fail(400, emailError, 'invalid_email');
@@ -214,13 +223,15 @@ authRouter.post('/auth/register', async (req, res) => {
     }
     const fields = getRegistrationFields();
     const answers = normalizeRegistrationFieldValues(submittedRegistrationFieldValues, fields);
-    const createdUser = createUser({ username: normalized, email, passwordHash, role: 'learner' });
+    const createdUser = createUser({ username: normalized, email, firstName, lastName, passwordHash, role: 'learner' });
     saveUserRegistrationFieldValues(createdUser.id, answers);
+    recordLastLogin(createdUser.id);
+    const auditId = writeAuditLog({ actor: createdUser, action: 'account.registered', entityType: 'user', entityId: createdUser.id,
+      summary: `Learner account created: ${createdUser.username}` });
+    if (!auditId) fail(500, 'Account could not be created because the audit log is unavailable.', 'audit_unavailable');
     return createdUser;
   }).immediate();
   await regenerateSession(req, user.id);
-  recordLastLogin(user.id);
-  writeAuditLog({ actor: user, action: 'account.registered', entityType: 'user', entityId: user.id, summary: `Learner account created: ${user.username}` });
   res.status(201).json({ user: publicUser(user), registrationAvailable: registrationAvailable() });
 });
 
@@ -228,21 +239,33 @@ authRouter.post('/auth/login', async (req, res) => {
   const username = normalizeUsername(req.body?.username);
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
   if (username.length > 32 || password.length > 256) fail(400, 'Enter a valid username and password.', 'invalid_credentials');
-  const user = db.prepare('SELECT id, username, password_hash, role, disabled FROM users WHERE username = ? COLLATE NOCASE').get(username);
+  const user = db.prepare('SELECT id, username, email, first_name, last_name, password_hash, role, disabled FROM users WHERE username = ? COLLATE NOCASE').get(username);
   const valid = await verifyLoginPassword(password, user);
   if (!valid) {
     writeSystemLog('warn', 'auth', 'Sign-in attempt failed');
     fail(401, 'The username or password is incorrect.', 'login_failed');
   }
   await regenerateSession(req, user.id);
-  const currentUser = db.prepare('SELECT id, username, password_hash, role, disabled FROM users WHERE id = ?').get(user.id);
-  if (!currentUser || currentUser.disabled || currentUser.password_hash !== user.password_hash) {
-    await new Promise((resolve, reject) => req.session.destroy((error) => error ? reject(error) : resolve()));
+  const completeSignIn = db.transaction(() => {
+    const currentUser = db.prepare('SELECT id, username, email, first_name, last_name, password_hash, role, disabled FROM users WHERE id = ?').get(user.id);
+    if (!currentUser || currentUser.disabled || currentUser.password_hash !== user.password_hash) return null;
+    recordLastLogin(currentUser.id);
+    const auditId = writeAuditLog({ actor: currentUser, action: 'auth.signed_in', entityType: 'user', entityId: currentUser.id, summary: `${currentUser.username} signed in` });
+    if (!auditId) fail(500, 'Sign-in could not be completed because the audit log is unavailable.', 'audit_unavailable');
+    return currentUser;
+  });
+  let currentUser;
+  try {
+    currentUser = completeSignIn.immediate();
+  } catch (error) {
+    await destroySession(req);
+    throw error;
+  }
+  if (!currentUser) {
+    await destroySession(req);
     writeSystemLog('warn', 'auth', 'Sign-in attempt failed');
     fail(401, 'The username or password is incorrect.', 'login_failed');
   }
-  recordLastLogin(currentUser.id);
-  writeAuditLog({ actor: currentUser, action: 'auth.signed_in', entityType: 'user', entityId: currentUser.id, summary: `${currentUser.username} signed in` });
   res.json({ user: publicUser(currentUser), ...getPlatformConfiguration() });
 });
 
@@ -257,6 +280,26 @@ authRouter.post('/auth/logout', requireAuth, async (req, res, next) => {
 
 authRouter.get('/auth/me', (req, res) => {
   res.json({ user: publicUser(req.currentUser), ...getPlatformConfiguration() });
+});
+
+authRouter.put('/auth/profile', requireAuth, (req, res) => {
+  const { firstName, lastName } = accountNames(req.body);
+  const updateProfile = db.transaction(() => {
+    const user = db.prepare('SELECT id, username, first_name, last_name, email FROM users WHERE id = ?').get(req.currentUser.id);
+    if (!user) fail(404, 'Account not found.', 'not_found');
+    const changed = user.first_name !== firstName || user.last_name !== lastName;
+    if (changed) {
+      db.prepare('UPDATE users SET first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(firstName, lastName, user.id);
+      const auditId = writeAuditLog({ actor: req.currentUser, action: 'account.profile_updated', entityType: 'user', entityId: user.id,
+        summary: `${user.username} updated their profile name`, details: { firstName, lastName } });
+      if (!auditId) fail(500, 'Profile could not be updated because the audit log is unavailable.', 'audit_unavailable');
+    }
+    return db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(user.id);
+  });
+  const user = updateProfile.immediate();
+  const certificates = issueCompletedCertificatesForUser(user.id);
+  res.json({ user: publicUser(user), certificatesIssued: certificates.length });
 });
 
 authRouter.put('/auth/password', requireAuth, passwordChangeLimiter, async (req, res) => {
@@ -281,9 +324,11 @@ authRouter.put('/auth/password', requireAuth, passwordChangeLimiter, async (req,
     db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run(passwordHash, req.currentUser.id);
     invalidateUserSessions(db, req.currentUser.id, req.sessionID);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'account.password_changed', entityType: 'user', entityId: req.currentUser.id,
+      summary: `${req.currentUser.username} changed their password` });
+    if (!auditId) fail(500, 'Password could not be changed because the audit log is unavailable.', 'audit_unavailable');
   });
   updatePassword.immediate();
-  writeAuditLog({ actor: req.currentUser, action: 'account.password_changed', entityType: 'user', entityId: req.currentUser.id, summary: `${req.currentUser.username} changed their password` });
   res.status(204).end();
 });
 

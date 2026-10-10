@@ -7,21 +7,32 @@ const systemRetention = { table: 'system_logs', maximum: maxSystemRows, count: n
 const credentialAssignmentPattern = /((?:"|')?(?:password|secret|token|cookie|session|authorization|api[_-]?key|private[_-]?key)(?:"|')?\s*[=:]\s*)(?:(?:Bearer|Basic)\s+)?("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;]+)/gi;
 
 function insertRetainedRow(retention, insert) {
-  if (retention.count === null) {
-    retention.count = Number(db.prepare(`SELECT COUNT(*) AS count FROM ${retention.table}`).get().count);
-  }
-
-  const result = insert();
-  retention.count += 1;
-  if (retention.count > retention.maximum) {
-    retention.trimStatement ??= db.prepare(`DELETE FROM ${retention.table} WHERE id = (SELECT MIN(id) FROM ${retention.table})`);
-    while (retention.count > retention.maximum) {
-      const { changes } = retention.trimStatement.run();
-      if (!changes) break;
-      retention.count -= changes;
+  const nestedInCallerTransaction = db.inTransaction;
+  const persist = db.transaction(() => {
+    if (retention.count === null) {
+      retention.count = Number(db.prepare(`SELECT COUNT(*) AS count FROM ${retention.table}`).get().count);
     }
+
+    const result = insert();
+    retention.count += 1;
+    if (retention.count > retention.maximum) {
+      retention.trimStatement ??= db.prepare(`DELETE FROM ${retention.table} WHERE id = (SELECT MIN(id) FROM ${retention.table})`);
+      while (retention.count > retention.maximum) {
+        const { changes } = retention.trimStatement.run();
+        if (!changes) break;
+        retention.count -= changes;
+      }
+    }
+    return result;
+  });
+  let persisted = false;
+  try {
+    const result = persist();
+    persisted = true;
+    return result;
+  } finally {
+    if (nestedInCallerTransaction || !persisted) retention.count = null;
   }
-  return result;
 }
 
 function redactCredentialText(value) {

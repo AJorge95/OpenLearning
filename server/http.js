@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { db } from './db.js';
 import { writeSystemLog } from './log-store.js';
+import { editableCourse, logicalCourseId } from './course-versioning.js';
 
 export class ApiError extends Error {
   constructor(status, message, code = 'request_error') {
@@ -90,7 +91,7 @@ export function loadCurrentUser(req, _res, next) {
       req.currentUser = null;
       return next();
     }
-    const user = db.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?').get(req.session.userId);
+    const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(req.session.userId);
     if (!user || user.disabled) {
       const reason = user ? 'user_disabled' : 'user_missing';
       req.session.destroy((error) => {
@@ -114,12 +115,83 @@ export function hasCourseGrant(courseId, userId) {
   return db.prepare('SELECT 1 FROM course_grants WHERE course_id = ? AND user_id = ?').get(courseId, userId) !== undefined;
 }
 
-export function canViewCourse(course, user) {
+function cachedValue(cache, key, load) {
+  if (!cache) return load();
+  if (cache.has(key)) return cache.get(key);
+  const value = load();
+  cache.set(key, value);
+  return value;
+}
+
+function canViewCourseWithCache(course, user, cache) {
   if (!course || !user || user.disabled) return false;
   if (user.role === 'admin' || user.role === 'moderator') return true;
-  if (course.status !== 'published') return false;
-  if (course.visibility === 'public') return true;
-  return hasCourseGrant(course.id, user.id);
+  const courseId = logicalCourseId(course.id) || course.id;
+  const canonical = cachedValue(cache?.canonical, courseId,
+    () => db.prepare('SELECT * FROM courses WHERE id = ? AND logical_course_id IS NULL').get(courseId));
+  if (!canonical || canonical.status !== 'published') return false;
+  if (course.logical_course_id) {
+    const active = cachedValue(cache?.activeVersions, courseId,
+      () => db.prepare('SELECT storage_course_id FROM course_versions WHERE course_id = ? ORDER BY version_number DESC LIMIT 1').get(courseId));
+    if (active?.storage_course_id !== course.id) return false;
+  }
+  if (canonical.visibility === 'public') return true;
+  const granted = cachedValue(cache?.grants, courseId, () => hasCourseGrant(courseId, user.id));
+  if (granted) return true;
+  return hasUnlockedPathAccess(courseId, user.id, cache);
+}
+
+export function canViewCourse(course, user) {
+  return canViewCourseWithCache(course, user, null);
+}
+
+export function createCourseAccessChecker(user) {
+  const cache = {
+    canonical: new Map(),
+    activeVersions: new Map(),
+    grants: new Map(),
+    pathAccess: new Map(),
+    pathCompletion: new Map(),
+  };
+  return (course) => canViewCourseWithCache(course, user, cache);
+}
+
+function completedForPath(courseId, userId, completionCache) {
+  return cachedValue(completionCache, courseId, () => {
+    const version = db.prepare(`SELECT v.id, v.storage_course_id FROM course_versions v
+      WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT 1`).get(courseId);
+    const contentId = version?.storage_course_id || courseId;
+    const state = db.prepare('SELECT target_version_id FROM course_learning_state WHERE user_id = ? AND course_id = ?').get(userId, courseId);
+    const resetRequired = Boolean(version && state?.target_version_id === version.id);
+    const lessons = db.prepare(`SELECT l.id, l.stable_id FROM lessons l JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?`).all(contentId);
+    const quizzes = db.prepare(`SELECT q.id, q.stable_id FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?`).all(contentId);
+    const lessonDone = db.prepare(`SELECT 1 FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id
+      WHERE p.user_id = ? AND (? = l.id OR (? = 0 AND l.stable_id = ?)) LIMIT 1`);
+    if (!lessons.length && !quizzes.length) return false;
+    for (const lesson of lessons) if (!lessonDone.get(userId, lesson.id, resetRequired ? 1 : 0, lesson.stable_id)) return false;
+    const quizDone = db.prepare(`SELECT 1 FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
+      JOIN course_modules m ON m.id = q.module_id WHERE a.user_id = ? AND a.passed = 1
+        AND (? = q.id OR (? = 0 AND q.stable_id = ?)) LIMIT 1`);
+    for (const quiz of quizzes) if (!quizDone.get(userId, quiz.id, resetRequired ? 1 : 0, quiz.stable_id)) return false;
+    return true;
+  });
+}
+
+function hasUnlockedPathAccess(courseId, userId, cache) {
+  return cachedValue(cache?.pathAccess, courseId, () => {
+    const paths = db.prepare(`SELECT lp.id AS path_id, lp.status, pc.position, pc.requires_previous
+      FROM learning_path_enrollments e JOIN learning_paths lp ON lp.id = e.path_id
+      JOIN learning_path_courses pc ON pc.path_id = lp.id
+      WHERE e.user_id = ? AND pc.course_id = ? AND lp.status = 'published'`).all(userId, courseId);
+    for (const path of paths) {
+      if (!path.requires_previous || path.position === 0) return true;
+      const prerequisites = db.prepare(`SELECT prior.course_id
+        FROM learning_path_courses prior WHERE prior.path_id = ? AND prior.position < ? ORDER BY prior.position`)
+        .all(path.path_id, path.position);
+      if (prerequisites.every((step) => completedForPath(step.course_id, userId, cache?.pathCompletion))) return true;
+    }
+    return false;
+  });
 }
 
 export function courseById(courseId) {
@@ -128,9 +200,21 @@ export function courseById(courseId) {
 
 export function requireCourseManager(courseId, user) {
   if (!user || !['admin', 'moderator'].includes(user.role)) fail(403, 'You do not have permission to manage courses.', 'forbidden');
-  const course = courseById(courseId);
+  let course = courseById(courseId);
+  if (!course) {
+    course = db.prepare(`SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id WHERE m.id = ?`).get(courseId)
+      ?? db.prepare(`SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN lessons l ON l.module_id = m.id WHERE l.id = ?`).get(courseId)
+      ?? db.prepare(`SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN quizzes q ON q.module_id = m.id WHERE q.id = ?`).get(courseId);
+  }
   if (!course) fail(404, 'Course not found.', 'not_found');
-  return course;
+  const logicalId = course.logical_course_id || course.id;
+  if (course.logical_course_id) {
+    const revision = db.prepare('SELECT revision_course_id FROM course_revisions WHERE course_id = ?').get(logicalId);
+    if (revision?.revision_course_id !== course.id) fail(409, 'This course content belongs to an older published version. Reload the editor to work on the current revision.', 'stale_course_revision');
+  }
+  const editable = editableCourse(logicalId, user);
+  if (!editable) fail(404, 'Course not found.', 'not_found');
+  return editable;
 }
 
 export function requireCourseViewer(courseId, user) {
