@@ -308,6 +308,29 @@ test('near-complete playback unlocks lesson completion and saved completion rema
   assert.equal(lessonWatch.lessonVideoWasWatched(learner.id, 'watch-lesson'), true);
 });
 
+test('replaying a completed video starts at zero and keeps the watched high-water mark', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  withFakeClock(3_000_000, (advance) => {
+    lessonWatch.beginLessonWatch(learner, 'watch-lesson', 10);
+    advance(4_000);
+    lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 4);
+    advance(4_000);
+    lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 8);
+    advance(1_500);
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 9.5).complete, true);
+
+    const replay = lessonWatch.beginLessonWatch(learner, 'watch-lesson', 10);
+    assert.equal(replay.lastPositionSeconds, 0);
+    assert.equal(replay.watchedUntilSeconds, 9.5);
+    assert.equal(replay.complete, true);
+
+    advance(4_000);
+    const replayProgress = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 4);
+    assert.equal(replayProgress.accepted, true);
+    assert.equal(replayProgress.watchedUntilSeconds, 9.5);
+  });
+});
+
 test('saved lesson completion remains recognized without a watch-progress row', () => {
   const learner = { id: 'watch-learner', role: 'learner' };
   database.prepare('INSERT INTO lesson_progress (user_id, lesson_id) VALUES (?, ?)').run(learner.id, 'watch-lesson');
