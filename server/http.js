@@ -18,6 +18,7 @@ const requestBodyErrors = new Map([
   ['request.aborted', { status: 400, message: 'Request body was interrupted before it was complete.', code: 'request_aborted' }],
   ['parameters.too.many', { status: 413, message: 'Request body contains too many form fields.', code: 'too_many_parameters' }],
 ]);
+const currentUserStatement = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?');
 
 export function fail(status, message, code) {
   throw new ApiError(status, message, code);
@@ -91,7 +92,7 @@ export function loadCurrentUser(req, _res, next) {
       req.currentUser = null;
       return next();
     }
-    const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(req.session.userId);
+    const user = currentUserStatement.get(req.session.userId);
     if (!user || user.disabled) {
       const reason = user ? 'user_disabled' : 'user_missing';
       req.session.destroy((error) => {
