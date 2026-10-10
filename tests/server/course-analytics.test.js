@@ -433,6 +433,8 @@ test('course detail reuses its published version in the progress summary', async
       'expected the course row lookup to reuse the preloaded storage course ID');
     assert.equal(preparedSql.filter((sql) => sql === 'SELECT * FROM courses WHERE id = ?').length, 2,
       'expected the canonical root row to be reused instead of fetched again for its summary');
+    assert.equal(preparedSql.some((sql) => sql.startsWith('SELECT * FROM courses WHERE id IN (')), false,
+      'expected the preloaded published row to serve the course summary');
     const duplicateProgressQueries = preparedSql.filter((sql) => [
       'SELECT l.id, COALESCE(l.stable_id, l.id) AS stable_id FROM lessons l JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?',
       'SELECT q.id, COALESCE(q.stable_id, q.id) AS stable_id FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?',

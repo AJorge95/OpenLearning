@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse preloaded course content in detail summaries
+
+- **Reviewed:** Published course detail assembly, which fetched the active course row for the response and then selected that same row again when building its progress summary.
+- **Improvement:** Let the summary builder accept already-loaded content rows and pass the detail row only when its ID matches the active summary content. Revision previews still load their published summary row separately.
+- **Why it helps:** Detail requests avoid one repeated course-row query while preserving published progress and draft-preview separation.
+- **Interface review:** No visible change; course content, completion totals, and per-activity progress remain unchanged.
+- **Checked:** The course-detail regression confirms the published row is not fetched a second time and progress remains complete for the fixture. The focused course analytics/versioning suite passed (69/69); full `npm test` passed all 262 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reuse the canonical course row in detail summaries
 
 - **Reviewed:** The course detail payload’s summary setup, which re-read the canonical row even when the route had already passed that exact row into the payload builder.
