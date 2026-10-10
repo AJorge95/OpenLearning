@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse enrolled-path lookups during course access checks
+
+- **Reviewed:** Private-course authorization performs the same parameterized enrolled-path lookup once per distinct course checked by a request-scoped access checker.
+- **Improvement:** Prepare the enrolled-path lookup once alongside the other shared course-access statements and execute it for each learner/course pair.
+- **Why it helps:** Learner lists and other bulk access checks avoid repeatedly compiling the same join while each check still reads current path enrollment and course-step state.
+- **Interface review:** No visible change; private-course access rules and response shapes stay the same.
+- **Checked:** A regression verifies two private courses remain accessible through the enrolled path, that a fresh checker denies access after enrollment removal, and that access checks do not prepare the lookup per course. The focused course-analytics suite passed (73/73); full `npm test` passed all 269 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reuse the learning-path prerequisite query
 
 - **Reviewed:** Private-course access checks that iterate the learner's enrolled paths and compiled the same prerequisite-course query again for every locked path.

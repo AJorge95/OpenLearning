@@ -20,6 +20,10 @@ const requestBodyErrors = new Map([
 ]);
 const currentUserStatement = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?');
 const courseGrantStatement = db.prepare('SELECT 1 FROM course_grants WHERE course_id = ? AND user_id = ?');
+const enrolledCoursePathsStatement = db.prepare(`SELECT lp.id AS path_id, lp.status, pc.position, pc.requires_previous
+  FROM learning_path_enrollments e JOIN learning_paths lp ON lp.id = e.path_id
+  JOIN learning_path_courses pc ON pc.path_id = lp.id
+  WHERE e.user_id = ? AND pc.course_id = ? AND lp.status = 'published'`);
 const pathPrerequisiteCoursesStatement = db.prepare(`SELECT prior.course_id
   FROM learning_path_courses prior WHERE prior.path_id = ? AND prior.position < ? ORDER BY prior.position`);
 
@@ -205,10 +209,7 @@ function completedForPath(courseId, userId, completionCache) {
 
 function hasUnlockedPathAccess(courseId, userId, cache) {
   return cachedValue(cache?.pathAccess, courseId, () => {
-    const paths = db.prepare(`SELECT lp.id AS path_id, lp.status, pc.position, pc.requires_previous
-      FROM learning_path_enrollments e JOIN learning_paths lp ON lp.id = e.path_id
-      JOIN learning_path_courses pc ON pc.path_id = lp.id
-      WHERE e.user_id = ? AND pc.course_id = ? AND lp.status = 'published'`).all(userId, courseId);
+    const paths = enrolledCoursePathsStatement.all(userId, courseId);
     for (const path of paths) {
       if (!path.requires_previous || path.position === 0) return true;
       const prerequisites = pathPrerequisiteCoursesStatement.all(path.path_id, path.position);
