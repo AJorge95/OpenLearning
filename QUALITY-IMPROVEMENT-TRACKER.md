@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Cover protected video range playback with integration tests
+
+- **Reviewed:** The lesson player's protected media route, its authorization checks, byte-range parsing and response headers, and existing media-route test coverage. The route supported partial playback, but retrieval and range access were not covered by integration tests.
+- **Improvement:** Add an isolated video fixture and route tests for explicit and suffix byte ranges, unsatisfiable ranges, stale `If-Range` fallback, and authorization before streaming.
+- **Why it helps:** Seeking and resuming video depends on correct partial responses; these checks also guard against a future range-handling change bypassing course access checks.
+- **Interface review:** Lesson playback already requests the protected video URL with browser range support; the player markup and layout remain unchanged.
+- **Checked:** The focused media-route suite passed all 11 tests. Full `npm test` passed all 233 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Announce MP4 format for lesson video uploads
 
 - **Reviewed:** All course-editor file inputs, their visible labels and helper text, and the server's MP4 validation message. The lesson video input was the only upload control without a format description.

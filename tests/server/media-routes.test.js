@@ -23,6 +23,7 @@ let fixtureDirectory;
 let database;
 let server;
 let captionPath;
+const rangeMediaContents = Buffer.from('0123456789');
 
 before(async () => {
   const tempBase = path.resolve(os.tmpdir());
@@ -39,13 +40,15 @@ before(async () => {
   });
 
   ({ db: database } = await import('../../server/db.js'));
-  const [{ mediaUploadRouter }, { errorHandler }] = await Promise.all([
+  const [{ mediaUploadRouter, protectedMediaRouter }, { errorHandler }] = await Promise.all([
     import('../../server/routes-media.js'),
     import('../../server/http.js'),
   ]);
   database.exec(`
     INSERT INTO users (id, username, email, password_hash, role, disabled)
       VALUES ('admin-media', 'media_admin', 'media-admin@example.invalid', 'not-used', 'admin', 0);
+    INSERT INTO users (id, username, email, password_hash, role, disabled)
+      VALUES ('learner-media', 'media_learner', 'media-learner@example.invalid', 'not-used', 'learner', 0);
     INSERT INTO courses (id, title, status, created_by, updated_by)
       VALUES ('course-caption-audit', 'Caption audit course', 'draft', 'admin-media', 'admin-media');
     INSERT INTO course_modules (id, course_id, title, position)
@@ -54,11 +57,23 @@ before(async () => {
       VALUES ('lesson-caption-audit', 'module-caption-audit', 'Caption lesson', 0);
     INSERT INTO lesson_captions (id, lesson_id, language, label, file_name, original_name, byte_size)
       VALUES ('caption-audit', 'lesson-caption-audit', 'en', 'English', 'caption-audit.vtt', 'captions.vtt', 20);
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('course-range-tests', 'Media range test course', 'draft', 'admin-media', 'admin-media');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('module-range-tests', 'course-range-tests', 'Media range module', 0);
+    INSERT INTO media_files (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+      VALUES ('media-range-tests', 'course-range-tests', 'range-test.mp4', 'range-test.mp4', 'video/mp4', 10, 'video');
+    INSERT INTO lessons (id, module_id, title, position, media_id)
+      VALUES ('lesson-range-tests', 'module-range-tests', 'Media range lesson', 0, 'media-range-tests');
   `);
   const courseMediaDirectory = path.join(fixtureDirectory, 'course-media', 'course-caption-audit');
   captionPath = path.join(courseMediaDirectory, 'caption-audit.vtt');
   await fs.mkdir(courseMediaDirectory, { recursive: true });
   await fs.writeFile(captionPath, 'WEBVTT\n\nfixture text');
+  const rangeMediaDirectory = path.join(fixtureDirectory, 'course-media', 'course-range-tests');
+  const rangeMediaPath = path.join(rangeMediaDirectory, 'range-test.mp4');
+  await fs.mkdir(rangeMediaDirectory, { recursive: true });
+  await fs.writeFile(rangeMediaPath, rangeMediaContents);
 
   const app = express();
   app.use(express.json());
@@ -68,6 +83,7 @@ before(async () => {
     next();
   });
   app.use('/api', mediaUploadRouter);
+  app.use('/media', protectedMediaRouter);
   app.use(errorHandler);
   server = createServer(app);
   server.listen(0, '127.0.0.1');
@@ -101,6 +117,12 @@ function apiUrl(pathname) {
   const address = server.address();
   assert(address && typeof address !== 'string');
   return `http://127.0.0.1:${address.port}/api${pathname}`;
+}
+
+function mediaUrl(pathname) {
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  return `http://127.0.0.1:${address.port}/media${pathname}`;
 }
 
 function pngCoverHeader(width, height) {
@@ -188,6 +210,53 @@ test('rejects a truncated PNG cover and removes the temporary upload', async () 
   assert.equal(database.prepare("SELECT cover_media_id FROM courses WHERE id = 'course-caption-audit'").get().cover_media_id, null);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.cover_uploaded'").get().count, originalAuditCount);
   assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
+});
+
+test('streams protected video byte ranges and rejects unsatisfiable ranges', async () => {
+  const response = await fetch(mediaUrl('/media-range-tests'), {
+    headers: { 'x-test-user': 'admin-media', range: 'bytes=2-5', connection: 'close' },
+  });
+
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get('accept-ranges'), 'bytes');
+  assert.equal(response.headers.get('content-range'), 'bytes 2-5/10');
+  assert.equal(response.headers.get('content-length'), '4');
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.from('2345'));
+
+  const suffixResponse = await fetch(mediaUrl('/media-range-tests'), {
+    headers: { 'x-test-user': 'admin-media', range: 'bytes=-3', connection: 'close' },
+  });
+  assert.equal(suffixResponse.status, 206);
+  assert.equal(suffixResponse.headers.get('content-range'), 'bytes 7-9/10');
+  assert.deepEqual(Buffer.from(await suffixResponse.arrayBuffer()), Buffer.from('789'));
+
+  const invalidResponse = await fetch(mediaUrl('/media-range-tests'), {
+    headers: { 'x-test-user': 'admin-media', range: 'bytes=10-', connection: 'close' },
+  });
+  assert.equal(invalidResponse.status, 416);
+  assert.equal(invalidResponse.headers.get('content-range'), 'bytes */10');
+  assert.equal(await invalidResponse.text(), '');
+
+  const fullResponse = await fetch(mediaUrl('/media-range-tests'), {
+    headers: { 'x-test-user': 'admin-media', range: 'bytes=2-5', 'if-range': '"stale-version"', connection: 'close' },
+  });
+  assert.equal(fullResponse.status, 200);
+  assert.equal(fullResponse.headers.get('content-length'), '10');
+  assert.deepEqual(Buffer.from(await fullResponse.arrayBuffer()), rangeMediaContents);
+});
+
+test('checks video access before serving a byte range', async () => {
+  const anonymousResponse = await fetch(mediaUrl('/media-range-tests'), {
+    headers: { range: 'bytes=0-0', connection: 'close' },
+  });
+  assert.equal(anonymousResponse.status, 401);
+  assert.equal((await anonymousResponse.json()).code, 'unauthorized');
+
+  const learnerResponse = await fetch(mediaUrl('/media-range-tests'), {
+    headers: { 'x-test-user': 'learner-media', range: 'bytes=0-0', connection: 'close' },
+  });
+  assert.equal(learnerResponse.status, 403);
+  assert.equal((await learnerResponse.json()).code, 'course_access_denied');
 });
 
 test('rejects truncated WebP RIFF headers and image chunks without saving media', async () => {
