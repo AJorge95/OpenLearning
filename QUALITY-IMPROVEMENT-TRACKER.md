@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Align README capabilities with shipped access rules
+
+- **Reviewed:** The feature summary, role permissions, private-course checks, path self-enrollment filter, staff routes, competency mappings, course versions, and calendar deadlines.
+- **Improvement:** Document learning paths, competency progress, version/review/restore workflows, and learner deadlines; clarify that private courses can be reached through either an individual grant or an unlocked assigned-path step.
+- **Why it helps:** Readers can understand the actual access rules and staff responsibilities before using or evaluating the platform.
+- **Interface review:** The rendered learning-path page exposes its create form and status filters clearly; the prior responsive CSS and shared focus behavior remain in place.
+- **Checked:** Compared the README claims with the course-access checker, learning-path enrollment rules, staff/admin route guards, version restore routes, and calendar implementation; `git diff --check` passed.
+
 ## 2026-10-10 — Tighten the administrator role selector hit area
 
 - **Reviewed:** The live account-details role control, its visible trigger width, desktop flex row, and leftover selectors for the former wrapping-label layout.
