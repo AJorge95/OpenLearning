@@ -1683,7 +1683,7 @@ export function AdminUserDetailsPage() {
       .catch((cause) => {
         if (active) {
           setError(cause instanceof ApiError ? cause.message : 'Account details could not be loaded.');
-          setCanRetryLoad(!(cause instanceof ApiError) || [408, 429].includes(cause.status) || cause.status >= 500);
+          setCanRetryLoad(!(cause instanceof ApiError) || [0, 408, 429].includes(cause.status) || cause.status >= 500);
         }
       })
       .finally(() => { if (active) setLoading(false); });

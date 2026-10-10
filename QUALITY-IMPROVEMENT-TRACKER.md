@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Make API connection failures consistent and retryable
+
+- **Reviewed:** Shared API fetch and response-body handling, CSRF setup and retries, request cancellation, and account-detail load recovery.
+- **Improvement:** Convert fetch and response-read transport failures into a stable `network_error` with status `0`, preserve `AbortError` for intentionally cancelled requests, and offer retry for account-detail network failures.
+- **Why it helps:** Forms and data views can explain temporary connection loss consistently, while cancelled route requests remain cancellations and account details can recover without a reload.
+- **Interface review:** The account-detail error alert and retry button remain a wrapped, responsive row; the message is visible and the button remains available when the API is offline.
+- **Checked:** In the local admin page at 1280×720, simulated an offline API read, confirmed the actionable alert and **Try again**, restored the connection, and confirmed the account details loaded. Repeated at 390×844: the notice wrapped, the retry action remained visible, and page width stayed at 390px. The browser console had no warnings or errors after recovery. All 218 `npm test` cases, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Guard the administrator role selector's click boundary
 
 - **Reviewed:** The repeated browser report, the annotated `label` target, the current account-details markup and styles, and the selector's live trigger and wrapper hit areas.

@@ -35,6 +35,31 @@ function invalidResponse(status: number) {
   return new ApiError(status, 'The server returned an invalid response. Refresh and try again.', 'invalid_response');
 }
 
+function isAbortError(error: unknown) {
+  return typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError';
+}
+
+function throwTransportFailure(error: unknown): never {
+  if (error instanceof ApiError || isAbortError(error)) throw error;
+  throw new ApiError(0, 'The server could not be reached. Check your connection and try again.', 'network_error');
+}
+
+async function fetchResponse(path: string, options: RequestInit): Promise<Response> {
+  try {
+    return await fetch(path, options);
+  } catch (error) {
+    return throwTransportFailure(error);
+  }
+}
+
+async function readResponseText(response: Response): Promise<string> {
+  try {
+    return await response.text();
+  } catch (error) {
+    return throwTransportFailure(error);
+  }
+}
+
 function isJsonContentType(contentType: string) {
   const mediaType = contentType.split(';', 1)[0].trim().toLowerCase();
   return mediaType === 'application/json' || mediaType.endsWith('+json');
@@ -47,7 +72,7 @@ function isCsrfRejection(code?: string) {
 async function errorFromResponse(response: Response) {
   const contentType = response.headers.get('content-type') || '';
   const data = isJsonContentType(contentType)
-    ? parseJsonBody(await response.text(), response.status) as ApiErrorPayload
+    ? parseJsonBody(await readResponseText(response), response.status) as ApiErrorPayload
     : null;
   if (isCsrfRejection(data?.code)) csrfToken = null;
   return new ApiError(response.status, data?.error || `Request failed (${response.status}).`, data?.code);
@@ -57,10 +82,10 @@ async function refreshCsrf(): Promise<string> {
   if (csrfRefreshPromise) return csrfRefreshPromise;
   const generation = csrfGeneration;
   const pending = (async () => {
-    const response = await fetch('/api/csrf', { credentials: 'same-origin' });
+    const response = await fetchResponse('/api/csrf', { credentials: 'same-origin' });
     if (!response.ok) throw new ApiError(response.status, 'Unable to start a secure session. Refresh and try again.');
     if (!isJsonContentType(response.headers.get('content-type') || '')) throw invalidResponse(response.status);
-    const data = parseJsonObject(await response.text(), response.status);
+    const data = parseJsonObject(await readResponseText(response), response.status);
     if (typeof data.token !== 'string' || !data.token) throw invalidResponse(response.status);
     if (generation !== csrfGeneration) return ensureCsrf();
     csrfToken = data.token;
@@ -102,12 +127,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers || {});
   if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   if (requiresCsrf) headers.set('X-CSRF-Token', await ensureCsrf());
-  let response = await fetch(path, { ...options, method, headers, credentials: 'same-origin' });
+  let response = await fetchResponse(path, { ...options, method, headers, credentials: 'same-origin' });
   if (!response.ok) {
     const error = await errorFromResponse(response);
     if (requiresCsrf && isCsrfRejection(error.code)) {
       headers.set('X-CSRF-Token', await refreshCsrf());
-      response = await fetch(path, { ...options, method, headers, credentials: 'same-origin' });
+      response = await fetchResponse(path, { ...options, method, headers, credentials: 'same-origin' });
     } else {
       throw error;
     }
@@ -116,7 +141,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!response.ok) throw await errorFromResponse(response);
   const contentType = response.headers.get('content-type') || '';
   const data = isJsonContentType(contentType)
-    ? parseJsonObject(await response.text(), response.status)
+    ? parseJsonObject(await readResponseText(response), response.status)
     : null;
   if (!isJsonContentType(contentType)) throw invalidResponse(response.status);
   return data as T;
