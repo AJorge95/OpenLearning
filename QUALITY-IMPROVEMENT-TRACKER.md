@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Keep null stable IDs distinct in path completion
+
+- **Reviewed:** The lesson and quiz insertion paths, nullable `stable_id` columns, and the batched prerequisite history sets added in the preceding cycle.
+- **Improvement:** Fall back to each lesson or quiz's own ID when its stable ID is null, so unrelated null values cannot make unfinished content appear complete.
+- **Why it helps:** Paths continue to require every lesson and a passing attempt for every quiz, including legacy and unversioned content that has no stable ID.
+- **Interface review:** Shared visible-focus styling, the skip link, and reduced-motion rules are already present; no additional UI change was indicated by this review.
+- **Checked:** The regression covers 41 lessons and two null-stable quizzes; a missing lesson and an unpassed quiz each keep the path locked, all completed content unlocks it, and history-read count stays constant from one to 41 lessons. Full `npm test` passed all 213 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Batch learning-path prerequisite progress checks
 
 - **Reviewed:** The learner path-access check, version reset behavior, lesson and quiz history rules, and existing path query-scaling coverage.
