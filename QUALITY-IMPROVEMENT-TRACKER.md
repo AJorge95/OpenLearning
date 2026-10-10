@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Announce MP4 format for lesson video uploads
+
+- **Reviewed:** All course-editor file inputs, their visible labels and helper text, and the server's MP4 validation message. The lesson video input was the only upload control without a format description.
+- **Improvement:** Add a screen-reader-only “Choose an MP4 video file” hint and associate it with the lesson video input using `aria-describedby`.
+- **Why it helps:** Screen-reader users learn the accepted format before opening the file picker, while the compact lesson row stays visually unchanged.
+- **Interface review:** The existing “Upload video” label and `accept="video/mp4,.mp4"` filter remain unchanged; the hint exists only for assistive technology.
+- **Checked:** The focused accessibility test passed and verifies the description relationship. Full `npm test` passed all 231 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Announce lesson document formats to screen readers
 
 - **Reviewed:** Lesson document upload guidance, its accepted file extensions, the file input's label, and the adjacent caption upload's accessible description pattern.
