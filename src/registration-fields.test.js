@@ -36,6 +36,24 @@ test('registration field editor identifies blank and duplicate labels', () => {
   ])?.fieldId, 'duplicate');
 });
 
+test('registration label and option uniqueness does not depend on browser locale', () => {
+  const originalToLocaleLowerCase = String.prototype.toLocaleLowerCase;
+  String.prototype.toLocaleLowerCase = function toTurkishLowerCase() {
+    return originalToLocaleLowerCase.call(this, 'tr');
+  };
+  try {
+    assert.equal(validateRegistrationFieldEditor([
+      { ...fields[0], id: 'interest', label: 'I', options: ['I', 'ı'] },
+    ]), null);
+    assert.equal(validateRegistrationFieldEditor([
+      { ...fields[1], id: 'first', label: 'I' },
+      { ...fields[2], id: 'second', label: 'ı' },
+    ]), null);
+  } finally {
+    String.prototype.toLocaleLowerCase = originalToLocaleLowerCase;
+  }
+});
+
 test('registration field editor validates select options using server rules', () => {
   const result = validateRegistrationFieldEditor([
     { ...fields[0], options: ['Design', ' design '] },

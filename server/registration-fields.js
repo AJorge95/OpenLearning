@@ -23,7 +23,7 @@ export function normalizeRegistrationFields(value) {
     if (!/^[a-zA-Z0-9_-]{1,80}$/.test(id) || ids.has(id)) {
       fail(400, `Registration field ${index + 1} needs a unique field ID.`, 'invalid_registration_fields');
     }
-    if (!label || label.length > 80 || labels.has(label.toLocaleLowerCase())) {
+    if (!label || label.length > 80 || labels.has(label.toLowerCase())) {
       fail(400, `Registration field ${index + 1} needs a unique label of 1 to 80 characters.`, 'invalid_registration_fields');
     }
     if (!allowedTypes.has(type)) {
@@ -33,7 +33,7 @@ export function normalizeRegistrationFields(value) {
       fail(400, `Choose whether "${label}" is required.`, 'invalid_registration_fields');
     }
     ids.add(id);
-    labels.add(label.toLocaleLowerCase());
+    labels.add(label.toLowerCase());
 
     let options = [];
     if (type === 'select') {
@@ -43,7 +43,7 @@ export function normalizeRegistrationFields(value) {
       options = item.options.map((option) => typeof option === 'string' ? option.trim() : '');
       while (options.length && options.at(-1) === '') options.pop();
       if (options.length < 2 || options.length > maximumOptions || options.some((option) => !option || option.length > 100)
-        || new Set(options.map((option) => option.toLocaleLowerCase())).size !== options.length) {
+        || new Set(options.map((option) => option.toLowerCase())).size !== options.length) {
         fail(400, `"${label}" needs 2 to ${maximumOptions} unique options, each up to 100 characters.`, 'invalid_registration_fields');
       }
     }

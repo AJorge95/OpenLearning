@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Make registration uniqueness locale-independent
+
+- **Reviewed:** Browser and server validation for duplicate registration-field labels and select options, including each runtime’s implicit locale behavior.
+- **Improvement:** Use locale-independent lowercase normalization in both layers. Add client and server regressions that simulate a Turkish locale and cover the `I`/`ı` pair for labels and select options.
+- **Why it helps:** An administrator’s browser and the server no longer disagree about whether a field label or option is a duplicate when their default locales differ.
+- **Checked:** The new client and server regressions failed before the change under a simulated Turkish locale and passed afterward. All 19 focused registration tests passed; full `npm test` passed all 200 tests; `npx tsc --noEmit`, `npm run build`, changed-file `node --check`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reject cancelled uploads while token refresh is pending
 
 - **Reviewed:** Upload cancellation before XHR creation, the shared single-flight CSRF refresh, the multipart deferral added in the previous cycle, and cancellation during an upload retry.

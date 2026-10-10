@@ -161,6 +161,26 @@ test('registration field definitions trim values and reject duplicate or invalid
   ]), 'invalid_registration_fields');
 });
 
+test('registration label and option uniqueness is independent of server locale', () => {
+  const originalToLocaleLowerCase = String.prototype.toLocaleLowerCase;
+  String.prototype.toLocaleLowerCase = function toTurkishLowerCase() {
+    return originalToLocaleLowerCase.call(this, 'tr');
+  };
+  try {
+    const fields = registrationFields.normalizeRegistrationFields([
+      { id: 'first', label: 'I', type: 'text', required: false, options: [] },
+      { id: 'second', label: 'ı', type: 'text', required: false, options: [] },
+    ]);
+    assert.equal(fields.length, 2);
+    const select = registrationFields.normalizeRegistrationFields([
+      { id: 'interest', label: 'Interest', type: 'select', required: false, options: ['I', 'ı'] },
+    ]);
+    assert.deepEqual(select[0].options, ['I', 'ı']);
+  } finally {
+    String.prototype.toLocaleLowerCase = originalToLocaleLowerCase;
+  }
+});
+
 test('invalid stored registration fields pause public signup and stay recoverable in admin settings', async () => {
   setSetting('registration_fields', '{invalid json');
   assert.deepEqual(registrationFields.readRegistrationFields(), { fields: [], configurationValid: false });
