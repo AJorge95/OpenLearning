@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Align custom registration date boundaries
+
+- **Reviewed:** The browser’s native date-input range against server-side calendar-date validation for custom registration fields.
+- **Improvement:** Bound custom date inputs to `0001-01-01` through `9999-12-31` and reject year zero on the server. Add regressions for year zero, both supported boundaries, year 10000, and an impossible calendar date.
+- **Why it helps:** The browser and server now accept the same representable date range, avoiding values that cannot be entered in the form or would be rejected only after submission.
+- **Interface review:** Rechecked the reported account-role select on a fresh local page. Its live markup uses a bounded `div` wrapper and a 152px trigger; clicking the adjacent gap left the menu closed. The supplied annotation targets an older `label` structure, so no duplicate width rule was needed.
+- **Checked:** All 200 tests passed; `npx tsc --noEmit`, `npm run build`, changed-file `node --check`, and `git diff --check` passed. The local mocked `/register` flow was checked at 390px with Chrome for date boundaries and no console errors. The account details route was checked in the Codex in-app browser at 1999×1244 for page identity, non-empty content, no console warnings/errors, and click behavior. No production coverage was claimed.
+
 ## 2026-10-10 — Make registration uniqueness locale-independent
 
 - **Reviewed:** Browser and server validation for duplicate registration-field labels and select options, including each runtime’s implicit locale behavior.

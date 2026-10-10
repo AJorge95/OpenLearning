@@ -547,7 +547,12 @@ test('registration answers enforce required, date, choice, checkbox, and field-v
   assertApiError(() => registrationFields.normalizeRegistrationFieldValues({ acknowledgement: true }, fieldDefinitions), 'required_registration_field');
   assertApiError(() => registrationFields.normalizeRegistrationFieldValues({ department: 'Other', acknowledgement: true }, fieldDefinitions), 'invalid_registration_answers');
   assertApiError(() => registrationFields.normalizeRegistrationFieldValues({ department: 'Research', acknowledgement: 'yes' }, fieldDefinitions), 'invalid_registration_answers');
+  assertApiError(() => registrationFields.normalizeRegistrationFieldValues({ department: 'Research', acknowledgement: true, 'start-date': '0000-01-01' }, fieldDefinitions), 'invalid_registration_answers');
   assertApiError(() => registrationFields.normalizeRegistrationFieldValues({ department: 'Research', acknowledgement: true, 'start-date': '2025-02-30' }, fieldDefinitions), 'invalid_registration_answers');
+  assertApiError(() => registrationFields.normalizeRegistrationFieldValues({ department: 'Research', acknowledgement: true, 'start-date': '10000-01-01' }, fieldDefinitions), 'invalid_registration_answers');
+  for (const date of ['0001-01-01', '9999-12-31']) {
+    assert.equal(registrationFields.normalizeRegistrationFieldValues({ department: 'Research', acknowledgement: true, 'start-date': date }, fieldDefinitions)[2].value, date);
+  }
   assertApiError(() => registrationFields.normalizeRegistrationFieldValues({ department: 'Research', acknowledgement: true, removedField: 'old value' }, fieldDefinitions), 'registration_fields_changed', 409);
 });
 
