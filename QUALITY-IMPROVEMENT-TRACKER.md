@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Batch learning-path prerequisite progress checks
+
+- **Reviewed:** The learner path-access check, version reset behavior, lesson and quiz history rules, and existing path query-scaling coverage.
+- **Improvement:** Load a learner's completed lessons and passed quizzes for a logical course and its stored versions once, then compare IDs or stable IDs in memory. This replaces one synchronous SQLite lookup per required lesson and quiz.
+- **Why it helps:** Unlock checks now make a fixed number of progress-history reads as course content grows, while a missing lesson or unpassed quiz still keeps the next path step locked.
+- **Interface review:** No visible controls changed. The preceding role-select review confirmed the account page's current bounded trigger and outside-click behavior.
+- **Checked:** A regression grew prerequisite content from 1 to 41 lessons and asserted the progress-history read count stayed constant. It also verified that an incomplete lesson and a failed quiz keep the target locked, while a fully completed course unlocks it. Full `npm test` passed all 213 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Verify administrator role select hit area
 
 - **Reviewed:** The account-details role control's live markup, computed width, pointer-event boundaries, the older screenshot's label target, and the existing custom-select structure guard.

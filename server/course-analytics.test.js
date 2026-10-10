@@ -598,6 +598,90 @@ test('My learning caches prerequisite completion checks as enrolled paths grow',
     `Expected bounded additional visibility work, got ${threeCourseResult.queryCount} then ${sixCourseResult.queryCount} queries.`);
 });
 
+test('prerequisite completion history reads stay bounded as course content grows', async () => {
+  database.exec(`
+    INSERT INTO courses (id, title, visibility, status, created_by, updated_by) VALUES
+      ('path-bulk-prerequisite', 'Bulk prerequisite', 'public', 'published', 'admin-1', 'admin-1'),
+      ('path-bulk-target', 'Bulk target', 'private', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('path-bulk-module', 'path-bulk-prerequisite', 'Bulk module', 0);
+    INSERT INTO quizzes (id, module_id, title, pass_mark)
+      VALUES ('path-bulk-quiz', 'path-bulk-module', 'Bulk quiz', 70);
+    INSERT INTO quiz_attempts (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json)
+      VALUES ('path-bulk-attempt', 'path-bulk-quiz', 'learner-active', 100, 1, '{}', '[]');
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('path-bulk-completion', 'Bulk completion', 'published', 0, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+      ('path-bulk-first', 'path-bulk-completion', 'path-bulk-prerequisite', 0, 0),
+      ('path-bulk-second', 'path-bulk-completion', 'path-bulk-target', 1, 1);
+    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by)
+      VALUES ('path-bulk-enrollment', 'path-bulk-completion', 'learner-active', 'assigned', 'admin-1');
+  `);
+
+  const addLesson = database.prepare(`INSERT INTO lessons (id, module_id, title, position, stable_id)
+    VALUES (?, 'path-bulk-module', ?, ?, ?)`);
+  const addProgress = database.prepare('INSERT INTO lesson_progress (user_id, lesson_id) VALUES (?, ?)');
+  addLesson.run('path-bulk-lesson-0', 'Bulk lesson 0', 0, 'path-bulk-stable-0');
+  addProgress.run('learner-active', 'path-bulk-lesson-0');
+
+  async function measureCompletionReads() {
+    const originalPrepare = database.prepare;
+    let completionReads = 0;
+    database.prepare = (sql) => {
+      const statement = originalPrepare.call(database, sql);
+      if (!sql.includes('lesson_progress') && !sql.includes('quiz_attempts')) return statement;
+      return new Proxy(statement, {
+        get(target, property) {
+          const value = Reflect.get(target, property, target);
+          if ((property === 'get' || property === 'all') && typeof value === 'function') {
+            return (...args) => {
+              completionReads += 1;
+              return value.apply(target, args);
+            };
+          }
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    };
+    try {
+      const response = await fetch(apiUrl('/learning-paths/path-bulk-completion'), {
+        headers: userHeaders('learner-active'),
+      });
+      assert.equal(response.status, 200);
+      const path = (await response.json()).path;
+      return {
+        completionReads,
+        targetUnlocked: path.courses.find((course) => course.id === 'path-bulk-target').unlocked,
+      };
+    } finally {
+      delete database.prepare;
+    }
+  }
+
+  const oneLesson = await measureCompletionReads();
+  assert.equal(oneLesson.targetUnlocked, true);
+
+  for (let position = 1; position < 41; position += 1) {
+    const lessonId = `path-bulk-lesson-${position}`;
+    addLesson.run(lessonId, `Bulk lesson ${position}`, position, `path-bulk-stable-${position}`);
+    if (position < 40) addProgress.run('learner-active', lessonId);
+  }
+
+  const oneLessonIncomplete = await measureCompletionReads();
+  assert.equal(oneLessonIncomplete.targetUnlocked, false);
+
+  addProgress.run('learner-active', 'path-bulk-lesson-40');
+  const manyLessons = await measureCompletionReads();
+  assert.equal(manyLessons.targetUnlocked, true);
+  assert.equal(manyLessons.completionReads, oneLesson.completionReads,
+    `Expected bounded history reads, got ${oneLesson.completionReads} then ${manyLessons.completionReads}.`);
+
+  database.prepare("UPDATE quiz_attempts SET passed = 0 WHERE id = 'path-bulk-attempt'").run();
+  const failedQuiz = await measureCompletionReads();
+  assert.equal(failedQuiz.targetUnlocked, false);
+  database.prepare("UPDATE quiz_attempts SET passed = 1 WHERE id = 'path-bulk-attempt'").run();
+});
+
 test('learning-path completion summaries use a fixed query count as path size grows', async () => {
   database.exec(`
     INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
