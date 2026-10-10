@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Explain password requirements in the user-list reset dialog
+
+- **Reviewed:** Administrator password-reset entry points, password length validation, and existing accessible guidance in account creation and account details.
+- **Improvement:** Show “Use at least 12 characters” beneath the new-password field in the user-list reset dialog and connect it with `aria-describedby`.
+- **Why it helps:** Administrators see the enforced minimum before submitting and screen-reader users receive the same requirement when focusing the field.
+- **Interface review:** Reuses the existing form helper styling and leaves the modal’s field labels and layout intact.
+- **Checked:** The focused guidance test passed both account-detail and dialog cases; full `npm test` passed all 237 tests; `npm run build` and `git diff --check` passed. `npx tsc --noEmit` still reports TS18047 in the separately edited `src/components.tsx:430`. Rendered modal interaction was not checked: the Browser plugin is unavailable and the repository has no Playwright dependency, so I did not add browser packages.
+
 ## 2026-10-10 — Clarify interrupted upload outcomes
 
 - **Reviewed:** Shared fetch transport errors, XHR upload failures, upload cancellation and CSRF retry behavior, and the course editor's document, caption, video, and cover upload handlers.
