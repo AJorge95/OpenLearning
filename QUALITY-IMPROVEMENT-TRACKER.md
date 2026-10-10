@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Show a posted lesson comment without refetching feedback
+
+- **Reviewed:** The learner comment submission route and feedback pagination lifecycle after a successful post.
+- **Improvement:** Use the created comment and updated total already returned by the server to prepend the new comment in the current list. Keep the number of loaded comments bounded and cancel any in-flight page request that could overwrite the local update.
+- **Why it helps:** Learners see their comment immediately, retain comments they already loaded, and avoid an additional feedback request.
+- **Interface review:** The existing posted confirmation and comment-count UI are preserved; no layout change was needed.
+- **Checked:** Focused client comment tests passed (4/4), including stable page length and duplicate protection. Full `npm test` passed all 252 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Browser submission was not used because the available development session has no disposable learner fixture and submitting would persist a comment.
+
 ## 2026-10-10 — Reuse course states across overlapping learning paths
 
 - **Reviewed:** Learner completion sync when a course appears in several enrolled paths, and the joined learning-state lookup performed for each unlocked course.
