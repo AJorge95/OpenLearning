@@ -32,7 +32,7 @@ function progressForStorage(logicalId, contentId, user, version) {
   return { completedLessonIds, passedQuizIds };
 }
 
-function courseSummaryDetails(courses, user, preloadedVersionsByCourse) {
+function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloadedContentCoursesById) {
   if (!courses.length) return [];
   const logicalIdsByCourse = courses.map((course) => course.logical_course_id || course.id);
   const logicalIds = [...new Set(logicalIdsByCourse)];
@@ -48,8 +48,14 @@ function courseSummaryDetails(courses, user, preloadedVersionsByCourse) {
   const contentIdByCourse = new Map(logicalIds.map((id) => [id, latestVersionsByCourse.get(id)?.storage_course_id ?? id]));
   const contentIds = [...new Set(contentIdByCourse.values())];
   const contentPlaceholders = contentIds.map(() => '?').join(', ');
-  const contentCoursesById = new Map(db.prepare(`SELECT * FROM courses WHERE id IN (${contentPlaceholders})`)
-    .all(...contentIds).map((row) => [row.id, row]));
+  const contentCoursesById = new Map(preloadedContentCoursesById);
+  const missingContentIds = contentIds.filter((id) => !contentCoursesById.has(id));
+  if (missingContentIds.length) {
+    const missingContentPlaceholders = missingContentIds.map(() => '?').join(', ');
+    for (const row of db.prepare(`SELECT * FROM courses WHERE id IN (${missingContentPlaceholders})`).all(...missingContentIds)) {
+      contentCoursesById.set(row.id, row);
+    }
+  }
   const countsByCourse = new Map(db.prepare(`
     SELECT c.id,
       (SELECT COUNT(*) FROM course_modules m WHERE m.course_id = c.id) AS module_count,
@@ -174,7 +180,9 @@ export function getCoursePayload(course, user, { includeAnswers = false, storage
   const content = storageCourseId ? db.prepare('SELECT * FROM courses WHERE id = ?').get(storageCourseId)
     : editingCopy ? course : currentPublishedCourseForVersion(logicalId, version) || course;
   const rootCourse = course.id === logicalId ? course : db.prepare('SELECT * FROM courses WHERE id = ?').get(logicalId) || course;
-  const summaryDetails = courseSummaryDetails([rootCourse], user, new Map([[logicalId, version]]))[0];
+  const summaryContentId = version?.storage_course_id || logicalId;
+  const preloadedSummaryContent = content.id === summaryContentId ? new Map([[content.id, content]]) : undefined;
+  const summaryDetails = courseSummaryDetails([rootCourse], user, new Map([[logicalId, version]]), preloadedSummaryContent)[0];
   const summary = summaryDetails.summary;
   const resultSummary = editingCopy ? { ...summary, title: course.title, description: course.description,
     category: course.category, visibility: course.visibility,
