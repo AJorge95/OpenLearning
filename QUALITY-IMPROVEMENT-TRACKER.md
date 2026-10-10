@@ -8,6 +8,13 @@
 - **Interface review:** The signed-in account page renders the role control and trigger at the same 144px width. A click in the adjacent right gap leaves the menu closed, the trigger opens it, and the same outside click closes it; no duplicate selector style change was needed.
 - **Checked:** The new regression first reproduced three completion-history reads, then passed with two after the shared checker change. Full `npm test` passed all 243 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The account page rendered meaningful content at 1264×712 with no framework overlay or browser console warnings/errors.
 
+## 2026-10-10 — Recheck account-detail responsiveness and course submission paths
+
+- **Reviewed:** The account-detail page structure and role control, its desktop and narrow layouts, the scrollable course-activity table, shared course-access call sites, and quiz answer validation and choice loading.
+- **Result:** No code change. The account layout stacks cleanly on mobile; the role selector fills the available content width; the wider table has a named, keyboard-focusable scroll region. Nearby multi-course visibility checks use the request-scoped checker, and quiz choices are loaded in one query with answer IDs validated against the current questions.
+- **Why no change:** The reported role-selector boundary is already constrained to the visible trigger, and the inspected responsive and backend paths showed no distinct reproducible gap.
+- **Checked:** The signed-in account page rendered at 1280×720 and 390×844. At mobile width, the document remains 390px wide while the course table scrolls within its 326px region; no page-level horizontal overflow appeared. The restored desktop page had no browser console warnings or errors. No code tests were run because this review made no runtime changes.
+
 ## 2026-10-10 — Protect first-run setup with a private bootstrap credential
 
 - **Reviewed:** First-run setup flow, environment configuration, account registration conflicts, and authentication rate-limit coverage.
