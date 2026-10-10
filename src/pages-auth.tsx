@@ -33,7 +33,16 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
     <div className="registration-form-fields-heading"><strong>About you</strong><span>Share the details requested by this learning space.</span></div>
     {fields.map((field) => {
       if (field.type === 'checkbox') return <label className="registration-checkbox-field" key={field.id}>
-        <input type="checkbox" required={field.required} checked={values[field.id] === true} onChange={(event) => onChange(field.id, event.target.checked)} disabled={disabled} />
+        <input
+          id={`registration-field-${field.id}`}
+          type="checkbox"
+          required={field.required}
+          checked={values[field.id] === true}
+          aria-invalid={invalidFieldId === field.id || undefined}
+          aria-describedby={invalidFieldId === field.id ? 'registration-form-error' : undefined}
+          onChange={(event) => onChange(field.id, event.target.checked)}
+          disabled={disabled}
+        />
         <span>{field.label}{field.required && <small>Required</small>}</span>
       </label>;
       if (field.type === 'select') return <div className="registration-custom-field" key={field.id}>

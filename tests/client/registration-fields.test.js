@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
 import { findMissingRequiredRegistrationField, validateRegistrationFieldEditor } from '../../src/registration-fields.ts';
 
@@ -20,6 +21,16 @@ test('checkbox requiredness and optional blank fields are handled separately', (
   const values = { department: 'Research', about: 'Here', 'start-date': '2026-10-09', policy: false, optional: '  ' };
   assert.equal(findMissingRequiredRegistrationField(fields, values)?.id, 'policy');
   assert.equal(findMissingRequiredRegistrationField(fields, { ...values, policy: true }), undefined);
+});
+
+test('invalid registration checkboxes can receive focus and reference the form error', () => {
+  const source = fs.readFileSync(new URL('../../src/pages-auth.tsx', import.meta.url), 'utf8');
+  const checkboxBranch = source.match(/if \(field\.type === 'checkbox'\) return <label[\s\S]*?<\/label>/)?.[0];
+
+  assert.ok(checkboxBranch, 'Expected to find the custom registration checkbox field.');
+  assert.match(checkboxBranch, /id=\{`registration-field-\$\{field\.id\}`\}/);
+  assert.match(checkboxBranch, /aria-invalid=\{invalidFieldId === field\.id \|\| undefined\}/);
+  assert.match(checkboxBranch, /aria-describedby=\{invalidFieldId === field\.id \? 'registration-form-error' : undefined\}/);
 });
 
 test('registration field editor identifies blank and duplicate labels', () => {
