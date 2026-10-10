@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Combine learner reaction counts and state lookup
+
+- **Reviewed:** Lesson feedback reads and reaction updates, which separately loaded per-lesson reaction totals and the current learner’s selected reaction.
+- **Improvement:** Read both values with one conditional aggregate query, and reuse that aggregate after a reaction update to return the updated counts.
+- **Why it helps:** Learner feedback removes one database query and gets the counts and selected reaction from the same snapshot. Staff responses still omit learner reaction data.
+- **Interface review:** The feedback response keeps the same reaction counts and selected-state shape consumed by the lesson page; no visible UI change was needed.
+- **Checked:** A route regression confirms the learner feedback request runs one query against `lesson_reactions` and still returns the correct selection and totals. Focused moderation/feedback tests passed (7/7); full `npm test` passed all 250 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Keep the account role selector aligned with its field width
 
 - **Reviewed:** The reported admin account page, selector hit area, desktop and mobile layout, and the live DOM against the attached comment target.

@@ -138,6 +138,29 @@ test('course managers can review published private-course comments without learn
   assert.deepEqual(learnerFeedback.counts, { like: 1, dislike: 0 });
 });
 
+test('learner feedback reads aggregate reaction counts and the learner reaction in one query', async () => {
+  database.prepare("INSERT INTO lesson_reactions (lesson_id, user_id, reaction) VALUES ('lesson-public', 'learner-2', 'dislike')").run();
+  const originalPrepare = database.prepare;
+  let reactionQueries = 0;
+  database.prepare = function countedPrepare(sql, ...args) {
+    if (sql.includes('lesson_reactions')) reactionQueries += 1;
+    return Reflect.apply(originalPrepare, this, [sql, ...args]);
+  };
+  let result;
+  try {
+    const response = await fetch(apiUrl('/lessons/lesson-public/feedback'), { headers: userHeaders('learner-1') });
+    assert.equal(response.status, 200);
+    result = await response.json();
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare("DELETE FROM lesson_reactions WHERE lesson_id = 'lesson-public' AND user_id = 'learner-2'").run();
+  }
+
+  assert.equal(reactionQueries, 1);
+  assert.equal(result.reaction, 'like');
+  assert.deepEqual(result.counts, { like: 1, dislike: 1 });
+});
+
 test('learners cannot remove comments, and staff cannot post learner comments', async () => {
   const removal = await fetch(apiUrl('/lessons/lesson-public/comments/comment-public'), {
     method: 'DELETE',
