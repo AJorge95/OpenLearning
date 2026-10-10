@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Bound platform icon pixel dimensions
+
+- **Reviewed:** The platform icon’s 512 KB byte limit, how the branding image is reused throughout the application, dimension headers in PNG/JPEG/WebP, and the upload guidance in the admin settings and setup flow.
+- **Improvement:** Reject platform icons wider or taller than 1024 pixels for all three supported formats, and show the dimension limit beside the file input. Extend the settings regression to cover oversized PNG, JPEG, and WebP headers and confirm rejected uploads leave branding and audit history untouched.
+- **Why it helps:** Small compressed files can still request large decoded image surfaces. Bounding each dimension protects browsers and keeps platform branding sized for its intended use.
+- **Checked:** The focused icon and settings suite passed all 14 tests; full `npm test` passed all 193 tests; `npx tsc --noEmit`, `npm run build`, changed-file `node --check`, and `git diff --check` passed. Playwright using installed Chrome rendered `/admin/settings` at 1440px and 390px, confirmed the updated guidance, accessible description, and icon preview, found no horizontal overflow, and reported no console warnings or errors. This was local mocked-admin coverage, not production validation.
+
 ## 2026-10-10 — Validate platform icon uploads and describe file guidance
 
 - **Reviewed:** The platform icon picker’s visible format/size guidance and file input, the settings API’s data-URL and image-signature validation, and whether invalid icon updates can write settings or audit records.

@@ -24,10 +24,12 @@ function destroySession(req) {
 const defaultPalette = 'violet';
 const paletteIds = new Set(['violet', 'ocean', 'forest', 'rose', 'amber']);
 const maxBrandIconBytes = 512 * 1024;
+const maxBrandIconDimension = 1024;
 const maxUserLimit = 1_000_000;
 const brandIconPngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const brandIconJpegStart = Buffer.from([0xff, 0xd8, 0xff]);
 const brandIconJpegEnd = Buffer.from([0xff, 0xd9]);
+const brandIconJpegFrameMarkers = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
 
 function defaultConnectionProtocol() {
   return config.nodeEnv === 'production' ? 'https' : 'http';
@@ -116,36 +118,72 @@ function parseUserLimit(value) {
   return value;
 }
 
-function platformIconBytesMatchType(type, bytes) {
+function platformIconDimensions(type, bytes) {
   if (type === 'png') {
     if (bytes.length < 45
       || !bytes.subarray(0, brandIconPngSignature.length).equals(brandIconPngSignature)
       || bytes.readUInt32BE(8) !== 13
       || bytes.toString('ascii', 12, 16) !== 'IHDR'
       || bytes.readUInt32BE(16) === 0
-      || bytes.readUInt32BE(20) === 0) return false;
+      || bytes.readUInt32BE(20) === 0) return null;
     const trailer = bytes.subarray(bytes.length - 12);
-    return trailer.readUInt32BE(0) === 0 && trailer.toString('ascii', 4, 8) === 'IEND';
+    if (trailer.readUInt32BE(0) !== 0 || trailer.toString('ascii', 4, 8) !== 'IEND') return null;
+    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
   }
   if (type === 'jpeg') {
-    return bytes.length >= 5 && bytes.subarray(0, 3).equals(brandIconJpegStart)
-      && bytes.lastIndexOf(brandIconJpegEnd) >= Math.max(0, bytes.length - 4096);
+    if (bytes.length < 5 || !bytes.subarray(0, 3).equals(brandIconJpegStart)
+      || bytes.lastIndexOf(brandIconJpegEnd) < Math.max(0, bytes.length - 4096)) return null;
+    let offset = 2;
+    while (offset < bytes.length) {
+      if (bytes[offset] !== 0xff) return null;
+      while (bytes[offset] === 0xff) offset += 1;
+      if (offset >= bytes.length) return null;
+      const marker = bytes[offset++];
+      if (marker === 0x00 || marker === 0xd9 || marker === 0xda) return null;
+      if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) continue;
+      if (offset + 2 > bytes.length) return null;
+      const segmentLength = bytes.readUInt16BE(offset);
+      if (segmentLength < 2 || offset + segmentLength > bytes.length) return null;
+      if (brandIconJpegFrameMarkers.has(marker)) {
+        if (segmentLength < 8) return null;
+        const componentCount = bytes[offset + 7];
+        if (componentCount < 1 || segmentLength < 8 + componentCount * 3) return null;
+        const height = bytes.readUInt16BE(offset + 3);
+        const width = bytes.readUInt16BE(offset + 5);
+        return width > 0 && height > 0 ? { width, height } : null;
+      }
+      offset += segmentLength;
+    }
+    return null;
   }
   if (type === 'webp') {
     if (bytes.length < 20 || bytes.toString('ascii', 0, 4) !== 'RIFF'
-      || bytes.toString('ascii', 8, 12) !== 'WEBP') return false;
+      || bytes.toString('ascii', 8, 12) !== 'WEBP') return null;
     const riffSize = bytes.readUInt32LE(4);
     const riffEnd = riffSize + 8;
     const firstChunkType = bytes.toString('ascii', 12, 16);
     const firstChunkSize = bytes.readUInt32LE(16);
     const paddedChunkSize = firstChunkSize + (firstChunkSize % 2);
-    return riffSize >= 12 && riffSize % 2 === 0 && riffEnd <= bytes.length
+    if (!(riffSize >= 12 && riffSize % 2 === 0 && riffEnd <= bytes.length
       && ['VP8 ', 'VP8L', 'VP8X'].includes(firstChunkType)
       && firstChunkSize > 0
       && (firstChunkType !== 'VP8X' || firstChunkSize === 10)
-      && 20 + paddedChunkSize <= riffEnd;
+      && 20 + paddedChunkSize <= riffEnd)) return null;
+    if (firstChunkType === 'VP8X') {
+      return { width: bytes.readUIntLE(24, 3) + 1, height: bytes.readUIntLE(27, 3) + 1 };
+    }
+    if (firstChunkType === 'VP8L') {
+      if (firstChunkSize < 5 || bytes[20] !== 0x2f) return null;
+      const width = 1 + (((bytes[22] & 0x3f) << 8) | bytes[21]);
+      const height = 1 + (((bytes[24] & 0x0f) << 10) | (bytes[23] << 2) | ((bytes[22] & 0xc0) >> 6));
+      return { width, height };
+    }
+    if (firstChunkSize < 10 || bytes[23] !== 0x9d || bytes[24] !== 0x01 || bytes[25] !== 0x2a) return null;
+    const width = bytes.readUInt16LE(26) & 0x3fff;
+    const height = bytes.readUInt16LE(28) & 0x3fff;
+    return width > 0 && height > 0 ? { width, height } : null;
   }
-  return false;
+  return null;
 }
 
 function parsePlatformIcon(value) {
@@ -159,8 +197,12 @@ function parsePlatformIcon(value) {
   if (bytes.length === 0 || bytes.length > maxBrandIconBytes || bytes.toString('base64') !== match[2]) {
     fail(400, 'The platform icon must be a valid image no larger than 512 KB.', 'invalid_platform_icon');
   }
-  if (!platformIconBytesMatchType(match[1], bytes)) {
+  const dimensions = platformIconDimensions(match[1], bytes);
+  if (!dimensions) {
     fail(400, 'The selected file does not match a supported image format.', 'invalid_platform_icon');
+  }
+  if (dimensions.width > maxBrandIconDimension || dimensions.height > maxBrandIconDimension) {
+    fail(400, 'The platform icon dimensions must be 1024 × 1024 pixels or smaller.', 'invalid_platform_icon');
   }
   return value;
 }

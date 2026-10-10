@@ -92,7 +92,7 @@ export function PlatformIconPicker({ value, onChange }: { value: string | null; 
     <div className="platform-icon-preview"><ImageWithFallback src={value} className="platform-icon-preview-image" alt="Platform icon preview" fallback={<BookOpen size={23} />} onError={() => setError('The selected image could not be displayed. Try a different image.')} /></div>
     <div className="platform-icon-controls">
       <strong>Platform icon</strong>
-      <span id={iconHelpId} className="muted">PNG, JPG, or WebP · up to 512 KB</span>
+      <span id={iconHelpId} className="muted">PNG, JPG, or WebP · up to 512 KB · 1024 × 1024 px max</span>
       <div className="platform-icon-actions">
         <label className="button button-secondary platform-icon-upload"><ImagePlus size={16} />Upload icon<input type="file" accept="image/png,image/jpeg,image/webp" aria-describedby={iconHelpId} onChange={selectFile} /></label>
         {value && <button type="button" className="button button-quiet platform-icon-remove" onClick={() => { readSequenceRef.current += 1; setError(''); onChange(null); }}><X size={15} />Remove</button>}

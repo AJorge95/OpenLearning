@@ -23,6 +23,7 @@ function identifierExpression(attribute) {
 
 function iconHintBinding(component) {
   let hintId = '';
+  let hintText = '';
   let inputDescription = '';
   function visit(node) {
     if (ts.isJsxElement(node)) {
@@ -30,6 +31,7 @@ function iconHintBinding(component) {
       const classValue = className?.initializer && ts.isStringLiteral(className.initializer) ? className.initializer.text : '';
       if (classValue === 'muted' && node.children.some((child) => ts.isJsxText(child) && child.text.includes('512 KB'))) {
         hintId = identifierExpression(jsxAttribute(node.openingElement, 'id'));
+        hintText = node.children.filter(ts.isJsxText).map((child) => child.text.trim()).join('');
       }
       node.children.forEach(visit);
       return;
@@ -44,7 +46,7 @@ function iconHintBinding(component) {
     ts.forEachChild(node, visit);
   }
   visit(component);
-  return { hintId, inputDescription };
+  return { hintId, hintText, inputDescription };
 }
 
 test('platform icon file input exposes its format and size guidance as a description', () => {
@@ -53,5 +55,6 @@ test('platform icon file input exposes its format and size guidance as a descrip
   assert.ok(component, 'PlatformIconPicker should exist');
   const binding = iconHintBinding(component);
   assert.ok(binding.hintId, 'the visible icon hint should have an id');
+  assert.equal(binding.hintText, 'PNG, JPG, or WebP · up to 512 KB · 1024 × 1024 px max');
   assert.equal(binding.inputDescription, binding.hintId);
 });

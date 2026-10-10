@@ -299,7 +299,7 @@ test('platform setting changes roll back when their required audit entry cannot 
     WHERE action = 'platform.settings_updated'`).get().count, originalAuditCount + 1);
 });
 
-test('platform settings reject truncated icons even when their first bytes match the declared image type', async () => {
+test('platform settings reject truncated and oversized icons without changing branding or audit history', async () => {
   const settingValue = (key) => database.prepare('SELECT value FROM app_settings WHERE key = ?').get(key)?.value ?? null;
   const originalName = settingValue('platform_name');
   const originalIcon = settingValue('platform_icon');
@@ -310,13 +310,32 @@ test('platform settings reject truncated icons even when their first bytes match
   truncatedWebp.write('RIFF', 0, 'ascii');
   truncatedWebp.writeUInt32LE(4, 4);
   truncatedWebp.write('WEBP', 8, 'ascii');
-  const malformedIcons = [
+  const oversizedPng = Buffer.alloc(45);
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(oversizedPng);
+  oversizedPng.writeUInt32BE(13, 8);
+  oversizedPng.write('IHDR', 12, 'ascii');
+  oversizedPng.writeUInt32BE(1025, 16);
+  oversizedPng.writeUInt32BE(1, 20);
+  oversizedPng.writeUInt32BE(0, 33);
+  oversizedPng.write('IEND', 37, 'ascii');
+  const oversizedJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 4, 1, 1, 0x11, 0, 0xff, 0xd9]);
+  const oversizedWebp = Buffer.alloc(30);
+  oversizedWebp.write('RIFF', 0, 'ascii');
+  oversizedWebp.writeUInt32LE(22, 4);
+  oversizedWebp.write('WEBP', 8, 'ascii');
+  oversizedWebp.write('VP8X', 12, 'ascii');
+  oversizedWebp.writeUInt32LE(10, 16);
+  oversizedWebp.writeUIntLE(1024, 24, 3);
+  const invalidIcons = [
     ['png', Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])],
     ['jpeg', Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
     ['webp', truncatedWebp],
+    ['png', oversizedPng],
+    ['jpeg', oversizedJpeg],
+    ['webp', oversizedWebp],
   ];
 
-  for (const [type, bytes] of malformedIcons) {
+  for (const [type, bytes] of invalidIcons) {
     const response = await fetch(apiUrl('/admin/settings'), {
       method: 'PUT',
       headers: { 'content-type': 'application/json', connection: 'close' },
