@@ -273,6 +273,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .account-control-row .app-select { width: 100%; max-width: 240px; }
 .account-role-control > .app-select { width: 100%; max-width: 100%; }
 .account-role-control { pointer-events: none; }
+.account-role-control > label { pointer-events: auto; cursor: pointer; }
 .account-role-control .app-select-trigger { pointer-events: auto; }
 .account-password-form { gap: 12px; }
 .account-password-form label { font-size: 11px; }
