@@ -112,6 +112,51 @@ after(() => {
   }
 });
 
+test('reset preparation drains active requests and blocks new API and media requests', async () => {
+  const listeners = new Map();
+  const activeResponse = {
+    once(event, callback) { listeners.set(event, callback); return this; },
+  };
+  let activeRequestContinued = false;
+  reset.platformResetGate({ path: '/api/courses' }, activeResponse, () => { activeRequestContinued = true; });
+  assert.equal(activeRequestContinued, true);
+
+  let preparationSettled = false;
+  const preparation = reset.preparePlatformReset(actor).then((state) => {
+    preparationSettled = true;
+    return state;
+  });
+  try {
+    await Promise.resolve();
+    assert.equal(preparationSettled, false);
+    assert.equal(reset.getPlatformResetStatus(actor.id).phase, 'preparing');
+
+    for (const pathname of ['/api/courses', '/media/course/video.mp4']) {
+      let continued = false;
+      const blockedResponse = {
+        statusCode: 200,
+        payload: null,
+        status(code) { this.statusCode = code; return this; },
+        json(payload) { this.payload = payload; return this; },
+      };
+      reset.platformResetGate({ path: pathname }, blockedResponse, () => { continued = true; });
+      assert.equal(continued, false);
+      assert.equal(blockedResponse.statusCode, 503);
+      assert.equal(blockedResponse.payload.code, 'platform_reset_in_progress');
+    }
+
+    listeners.get('finish')();
+    const prepared = await preparation;
+    assert.equal(prepared.phase, 'ready');
+    reset.cancelPlatformReset(actor, prepared.confirmationId);
+  } finally {
+    listeners.get('finish')?.();
+    await preparation.catch(() => null);
+    const state = reset.getPlatformResetStatus(actor.id);
+    if (state.phase === 'ready') reset.cancelPlatformReset(actor, state.confirmationId);
+  }
+});
+
 test('reset preparation verifies a restorable backup and cancellation preserves platform data', async () => {
   const prepared = await reset.preparePlatformReset(actor);
   assert.equal(prepared.pending, true);
