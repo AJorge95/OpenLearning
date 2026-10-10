@@ -585,9 +585,21 @@ test('learning-path state synchronization reuses completed course summaries for 
   }
 
   let singleCourseSummaryReads = 0;
+  let existingStateJoinQueries = 0;
+  let repeatedStateInitializationQueries = 0;
+  const repeatedStateInitializationPatterns = [
+    'SELECT logical_course_id FROM courses WHERE id = ?',
+    'SELECT completion_window_days FROM courses WHERE id = ?',
+    'SELECT id, logical_course_id FROM courses WHERE id = ?',
+    'FROM course_versions v JOIN courses c ON c.id = v.storage_course_id',
+    'INSERT OR IGNORE INTO course_learning_state',
+    'SELECT * FROM course_learning_state WHERE user_id = ? AND course_id = ?',
+  ];
   const originalPrepare = database.prepare;
   database.prepare = (sql) => {
     if (sql.includes('SELECT * FROM courses WHERE id IN (?)')) singleCourseSummaryReads += 1;
+    if (sql.includes('FROM courses c LEFT JOIN course_learning_state s')) existingStateJoinQueries += 1;
+    if (repeatedStateInitializationPatterns.some((pattern) => sql.includes(pattern))) repeatedStateInitializationQueries += 1;
     return originalPrepare.call(database, sql);
   };
   try {
@@ -599,6 +611,8 @@ test('learning-path state synchronization reuses completed course summaries for 
   }
 
   assert.equal(singleCourseSummaryReads, 0);
+  assert.equal(existingStateJoinQueries, courseIds.length);
+  assert.equal(repeatedStateInitializationQueries, 0);
 });
 
 test('learning-path synchronization refreshes progress when a new state requires recompletion', () => {
