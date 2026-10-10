@@ -117,3 +117,41 @@ test('does not construct or send an upload when its signal is already aborted', 
   assert.equal(formDataConstructed, false);
   assert.equal(xhrConstructed, false);
 });
+
+test('does not construct a multipart body if cancelled while fetching the CSRF token', async (t) => {
+  restoreFetch(t);
+  const originalFormData = globalThis.FormData;
+  const originalXhr = globalThis.XMLHttpRequest;
+  let resolveCsrfResponse;
+  let fetchRequests = 0;
+  let formDataConstructed = false;
+  let xhrConstructed = false;
+  const csrfResponse = new Promise((resolve) => { resolveCsrfResponse = resolve; });
+  globalThis.fetch = async () => {
+    fetchRequests += 1;
+    return csrfResponse;
+  };
+  globalThis.FormData = class {
+    constructor() { formDataConstructed = true; }
+    append() {}
+  };
+  globalThis.XMLHttpRequest = class {
+    constructor() { xhrConstructed = true; }
+  };
+  t.after(() => {
+    globalThis.FormData = originalFormData;
+    if (originalXhr === undefined) delete globalThis.XMLHttpRequest;
+    else globalThis.XMLHttpRequest = originalXhr;
+  });
+
+  const controller = new AbortController();
+  const upload = api.upload('/api/upload', {}, new Blob(['test']), () => {}, { signal: controller.signal });
+  assert.equal(fetchRequests, 1);
+  controller.abort();
+  resolveCsrfResponse(jsonResponse({ token: 'unused-token' }));
+
+  await assert.rejects(upload, (error) => error.name === 'AbortError');
+  assert.equal(fetchRequests, 1);
+  assert.equal(formDataConstructed, false);
+  assert.equal(xhrConstructed, false);
+});
