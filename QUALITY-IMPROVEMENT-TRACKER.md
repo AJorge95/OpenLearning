@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Recheck learner calendar date boundaries
+
+- **Reviewed:** The authenticated calendar endpoint, date parsing, inclusive range bounds, published-course and private-access filters, and its existing route coverage.
+- **Result:** No code change. The endpoint rejects impossible dates and reversed or overwide ranges, caps requests at 62 days, uses bound range parameters and the deadline index, includes deadlines on the final date, and filters private courses through current access.
+- **Why no change:** The inspected behavior already covers the relevant boundary, query, and access cases; no separate calendar defect was present.
+- **Checked:** Compared `server/routes-programs.js` with the calendar cases in `server/course-analytics.test.js`, including invalid leap days, the maximum range, final-day inclusion, query planning, version-aware completion, and revoked private access. The full suite still reports three failures associated with separate uncommitted backend edits; no calendar files were changed.
+
 ## 2026-10-10 — Match form select names to visible labels
 
 - **Reviewed:** Shared `AppSelect` field containers, their visible labels and accessible names, the registration-field editor, and the repeated account-role hit-area report.
