@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse course states across overlapping learning paths
+
+- **Reviewed:** Learner completion sync when a course appears in several enrolled paths, and the joined learning-state lookup performed for each unlocked course.
+- **Improvement:** Pass all affected path IDs through one sync call and reuse each learner/course state lookup for the duration of that call.
+- **Why it helps:** Completing a shared course no longer repeats the same state query once per path, while each path still evaluates its own prerequisite order and newly created recompletion state.
+- **Interface review:** No visible change; the existing unlocked-course and progress behavior remains intact.
+- **Checked:** A two-path regression with three shared completed courses now performs three state joins instead of six; the required-recompletion regression also passed. Full `npm test` passed all 250 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Combine learner reaction counts and state lookup
 
 - **Reviewed:** Lesson feedback reads and reaction updates, which separately loaded per-lesson reaction totals and the current learner’s selected reaction.

@@ -64,7 +64,7 @@ function syncLearnerPathsForCourse(courseId, userId) {
   const paths = db.prepare(`SELECT DISTINCT e.path_id FROM learning_path_enrollments e
     JOIN learning_path_courses pc ON pc.path_id = e.path_id
     WHERE e.user_id = ? AND pc.course_id = ?`).all(userId, logicalId);
-  for (const path of paths) syncUnlockedPathStates(path.path_id, userId);
+  syncUnlockedPathStates(paths.map((path) => path.path_id), userId);
 }
 
 async function removeCourseMediaFile(courseId, fileName, message, details = {}) {
