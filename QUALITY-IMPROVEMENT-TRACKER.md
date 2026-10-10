@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Keep editor navigation available during settings integration
+
+- **Reviewed:** The uncommitted platform-reset settings integration, its server request gate and backup/rollback flow, and the existing course-editor navigation handlers.
+- **Improvement:** Restored `useNavigate()` to `CourseEditorPage`, where course creation and deletion call it, and removed the unused hook from `AdminSettingsPage`. This reconciles the pending settings work with the existing editor behavior without staging the reset feature.
+- **Why it helps:** TypeScript can check the combined working tree again, and course-editor navigation remains available after create/delete actions.
+- **Interface review:** The pending reset panel retains a labelled section, a live preparation status, explicit backup details, and stacked mobile actions. No reset or confirmation action was invoked.
+- **Checked:** `npx tsc --noEmit`, full `npm test` (248 tests), `npm run build`, and `git diff --check` passed. Only this tracker note is included in the commit; reset implementation files remain uncommitted user work.
+
 ## 2026-10-10 — Avoid repeated initialization work for existing learner states
 
 - **Reviewed:** Learning-path enrollment and assignment synchronization, which rechecks each unlocked course state for every learner even when that state already exists.
