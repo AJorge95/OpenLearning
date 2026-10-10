@@ -13,6 +13,7 @@ import { canonicalCaptionLanguageTag, captionFileSizeError, captionLanguageError
 import { courseEditingNote } from './course-editing-note';
 import { firstQuizTextIssue } from './quiz-validation';
 import { lessonResourceUrlError } from './resource-validation';
+import { getPasswordConfirmationError } from './password-confirmation';
 import { userListEmptyMessage } from './user-list-empty-state';
 import type { UserRoleFilter } from './user-list-empty-state';
 import type { Competency, Course, CourseAccessUser, CourseAnalytics, CourseModule, CourseVersion, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
@@ -1554,6 +1555,8 @@ export function AdminUsersPage() {
     event.preventDefault();
     const user = resetUser;
     if (!user || savingIdsRef.current.has(user.id)) return;
+    const confirmationError = getPasswordConfirmationError(newPassword, confirmPassword);
+    if (confirmationError) { setError(confirmationError); return; }
     markSaving(user.id, true); setError(''); setSuccess('');
     try {
       await api.put(`/api/admin/users/${user.id}/password`, { password: newPassword, confirmPassword });
@@ -1611,6 +1614,8 @@ export function AdminUserCreatePage() {
   async function createAccount(event: React.FormEvent) {
     event.preventDefault();
     if (saving) return;
+    const confirmationError = getPasswordConfirmationError(password, confirmPassword);
+    if (confirmationError) { setError(confirmationError); return; }
     setSaving(true); setError('');
     try {
       const response = await api.post<{ user: User }>('/api/admin/users', { email, firstName, lastName, username, role, password, confirmPassword });
@@ -1741,6 +1746,8 @@ export function AdminUserDetailsPage() {
   async function resetPassword(event: React.FormEvent) {
     event.preventDefault();
     if (!account || saving) return;
+    const confirmationError = getPasswordConfirmationError(password, confirmPassword);
+    if (confirmationError) { setError(confirmationError); setSuccess(''); return; }
     const requestedUserId = account.user.id;
     const requestedUsername = account.user.username;
     const actionSequence = ++actionSequenceRef.current;

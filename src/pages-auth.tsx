@@ -4,6 +4,7 @@ import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
 import { AppSelect, Button, ImageWithFallback, PalettePicker, PlatformBrand, PlatformIconPicker } from './components';
 import { findMissingRequiredRegistrationField } from './registration-fields';
+import { getPasswordConfirmationError } from './password-confirmation';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import type { RegistrationField, RegistrationFieldValues } from './types';
@@ -106,8 +107,9 @@ export function SetupPage() {
       setError('Platform name must be between 2 and 80 characters.');
       return;
     }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+    const confirmationError = getPasswordConfirmationError(password, confirmPassword);
+    if (confirmationError) {
+      setError(confirmationError);
       return;
     }
     setPlatformName(normalizedPlatformName);
@@ -261,6 +263,11 @@ export function RegisterPage() {
       window.requestAnimationFrame(() => document.getElementById(`registration-field-${missingField.id}`)?.focus());
       return;
     }
+    const confirmationError = getPasswordConfirmationError(password, confirmPassword);
+    if (confirmationError) {
+      setError(confirmationError);
+      return;
+    }
     if (!acquireSubmissionLock(submissionInFlightRef)) return;
     setSaving(true);
     try { await signUp(email, firstName, lastName, username, password, confirmPassword, registrationFieldValues); navigate('/courses'); }
@@ -326,6 +333,12 @@ export function AccountSecurityPage() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    const confirmationError = getPasswordConfirmationError(password, confirmPassword);
+    if (confirmationError) {
+      setError(confirmationError);
+      setMessage('');
+      return;
+    }
     if (!acquireSubmissionLock(passwordSubmissionInFlightRef)) return;
     setError(''); setMessage(''); setSaving(true);
     try {
