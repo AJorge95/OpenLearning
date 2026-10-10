@@ -269,6 +269,29 @@ test('analytics count each eligible learner once and report course-wide completi
   assert.equal(result.learners.some((learner) => learner.id === 'learner-unassigned'), false);
 });
 
+test('course list exposes the current review status for unpublished revisions', async () => {
+  const courseId = 'course-review-list';
+  try {
+    database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES (?, 'Review list course', 'published', 'admin-1', 'admin-1')`).run(courseId);
+    database.prepare(`INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+      VALUES ('version-review-list', ?, ?, 1, 'admin-1')`).run(courseId, courseId);
+    assert.ok(editableCourse(courseId, { id: 'admin-1' }));
+
+    for (const reviewStatus of ['draft', 'in_review', 'changes_requested']) {
+      database.prepare('UPDATE course_revisions SET review_status = ? WHERE course_id = ?').run(reviewStatus, courseId);
+      const response = await fetch(apiUrl('/manage/courses?status=all'), { headers: userHeaders('admin-1') });
+      assert.equal(response.status, 200);
+      const result = await response.json();
+      const course = result.courses.find((item) => item.id === courseId);
+      assert.equal(course?.hasUnpublishedChanges, true);
+      assert.equal(course?.reviewStatus, reviewStatus);
+    }
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('course analytics eligibility reads course memberships before learner accounts', () => {
   const plan = database.prepare(`EXPLAIN QUERY PLAN SELECT u.id, u.username, u.disabled FROM (
     SELECT user_id AS id FROM enrollments WHERE course_id = ?

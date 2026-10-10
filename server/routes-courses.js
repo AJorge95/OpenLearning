@@ -232,7 +232,7 @@ courseRouter.get('/manage/courses', requireStaff, (req, res) => {
   const { page, pageSize, offset } = paginationWindow(total, req.query.page, 50);
   const rows = db.prepare(`
     SELECT c.*, u.username AS owner,
-      revision.revision_course_id,
+      revision.revision_course_id, revision.review_status,
       draft.title AS draft_title, draft.description AS draft_description, draft.category AS draft_category,
       draft.visibility AS draft_visibility, draft.cover_media_id AS draft_cover_media_id,
       draft.updated_at AS draft_updated_at
@@ -252,6 +252,7 @@ courseRouter.get('/manage/courses', requireStaff, (req, res) => {
       coverUrl: row.draft_cover_media_id ? `/media/${row.draft_cover_media_id}` : null,
       updatedAt: row.draft_updated_at,
       hasUnpublishedChanges: true,
+      reviewStatus: row.review_status || 'draft',
     };
   });
   res.json({ courses, total, page, pageSize });

@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Show course revision review state in the course list
+
+- **Reviewed:** The course list’s unpublished-change badge, the revision review workflow, existing review status types, and the current course list API payload.
+- **Improvement:** Include the revision’s review status in the staff course list and label its badge as “Draft changes”, “In review”, or “Changes requested”.
+- **Why it helps:** Staff can see whether a published course revision is awaiting review or needs edits without opening each course.
+- **Checked:** The course analytics/list suite passed all 58 cases, including the new three-state API regression. `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The authenticated `/manage/courses` Chrome tab rendered the existing unpublished revision as “Draft changes”. Browser-plugin and Playwright tooling were unavailable, so screenshot, console, and interaction checks were not run.
+
 ## 2026-10-10 — Validate WebP cover RIFF chunk bounds
 
 - **Reviewed:** WebP cover upload signatures and rejection cleanup, plus the reported administrator role-selector hit area.
