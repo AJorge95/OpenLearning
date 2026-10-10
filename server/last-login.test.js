@@ -26,6 +26,7 @@ let database;
 let migrateDatabase;
 let server;
 let sessionStore;
+let httpErrorHandler;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -61,7 +62,7 @@ before(async () => {
   ({ db: database, migrateDatabase } = await import('./db.js'));
   const { authRouter } = await import('./routes-auth.js');
   const { adminRouter } = await import('./routes-admin.js');
-  const { errorHandler } = await import('./http.js');
+  ({ errorHandler: httpErrorHandler } = await import('./http.js'));
 
   const app = express();
   app.use(express.json());
@@ -74,7 +75,7 @@ before(async () => {
   });
   app.use('/api', authRouter);
   app.use('/api/admin', adminRouter);
-  app.use(errorHandler);
+  app.use(httpErrorHandler);
   server = createServer(app);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -107,6 +108,49 @@ function storedSessionIds() {
     else resolve(Object.keys(sessions || {}).sort());
   }));
 }
+
+test('JSON parser failures return structured client errors', async () => {
+  const app = express();
+  app.use(express.json({ limit: '1mb' }));
+  app.post('/api/request-body-test', (_req, res) => res.json({ accepted: true }));
+  app.use(httpErrorHandler);
+
+  const parserServer = createServer(app);
+  parserServer.listen(0, '127.0.0.1');
+  await once(parserServer, 'listening');
+  const address = parserServer.address();
+  assert(address && typeof address !== 'string');
+  const url = `http://127.0.0.1:${address.port}/api/request-body-test`;
+
+  try {
+    const malformedResponse = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"value":',
+    });
+    assert.equal(malformedResponse.status, 400);
+    assert.deepEqual(await malformedResponse.json(), {
+      error: 'Request body contains invalid JSON.',
+      code: 'invalid_json',
+    });
+
+    const oversizedResponse = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: 'x'.repeat(1_048_576) }),
+    });
+    assert.equal(oversizedResponse.status, 413);
+    assert.deepEqual(await oversizedResponse.json(), {
+      error: 'Request body is too large.',
+      code: 'payload_too_large',
+    });
+  } finally {
+    const closed = once(parserServer, 'close');
+    parserServer.close();
+    parserServer.closeAllConnections();
+    await closed;
+  }
+});
 
 test('migrations 16 to 31 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
   const migrationDb = new Database(':memory:');

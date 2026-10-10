@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Protect structured request-body error responses
+
+- **Reviewed:** Express JSON parsing and error mapping, the production 1 MB body limit, the shared client `ApiError` parser, and form-level error display.
+- **Improvement:** Add an isolated HTTP regression covering malformed JSON (`400 invalid_json`) and an oversized JSON body (`413 payload_too_large`) through the real parser and error middleware.
+- **Why it helps:** Clients keep receiving stable, actionable API errors instead of Express defaults or parser internals if the request middleware changes.
+- **Interface review:** The shared API client already maps these JSON bodies to `ApiError`; existing forms display the message. No markup change was needed.
+- **Checked:** `node --test server/last-login.test.js` passed all 9 tests; full `npm test` passed all 206 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The HTTP fixture uses a temporary isolated database and does not write application data.
+
 ## 2026-10-10 — Preserve the setup mark when an uploaded icon cannot decode
 
 - **Reviewed:** The setup wizard's platform mark, the icon picker's decode-error handling, the shared `ImageWithFallback` component, and server-side icon validation.
