@@ -1692,6 +1692,69 @@ test('calendar hides private course deadlines after access is revoked', async ()
   assert.deepEqual(await calendarItems(), []);
 });
 
+test('calendar path access caches completion checks shared by private deadlines', async () => {
+  const learnerId = 'learner-calendar-path-cache';
+  const courseIds = ['calendar-path-prerequisite', 'calendar-path-target-one', 'calendar-path-target-two'];
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
+    VALUES (?, 'calendar_path_cache', 'calendar-path-cache@example.invalid', 'not-used', 'learner', 0)`).run(learnerId);
+
+  const insertCourse = database.prepare(`INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+    VALUES (?, ?, ?, 'published', 'admin-1', 'admin-1')`);
+  const insertModule = database.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, 0)');
+  const insertLesson = database.prepare('INSERT INTO lessons (id, module_id, title, position) VALUES (?, ?, ?, 0)');
+  const insertProgress = database.prepare('INSERT INTO lesson_progress (user_id, lesson_id, completed_at) VALUES (?, ?, CURRENT_TIMESTAMP)');
+  courseIds.forEach((courseId, index) => {
+    insertCourse.run(courseId, `Calendar path course ${index}`, index === 0 ? 'public' : 'private');
+    const moduleId = `${courseId}-module`;
+    const lessonId = `${courseId}-lesson`;
+    insertModule.run(moduleId, courseId, `Module ${index}`);
+    insertLesson.run(lessonId, moduleId, `Lesson ${index}`);
+    insertProgress.run(learnerId, lessonId);
+  });
+
+  database.exec(`
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('calendar-path-cache', 'Calendar path cache', 'published', 0, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+      ('calendar-path-cache-step-one', 'calendar-path-cache', 'calendar-path-prerequisite', 0, 0),
+      ('calendar-path-cache-step-two', 'calendar-path-cache', 'calendar-path-target-one', 1, 1),
+      ('calendar-path-cache-step-three', 'calendar-path-cache', 'calendar-path-target-two', 2, 1);
+    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by)
+      VALUES ('calendar-path-cache-enrollment', 'calendar-path-cache', 'learner-calendar-path-cache', 'assigned', 'admin-1');
+    INSERT INTO course_learning_state (user_id, course_id, deadline_at, started_at) VALUES
+      ('learner-calendar-path-cache', 'calendar-path-target-one', '2099-01-01T00:00:00.000Z', CURRENT_TIMESTAMP),
+      ('learner-calendar-path-cache', 'calendar-path-target-two', '2099-01-01T00:00:00.000Z', CURRENT_TIMESTAMP);
+  `);
+
+  const originalPrepare = database.prepare;
+  let prerequisiteHistoryReads = 0;
+  database.prepare = (sql) => {
+    if (sql.includes('FROM lesson_progress p') && sql.includes('c.id = ? OR c.logical_course_id = ?')) {
+      prerequisiteHistoryReads += 1;
+    }
+    return originalPrepare.call(database, sql);
+  };
+  let response;
+  try {
+    response = await fetch(apiUrl('/calendar?from=2099-01-01&to=2099-01-01'), {
+      headers: userHeaders(learnerId),
+    });
+  } finally {
+    delete database.prepare;
+  }
+
+  try {
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).items.map((item) => item.courseId), courseIds.slice(1));
+    assert.equal(prerequisiteHistoryReads, 2,
+      `Expected shared path completion history to be read once per prerequisite course, got ${prerequisiteHistoryReads} reads.`);
+  } finally {
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run('calendar-path-cache');
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?, ?)').run(...courseIds);
+    database.prepare('DELETE FROM users WHERE id = ?').run(learnerId);
+  }
+});
+
 test('course access learner search matches email and remains limited to learners', async () => {
   const response = await fetch(apiUrl(`/manage/courses/course-analytics/access?q=${encodeURIComponent('UNASSIGNED@EXAMPLE.INVALID')}`), {
     headers: userHeaders('admin-1'),

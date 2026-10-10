@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
-import { canViewCourse, createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireObjectBody, requireStaff } from './http.js';
+import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireObjectBody, requireStaff } from './http.js';
 import { courseSummaries, courseSummary, ensureCourseLearningState } from './course-service.js';
 import { courseVersionHistory, logicalCourseId, publishRevision, restoreCourseVersion } from './course-versioning.js';
 import { writeAuditLog } from './log-store.js';
@@ -381,7 +381,8 @@ programsRouter.get('/calendar', (req, res) => {
     FROM course_learning_state s JOIN courses c ON c.id = s.course_id
     WHERE s.user_id = ? AND s.deadline_at >= ? AND s.deadline_at < ?
       AND c.status = 'published' ORDER BY s.deadline_at, c.title COLLATE NOCASE`).all(req.currentUser.id, from, endExclusive);
-  const visibleItems = items.filter((item) => item.visibility === 'public' || canViewCourse(item, req.currentUser));
+  const canView = createCourseAccessChecker(req.currentUser);
+  const visibleItems = items.filter((item) => item.visibility === 'public' || canView(item));
   const summaries = courseSummaries(visibleItems, req.currentUser);
   const now = Date.now();
   res.json({ items: visibleItems.map((item, index) => {
