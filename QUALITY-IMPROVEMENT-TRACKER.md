@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Allow the document shell to fit narrow phone viewports
+
+- **Reviewed:** The 320px course-editor render and the global `html` and `body` minimum-width rules.
+- **Improvement:** Remove the fixed 320px minimum from the document shell so it can shrink to the usable viewport width.
+- **Why it helps:** Browsers with a classic vertical scrollbar can use less than 320px of content width at a 320px viewport; the page no longer adds horizontal scrolling to preserve the larger minimum.
+- **Interface review:** At 320px, the usable width was 305px and the document, body, and editor grid all measured 305px or less. The 360px and 390px layouts also remained within the viewport, with no browser warnings or errors.
+- **Checked:** The focused responsive-viewport regression passed (1/1); full `npm test` passed all 261 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered checks used the in-app browser at 320×900, 360×900, and 390×900.
+
 ## 2026-10-10 — Reuse course summary progress in detail payloads
 
 - **Reviewed:** Published course detail assembly, which loaded lesson and quiz history, learning state, and active content again after calculating the summary.
