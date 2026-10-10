@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Announce lesson document formats to screen readers
+
+- **Reviewed:** Lesson document upload guidance, its accepted file extensions, the file input's label, and the adjacent caption upload's accessible description pattern.
+- **Improvement:** Give the visible document-format hint a `useId()` value and reference it from the document input with `aria-describedby`.
+- **Why it helps:** Screen-reader users hear the supported document formats when they focus the upload control, just as they do for lesson captions and course covers.
+- **Interface review:** The “Attach a document” guidance and “Choose document” button remain visually unchanged; the relationship adds no layout changes.
+- **Checked:** The focused accessibility test passed and confirms the input references the visible format hint. Full `npm test` passed all 230 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The signed-in local lesson editor rendered the hint beside its upload control at 1999 × 1244.
+
 ## 2026-10-10 — Announce course cover limits to screen readers
 
 - **Reviewed:** The course editor's visible cover-format and dimension hint, its file-input label, and the existing accessible descriptions for platform icons and lesson captions.
