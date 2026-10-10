@@ -1882,6 +1882,122 @@ test('course updates roll back when their audit entry cannot be saved', async ()
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.updated' AND entity_id = 'course-update-audit'").get().count, 1);
 });
 
+test('course management keeps draft edits and published versions under one visible course identity', async () => {
+  const titlePrefix = 'Identity flow regression';
+  let courseId = '';
+  try {
+    const createResponse = await fetch(apiUrl('/manage/courses'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: `${titlePrefix} initial`, description: '', category: 'General', visibility: 'public' }),
+    });
+    assert.equal(createResponse.status, 201);
+    courseId = (await createResponse.json()).course.id;
+
+    const firstDraftSave = await fetch(apiUrl(`/manage/courses/${courseId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: `${titlePrefix} draft one`, status: 'draft' }),
+    });
+    assert.equal(firstDraftSave.status, 200);
+
+    database.prepare(`INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('module-identity-flow', ?, 'Identity module', 0)`).run(courseId);
+    database.prepare(`INSERT INTO media_files (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+      VALUES ('media-identity-flow', ?, 'identity.mp4', 'identity.mp4', 'video/mp4', 1, 'video')`).run(courseId);
+    database.prepare(`INSERT INTO lessons (id, module_id, title, media_id, position)
+      VALUES ('lesson-identity-flow', 'module-identity-flow', 'Identity lesson', 'media-identity-flow', 0)`).run();
+
+    async function fetchManagedCourses(status, query = titlePrefix) {
+      const params = new URLSearchParams({ q: query });
+      if (status) params.set('status', status);
+      const response = await fetch(apiUrl(`/manage/courses?${params}`), { headers: userHeaders('admin-1') });
+      assert.equal(response.status, 200);
+      return response.json();
+    }
+
+    let result = await fetchManagedCourses('draft');
+    assert.equal(result.total, 1);
+    assert.deepEqual(result.courses.map((course) => course.id), [courseId]);
+    assert.equal(result.courses[0].hasUnpublishedChanges, false);
+
+    const firstPublish = await fetch(apiUrl(`/manage/courses/${courseId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: `${titlePrefix} published one`, status: 'published' }),
+    });
+    assert.equal(firstPublish.status, 200);
+    assert.equal((await firstPublish.json()).course.id, courseId);
+    const firstVersion = database.prepare('SELECT id FROM course_versions WHERE course_id = ? AND version_number = 1').get(courseId);
+    assert.ok(firstVersion?.id);
+
+    let allCourses = await fetchManagedCourses('all');
+    assert.equal(allCourses.total, 1);
+    assert.deepEqual(allCourses.courses.map((course) => course.id), [courseId]);
+
+    const editorLoad = await fetch(apiUrl(`/manage/courses/${courseId}`), { headers: userHeaders('admin-1') });
+    assert.equal(editorLoad.status, 200);
+    assert.equal((await editorLoad.json()).course.id, courseId);
+    const secondDraftSave = await fetch(apiUrl(`/manage/courses/${courseId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: `${titlePrefix} draft two`, status: 'draft' }),
+    });
+    assert.equal(secondDraftSave.status, 200);
+    assert.equal((await secondDraftSave.json()).course.id, courseId);
+
+    for (const status of ['draft', 'published']) {
+      result = await fetchManagedCourses(status);
+      assert.equal(result.total, 1);
+      assert.deepEqual(result.courses.map((course) => course.id), [courseId]);
+      assert.equal(result.courses[0].hasUnpublishedChanges, true);
+      assert.equal(result.courses[0].title, `${titlePrefix} draft two`);
+    }
+    result = await fetchManagedCourses('', `${titlePrefix} draft two`);
+    assert.equal(result.total, 1);
+    assert.deepEqual(result.courses.map((course) => course.id), [courseId]);
+    allCourses = await fetchManagedCourses('all');
+    assert.equal(allCourses.total, 1);
+    assert.deepEqual(allCourses.courses.map((course) => course.id), [courseId]);
+
+    const secondPublish = await fetch(apiUrl(`/manage/courses/${courseId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: `${titlePrefix} published two`, status: 'published' }),
+    });
+    assert.equal(secondPublish.status, 200);
+    assert.equal((await secondPublish.json()).course.id, courseId);
+    assert.deepEqual(database.prepare('SELECT version_number, course_id FROM course_versions WHERE course_id = ? ORDER BY version_number').all(courseId), [
+      { version_number: 1, course_id: courseId },
+      { version_number: 2, course_id: courseId },
+    ]);
+    result = await fetchManagedCourses('published');
+    assert.equal(result.total, 1);
+    assert.deepEqual(result.courses.map((course) => course.id), [courseId]);
+    assert.equal(result.courses[0].hasUnpublishedChanges, false);
+    result = await fetchManagedCourses('draft');
+    assert.equal(result.total, 0);
+
+    const restoreResponse = await fetch(apiUrl(`/manage/courses/${courseId}/versions/${firstVersion.id}/restore`), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(restoreResponse.status, 200);
+    const versions = database.prepare('SELECT version_number, course_id FROM course_versions WHERE course_id = ? ORDER BY version_number').all(courseId);
+    assert.deepEqual(versions, [
+      { version_number: 1, course_id: courseId },
+      { version_number: 2, course_id: courseId },
+      { version_number: 3, course_id: courseId },
+    ]);
+    result = await fetchManagedCourses('published');
+    assert.equal(result.total, 1);
+    assert.deepEqual(result.courses.map((course) => course.id), [courseId]);
+  } finally {
+    if (courseId) database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('course deletion preserves records and media when its audit entry cannot be saved', async () => {
   database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
     VALUES ('course-delete-audit', 'Archived course', 'archived', 'admin-1', 'admin-1')`).run();

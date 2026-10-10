@@ -498,6 +498,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .table-scroll-hint { display: none; }
 .course-table th, .user-table th { height: 49px; padding: 0 16px; color: #5d6372; background: #f9f9fc; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 650; }
 .course-table td, .user-table td { height: 78px; padding: 10px 16px; border-bottom: 1px solid var(--line); color: #3e4352; font-size: 13px; }
+.course-list-status { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .course-table tbody tr:last-child td, .user-table tbody tr:last-child td { border-bottom: 0; }
 .course-table tbody tr:hover, .user-table tbody tr:hover { background: var(--purple-hover-bg); }
 .table-course { display: flex; align-items: center; gap: 13px; min-width: 235px; }

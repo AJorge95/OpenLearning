@@ -208,22 +208,53 @@ courseRouter.get('/my-learning/certificates', (req, res) => {
 courseRouter.get('/manage/courses', requireStaff, (req, res) => {
   const query = textField(req.query.q, 'Search', 120);
   const status = enumQuery(req.query.status, 'course status', ['all', 'draft', 'published', 'archived'], 'all');
-  const clauses = [];
+  const clauses = ['c.logical_course_id IS NULL'];
   const params = [];
-  if (status !== 'all') { clauses.push('c.status = ?'); params.push(status); }
+  if (status === 'draft') {
+    clauses.push(`(c.status = 'draft' OR (c.status = 'published' AND revision.revision_course_id IS NOT NULL))`);
+  } else if (status !== 'all') {
+    clauses.push('c.status = ?');
+    params.push(status);
+  }
   if (query) {
-    const search = textSearchPredicate(['c.title', 'c.description', 'c.category'], query);
+    const search = textSearchPredicate([
+      'c.title', 'c.description', 'c.category',
+      'draft.title', 'draft.description', 'draft.category',
+    ], query);
     clauses.push(`(${search.sql})`);
     params.push(...search.params);
   }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-  const total = db.prepare(`SELECT COUNT(*) AS count FROM courses c JOIN users u ON u.id = c.created_by ${where}`).get(...params).count;
+  const from = `FROM courses c JOIN users u ON u.id = c.created_by
+    LEFT JOIN course_revisions revision ON revision.course_id = c.id
+    LEFT JOIN courses draft ON draft.id = revision.revision_course_id`;
+  const total = db.prepare(`SELECT COUNT(*) AS count ${from} ${where}`).get(...params).count;
   const { page, pageSize, offset } = paginationWindow(total, req.query.page, 50);
   const rows = db.prepare(`
-    SELECT c.*, u.username AS owner FROM courses c JOIN users u ON u.id = c.created_by
-    ${where} ORDER BY c.updated_at DESC, c.id ASC LIMIT ? OFFSET ?
+    SELECT c.*, u.username AS owner,
+      revision.revision_course_id,
+      draft.title AS draft_title, draft.description AS draft_description, draft.category AS draft_category,
+      draft.visibility AS draft_visibility, draft.cover_media_id AS draft_cover_media_id,
+      draft.updated_at AS draft_updated_at
+    ${from} ${where} ORDER BY COALESCE(draft.updated_at, c.updated_at) DESC, c.id ASC LIMIT ? OFFSET ?
   `).all(...params, pageSize, offset);
-  res.json({ courses: courseSummaries(rows, req.currentUser), total, page, pageSize });
+  const courses = courseSummaries(rows, req.currentUser).map((course, index) => {
+    const row = rows[index];
+    const hasUnpublishedChanges = Boolean(row.revision_course_id);
+    if (!hasUnpublishedChanges) return { ...course, hasUnpublishedChanges: false };
+    return {
+      ...course,
+      title: row.draft_title,
+      description: row.draft_description,
+      category: row.draft_category,
+      visibility: row.draft_visibility,
+      coverMediaId: row.draft_cover_media_id,
+      coverUrl: row.draft_cover_media_id ? `/media/${row.draft_cover_media_id}` : null,
+      updatedAt: row.draft_updated_at,
+      hasUnpublishedChanges: true,
+    };
+  });
+  res.json({ courses, total, page, pageSize });
 });
 
 courseRouter.get('/courses/:courseId', (req, res) => {
