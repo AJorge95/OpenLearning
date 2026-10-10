@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse course access checks when filtering calendar deadlines
+
+- **Reviewed:** Calendar visibility checks for multiple private deadlines in the same assigned learning path, the request-scoped course-access cache, and the reported administrator role-selector hit area.
+- **Improvement:** Use one request-scoped course-access checker while filtering calendar deadlines. Add a regression proving that two private deadlines sharing a completed prerequisite read that prerequisite's completion history once.
+- **Why it helps:** Calendar work avoids repeating SQLite completion-history reads for shared learning-path prerequisites without changing which private courses are visible.
+- **Interface review:** The signed-in account page renders the role control and trigger at the same 144px width. A click in the adjacent right gap leaves the menu closed, the trigger opens it, and the same outside click closes it; no duplicate selector style change was needed.
+- **Checked:** The new regression first reproduced three completion-history reads, then passed with two after the shared checker change. Full `npm test` passed all 243 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The account page rendered meaningful content at 1264×712 with no framework overlay or browser console warnings/errors.
+
 ## 2026-10-10 — Protect first-run setup with a private bootstrap credential
 
 - **Reviewed:** First-run setup flow, environment configuration, account registration conflicts, and authentication rate-limit coverage.
