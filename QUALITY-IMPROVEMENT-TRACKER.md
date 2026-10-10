@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Normalize custom-select typeahead accents
+
+- **Reviewed:** `AppSelect` typeahead lowercases option labels and typed prefixes but compares their raw Unicode sequences. User-defined course categories and registration select choices can contain accents whose composed and decomposed forms look identical but fail that comparison.
+- **Improvement:** Normalize both prefixes and labels to NFC before case-insensitive matching, including repeated-character searches.
+- **Why it helps:** Keyboard selection works consistently for canonically equivalent accented text without changing the stored option values or matching order.
+- **Interface review:** The change is limited to shared `AppSelect` keyboard search; focus movement, disabled options, repeated-letter cycling, and visible labels retain existing behavior.
+- **Backend review:** Registration values and category storage remain unchanged; no API or database change is needed.
+- **Checked:** AppSelect navigation/display regressions, full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Limit role-menu activation to its trigger
 
 - **Reviewed:** The account role field used a native label connected to the custom combobox, and CSS made that label a pointer target. Clicking anywhere in the label's hit area could open the menu outside the visible select trigger.

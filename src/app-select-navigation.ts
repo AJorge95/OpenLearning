@@ -31,12 +31,13 @@ export function findAppSelectTypeaheadIndex(
   if (!options.length || !prefix) return -1;
   const characters = Array.from(prefix);
   const needle = cycleRepeatedCharacter ? characters.at(-1) ?? '' : prefix;
-  const normalizedNeedle = needle.toLocaleLowerCase();
+  const normalizedNeedle = needle.normalize('NFC').toLocaleLowerCase().normalize('NFC');
   const firstIndex = cycleRepeatedCharacter ? start + 1 : start;
   for (let offset = 0; offset < options.length; offset += 1) {
     const index = ((firstIndex + offset) % options.length + options.length) % options.length;
     const option = options[index];
-    if (!option.disabled && option.label.toLocaleLowerCase().startsWith(normalizedNeedle)) return index;
+    const normalizedLabel = option.label.normalize('NFC').toLocaleLowerCase().normalize('NFC');
+    if (!option.disabled && normalizedLabel.startsWith(normalizedNeedle)) return index;
   }
   return -1;
 }

@@ -53,6 +53,13 @@ test('custom-select repeated-letter typeahead cycles from the active option', ()
   assert.equal(findAppSelectTypeaheadIndex(labeledOptions, 0, ''), -1);
 });
 
+test('custom-select typeahead matches canonically equivalent accented labels', () => {
+  const labeledOptions = [{ label: 'Café' }, { label: 'Café international' }];
+
+  assert.equal(findAppSelectTypeaheadIndex(labeledOptions, 0, 'Cafe\u0301'), 0);
+  assert.equal(findAppSelectTypeaheadIndex([{ label: 'Cafe\u0301 international' }], 0, 'Café'), 0);
+});
+
 test('custom-select displays an explicit placeholder when its value is absent from live options', () => {
   const currentOptions = [{ value: '', label: 'All actions' }, { value: 'user.created', label: 'User created' }];
 
