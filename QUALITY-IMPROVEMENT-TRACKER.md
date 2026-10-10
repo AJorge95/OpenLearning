@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Require explicit alternative text intent for fallback images
+
+- **Reviewed:** Every `ImageWithFallback` JSX call site, nearby brand/course/certificate text, fallback content, and the image component's TypeScript contract.
+- **Improvement:** Require an `alt` prop and explicitly mark adjacent brand, certificate, and course-cover imagery decorative with `alt=""`.
+- **Why it helps:** Image callers must decide whether an image needs a text alternative, preventing a future meaningful image from being silently hidden from assistive technology.
+- **Interface review:** Current decorative images remain silent to screen readers; the platform icon preview retains its descriptive alternative text and visual fallback.
+- **Checked:** The focused image-alt suite passed both tests, verifying the required prop contract and every JSX call site; full `npm test` passed all 225 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Clear corrected password-confirmation warnings
 
 - **Reviewed:** The six password-confirmation forms added to client-side validation, their form error state, and existing password requirements.

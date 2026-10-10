@@ -20,7 +20,7 @@ export function PlatformBrand({ className, to = '/courses' }: { className: strin
   const { platformName, platformIcon } = useAuth();
   return <Link className={className} to={to}>
     <span className="brand-content">
-      <ImageWithFallback src={platformIcon} className="brand-icon" fallback={<span className="brand-icon brand-icon-fallback"><BookOpen size={18} /></span>} />
+      <ImageWithFallback src={platformIcon} className="brand-icon" alt="" fallback={<span className="brand-icon brand-icon-fallback"><BookOpen size={18} /></span>} />
       <span className="brand-name">{platformName}</span>
     </span>
   </Link>;
@@ -29,7 +29,7 @@ export function PlatformBrand({ className, to = '/courses' }: { className: strin
 type ImageWithFallbackProps = {
   src: string | null;
   className: string;
-  alt?: string;
+  alt: string;
   fallback: React.ReactNode;
   onError?: () => void;
   loading?: React.ImgHTMLAttributes<HTMLImageElement>['loading'];
@@ -41,7 +41,7 @@ export function ImageWithFallback(props: ImageWithFallbackProps) {
   return <ImageWithFallbackImage key={props.src} {...props} src={props.src} />;
 }
 
-function ImageWithFallbackImage({ src, className, alt = '', fallback, onError, loading, decoding }: ImageWithFallbackProps & { src: string }) {
+function ImageWithFallbackImage({ src, className, alt, fallback, onError, loading, decoding }: ImageWithFallbackProps & { src: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) return <>{fallback}</>;
   return <img className={className} src={src} alt={alt} loading={loading} decoding={decoding} onError={() => { setFailed(true); onError?.(); }} />;
@@ -402,7 +402,7 @@ function CourseCoverAsset({ course, className, iconSize, loading }: {
   iconSize: number;
   loading?: React.ImgHTMLAttributes<HTMLImageElement>['loading'];
 }) {
-  return <ImageWithFallback src={course.coverUrl} className={className} loading={loading} decoding={loading === 'lazy' ? 'async' : undefined} fallback={<div className={`course-cover-placeholder ${className}`} aria-hidden="true"><BookOpen size={iconSize} strokeWidth={1.5} /></div>} />;
+  return <ImageWithFallback src={course.coverUrl} className={className} alt="" loading={loading} decoding={loading === 'lazy' ? 'async' : undefined} fallback={<div className={`course-cover-placeholder ${className}`} aria-hidden="true"><BookOpen size={iconSize} strokeWidth={1.5} /></div>} />;
 }
 
 export function CourseCover({ course, className = '' }: { course: Course; className?: string }) {

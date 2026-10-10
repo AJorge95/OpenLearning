@@ -358,7 +358,7 @@ export function CourseCertificatePage() {
     <div className="certificate-page-heading"><div><div className="breadcrumbs"><Link to="/my-learning">My learning</Link><span>/</span><span>Certificate</span></div><h1>Your achievement</h1><p>A certificate to recognize the knowledge you have gained.</p></div><div className="certificate-actions"><Button variant="secondary" onClick={() => window.print()}><Printer size={17} />Print or save as PDF</Button></div></div>
     <article className="certificate-paper" aria-label={`Certificate awarded to ${certificate.recipientName} for ${certificate.courseTitle}`}>
       <div className="certificate-inner-border" aria-hidden="true" />
-      <div className="certificate-brand"><ImageWithFallback src={platformIcon} className="certificate-brand-image" fallback={<span className="certificate-brand-mark"><Award size={22} /></span>} /><span>{certificate.platformName || platformName}</span></div>
+      <div className="certificate-brand"><ImageWithFallback src={platformIcon} className="certificate-brand-image" alt="" fallback={<span className="certificate-brand-mark"><Award size={22} /></span>} /><span>{certificate.platformName || platformName}</span></div>
       <div className="certificate-kicker">Certificate of completion</div>
       <p className="certificate-intro">This certificate recognizes</p>
       <h2 className="certificate-recipient">{certificate.recipientName}</h2>
