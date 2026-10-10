@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Keep learner navigation usable on narrow screens
+
+- **Reviewed:** The shared learner header’s navigation structure, the existing 720px breakpoint, and how the brand, account menu, and five links fit at phone widths.
+- **Improvement:** Give the mobile header a dedicated brand/account row and a horizontally scrollable, single-line navigation row. Keep the active link in view after route changes and resizing, and share the reveal-scroll calculation with the management sidebar. Add unit coverage for left, right, and already-visible links.
+- **Why it helps:** At 320px and 390px the former header wrapped navigation labels and squeezed the brand. The revised layout keeps the brand and account menu visible, avoids page-level horizontal overflow, and preserves readable navigation links while allowing the full set to scroll.
+- **Checked:** Before/after Playwright screenshots used a local header fixture with the project stylesheet at 320px, 390px, and 720px. DOM checks confirmed page width equals viewport width, the brand and account control stay inside the viewport, navigation labels remain single-line, and the active Calendar link can be revealed. The three new navigation-scroll tests passed; full `npm test` passed all 204 tests; `npx tsc --noEmit`, `npm run build`, changed-file `node --check`, and `git diff --check` passed. This was local fixture coverage, not an authenticated or production route check.
+
 ## 2026-10-10 — Invalidate in-flight CSRF refreshes across auth changes
 
 - **Reviewed:** The API client’s shared CSRF refresh promise and the auth provider’s token clearing after sign-in, sign-up, setup, and sign-out.
