@@ -19,6 +19,7 @@ const requestBodyErrors = new Map([
   ['parameters.too.many', { status: 413, message: 'Request body contains too many form fields.', code: 'too_many_parameters' }],
 ]);
 const currentUserStatement = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?');
+const courseGrantStatement = db.prepare('SELECT 1 FROM course_grants WHERE course_id = ? AND user_id = ?');
 
 export function fail(status, message, code) {
   throw new ApiError(status, message, code);
@@ -113,7 +114,7 @@ export function loadCurrentUser(req, _res, next) {
 }
 
 export function hasCourseGrant(courseId, userId) {
-  return db.prepare('SELECT 1 FROM course_grants WHERE course_id = ? AND user_id = ?').get(courseId, userId) !== undefined;
+  return courseGrantStatement.get(courseId, userId) !== undefined;
 }
 
 function cachedValue(cache, key, load) {

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse the private-course grant query
+
+- **Reviewed:** Course access checks for private courses. The request-scoped checker caches each course’s grant result, but distinct private courses still prepared the same grant SELECT separately.
+- **Improvement:** Reuse one prepared grant statement while executing it for each uncached course and user.
+- **Why it helps:** Requests that check multiple private courses skip repeated SQL compilation, while grant changes remain visible to subsequent checks.
+- **Interface review:** No visible change; course visibility and grant/revocation behavior stay the same.
+- **Checked:** The course-access regression verifies the query is not re-prepared and checks grant creation and revocation against live SQLite rows. The focused course analytics suite passed (70/70); full `npm test` passed all 266 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reuse the current-user query across requests
 
 - **Reviewed:** The authentication middleware, which prepares the same account lookup for each signed-in request. This middleware runs before the protected API routes.

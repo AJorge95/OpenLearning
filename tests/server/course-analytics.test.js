@@ -27,6 +27,7 @@ let editableCourse;
 let readCurrentPublishedCourse;
 let isLessonUnlocked;
 let syncPathStates;
+let hasCourseGrant;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -60,7 +61,7 @@ before(async () => {
   });
 
   ({ db: database } = await import('../../server/db.js'));
-  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests }] = await Promise.all([
+  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler, hasCourseGrant: checkCourseGrant }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests }] = await Promise.all([
     import('../../server/routes-courses.js'),
     import('../../server/routes-programs.js'),
     import('../../server/http.js'),
@@ -72,6 +73,7 @@ before(async () => {
   syncPathStates = syncUnlockedPathStates;
   editableCourse = createEditableCourse;
   readCurrentPublishedCourse = currentPublishedCourseForTests;
+  hasCourseGrant = checkCourseGrant;
   database.exec(`
     INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES
       ('admin-1', 'admin', 'admin@example.invalid', 'not-used', 'admin', 0),
@@ -2991,4 +2993,32 @@ test('path learner directory searches and paginates active learners without hidi
   });
   assert.equal(invalidSearch.status, 400);
   assert.equal((await invalidSearch.json()).code, 'validation_error');
+});
+
+test('course access grant lookup reuses its query and sees grant changes immediately', () => {
+  const courseId = 'course-grant-statement-cache';
+  database.prepare(`INSERT INTO courses (id, title, status, visibility, created_by, updated_by)
+    VALUES (?, 'Grant cache test', 'published', 'private', 'admin-1', 'admin-1')`).run(courseId);
+
+  const originalPrepare = database.prepare;
+  let grantQueryPreparations = 0;
+  database.prepare = (sql) => {
+    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT 1 FROM course_grants WHERE course_id = ? AND user_id = ?') {
+      grantQueryPreparations += 1;
+    }
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    assert.equal(hasCourseGrant(courseId, 'learner-active'), false);
+    originalPrepare.call(database, `INSERT INTO course_grants (id, course_id, user_id, granted_by)
+      VALUES ('grant-statement-cache-test', ?, 'learner-active', 'admin-1')`).run(courseId);
+    assert.equal(hasCourseGrant(courseId, 'learner-active'), true);
+    originalPrepare.call(database, 'DELETE FROM course_grants WHERE id = ?').run('grant-statement-cache-test');
+    assert.equal(hasCourseGrant(courseId, 'learner-active'), false);
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.equal(grantQueryPreparations, 0);
 });
