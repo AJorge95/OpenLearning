@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse supplied course rows in batched summaries
+
+- **Reviewed:** The batched summary builder’s content-row query and the input rows supplied by course, learning-path, and certificate callers.
+- **Improvement:** Reuse a supplied course row when its ID is the active summary content ID; continue fetching version snapshots that are not present in the input set.
+- **Why it helps:** Lists of unversioned courses skip a redundant `courses` query, while versioned courses still summarize their latest published snapshot and retain constant query preparation as list size grows.
+- **Interface review:** No visible change; course and path summary response shapes and progress calculations remain the same.
+- **Checked:** A regression confirms an unversioned input row skips the full course-row query while versioned summary progress remains intact. The focused course analytics/versioning suite passed (69/69); full `npm test` passed all 262 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reuse preloaded course content in detail summaries
 
 - **Reviewed:** Published course detail assembly, which fetched the active course row for the response and then selected that same row again when building its progress summary.

@@ -638,17 +638,22 @@ test('course summaries batch database reads and preserve progress across version
   function measureSummaries(rows) {
     const originalPrepare = database.prepare;
     let queryCount = 0;
+    const preparedSql = [];
     database.prepare = (sql) => {
       queryCount += 1;
+      preparedSql.push(sql.replace(/\s+/g, ' ').trim());
       return originalPrepare.call(database, sql);
     };
-    try { return { summaries: summarizeCourses(rows, learner), queryCount }; }
+    try { return { summaries: summarizeCourses(rows, learner), queryCount, preparedSql }; }
     finally { delete database.prepare; }
   }
 
   const oneCourse = measureSummaries(courses.slice(0, 1));
   const twoCourses = measureSummaries(courses);
+  const unversionedCourse = measureSummaries(courses.slice(1));
   assert.equal(twoCourses.queryCount, oneCourse.queryCount);
+  assert.equal(unversionedCourse.preparedSql.some((sql) => sql.startsWith('SELECT * FROM courses WHERE id IN (')), false,
+    'expected a supplied unversioned course row to be reused in its summary');
   const summary = twoCourses.summaries.find((course) => course.id === 'course-summary-versioned');
   assert.equal(summary.versionNumber, 2);
   assert.equal(summary.deadlineAt, '2026-11-01 00:00:00');

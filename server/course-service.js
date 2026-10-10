@@ -49,6 +49,10 @@ function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloade
   const contentIds = [...new Set(contentIdByCourse.values())];
   const contentPlaceholders = contentIds.map(() => '?').join(', ');
   const contentCoursesById = new Map(preloadedContentCoursesById);
+  for (const [index, course] of courses.entries()) {
+    const contentId = contentIdByCourse.get(logicalIdsByCourse[index]);
+    if (course.id === contentId) contentCoursesById.set(contentId, course);
+  }
   const missingContentIds = contentIds.filter((id) => !contentCoursesById.has(id));
   if (missingContentIds.length) {
     const missingContentPlaceholders = missingContentIds.map(() => '?').join(', ');
