@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Keep the course editor details grid inside tablet viewports
+
+- **Reviewed:** The course editor’s three-column details grid and its available width across desktop, tablet, and phone layouts.
+- **Improvement:** Switch the details grid to two columns below 1140px; retain the existing single-column phone layout below 720px.
+- **Why it helps:** Category, visibility, and completion fields remain inside the editor card instead of forcing page-level horizontal overflow on tablet widths.
+- **Interface review:** The rendered editor used two columns at 1140px and 900px and one column at 720px and 390px. At each tested size, the document stayed within the viewport and the grid had no internal overflow. The page rendered without browser warnings or errors.
+- **Checked:** The focused course-editor structure tests passed (3/3); full `npm test` passed all 258 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered checks used the existing in-app browser at 1140×800, 900×800, 720×800, and 390×800.
+
 ## 2026-10-10 — Focus invalid required signup checkboxes
 
 - **Reviewed:** Custom registration field validation, input IDs, and error associations on the public signup form.

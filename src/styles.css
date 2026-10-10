@@ -1068,6 +1068,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .surface-form { display: grid; gap: 18px; padding: 24px; border: 1px solid var(--line); border-radius: 4px; }
 .surface-form .button { width: fit-content; }
 
+@media (max-width: 1140px) {
+  .editor-field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 1260px) {
   .course-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .player-layout { grid-template-columns: minmax(0, 1fr) 335px; }
