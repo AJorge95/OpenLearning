@@ -434,6 +434,68 @@ test('course details resolve learner progress before version history exists', as
   assert.equal(course.modules[0].quiz.passed, true);
 });
 
+test('course and learning-path detail GETs are read-only while protected actions initialize learner state', async () => {
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
+      ('course-read-only-detail', 'Read-only detail', 'published', 'admin-1', 'admin-1'),
+      ('course-path-sync-target', 'Path sync target', 'published', 'admin-1', 'admin-1');
+    INSERT INTO users (id, username, email, password_hash, role, disabled)
+      VALUES ('learner-read-only-path', 'learner_read_only_path', 'readonly.path@example.invalid', 'not-used', 'learner', 0);
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('path-read-only-detail', 'Read-only path', 'published', 0, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+      VALUES ('path-read-only-course-one', 'path-read-only-detail', 'course-empty', 0, 0);
+    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source)
+      VALUES ('path-read-only-enrollment', 'path-read-only-detail', 'learner-read-only-path', 'assigned');
+  `);
+
+  try {
+    const courseEnrollmentCount = () => database.prepare('SELECT COUNT(*) AS count FROM enrollments WHERE course_id = ? AND user_id = ?')
+      .get('course-read-only-detail', 'learner-unassigned').count;
+    const courseStateCount = () => database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE course_id = ? AND user_id = ?')
+      .get('course-read-only-detail', 'learner-unassigned').count;
+    assert.equal(courseEnrollmentCount(), 0);
+    assert.equal(courseStateCount(), 0);
+    const courseResponse = await fetch(apiUrl('/courses/course-read-only-detail'), { headers: userHeaders('learner-unassigned') });
+    assert.equal(courseResponse.status, 200);
+    assert.equal(courseEnrollmentCount(), 0);
+    assert.equal(courseStateCount(), 0);
+
+    const pathStateCount = (courseId) => database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE course_id = ? AND user_id = ?')
+      .get(courseId, 'learner-read-only-path').count;
+    assert.equal(pathStateCount('course-empty'), 0);
+    const pathResponse = await fetch(apiUrl('/learning-paths/path-read-only-detail'), { headers: userHeaders('learner-read-only-path') });
+    assert.equal(pathResponse.status, 200);
+    assert.equal(pathStateCount('course-empty'), 0);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_path_enrollments WHERE path_id = ? AND user_id = ?')
+      .get('path-read-only-detail', 'learner-read-only-path').count, 1);
+
+    const patchResponse = await fetch(apiUrl('/manage/learning-paths/path-read-only-detail'), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ courses: [
+        { courseId: 'course-empty', requiresPrevious: false },
+        { courseId: 'course-path-sync-target', requiresPrevious: false },
+      ] }),
+    });
+    assert.equal(patchResponse.status, 200);
+    assert.equal(pathStateCount('course-empty'), 1);
+    assert.equal(pathStateCount('course-path-sync-target'), 1);
+
+    const enrollmentResponse = await fetch(apiUrl('/courses/course-read-only-detail/enroll'), {
+      method: 'POST',
+      headers: userHeaders('learner-unassigned'),
+    });
+    assert.equal(enrollmentResponse.status, 201);
+    assert.equal(courseEnrollmentCount(), 1);
+    assert.equal(courseStateCount(), 1);
+  } finally {
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run('path-read-only-detail');
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run('course-read-only-detail', 'course-path-sync-target');
+    database.prepare('DELETE FROM users WHERE id = ?').run('learner-read-only-path');
+  }
+});
+
 test('course summaries batch database reads and preserve progress across versions', () => {
   database.exec(`
     INSERT INTO courses (id, title, status, created_by, updated_by)

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nextCourseActivity, nextCourseActivityAfterLesson } from '../../src/course-navigation.ts';
+import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from '../../src/course-navigation.ts';
 
 const lesson = (id, completed) => ({ id, completed });
 const quiz = (id, passed) => ({ id, passed });
@@ -41,6 +41,14 @@ test('keeps lesson review available after all course activities are complete', (
 test('returns no activity when the course has no modules or lessons', () => {
   assert.equal(nextCourseActivity(undefined), null);
   assert.equal(nextCourseActivity([{ lessons: [], quiz: null }]), null);
+});
+
+test('only learners create an enrollment before opening course activities', () => {
+  assert.equal(shouldEnrollBeforeCourseActivity('learner'), true);
+  assert.equal(shouldEnrollBeforeCourseActivity('moderator'), false);
+  assert.equal(shouldEnrollBeforeCourseActivity('admin'), false);
+  assert.equal(shouldEnrollBeforeCourseActivity(null), false);
+  assert.equal(shouldEnrollBeforeCourseActivity(undefined), false);
 });
 
 test('continues to the next lesson before the module quiz', () => {

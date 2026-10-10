@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
 import { AppSelect, Button, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
 import { formatCountLabel } from './count-label';
-import { nextCourseActivity, nextCourseActivityAfterLesson } from './course-navigation';
+import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from './course-navigation';
 import { summarizeCourseProgress } from './course-progress';
 import { getNewLessonComments } from './lesson-comments';
 import { tryEnterFullscreen } from './video-fullscreen';
@@ -414,12 +414,28 @@ export function CourseOverviewPage() {
     const isCurrentRequest = () => requestSequence === enrollmentSequenceRef.current && routeCourseIdRef.current === requestedCourseId;
     setStarting(true); setError('');
     try {
-      await api.post(`/api/courses/${requestedCourseId}/enroll`);
+      if (shouldEnrollBeforeCourseActivity(user?.role)) await api.post(`/api/courses/${requestedCourseId}/enroll`);
       if (!isCurrentRequest()) return;
       const activity = nextCourseActivity(requestedCourse.modules);
       if (activity?.type === 'lesson') navigate(`/courses/${requestedCourseId}/learn/${activity.id}`);
       else if (activity?.type === 'quiz') navigate(`/courses/${requestedCourseId}/quiz/${activity.id}`);
       else setError('This course does not have any lessons yet.');
+    } catch (cause) {
+      if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'Course access could not be started.');
+    } finally {
+      if (isCurrentRequest()) setStarting(false);
+    }
+  }
+
+  async function openCurriculumActivity(href: string) {
+    if (!course || course.id !== courseId || starting) return;
+    const requestedCourseId = courseId;
+    const requestSequence = ++enrollmentSequenceRef.current;
+    const isCurrentRequest = () => requestSequence === enrollmentSequenceRef.current && routeCourseIdRef.current === requestedCourseId;
+    setStarting(true); setError('');
+    try {
+      if (shouldEnrollBeforeCourseActivity(user?.role)) await api.post(`/api/courses/${requestedCourseId}/enroll`);
+      if (isCurrentRequest()) navigate(href);
     } catch (cause) {
       if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'Course access could not be started.');
     } finally {
@@ -454,7 +470,7 @@ export function CourseOverviewPage() {
       <div className="course-description-block"><h2>About this course</h2><p>{course.description || 'Explore the lessons and practical knowledge in this course.'}</p></div>
       <div className="course-curriculum-block">
         <div className="section-heading-row"><div><h2>Course content</h2><p>{formatCountLabel(course.moduleCount, 'module', 'modules')} <span>·</span> {formatCountLabel(course.lessonCount, 'lesson', 'lessons')}</p></div>{course.progress > 0 && <div className="course-progress-summary"><span>{course.completedLessons} of {formatCountLabel(course.lessonCount, 'lesson', 'lessons')} complete</span><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /></div>}</div>
-        {course.modules?.map((module) => <CurriculumModule key={module.id} module={module} courseId={course.id} />)}
+        {course.modules?.map((module) => <CurriculumModule key={module.id} module={module} courseId={course.id} onOpenActivity={openCurriculumActivity} />)}
       </div>
     </section>
     <div className="course-bottom-cta"><span>{user?.username ? `Ready when you are, ${user.username}.` : 'Ready when you are.'}</span><Button onClick={startLearning} disabled={!nextActivity || starting}>{startButtonLabel}<ArrowRight size={17} /></Button></div>
@@ -482,6 +498,7 @@ export function CoursePlayerPage() {
   const commentPageSequenceRef = useRef(0);
   const commentPageControllerRef = useRef<AbortController | null>(null);
   const completionSequenceRef = useRef(0);
+  const curriculumNavigationInFlightRef = useRef(false);
   const previousLessonRouteRef = useRef(`${courseId}:${lessonId}`);
   const [course, setCourse] = useState<Course | null>(null);
   const [availableCertificate, setAvailableCertificate] = useState<CourseCertificate | null>(null);
@@ -540,6 +557,21 @@ export function CoursePlayerPage() {
     const open = !railOpen;
     focusRailAfterOpenRef.current = open;
     setRailOpen(open);
+  }
+
+  async function openCurriculumActivity(href: string) {
+    const requestedCourseId = courseId;
+    if (!course || course.id !== requestedCourseId || curriculumNavigationInFlightRef.current) return;
+    curriculumNavigationInFlightRef.current = true;
+    setError('');
+    try {
+      if (shouldEnrollBeforeCourseActivity(user?.role)) await api.post(`/api/courses/${requestedCourseId}/enroll`);
+      if (routeCourseIdRef.current === requestedCourseId) navigate(href);
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Course access could not be started.');
+    } finally {
+      curriculumNavigationInFlightRef.current = false;
+    }
   }
 
   async function load(showLoading = true) {
@@ -1126,7 +1158,7 @@ export function CoursePlayerPage() {
       </section>}
     </div>
     <aside id="course-content-rail" className="course-rail" aria-labelledby="course-rail-title" hidden={!railOpen}><div className="course-rail-head"><div><h2 id="course-rail-title">Course content</h2><small>{course.progress}% complete</small></div><button ref={railCloseRef} type="button" aria-label="Hide course content" onClick={() => { focusRailAfterOpenRef.current = false; setRailOpen(false); railToggleRef.current?.focus(); }}><ChevronDown size={18} /></button></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} />
-      {modules.map((module) => <CurriculumModule key={module.id} module={module} selectedLessonId={lessonId} courseId={course.id} compact />)}
+      {modules.map((module) => <CurriculumModule key={module.id} module={module} selectedLessonId={lessonId} courseId={course.id} compact onOpenActivity={openCurriculumActivity} />)}
     </aside>
   </div>;
 }

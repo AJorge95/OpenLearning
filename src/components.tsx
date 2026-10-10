@@ -409,24 +409,32 @@ export function CourseCover({ course, className = '' }: { course: Course; classN
   return <CourseCoverAsset course={course} className={`course-cover-image ${className}`} iconSize={44} />;
 }
 
-export function CurriculumModule({ module, selectedLessonId, courseId, compact = false }: {
+function openCurriculumActivity(event: React.MouseEvent<HTMLAnchorElement>, href: string, onOpenActivity?: (href: string) => void) {
+  if (!onOpenActivity || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.currentTarget.target) return;
+  event.preventDefault();
+  onOpenActivity(href);
+}
+
+export function CurriculumModule({ module, selectedLessonId, courseId, compact = false, onOpenActivity }: {
   module: CourseModule;
   selectedLessonId?: string;
   courseId: string;
   compact?: boolean;
+  onOpenActivity?: (href: string) => void;
 }) {
+  const quiz = module.quiz;
   return (
     <details className={`curriculum-module ${compact ? 'curriculum-module-compact' : ''}`} open>
-      <summary><span className="module-title">{module.title}</span><span className="module-count">{formatCountLabel(module.lessons.length + (module.quiz ? 1 : 0), 'item', 'items')}</span><ChevronDown size={17} /></summary>
+      <summary><span className="module-title">{module.title}</span><span className="module-count">{formatCountLabel(module.lessons.length + (quiz ? 1 : 0), 'item', 'items')}</span><ChevronDown size={17} /></summary>
       <div className="curriculum-items">
-        {module.lessons.map((lesson) => <CurriculumLesson key={lesson.id} lesson={lesson} selected={selectedLessonId === lesson.id} courseId={courseId} />)}
-        {module.quiz && <Link className="curriculum-item quiz-item" to={`/courses/${courseId}/quiz/${module.quiz.id}`}><span className="curriculum-icon"><CircleHelp size={17} /></span><span className="curriculum-item-name">{module.quiz.title}</span>{module.quiz.passed && <Check className="completion-icon" size={16} />}</Link>}
+        {module.lessons.map((lesson) => <CurriculumLesson key={lesson.id} lesson={lesson} selected={selectedLessonId === lesson.id} courseId={courseId} onOpenActivity={onOpenActivity} />)}
+        {quiz && <Link className="curriculum-item quiz-item" to={`/courses/${courseId}/quiz/${quiz.id}`} onClick={(event) => openCurriculumActivity(event, `/courses/${courseId}/quiz/${quiz.id}`, onOpenActivity)}><span className="curriculum-icon"><CircleHelp size={17} /></span><span className="curriculum-item-name">{quiz.title}</span>{quiz.passed && <Check className="completion-icon" size={16} />}</Link>}
       </div>
     </details>
   );
 }
 
-function CurriculumLesson({ lesson, selected, courseId }: { lesson: Lesson; selected: boolean; courseId: string }) {
+function CurriculumLesson({ lesson, selected, courseId, onOpenActivity }: { lesson: Lesson; selected: boolean; courseId: string; onOpenActivity?: (href: string) => void }) {
   if (lesson.locked) return (
     <div className="curriculum-item curriculum-item-locked" aria-disabled="true" title="Complete the previous lesson to unlock this lesson">
       <span className="curriculum-icon"><LockKeyhole size={15} /></span>
@@ -435,7 +443,7 @@ function CurriculumLesson({ lesson, selected, courseId }: { lesson: Lesson; sele
     </div>
   );
   return (
-    <Link className={`curriculum-item ${selected ? 'selected' : ''}`} aria-current={selected ? 'page' : undefined} to={`/courses/${courseId}/learn/${lesson.id}`}>
+    <Link className={`curriculum-item ${selected ? 'selected' : ''}`} aria-current={selected ? 'page' : undefined} to={`/courses/${courseId}/learn/${lesson.id}`} onClick={(event) => openCurriculumActivity(event, `/courses/${courseId}/learn/${lesson.id}`, onOpenActivity)}>
       <span className="curriculum-icon">{lesson.completed ? <Check size={17} /> : lesson.hasVideo ? <Play size={15} /> : <FileText size={17} />}</span>
       <span className="curriculum-item-name">{lesson.title}</span>
       {lesson.completed && <Check className="completion-icon" size={16} />}
