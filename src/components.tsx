@@ -6,7 +6,7 @@ import { ApiError } from './api';
 import { useAuth } from './auth-context';
 import { BRAND_PALETTES, MAX_BRAND_ICON_BYTES } from './branding';
 import type { BrandingPalette } from './branding';
-import { findEnabledAppSelectIndex } from './app-select-navigation';
+import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex } from './app-select-navigation';
 import { getAppSelectHorizontalPosition, getAppSelectVerticalPosition } from './app-select-position';
 import { formatCountLabel } from './count-label';
 import { getHorizontalRevealScrollLeft } from './navigation-scroll';
@@ -285,21 +285,18 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
     triggerRef.current?.focus();
   }
 
-  function findByPrefix(prefix: string) {
-    if (!prefix) return -1;
-    for (let offset = 0; offset < options.length; offset += 1) {
-      const index = (activeIndex + offset) % options.length;
-      if (!options[index].disabled && options[index].label.toLocaleLowerCase().startsWith(prefix)) return index;
-    }
-    return -1;
-  }
-
   function searchByKey(key: string) {
     const char = key.toLocaleLowerCase();
     const nextPrefix = `${typeaheadRef.current}${char}`;
-    let match = findByPrefix(nextPrefix);
-    const prefix = match >= 0 ? nextPrefix : char;
-    if (match < 0) match = findByPrefix(prefix);
+    const startIndex = open ? activeIndex : selectedIndex;
+    const characters = Array.from(nextPrefix);
+    const repeatedCharacter = characters.length > 1 && characters.every((candidate) => candidate.toLocaleLowerCase() === char);
+    let prefix = repeatedCharacter ? char : nextPrefix;
+    let match = findAppSelectTypeaheadIndex(options, startIndex, prefix, repeatedCharacter);
+    if (match < 0 && !repeatedCharacter) {
+      prefix = char;
+      match = findAppSelectTypeaheadIndex(options, startIndex, prefix);
+    }
     typeaheadRef.current = prefix;
     if (typeaheadTimerRef.current !== null) window.clearTimeout(typeaheadTimerRef.current);
     typeaheadTimerRef.current = window.setTimeout(() => { typeaheadRef.current = ''; }, 650);
