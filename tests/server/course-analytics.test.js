@@ -24,6 +24,7 @@ let database;
 let server;
 let summarizeCourses;
 let editableCourse;
+let readCurrentPublishedCourse;
 let isLessonUnlocked;
 let syncPathStates;
 
@@ -59,7 +60,7 @@ before(async () => {
   });
 
   ({ db: database } = await import('../../server/db.js'));
-  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse }] = await Promise.all([
+  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests }] = await Promise.all([
     import('../../server/routes-courses.js'),
     import('../../server/routes-programs.js'),
     import('../../server/http.js'),
@@ -70,6 +71,7 @@ before(async () => {
   isLessonUnlocked = checkLessonUnlocked;
   syncPathStates = syncUnlockedPathStates;
   editableCourse = createEditableCourse;
+  readCurrentPublishedCourse = currentPublishedCourseForTests;
   database.exec(`
     INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES
       ('admin-1', 'admin', 'admin@example.invalid', 'not-used', 'admin', 0),
@@ -343,6 +345,47 @@ test('course analytics use published version content without creating an edit re
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_revisions WHERE course_id = ?').get(courseId).count, 0);
   } finally {
     database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
+test('current published course loads the latest storage course and falls back to the root course', () => {
+  const courseId = 'course-current-published-lookup';
+  const unversionedCourseId = `${courseId}-unversioned`;
+  const previousStorageId = `${courseId}-v1`;
+  const currentStorageId = `${courseId}-v2`;
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
+      ('${courseId}', 'Canonical course', 'published', 'admin-1', 'admin-1'),
+      ('${unversionedCourseId}', 'Unversioned course', 'published', 'admin-1', 'admin-1');
+    INSERT INTO courses (id, title, status, created_by, updated_by, logical_course_id) VALUES
+      ('${previousStorageId}', 'Previous title', 'published', 'admin-1', 'admin-1', '${courseId}'),
+      ('${currentStorageId}', 'Current title', 'published', 'admin-1', 'admin-1', '${courseId}');
+  `);
+  database.prepare(`INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+    VALUES ('${courseId}-version-1', ?, ?, 1, 'admin-1'), ('${courseId}-version-2', ?, ?, 2, 'admin-1')`)
+    .run(courseId, previousStorageId, courseId, currentStorageId);
+
+  const originalPrepare = database.prepare;
+  let preparedStatementCount = 0;
+  try {
+    database.prepare = (sql) => {
+      preparedStatementCount += 1;
+      return originalPrepare.call(database, sql);
+    };
+
+    const course = readCurrentPublishedCourse(courseId);
+    assert.equal(course?.id, currentStorageId);
+    assert.equal(course?.title, 'Current title');
+    assert.equal(preparedStatementCount, 2, 'expected one logical-ID lookup and one combined current-course lookup');
+
+    preparedStatementCount = 0;
+    const unversionedCourse = readCurrentPublishedCourse(unversionedCourseId);
+    assert.equal(unversionedCourse?.id, unversionedCourseId);
+    assert.equal(unversionedCourse?.title, 'Unversioned course');
+    assert.equal(preparedStatementCount, 2, 'expected one logical-ID lookup and one current-course lookup');
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(courseId, unversionedCourseId);
   }
 });
 

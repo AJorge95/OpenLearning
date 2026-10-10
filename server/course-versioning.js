@@ -123,8 +123,9 @@ export function editableCourse(courseId, actor) {
 
 export function currentPublishedCourse(courseId) {
   const id = logicalCourseId(courseId) || courseId;
-  const latest = publishedVersion(id);
-  return latest ? db.prepare('SELECT * FROM courses WHERE id = ?').get(latest.storage_course_id) : db.prepare('SELECT * FROM courses WHERE id = ?').get(id);
+  return db.prepare(`SELECT * FROM courses WHERE id = COALESCE(
+    (SELECT storage_course_id FROM course_versions WHERE course_id = ? ORDER BY version_number DESC LIMIT 1), ?
+  )`).get(id, id);
 }
 
 export function courseVersionHistory(courseId) {
