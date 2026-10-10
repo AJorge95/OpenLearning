@@ -65,6 +65,16 @@ test('registration label and option uniqueness does not depend on browser locale
   }
 });
 
+test('registration editor rejects canonically equivalent duplicate labels and options', () => {
+  assert.equal(validateRegistrationFieldEditor([
+    { ...fields[0], options: ['Café', 'Cafe\u0301'] },
+  ])?.target, 'options');
+  assert.equal(validateRegistrationFieldEditor([
+    { ...fields[1], label: 'Café' },
+    { ...fields[2], id: 'duplicate-label', label: 'Cafe\u0301' },
+  ])?.target, 'label');
+});
+
 test('registration field editor validates select options using server rules', () => {
   const result = validateRegistrationFieldEditor([
     { ...fields[0], options: ['Design', ' design '] },
