@@ -16,6 +16,13 @@ test('keeps the preferred menu width and clamps it beside the trigger when space
   assert.ok(position.left + position.width <= 320);
 });
 
+test('can match a custom-select menu width to its trigger', () => {
+  const position = getAppSelectHorizontalPosition({ left: 280, width: 144 }, 320, 144);
+
+  assert.deepEqual(position, { left: 164, width: 144 });
+  assert.ok(position.left + position.width <= 320);
+});
+
 test('caps the menu height to the room on the better side of a short viewport', () => {
   const position = getAppSelectVerticalPosition({ top: 50, bottom: 94 }, 120, 3);
 

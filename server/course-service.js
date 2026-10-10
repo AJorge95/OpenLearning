@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { fail, canViewCourse } from './http.js';
-import { currentPublishedCourse, publishedVersion } from './course-versioning.js';
+import { currentPublishedCourseForVersion, publishedVersion } from './course-versioning.js';
 
 function progressForStorage(logicalId, contentId, user, version) {
   const lessonRows = db.prepare(`SELECT l.id, COALESCE(l.stable_id, l.id) AS stable_id FROM lessons l
@@ -172,7 +172,7 @@ export function getCoursePayload(course, user, { includeAnswers = false, storage
   const editingCopy = Boolean(course.logical_course_id && includeAnswers);
   const version = publishedVersion(logicalId);
   const content = storageCourseId ? db.prepare('SELECT * FROM courses WHERE id = ?').get(storageCourseId)
-    : editingCopy ? course : currentPublishedCourse(logicalId) || course;
+    : editingCopy ? course : currentPublishedCourseForVersion(logicalId, version) || course;
   const rootCourse = db.prepare('SELECT * FROM courses WHERE id = ?').get(logicalId) || course;
   const summaryDetails = courseSummaryDetails([rootCourse], user, new Map([[logicalId, version]]))[0];
   const summary = summaryDetails.summary;
