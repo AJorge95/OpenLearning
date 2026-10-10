@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Resume tracked playback from verified progress after a tab is hidden
+
+- **Reviewed:** Tracked lesson videos pause when their page is backgrounded, but browsers can reset the media clock before a queued pause checkpoint reads it. Resuming from the stale browser position could restart playback away from the learner's latest verified point.
+- **Improvement:** Capture the playhead when the tab becomes hidden, queue that checkpoint before pausing, and on the next Play action wait for the checkpoint and reload the server-verified position. Completed lessons still begin replay at zero while retaining their verified watch history.
+- **Why it helps:** Learners can return to a backgrounded lesson without losing their place, and the resume position still comes from the existing server watch-progress contract.
+- **Interface review:** Playback remains paused while the page is hidden. The saved resume marker is cleared when playback restarts or the learner changes lessons; the normal controls and watch guidance remain unchanged.
+- **Backend review:** No API or persistence changes were needed; the player reuses existing watch-progress and replay-start endpoints.
+- **Checked:** Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The already-completed lesson was inspected in the browser but not played, to avoid writing test telemetry into its existing learner record; the visibility pause/resume interaction was validated through the existing suite and code path review, not a live playback run.
+
 ## 2026-10-11 — Keep lesson controls inside narrow screens
 
 - **Reviewed:** The lesson player's watch-control bar at 320–400px. Its fixed play, rewind, time, mute, volume, and full-screen controls overflowed the available width and made the whole page 382px wide at a 320px viewport.
