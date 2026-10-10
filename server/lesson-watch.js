@@ -3,6 +3,7 @@ import { fail } from './http.js';
 
 const maximumDurationSeconds = 24 * 60 * 60;
 const completionToleranceSeconds = 0.5;
+const progressClockToleranceSeconds = 0.5;
 const maximumHeartbeatCreditSeconds = 8;
 
 function readLessonCompletion(userId, lessonId) {
@@ -65,15 +66,19 @@ export function recordLessonWatchProgress(user, lessonId, position) {
   // count as watched. Normal player reports arrive every four seconds.
   const elapsed = Math.max(0, Math.min(maximumHeartbeatCreditSeconds, (now - row.last_heartbeat_at) / 1000));
   const maximumPosition = row.last_position_seconds + elapsed;
-  if (position > maximumPosition) {
+  if (position > maximumPosition + progressClockToleranceSeconds) {
     return { ...responseFor(user, lessonId, row), accepted: false };
   }
 
-  const watchedUntil = Math.max(row.watched_until_seconds, Math.min(position, maximumPosition, row.duration_seconds));
+  // Small media clock and request timing differences should not pause otherwise
+  // valid playback. Credit only the elapsed server time so this tolerance cannot
+  // accumulate into extra watched progress across heartbeats.
+  const acceptedPosition = Math.min(position, maximumPosition, row.duration_seconds);
+  const watchedUntil = Math.max(row.watched_until_seconds, acceptedPosition);
   const update = db.prepare(`UPDATE lesson_watch_progress SET watched_until_seconds = ?, duration_seconds = ?,
     last_position_seconds = ?, last_heartbeat_at = ?, updated_at = CURRENT_TIMESTAMP
     WHERE user_id = ? AND lesson_id = ?`);
-  update.run(watchedUntil, row.duration_seconds, position, now, user.id, lessonId);
+  update.run(watchedUntil, row.duration_seconds, acceptedPosition, now, user.id, lessonId);
   const updated = watchRecord(user.id, lessonId);
   return { ...responseFor(user, lessonId, updated), accepted: true };
 }

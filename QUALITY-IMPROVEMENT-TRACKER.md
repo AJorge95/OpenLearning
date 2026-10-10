@@ -42,7 +42,7 @@
 - **Improvement:** Add a fake-clock regression proving a progress report up to 0.5 seconds ahead is accepted but clamped to elapsed server time; larger leads are rejected without advancing the heartbeat, and a boundary retry earns no extra watched time.
 - **Why it helps:** Small browser/server clock differences can be tolerated without letting the allowance accumulate into unearned course completion.
 - **Interface review:** The player queue checks that the lesson is still active and the video is ready before sending progress; no separate UI change was warranted in this cycle.
-- **Checked:** All 6 focused `server/lesson-watch.test.js` cases passed. Full `npm test` passed all 170 cases; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+- **Checked:** All 6 focused `server/lesson-watch.test.js` cases passed. The current full `npm test`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The player compiled successfully; live playback was not exercised.
 
 ## 2026-10-10 — Skip unchanged certificate-name submissions
 
