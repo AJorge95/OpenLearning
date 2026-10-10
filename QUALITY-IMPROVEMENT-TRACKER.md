@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Expose required state for registration dropdowns
+
+- **Reviewed:** Required custom registration selects were validated on submission and displayed “Required”, but the combobox exposed the requirement only as text in its accessible name instead of a semantic required state.
+- **Improvement:** Add an optional `required` prop to `AppSelect`, forward it as `aria-required`, and pass the field’s required setting from registration. Keep the accessible name to the field label so requiredness is announced as state rather than duplicated in the name.
+- **Why it helps:** Screen-reader users can identify required dropdowns consistently with required text and checkbox fields, and the existing invalid/error association remains available when submission fails.
+- **Backend review:** Client and server required-field validation already agree; no API change was needed.
+- **Checked:** Added a regression test in `tests/client/registration-fields.test.js`; targeted registration-field tests and full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Resume tracked playback from verified progress after a tab is hidden
 
 - **Reviewed:** Tracked lesson videos pause when their page is backgrounded, but browsers can reset the media clock before a queued pause checkpoint reads it. Resuming from the stale browser position could restart playback away from the learner's latest verified point.

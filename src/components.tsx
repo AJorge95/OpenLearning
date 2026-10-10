@@ -232,7 +232,7 @@ export function Button({ children, variant = 'primary', className = '', type = '
 
 export type AppSelectOption<T extends string | number> = { value: T; label: string; disabled?: boolean };
 
-export function AppSelect<T extends string | number>({ value, options, onChange, ariaLabel, ariaLabelledBy, describedBy, controlId, invalid = false, className = '', disabled = false, leadingIcon, matchTriggerWidth = false }: {
+export function AppSelect<T extends string | number>({ value, options, onChange, ariaLabel, ariaLabelledBy, describedBy, controlId, invalid = false, className = '', disabled = false, required = false, leadingIcon, matchTriggerWidth = false }: {
   value: T;
   options: AppSelectOption<T>[];
   onChange: (value: T) => void;
@@ -243,6 +243,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   invalid?: boolean;
   className?: string;
   disabled?: boolean;
+  required?: boolean;
   leadingIcon?: React.ReactNode;
   matchTriggerWidth?: boolean;
 }) {
@@ -356,7 +357,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   }, []);
 
   return <div ref={rootRef} className={`app-select ${className}`.trim()}>
-    <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-labelledby={ariaLabelledBy} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined} aria-activedescendant={open ? `${menuId}-option-${activeIndex}` : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
+    <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-labelledby={ariaLabelledBy} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-required={required || undefined} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined} aria-activedescendant={open ? `${menuId}-option-${activeIndex}` : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
       {leadingIcon && <span className="app-select-leading" aria-hidden="true">{leadingIcon}</span>}<span className="app-select-value">{getAppSelectDisplayLabel(options, value)}</span><ChevronDown className="app-select-chevron" size={16} aria-hidden="true" />
     </button>
     {open && createPortal(<div ref={menuRef} id={menuId} className={`app-select-menu${matchTriggerWidth ? ' app-select-menu--match-trigger' : ''}`} role="listbox" aria-label={`${ariaLabel} options`} style={position}>

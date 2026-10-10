@@ -33,6 +33,17 @@ test('invalid registration checkboxes can receive focus and reference the form e
   assert.match(checkboxBranch, /aria-describedby=\{invalidFieldId === field\.id \? 'registration-form-error' : undefined\}/);
 });
 
+test('required registration selects expose required semantics to assistive technology', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-auth.tsx', import.meta.url), 'utf8');
+  const selectBranch = pageSource.match(/if \(field\.type === 'select'\) return <div className="registration-custom-field"[\s\S]*?<\/div>;/)?.[0];
+  const componentSource = fs.readFileSync(new URL('../../src/components.tsx', import.meta.url), 'utf8');
+
+  assert.ok(selectBranch, 'Expected to find the custom registration select field.');
+  assert.match(selectBranch, /ariaLabel=\{field\.label\}/);
+  assert.match(selectBranch, /required=\{field\.required\}/);
+  assert.match(componentSource, /aria-required=\{required \|\| undefined\}/);
+});
+
 test('registration field editor identifies blank and duplicate labels', () => {
   assert.deepEqual(validateRegistrationFieldEditor([
     { ...fields[0], label: '  ' },

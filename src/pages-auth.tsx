@@ -49,9 +49,10 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
         <span>{field.label}{field.required && <small>Required</small>}</span>
         <AppSelect<string>
           controlId={`registration-field-${field.id}`}
-          ariaLabel={`${field.label}${field.required ? ', required' : ''}`}
+          ariaLabel={field.label}
           describedBy={invalidFieldId === field.id ? 'registration-form-error' : undefined}
           invalid={invalidFieldId === field.id}
+          required={field.required}
           value={typeof values[field.id] === 'string' ? values[field.id] as string : ''}
           onChange={(value) => onChange(field.id, value)}
           disabled={disabled}
