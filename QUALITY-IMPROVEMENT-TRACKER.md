@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reduce repeated reads in lesson comment routes
+
+- **Reviewed:** Lesson feedback pagination and comment creation, which each loaded the comment total separately from the row data.
+- **Improvement:** Include the total in the first-page comment query and the created-comment read. Keep a count fallback only when an out-of-range page must be clamped to the last available page.
+- **Why it helps:** Normal feedback reads and comment posts each avoid one extra comment query while retaining the existing response shape and page-clamping behavior.
+- **Interface review:** No visual change; comment totals and pagination remain part of the same response contract.
+- **Checked:** Focused lesson-comment route tests passed (11/11), covering query counts, out-of-range clamping, empty pages, create responses, and existing moderation/access behavior. Full `npm test` passed all 256 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Show a posted lesson comment without refetching feedback
 
 - **Reviewed:** The learner comment submission route and feedback pagination lifecycle after a successful post.

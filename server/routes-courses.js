@@ -1187,12 +1187,17 @@ courseRouter.get('/lessons/:lessonId/feedback', (req, res) => {
     : { reaction: null, counts: { like: 0, dislike: 0 } };
   const requestedPage = pageQuery(req.query.page);
   const pageSize = 20;
-  const total = db.prepare('SELECT COUNT(*) AS count FROM lesson_comments WHERE lesson_id = ?').get(lesson.lesson_id).count;
-  const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
-  const comments = db.prepare(`SELECT c.id, c.body, c.created_at, u.username
+  const selectComments = db.prepare(`SELECT c.id, c.body, c.created_at, u.username, COUNT(*) OVER () AS total
     FROM lesson_comments c JOIN users u ON u.id = c.user_id
-    WHERE c.lesson_id = ? ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?`)
-    .all(lesson.lesson_id, pageSize, (page - 1) * pageSize);
+    WHERE c.lesson_id = ? ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?`);
+  let comments = selectComments.all(lesson.lesson_id, pageSize, (requestedPage - 1) * pageSize);
+  let total = comments[0]?.total ?? 0;
+  let page = requestedPage;
+  if (!comments.length && requestedPage > 1) {
+    total = db.prepare('SELECT COUNT(*) AS count FROM lesson_comments WHERE lesson_id = ?').get(lesson.lesson_id).count;
+    page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
+    if (page < requestedPage) comments = selectComments.all(lesson.lesson_id, pageSize, (page - 1) * pageSize);
+  }
   res.json({
     lessonId: lesson.lesson_id,
     reaction: summary.reaction,
@@ -1233,10 +1238,10 @@ courseRouter.post('/lessons/:lessonId/comments', learnerCommentLimiter, (req, re
     const id = randomUUID();
     db.prepare('INSERT INTO lesson_comments (id, lesson_id, user_id, body) VALUES (?, ?, ?, ?)')
       .run(id, lesson.lesson_id, req.currentUser.id, body);
-    const comment = db.prepare(`SELECT c.id, c.body, c.created_at, u.username
+    const comment = db.prepare(`SELECT c.id, c.body, c.created_at, u.username,
+      (SELECT COUNT(*) FROM lesson_comments WHERE lesson_id = c.lesson_id) AS total
       FROM lesson_comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?`).get(id);
-    const total = db.prepare('SELECT COUNT(*) AS count FROM lesson_comments WHERE lesson_id = ?').get(lesson.lesson_id).count;
-    return { comment: { id: comment.id, body: comment.body, username: comment.username, createdAt: comment.created_at }, total };
+    return { comment: { id: comment.id, body: comment.body, username: comment.username, createdAt: comment.created_at }, total: comment.total };
   });
   res.status(201).json(createComment.immediate());
 });

@@ -138,6 +138,36 @@ test('course managers can review published private-course comments without learn
   assert.deepEqual(learnerFeedback.counts, { like: 1, dislike: 0 });
 });
 
+test('the first feedback page reads its total alongside the comments', async () => {
+  const originalPrepare = database.prepare;
+  let commentQueries = 0;
+  database.prepare = function countedPrepare(sql, ...args) {
+    if (sql.includes('FROM lesson_comments c')) commentQueries += 1;
+    return Reflect.apply(originalPrepare, this, [sql, ...args]);
+  };
+  let result;
+  try {
+    const response = await fetch(apiUrl('/lessons/lesson-public/feedback'), { headers: userHeaders('learner-1') });
+    assert.equal(response.status, 200);
+    result = await response.json();
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.equal(commentQueries, 1);
+  assert.equal(result.total, 1);
+  assert.deepEqual(result.comments.map(({ id }) => id), ['comment-public']);
+});
+
+test('feedback clamps an out-of-range page to the last available page', async () => {
+  const response = await fetch(apiUrl('/lessons/lesson-public/feedback?page=99'), { headers: userHeaders('learner-1') });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.page, 1);
+  assert.equal(result.total, 1);
+  assert.deepEqual(result.comments.map(({ id }) => id), ['comment-public']);
+});
+
 test('learner feedback reads aggregate reaction counts and the learner reaction in one query', async () => {
   database.prepare("INSERT INTO lesson_reactions (lesson_id, user_id, reaction) VALUES ('lesson-public', 'learner-2', 'dislike')").run();
   const originalPrepare = database.prepare;
@@ -239,4 +269,41 @@ test('a comment from another lesson cannot be removed through the wrong lesson r
 test('learners without access cannot read private-course comments', async () => {
   const response = await fetch(apiUrl('/lessons/lesson-private/feedback'), { headers: userHeaders('learner-2') });
   assert.equal(response.status, 403);
+});
+
+test('an empty first feedback page reports zero comments and stays on page one', async () => {
+  const response = await fetch(apiUrl('/lessons/lesson-private/feedback'), { headers: userHeaders('moderator-1') });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.page, 1);
+  assert.equal(result.total, 0);
+  assert.deepEqual(result.comments, []);
+});
+
+test('posting a comment returns its row and updated total in one read', async () => {
+  const originalPrepare = database.prepare;
+  let commentQueries = 0;
+  let commentId;
+  database.prepare = function countedPrepare(sql, ...args) {
+    if (sql.includes('lesson_comments')) commentQueries += 1;
+    return Reflect.apply(originalPrepare, this, [sql, ...args]);
+  };
+  let result;
+  try {
+    const response = await fetch(apiUrl('/lessons/lesson-public/comments'), {
+      method: 'POST',
+      headers: { ...userHeaders('learner-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ body: 'A newly posted comment' }),
+    });
+    assert.equal(response.status, 201);
+    result = await response.json();
+    commentId = result.comment.id;
+  } finally {
+    database.prepare = originalPrepare;
+    if (commentId) database.prepare('DELETE FROM lesson_comments WHERE id = ?').run(commentId);
+  }
+
+  assert.equal(commentQueries, 2);
+  assert.equal(result.comment.body, 'A newly posted comment');
+  assert.equal(result.total, 2);
 });
