@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse course rows for calendar visibility checks
+
+- **Reviewed:** The calendar joins each deadline to its course and passes that row to the access checker. It selected status and visibility but omitted `logical_course_id`, forcing two more course reads for private deadlines.
+- **Improvement:** Include the logical-course identity in the calendar row so the access checker can reuse the complete root row or keep version-aware lookup when the row is a snapshot.
+- **Why it helps:** Private calendar deadlines avoid redundant course lookups while still reflecting grants and path access on each request.
+- **Interface review:** No visible change; the calendar retains the same response shape and hides deadlines when course access is revoked.
+- **Checked:** The calendar regression verifies grant creation/revocation behavior and that neither redundant course SELECT is prepared during access checks. The focused course analytics suite passed (71/71); full `npm test` passed all 267 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reuse canonical rows in course access checks
 
 - **Reviewed:** Learner and competency list routes pass complete course rows into the access checker, which then re-resolved each root course ID and selected that same root row again.
