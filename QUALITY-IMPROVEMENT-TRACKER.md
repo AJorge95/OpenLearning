@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Recheck unfinished markers and backend catch paths
+
+- **Reviewed:** Source for `TODO`, `FIXME`, `HACK`, and `XXX` markers and empty catches in the server and client; the session migration and media file-validation cleanup paths.
+- **Result:** No code change. No unfinished markers were found. The migration treats malformed legacy session JSON as an unowned session, and file-handle close failures do not replace a media validation result.
+- **Why no change:** Existing session-store coverage confirms malformed sessions are discarded; file-stream coverage confirms early client closure stops reading cleanly. No reproducible reliability gap appeared in these paths.
+- **Checked:** The focused session-store and file-stream tests passed (5/5); `git diff --check` passed.
+
 ## 2026-10-10 — Explain when learner video cannot enter full screen
 
 - **Reviewed:** The learner video’s fullscreen control, browser API failure behavior, route-change state cleanup, and existing player error styling.
