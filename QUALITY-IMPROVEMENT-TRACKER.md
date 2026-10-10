@@ -8,6 +8,13 @@
 - **Interface review:** Rechecked the reported account-role select on a fresh local page. Its live markup uses a bounded `div` wrapper and a 152px trigger; clicking the adjacent gap left the menu closed. The supplied annotation targets an older `label` structure, so no duplicate width rule was needed.
 - **Checked:** All 200 tests passed; `npx tsc --noEmit`, `npm run build`, changed-file `node --check`, and `git diff --check` passed. The local mocked `/register` flow was checked at 390px with Chrome for date boundaries and no console errors. The account details route was checked in the Codex in-app browser at 1999×1244 for page identity, non-empty content, no console warnings/errors, and click behavior. No production coverage was claimed.
 
+## 2026-10-10 — Recheck admin account course query
+
+- **Reviewed:** The account-details route’s membership count and course page, the shared course-summary implementation, and its supporting membership indexes.
+- **Result:** No code change. Course access is deduplicated through a `UNION`, the route caps each page at 50 courses, and shared summaries batch content and progress reads instead of querying once per course.
+- **Why no change:** The existing route already bounds response size and the regression checks both membership indexes and guards against a full course-table scan. A separate performance change would need evidence of a slow query at real account/course volumes.
+- **Checked:** Inspected `server/routes-admin.js`, `server/course-service.js`, the schema indexes in `server/db.js`, and the `admin account course activity` query-plan regression in `server/last-login.test.js`; the full suite passed all 200 tests in this turn.
+
 ## 2026-10-10 — Make registration uniqueness locale-independent
 
 - **Reviewed:** Browser and server validation for duplicate registration-field labels and select options, including each runtime’s implicit locale behavior.
