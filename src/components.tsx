@@ -9,6 +9,7 @@ import type { BrandingPalette } from './branding';
 import { findEnabledAppSelectIndex } from './app-select-navigation';
 import { getAppSelectHorizontalPosition, getAppSelectVerticalPosition } from './app-select-position';
 import { formatCountLabel } from './count-label';
+import { getHorizontalRevealScrollLeft } from './navigation-scroll';
 import type { Course, CourseModule, Lesson } from './types';
 
 export function LoadingScreen({ label = 'Loading your learning space…' }: { label?: string }) {
@@ -128,16 +129,31 @@ export function Header() {
   const { user } = useAuth();
   const { submit: handleSignOut, signingOut, error: signOutError } = useSignOutAction();
   const { pathname } = useLocation();
+  const mainNavigationRef = useRef<HTMLElement>(null);
   const userMenuRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
     if (userMenuRef.current) userMenuRef.current.open = false;
   }, [pathname]);
 
+  useEffect(() => {
+    const revealActiveLink = () => {
+      const navigation = mainNavigationRef.current;
+      const activeLink = navigation?.querySelector<HTMLAnchorElement>('a[aria-current="page"]');
+      if (!navigation || !activeLink || navigation.scrollWidth <= navigation.clientWidth) return;
+      navigation.scrollLeft = getHorizontalRevealScrollLeft(
+        navigation.getBoundingClientRect(), activeLink.getBoundingClientRect(), navigation.scrollLeft,
+      );
+    };
+    revealActiveLink();
+    window.addEventListener('resize', revealActiveLink);
+    return () => window.removeEventListener('resize', revealActiveLink);
+  }, [pathname]);
+
   return (
     <header className="topbar">
       <PlatformBrand className="wordmark" />
-      <nav className="topnav" aria-label="Main navigation">
+      <nav ref={mainNavigationRef} className="topnav" aria-label="Main navigation">
         <NavLink to="/courses" end>Browse courses</NavLink>
         <NavLink to="/my-learning">My learning</NavLink>
         <NavLink to="/learning-paths">Learning paths</NavLink>
@@ -176,13 +192,9 @@ export function StaffFrame() {
       const navigation = staffNavigationRef.current;
       const activeLink = navigation?.querySelector<HTMLAnchorElement>('a[aria-current="page"]');
       if (!navigation || !activeLink || navigation.scrollWidth <= navigation.clientWidth) return;
-      const navigationBounds = navigation.getBoundingClientRect();
-      const linkBounds = activeLink.getBoundingClientRect();
-      if (linkBounds.left < navigationBounds.left) {
-        navigation.scrollLeft += linkBounds.left - navigationBounds.left - 12;
-      } else if (linkBounds.right > navigationBounds.right) {
-        navigation.scrollLeft += linkBounds.right - navigationBounds.right + 12;
-      }
+      navigation.scrollLeft = getHorizontalRevealScrollLeft(
+        navigation.getBoundingClientRect(), activeLink.getBoundingClientRect(), navigation.scrollLeft,
+      );
     };
     revealActiveLink();
     window.addEventListener('resize', revealActiveLink);

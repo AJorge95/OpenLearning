@@ -1091,14 +1091,18 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .quiz-layout { gap: 32px; }
 }
 @media (max-width: 720px) {
-  .topbar { height: 66px; padding: 0 16px; gap: 15px; }
-  .wordmark { font-size: 17px; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; }
-  .topnav { gap: 14px; }
-  .topnav a { font-size: 12px; }
+  .topbar { height: auto; min-height: 118px; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 42px 52px; gap: 8px 15px; padding: 8px 16px 0; }
+  .wordmark { grid-column: 1; grid-row: 1; max-width: none; font-size: 17px; overflow: hidden; text-overflow: ellipsis; }
+  .topnav { grid-column: 1 / -1; grid-row: 2; height: 52px; min-width: 0; gap: 14px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; padding: 5px 6px; }
+  .topnav::-webkit-scrollbar { height: 4px; }
+  .topnav::-webkit-scrollbar-track { background: transparent; }
+  .topnav::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--line-strong); }
+  .topnav a { flex: 0 0 auto; font-size: 12px; white-space: nowrap; }
+  .user-menu { grid-column: 2; grid-row: 1; margin-left: 0; }
   .account-name, .user-menu summary > svg { display: none; }
   .user-menu summary { gap: 0; }
   .avatar { width: 34px; height: 34px; }
-  .app-main { min-height: calc(100vh - 66px); }
+  .app-main { min-height: calc(100vh - 118px); }
   .catalog-page { padding: 34px 16px 54px; }
   .page-heading { align-items: flex-start; gap: 16px; flex-direction: column; margin-bottom: 26px; }
   .page-heading h1 { font-size: 34px; }
