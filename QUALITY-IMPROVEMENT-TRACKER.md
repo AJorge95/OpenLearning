@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Validate learning-path patches and skip no-op writes
+
+- **Reviewed:** Learning-path edit validation and audit behavior, plus the editor's labeled fields, grouped course selector, keyboard focus styles, and responsive single-column layout.
+- **Improvement:** Require an object body for learning-path patches, compare normalized course steps and editable fields with the stored path, and skip timestamp, course-row, and audit writes when nothing changed.
+- **Why it helps:** Malformed array requests no longer look like successful edits, and retrying a save with identical values no longer changes modification history or replaces stable course-row IDs.
+- **Interface review:** The path editor already provides label associations, a fieldset legend, named reorder controls, visible focus outlines, and a narrow-screen layout, so no separate UI change was warranted in this cycle.
+- **Checked:** The focused `server/course-analytics.test.js` suite passed all 55 tests; the regression covers array rejection, empty and identical no-op patches, stable course rows, and one real audited update. Full `npm test` passed all 165 cases; `npx tsc --noEmit`, `npm run build`, `node --check server/routes-programs.js`, and `git diff --check` passed.
+
 ## 2026-10-10 — Validate competency patches and skip no-op audits
 
 - **Reviewed:** The administrator competency edit route, its duplicate-title transaction test, and the current learner catalog's filter, search, and course-card structure.

@@ -278,7 +278,7 @@ programsRouter.post('/manage/learning-paths', requireStaff, (req, res) => {
 });
 
 programsRouter.patch('/manage/learning-paths/:pathId', requireStaff, (req, res) => {
-  const body = req.body || {};
+  const body = requireObjectBody(req.body, 'Learning path changes');
   const update = db.transaction(() => {
     const current = db.prepare('SELECT * FROM learning_paths WHERE id = ?').get(req.params.pathId);
     if (!current) fail(404, 'Learning path not found.', 'not_found');
@@ -287,15 +287,25 @@ programsRouter.patch('/manage/learning-paths/:pathId', requireStaff, (req, res) 
     const selfEnrollment = body.selfEnrollment === undefined ? Boolean(current.self_enrollment) : booleanValue(body.selfEnrollment, 'Self-enrollment');
     const status = body.status === undefined ? current.status : body.status;
     if (!['draft', 'published', 'archived'].includes(status)) fail(400, 'Choose a valid path status.', 'validation_error');
-    const courses = body.courses === undefined ? pathCourseRows(current.id).map((row) => ({ courseId: row.course_id, requiresPrevious: Boolean(row.requires_previous) }))
+    const existingCourses = db.prepare('SELECT course_id, requires_previous FROM learning_path_courses WHERE path_id = ? ORDER BY position').all(current.id);
+    const courses = body.courses === undefined ? existingCourses.map((row) => ({ courseId: row.course_id, requiresPrevious: Boolean(row.requires_previous) }))
       : normalizePathCourses(body.courses, selfEnrollment);
     if (status === 'published' && courses.length === 0) fail(400, 'Add at least one course before publishing a learning path.', 'empty_path');
     if (status !== 'archived' && selfEnrollment && body.courses === undefined && !allPathCoursesArePublic(courses.map((step) => step.courseId))) {
       fail(400, 'Self-enrollable paths can contain public courses only.', 'private_self_enrollment_course');
     }
+    const coursesChanged = courses.length !== existingCourses.length || courses.some((course, index) =>
+      course.courseId !== existingCourses[index]?.course_id
+      || course.requiresPrevious !== Boolean(existingCourses[index]?.requires_previous));
+    const changed = title !== current.title
+      || description !== current.description
+      || selfEnrollment !== Boolean(current.self_enrollment)
+      || status !== current.status
+      || coursesChanged;
+    if (!changed) return current;
     db.prepare(`UPDATE learning_paths SET title = ?, description = ?, self_enrollment = ?, status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(title, description, selfEnrollment ? 1 : 0, status, req.currentUser.id, current.id);
-    if (body.courses !== undefined) savePathCourses(current.id, courses);
+    if (coursesChanged) savePathCourses(current.id, courses);
     logAudit(req.currentUser, 'path.updated', 'learning_path', current.id, `Updated learning path: ${title}`, { status, selfEnrollment, courseCount: courses.length });
     return db.prepare('SELECT * FROM learning_paths WHERE id = ?').get(current.id);
   });
