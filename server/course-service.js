@@ -354,20 +354,25 @@ export function enrollLearner(courseId, userId) {
   ensureCourseLearningState(logicalId, userId);
 }
 
-export function ensureCourseLearningState(courseId, userId, now = new Date()) {
+export function ensureCourseLearningStateWithStatus(courseId, userId, now = new Date()) {
   const logicalId = db.prepare('SELECT logical_course_id FROM courses WHERE id = ?').get(courseId)?.logical_course_id || courseId;
   const course = db.prepare('SELECT completion_window_days FROM courses WHERE id = ?').get(logicalId);
-  if (!course) return null;
+  if (!course) return { state: null, created: false };
   const version = publishedVersion(logicalId);
   const deadlineDays = course.completion_window_days;
   const deadlineAt = Number.isInteger(deadlineDays) && deadlineDays > 0
     ? new Date(now.getTime() + deadlineDays * 24 * 60 * 60 * 1000).toISOString()
     : null;
-  db.prepare(`INSERT OR IGNORE INTO course_learning_state
+  const insert = db.prepare(`INSERT OR IGNORE INTO course_learning_state
       (user_id, course_id, target_version_id, deadline_at, deadline_window_days, started_at)
     VALUES (?, ?, ?, ?, ?, ?)`)
     .run(userId, logicalId, version?.requires_recompletion ? version.id : null, deadlineAt, deadlineDays ?? null, now.toISOString());
-  return db.prepare('SELECT * FROM course_learning_state WHERE user_id = ? AND course_id = ?').get(userId, logicalId);
+  const state = db.prepare('SELECT * FROM course_learning_state WHERE user_id = ? AND course_id = ?').get(userId, logicalId);
+  return { state, created: insert.changes > 0 };
+}
+
+export function ensureCourseLearningState(courseId, userId, now = new Date()) {
+  return ensureCourseLearningStateWithStatus(courseId, userId, now).state;
 }
 
 export function assertPublishable(courseId) {

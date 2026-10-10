@@ -25,6 +25,7 @@ let server;
 let summarizeCourses;
 let editableCourse;
 let isLessonUnlocked;
+let syncPathStates;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -58,7 +59,7 @@ before(async () => {
   });
 
   ({ db: database } = await import('../../server/db.js'));
-  const [{ courseRouter }, { programsRouter }, { errorHandler }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse }] = await Promise.all([
+  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse }] = await Promise.all([
     import('../../server/routes-courses.js'),
     import('../../server/routes-programs.js'),
     import('../../server/http.js'),
@@ -67,6 +68,7 @@ before(async () => {
   ]);
   summarizeCourses = courseSummaries;
   isLessonUnlocked = checkLessonUnlocked;
+  syncPathStates = syncUnlockedPathStates;
   editableCourse = createEditableCourse;
   database.exec(`
     INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES
@@ -554,6 +556,93 @@ test('course summaries batch database reads and preserve progress across version
   const resetSummary = summarizeCourses(courses.slice(0, 1), learner)[0];
   assert.equal(resetSummary.progress, 0);
   assert.equal(resetSummary.completed, false);
+});
+
+test('learning-path state synchronization reuses completed course summaries for existing states', () => {
+  const pathId = 'path-sync-summary-batch';
+  const courseIds = [1, 2, 3].map((number) => `${pathId}-course-${number}`);
+  const moduleIds = courseIds.map((courseId) => `${courseId}-module`);
+  const lessonIds = courseIds.map((courseId) => `${courseId}-lesson`);
+  database.exec(`
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('${pathId}', 'Summary batching', 'published', 0, 'admin-1', 'admin-1');
+  `);
+  const addCourse = database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, ?, 'published', 'admin-1', 'admin-1')`);
+  const addModule = database.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, 0)');
+  const addLesson = database.prepare('INSERT INTO lessons (id, module_id, title, position) VALUES (?, ?, ?, 0)');
+  const addCompletion = database.prepare('INSERT INTO lesson_progress (user_id, lesson_id, completed_at) VALUES (?, ?, ?)');
+  const addState = database.prepare('INSERT INTO course_learning_state (user_id, course_id) VALUES (?, ?)');
+  const addPathCourse = database.prepare(`INSERT INTO learning_path_courses
+    (id, path_id, course_id, position, requires_previous) VALUES (?, ?, ?, ?, ?)`);
+  for (const [index, courseId] of courseIds.entries()) {
+    addCourse.run(courseId, `Completed path course ${index + 1}`);
+    addModule.run(moduleIds[index], courseId, `Module ${index + 1}`);
+    addLesson.run(lessonIds[index], moduleIds[index], `Lesson ${index + 1}`);
+    addCompletion.run('learner-active', lessonIds[index], `2026-10-0${index + 1} 10:00:00`);
+    addState.run('learner-active', courseId);
+    addPathCourse.run(`${pathId}-step-${index + 1}`, pathId, courseId, index, index === 0 ? 0 : 1);
+  }
+
+  let singleCourseSummaryReads = 0;
+  const originalPrepare = database.prepare;
+  database.prepare = (sql) => {
+    if (sql.includes('SELECT * FROM courses WHERE id IN (?)')) singleCourseSummaryReads += 1;
+    return originalPrepare.call(database, sql);
+  };
+  try {
+    syncPathStates(pathId, 'learner-active');
+  } finally {
+    delete database.prepare;
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run(pathId);
+    database.prepare(`DELETE FROM courses WHERE id IN (${courseIds.map(() => '?').join(', ')})`).run(...courseIds);
+  }
+
+  assert.equal(singleCourseSummaryReads, 0);
+});
+
+test('learning-path synchronization refreshes progress when a new state requires recompletion', () => {
+  const pathId = 'path-sync-required-reset';
+  const courseId = `${pathId}-course`;
+  const versionCourseId = `${courseId}-v2`;
+  const nextCourseId = `${pathId}-next-course`;
+  const oldLessonId = `${courseId}-lesson-v1`;
+  database.exec(`
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('${pathId}', 'Required reset', 'published', 0, 'admin-1', 'admin-1');
+    INSERT INTO courses (id, title, status, created_by, updated_by, logical_course_id) VALUES
+      ('${courseId}', 'Versioned path course', 'published', 'admin-1', 'admin-1', NULL),
+      ('${versionCourseId}', 'Versioned path course', 'published', 'admin-1', 'admin-1', '${courseId}'),
+      ('${nextCourseId}', 'Next path course', 'published', 'admin-1', 'admin-1', NULL);
+    INSERT INTO course_modules (id, course_id, title, position, stable_id) VALUES
+      ('${courseId}-module-v1', '${courseId}', 'Module', 0, 'path-sync-module'),
+      ('${courseId}-module-v2', '${versionCourseId}', 'Module', 0, 'path-sync-module'),
+      ('${nextCourseId}-module', '${nextCourseId}', 'Module', 0, 'path-sync-next-module');
+    INSERT INTO lessons (id, module_id, title, position, stable_id) VALUES
+      ('${oldLessonId}', '${courseId}-module-v1', 'Lesson', 0, 'path-sync-lesson'),
+      ('${courseId}-lesson-v2', '${courseId}-module-v2', 'Lesson', 0, 'path-sync-lesson'),
+      ('${nextCourseId}-lesson', '${nextCourseId}-module', 'Lesson', 0, 'path-sync-next-lesson');
+    INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by, requires_recompletion) VALUES
+      ('${courseId}-version-1', '${courseId}', '${courseId}', 1, 'admin-1', 0),
+      ('${courseId}-version-2', '${courseId}', '${versionCourseId}', 2, 'admin-1', 1);
+    INSERT INTO lesson_progress (user_id, lesson_id, completed_at)
+      VALUES ('learner-active', '${oldLessonId}', '2026-10-01 10:00:00');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+      ('${pathId}-step-1', '${pathId}', '${courseId}', 0, 0),
+      ('${pathId}-step-2', '${pathId}', '${nextCourseId}', 1, 1);
+  `);
+
+  try {
+    syncPathStates(pathId, 'learner-active');
+    const state = database.prepare('SELECT target_version_id FROM course_learning_state WHERE user_id = ? AND course_id = ?')
+      .get('learner-active', courseId);
+    assert.equal(state.target_version_id, `${courseId}-version-2`);
+    assert.equal(database.prepare('SELECT 1 FROM course_learning_state WHERE user_id = ? AND course_id = ?')
+      .get('learner-active', nextCourseId), undefined);
+  } finally {
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run(pathId);
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?, ?)').run(courseId, versionCourseId, nextCourseId);
+  }
 });
 
 test('private path course access follows the current step prerequisite setting', async () => {

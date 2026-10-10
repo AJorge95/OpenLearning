@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse batched summaries during learning-path state synchronization
+
+- **Reviewed:** Ordered path-state synchronization, course summary batching, and state creation when a published course version requires learner recompletion.
+- **Improvement:** Keep the already-batched course summaries when a learner state exists or a newly created state does not activate a recompletion reset. Recompute only when a newly created state has a target version requiring reset.
+- **Why it helps:** Synchronizing an unlocked path no longer reloads each course and its progress separately after the batch summary query; the reset still correctly blocks later courses until the learner completes the new version.
+- **Interface review:** Rechecked the reported account-role control. Its visible trigger is 144×44 px; the trigger opens, while clicks in the adjacent gap and farther to the right leave it closed. No additional selector change was needed.
+- **Checked:** The focused path synchronization and recompletion tests passed; full `npm test` passed all 248 tests; `npm run build` and `git diff --check` passed. `npx tsc --noEmit` remains blocked by three separate uncommitted `navigate` errors in `src/pages-manage.tsx`.
+
 ## 2026-10-10 — Reuse SQL statements for video watch heartbeats
 
 - **Reviewed:** The learner video progress endpoint, which reports a heartbeat every four seconds, and the watch-progress reads and writes performed for accepted and rejected positions.
