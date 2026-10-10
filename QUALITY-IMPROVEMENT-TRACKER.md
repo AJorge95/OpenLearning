@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Clear corrected password-confirmation warnings
+
+- **Reviewed:** The six password-confirmation forms added to client-side validation, their form error state, and existing password requirements.
+- **Improvement:** Clear only the “Passwords do not match” warning as either password value changes; retain unrelated validation or API errors.
+- **Why it helps:** Users see the mismatch feedback disappear as soon as they correct either value, without hiding other actionable errors.
+- **Interface review:** The existing live error regions, password labels, hints, and server-side checks remain unchanged.
+- **Checked:** The focused password-confirmation suite passed all 5 tests, including selective error clearing across all six forms; full `npm test` passed all 223 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Validate password confirmation before submission and centralize tests
 
 - **Reviewed:** Password confirmation in setup, registration, self-service changes, and administrator account creation and resets; existing server-side mismatch validation; and the current test-file layout.
