@@ -30,6 +30,7 @@ let syncPathStates;
 let hasCourseGrant;
 let createCourseAccessChecker;
 let logicalCourseId;
+let publishedVersionForLogicalCourse;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -63,7 +64,7 @@ before(async () => {
   });
 
   ({ db: database } = await import('../../server/db.js'));
-  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler, hasCourseGrant: checkCourseGrant, createCourseAccessChecker: makeCourseAccessChecker }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests, logicalCourseId: resolveLogicalCourseId }] = await Promise.all([
+  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler, hasCourseGrant: checkCourseGrant, createCourseAccessChecker: makeCourseAccessChecker }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests, logicalCourseId: resolveLogicalCourseId, publishedVersionForLogicalCourse: readPublishedVersionForLogicalCourse }] = await Promise.all([
     import('../../server/routes-courses.js'),
     import('../../server/routes-programs.js'),
     import('../../server/http.js'),
@@ -78,6 +79,7 @@ before(async () => {
   hasCourseGrant = checkCourseGrant;
   createCourseAccessChecker = makeCourseAccessChecker;
   logicalCourseId = resolveLogicalCourseId;
+  publishedVersionForLogicalCourse = readPublishedVersionForLogicalCourse;
   database.exec(`
     INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES
       ('admin-1', 'admin', 'admin@example.invalid', 'not-used', 'admin', 0),
@@ -3100,6 +3102,47 @@ test('logical course ID resolution reuses its prepared course and content lookup
   }
 
   assert.equal(lookupPreparations, 0, 'course identity lookups should be prepared once when the module loads');
+});
+
+test('published version lookup reuses its statement while reading the latest live version', () => {
+  const rootId = 'published-version-prepared-root';
+  const firstStorageId = 'published-version-prepared-v1';
+  const secondStorageId = 'published-version-prepared-v2';
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Prepared version root', 'published', 'admin-1', 'admin-1')`).run(rootId);
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by, logical_course_id)
+    VALUES (?, 'Version one', 'published', 'admin-1', 'admin-1', ?)`)
+    .run(firstStorageId, rootId);
+  database.prepare(`INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+    VALUES ('published-version-prepared-v1-row', ?, ?, 1, 'admin-1')`).run(rootId, firstStorageId);
+
+  const originalPrepare = database.prepare;
+  let lookupPreparations = 0;
+  database.prepare = (sql) => {
+    if (sql.replace(/\s+/g, ' ').trim().startsWith('SELECT v.*, c.title, c.description, c.category, c.visibility, c.status,')) {
+      lookupPreparations += 1;
+    }
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    const firstVersion = publishedVersionForLogicalCourse(rootId);
+    assert.equal(firstVersion?.id, 'published-version-prepared-v1-row');
+    assert.equal(firstVersion?.title, 'Version one');
+    originalPrepare.call(database, `INSERT INTO courses (id, title, status, created_by, updated_by, logical_course_id)
+      VALUES (?, 'Version two', 'published', 'admin-1', 'admin-1', ?)`)
+      .run(secondStorageId, rootId);
+    originalPrepare.call(database, `INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+      VALUES ('published-version-prepared-v2-row', ?, ?, 2, 'admin-1')`).run(rootId, secondStorageId);
+    const latestVersion = publishedVersionForLogicalCourse(rootId);
+    assert.equal(latestVersion?.id, 'published-version-prepared-v2-row');
+    assert.equal(latestVersion?.title, 'Version two');
+  } finally {
+    database.prepare = originalPrepare;
+    originalPrepare.call(database, 'DELETE FROM courses WHERE id = ?').run(rootId);
+  }
+
+  assert.equal(lookupPreparations, 0, 'published-version lookup should reuse the statement prepared at module load');
 });
 
 test('course access reuses complete canonical rows supplied by list queries', () => {
