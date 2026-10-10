@@ -9,7 +9,7 @@ import { writeAuditLog } from './log-store.js';
 import { accountName, accountNames } from './account-names.js';
 import { issueCompletedCertificatesForUser } from './certificate-service.js';
 import { courseSummaries } from './course-service.js';
-import { readRegistrationFields, saveRegistrationFields } from './registration-fields.js';
+import { normalizeRegistrationFields, readRegistrationFields, saveRegistrationFields } from './registration-fields.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -37,7 +37,10 @@ adminRouter.get('/registration-fields', (_req, res) => {
 
 adminRouter.put('/registration-fields', (req, res) => {
   const fields = db.transaction(() => {
-    const savedFields = saveRegistrationFields(req.body?.fields);
+    const nextFields = normalizeRegistrationFields(req.body?.fields);
+    const current = readRegistrationFields();
+    if (current.configurationValid && JSON.stringify(current.fields) === JSON.stringify(nextFields)) return nextFields;
+    const savedFields = saveRegistrationFields(nextFields);
     const auditId = writeAuditLog({ actor: req.currentUser, action: 'platform.registration_fields_updated', entityType: 'platform',
       summary: 'Registration fields updated', details: { fieldCount: savedFields.length, fieldTypes: savedFields.map((field) => field.type) } });
     if (!auditId) fail(500, 'Registration fields could not be saved because the audit log is unavailable.', 'audit_unavailable');
