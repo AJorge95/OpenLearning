@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse the canonical course row in detail summaries
+
+- **Reviewed:** The course detail payload’s summary setup, which re-read the canonical row even when the route had already passed that exact row into the payload builder.
+- **Improvement:** Reuse the incoming row when its ID is the logical course ID; retain the database lookup for revision rows that still need canonical metadata.
+- **Why it helps:** Root-course detail reads avoid one redundant query without changing how draft or published revisions resolve their summary source.
+- **Interface review:** No visible change; summary values and revision content remain unchanged.
+- **Checked:** The course-detail regression confirms the root and published rows are each fetched once and progress is preserved. The focused course analytics/versioning suite passed (69/69); full `npm test` passed all 262 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Skip redundant course ID resolution for published versions
 
 - **Reviewed:** Course detail assembly, which passed a known canonical ID to `publishedVersion()` and re-queried `courses` to resolve that same ID.

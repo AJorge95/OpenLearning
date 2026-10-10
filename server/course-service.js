@@ -173,7 +173,7 @@ export function getCoursePayload(course, user, { includeAnswers = false, storage
   const version = publishedVersionForLogicalCourse(logicalId);
   const content = storageCourseId ? db.prepare('SELECT * FROM courses WHERE id = ?').get(storageCourseId)
     : editingCopy ? course : currentPublishedCourseForVersion(logicalId, version) || course;
-  const rootCourse = db.prepare('SELECT * FROM courses WHERE id = ?').get(logicalId) || course;
+  const rootCourse = course.id === logicalId ? course : db.prepare('SELECT * FROM courses WHERE id = ?').get(logicalId) || course;
   const summaryDetails = courseSummaryDetails([rootCourse], user, new Map([[logicalId, version]]))[0];
   const summary = summaryDetails.summary;
   const resultSummary = editingCopy ? { ...summary, title: course.title, description: course.description,
