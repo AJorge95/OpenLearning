@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { db, setting } from './db.js';
 import { courseSummaries, courseSummary } from './course-service.js';
-import { logicalCourseId, publishedVersion } from './course-versioning.js';
+import { logicalCourseId, publishedVersionForLogicalCourse } from './course-versioning.js';
 
 const certificateBatchSize = 200;
 
@@ -21,7 +21,7 @@ export function certificatePayload(row) {
 
 export function findCourseCertificate(courseId, userId, versionId) {
   const logicalId = logicalCourseId(courseId) || courseId;
-  const currentVersionId = versionId ?? publishedVersion(logicalId)?.id ?? null;
+  const currentVersionId = versionId ?? publishedVersionForLogicalCourse(logicalId)?.id ?? null;
   return findCertificateForVersion(logicalId, userId, currentVersionId);
 }
 
@@ -47,7 +47,7 @@ function saveCertificate(course, account, versionId) {
 export function issueCertificateIfComplete(courseId, user) {
   if (user.role !== 'learner') return null;
   const logicalId = logicalCourseId(courseId) || courseId;
-  const version = publishedVersion(logicalId);
+  const version = publishedVersionForLogicalCourse(logicalId);
   const versionId = version?.id ?? null;
   const existing = findCertificateForVersion(logicalId, user.id, versionId);
   if (existing) return certificatePayload(existing);

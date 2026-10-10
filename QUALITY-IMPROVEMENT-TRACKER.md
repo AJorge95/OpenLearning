@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Skip repeated course resolution in certificate lookup
+
+- **Reviewed:** Certificate lookup and issuance, which resolved the logical course ID and then passed it to the general published-version resolver, repeating the course-ID query.
+- **Improvement:** Use the canonical-ID published-version lookup in both certificate paths while retaining the general resolver for callers that may supply non-canonical IDs.
+- **Why it helps:** Certificate checks and issuance avoid one redundant course lookup without changing the version-specific certificate key.
+- **Interface review:** No visible change; existing certificate access, snapshot fields, and version behavior remain intact.
+- **Checked:** Regressions confirm both certificate lookup and issuance resolve the logical course ID once. The focused certificate suite passed (7/7); full `npm test` passed all 263 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reuse supplied course rows in batched summaries
 
 - **Reviewed:** The batched summary builder’s content-row query and the input rows supplied by course, learning-path, and certificate callers.
