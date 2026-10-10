@@ -12,7 +12,7 @@ import { learnerCommentLimiter, learnerReactionLimiter, quizAttemptLimiter } fro
 import { canonicalCourse, logicalCourseId, publishRevision, publishedVersion } from './course-versioning.js';
 import { certificatePayload, findCourseCertificate, issueCertificateIfComplete } from './certificate-service.js';
 import { syncUnlockedPathStates } from './routes-programs.js';
-import { beginLessonWatch, getLessonWatchProgress, lessonVideoWasWatched, recordLessonWatchProgress } from './lesson-watch.js';
+import { beginLessonWatch, getLessonWatchProgress, lessonVideoWasWatched, recordLessonWatchProgress, rewindLessonWatch } from './lesson-watch.js';
 import { readMp4Duration } from './mp4-duration.js';
 import { createVideoDurationReader } from './video-duration-reader.js';
 
@@ -310,6 +310,11 @@ courseRouter.post('/lessons/:lessonId/watch-progress/start', async (req, res) =>
   const lesson = requireWatchableLesson(req.params.lessonId, req.currentUser);
   const duration = await verifiedVideoDuration(lesson);
   res.json(beginLessonWatch(req.currentUser, lesson.lesson_id, duration));
+});
+
+courseRouter.post('/lessons/:lessonId/watch-progress/rewind', (req, res) => {
+  const lesson = requireWatchableLesson(req.params.lessonId, req.currentUser);
+  res.json(rewindLessonWatch(req.currentUser, lesson.lesson_id, req.body?.positionSeconds));
 });
 
 courseRouter.put('/lessons/:lessonId/watch-progress', (req, res) => {

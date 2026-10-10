@@ -18,6 +18,7 @@ import { writeSystemLog } from './log-store.js';
 import { cleanupOrphanedCourseMedia } from './media-cleanup.js';
 import { programsRouter } from './routes-programs.js';
 import { isReadyToServe } from './readiness.js';
+import { isPlatformResetActive, platformResetGate } from './platform-reset.js';
 
 const app = express();
 let isShuttingDown = false;
@@ -45,7 +46,7 @@ app.use(noStoreApiResponses);
 app.get('/healthz', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({ status: 'ok' }));
 app.get('/readyz', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  return isReadyToServe(db, isShuttingDown)
+  return isReadyToServe(db, isShuttingDown || isPlatformResetActive())
     ? res.json({ status: 'ok' })
     : res.status(503).json({ status: 'unavailable' });
 });
@@ -79,6 +80,7 @@ app.use(session({
 }));
 app.use(createSessionCookieProtocolMiddleware(setting, config.nodeEnv));
 app.use(loadCurrentUser);
+app.use(platformResetGate);
 
 const authRateLimitOptions = {
   windowMs: 15 * 60 * 1000,

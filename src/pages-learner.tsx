@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownUp, ArrowLeft, ArrowRight, Award, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, LockKeyhole, Maximize, MessageSquare, Pause, Play, Printer, Search, Send, ThumbsDown, ThumbsUp, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { ArrowDownUp, ArrowLeft, ArrowRight, Award, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, LockKeyhole, Maximize, MessageSquare, Pause, Play, Printer, RotateCcw, Search, Send, ThumbsDown, ThumbsUp, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
 import { AppSelect, Button, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
@@ -32,6 +32,7 @@ type LessonWatchProgress = {
   started: boolean;
   complete: boolean;
   watchedUntilSeconds: number;
+  lastPositionSeconds: number;
   durationSeconds: number;
 };
 
@@ -515,8 +516,9 @@ export function CoursePlayerPage() {
   const [videoPosition, setVideoPosition] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [watchProgress, setWatchProgress] = useState<LessonWatchProgress>({
-    lessonId: '', ready: false, required: false, started: false, complete: false, watchedUntilSeconds: 0, durationSeconds: 0,
+    lessonId: '', ready: false, required: false, started: false, complete: false, watchedUntilSeconds: 0, lastPositionSeconds: 0, durationSeconds: 0,
   });
+  const [rewindSaving, setRewindSaving] = useState(false);
   const [watchError, setWatchError] = useState('');
   const [feedback, setFeedback] = useState<LessonFeedback | null>(null);
   const [feedbackLoading, setFeedbackLoading] = useState(true);
@@ -667,6 +669,7 @@ export function CoursePlayerPage() {
     watchStartedLessonRef.current = null;
     lastProgressReportAtRef.current = 0;
     playbackPositionRef.current = 0;
+    setRewindSaving(false);
     setWatchError('');
     setVideoPlaying(false);
     setVideoPosition(0);
@@ -678,6 +681,7 @@ export function CoursePlayerPage() {
       started: false,
       complete: Boolean(current?.completed),
       watchedUntilSeconds: 0,
+      lastPositionSeconds: 0,
       durationSeconds: 0,
     });
     videoRef.current?.pause();
@@ -694,7 +698,7 @@ export function CoursePlayerPage() {
         playbackPositionRef.current = resumeAt;
         setVideoPosition(resumeAt);
         setWatchProgress({ lessonId: requestedLessonId, ready: true, required: result.required, started: false,
-          complete: result.complete, watchedUntilSeconds: result.watchedUntilSeconds, durationSeconds: result.durationSeconds });
+          complete: result.complete, watchedUntilSeconds: result.watchedUntilSeconds, lastPositionSeconds: result.lastPositionSeconds, durationSeconds: result.durationSeconds });
         const video = videoRef.current;
         if (video && video.readyState >= 1) video.currentTime = resumeAt;
       })
@@ -934,7 +938,7 @@ export function CoursePlayerPage() {
               `/api/lessons/${requestedLessonId}/watch-progress/start`, {},
             ).then((result) => {
               if (routeLessonIdRef.current === requestedLessonId) {
-                playbackPositionRef.current = result.watchedUntilSeconds;
+                playbackPositionRef.current = result.lastPositionSeconds;
                 watchStartedLessonRef.current = requestedLessonId;
                 lastProgressReportAtRef.current = Date.now();
                 setWatchProgress({ ...result, lessonId: requestedLessonId, ready: true, started: true });
@@ -973,14 +977,14 @@ export function CoursePlayerPage() {
         ? { ...previousProgress, ...result, started: true, ready: true }
         : previousProgress);
       if (result.accepted) {
-        playbackPositionRef.current = Math.max(playbackPositionRef.current, result.watchedUntilSeconds);
+        playbackPositionRef.current = result.lastPositionSeconds;
       } else {
         const videoElement = videoRef.current;
-        playbackPositionRef.current = result.watchedUntilSeconds;
-        if (videoElement && Math.abs(videoElement.currentTime - result.watchedUntilSeconds) > 0.15) {
+        playbackPositionRef.current = result.lastPositionSeconds;
+        if (videoElement && Math.abs(videoElement.currentTime - result.lastPositionSeconds) > 0.15) {
           videoElement.pause();
-          videoElement.currentTime = result.watchedUntilSeconds;
-          setVideoPosition(result.watchedUntilSeconds);
+          videoElement.currentTime = result.lastPositionSeconds;
+          setVideoPosition(result.lastPositionSeconds);
           setVideoPlaying(false);
           setWatchError('Manual seeking or accelerated playback was rejected. Continue from the last server-verified position.');
         }
@@ -1023,7 +1027,41 @@ export function CoursePlayerPage() {
     video.currentTime = verifiedPosition;
     setVideoPosition(verifiedPosition);
     setVideoPlaying(false);
-    setWatchError('Manual seeking is disabled. Continue from the last server-verified position.');
+    setWatchError('Forward seeking is disabled. Use Rewind 30 seconds to review.');
+  }
+
+  function rewindVideo30Seconds() {
+    const video = videoRef.current;
+    const requestedLessonId = lessonId;
+    if (!video || !watchReadyForCurrent || !watchProgress.started || rewindSaving
+      || watchStartedLessonRef.current !== requestedLessonId || video.currentTime <= 0) return;
+    setWatchError('');
+    setRewindSaving(true);
+    video.pause();
+    progressReportChainRef.current = progressReportChainRef.current.catch(() => undefined).then(async () => {
+      if (routeLessonIdRef.current !== requestedLessonId
+        || watchStartedLessonRef.current !== requestedLessonId) return;
+      const activeVideo = videoRef.current;
+      if (!activeVideo) return;
+      const targetPosition = Math.max(0, activeVideo.currentTime - 30);
+      const result = await api.post<Omit<LessonWatchProgress, 'lessonId' | 'ready' | 'started'>>(
+        `/api/lessons/${requestedLessonId}/watch-progress/rewind`, { positionSeconds: targetPosition },
+      );
+      if (routeLessonIdRef.current !== requestedLessonId) return;
+      playbackPositionRef.current = result.lastPositionSeconds;
+      activeVideo.currentTime = result.lastPositionSeconds;
+      setVideoPosition(result.lastPositionSeconds);
+      setWatchProgress((previousProgress) => previousProgress.lessonId === requestedLessonId
+        ? { ...previousProgress, ...result, started: true, ready: true }
+        : previousProgress);
+      lastProgressReportAtRef.current = Date.now();
+    }).catch((cause) => {
+      if (routeLessonIdRef.current === requestedLessonId) {
+        setWatchError(cause instanceof ApiError ? cause.message : 'The video could not be rewound. Try again.');
+      }
+    }).finally(() => {
+      if (routeLessonIdRef.current === requestedLessonId) setRewindSaving(false);
+    });
   }
 
   function enforceNormalPlaybackRate(event: React.SyntheticEvent<HTMLVideoElement>) {
@@ -1071,7 +1109,7 @@ export function CoursePlayerPage() {
             if (watchRequired && watchProgress.lessonId === lessonId && watchProgress.ready) {
               const resumeAt = watchProgress.complete ? 0 : watchProgress.watchedUntilSeconds;
               video.currentTime = resumeAt;
-              playbackPositionRef.current = resumeAt;
+              playbackPositionRef.current = watchProgress.started ? watchProgress.lastPositionSeconds : resumeAt;
             }
           }}
           onTimeUpdate={updateVideoPosition}
@@ -1091,13 +1129,14 @@ export function CoursePlayerPage() {
       </section>
       {watchRequired && current.hasVideo && <div className="lesson-video-controls" role="group" aria-label="Video playback controls">
         <button className="video-control-button video-play-button" type="button" aria-label={videoPlaying ? 'Pause video' : 'Play video'} disabled={!watchReadyForCurrent || videoError} onClick={() => void toggleVideoPlayback()}>{videoPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</button>
+        <button className="video-control-button video-rewind-button" type="button" aria-label="Rewind 30 seconds" title="Rewind 30 seconds" disabled={!watchReadyForCurrent || !watchProgress.started || rewindSaving || videoPosition <= 0} onClick={rewindVideo30Seconds}><RotateCcw size={16} /><span>30s</span></button>
         <span className="video-clock" aria-label="Current video time">{videoClock(videoPosition)} <span>/</span> {videoClock(videoDuration)}</span>
         <div className="video-watch-progress" role="progressbar" aria-label="Video watched; seeking is disabled" aria-valuemin={0} aria-valuemax={Math.max(1, videoDuration)} aria-valuenow={Math.min(videoPosition, videoDuration)}><span style={{ width: `${videoDuration ? Math.min(100, videoPosition / videoDuration * 100) : 0}%` }} /></div>
         <button className="video-control-button" type="button" aria-label={videoMuted ? 'Unmute video' : 'Mute video'} aria-pressed={videoMuted} onClick={() => updateVolume(videoMuted ? videoVolume || 1 : 0)}>{videoMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
         <input className="video-volume-control" type="range" min="0" max="1" step="0.05" value={videoMuted ? 0 : videoVolume} aria-label="Video volume" onChange={(event) => updateVolume(Number(event.target.value))} />
         <button className="video-control-button" type="button" aria-label="Enter full screen" onClick={() => { void enterVideoFullscreen(); }}><Maximize size={17} /></button>
       </div>}
-      {watchRequired && current.hasVideo && <p className={`video-watch-guidance ${watchedForCurrent ? 'is-watched' : ''}`} role="status" aria-live="polite">{!watchReadyForCurrent ? 'Preparing lesson playback…' : watchedForCurrent ? 'Full video watched. Mark this lesson complete to continue.' : 'Watch the full video to unlock lesson completion. Manual seeking and speed changes are disabled.'}</p>}
+      {watchRequired && current.hasVideo && <p className={`video-watch-guidance ${watchedForCurrent ? 'is-watched' : ''}`} role="status" aria-live="polite">{!watchReadyForCurrent ? 'Preparing lesson playback…' : watchedForCurrent ? 'Full video watched. Mark this lesson complete to continue.' : 'Watch the full video to unlock lesson completion. Forward seeking and speed changes are disabled.'}</p>}
       {videoError && <div className="player-video-error" role="alert"><p>The video could not be loaded. Retry, or contact your course administrator if it still will not play.</p><Button type="button" variant="secondary" onClick={retryVideo}>Retry video</Button></div>}
       {fullscreenError && <div className="player-video-error" role="alert">{fullscreenError}</div>}
       {watchError && <div className="player-video-error" role="alert">{watchError}</div>}

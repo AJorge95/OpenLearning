@@ -5,15 +5,59 @@ import { hashPassword, normalizeEmail, validateCredentials, validateEmail, valid
 import { enumQuery, fail, pageQuery, requireAdmin, requireObjectBody } from './http.js';
 import { invalidateUserSessions } from './session-store.js';
 import { textSearchPredicate } from './sql.js';
-import { writeAuditLog } from './log-store.js';
+import { writeAuditLog, writeSystemLog } from './log-store.js';
 import { accountName, accountNames } from './account-names.js';
 import { issueCompletedCertificatesForUser } from './certificate-service.js';
 import { courseSummaries } from './course-service.js';
 import { normalizeRegistrationFields, readRegistrationFields, saveRegistrationFields } from './registration-fields.js';
 import { adminPasswordResetLimiter } from './rate-limits.js';
+import { cancelPlatformReset, confirmPlatformReset, finishPlatformReset, getPlatformResetStatus, preparePlatformReset } from './platform-reset.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
+
+function destroyCurrentSession(req) {
+  return new Promise((resolve, reject) => req.session.destroy((error) => error ? reject(error) : resolve()));
+}
+
+adminRouter.get('/platform-reset', (req, res) => {
+  res.json(getPlatformResetStatus(req.currentUser.id));
+});
+
+adminRouter.post('/platform-reset/prepare', async (req, res) => {
+  try {
+    res.json(await preparePlatformReset(req.currentUser));
+  } catch (error) {
+    if (error?.status) throw error;
+    writeSystemLog('error', 'platform-reset', 'Could not create the pre-reset backup', {
+      actorId: req.currentUser.id,
+      errorName: String(error?.name || 'Error').slice(0, 100),
+      errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+    });
+    fail(500, 'The backup could not be completed, so the platform was not reset. Check the system log and available disk space.', 'platform_reset_backup_failed');
+  }
+});
+
+adminRouter.post('/platform-reset/cancel', (req, res) => {
+  const result = cancelPlatformReset(req.currentUser, req.body?.confirmationId);
+  res.json(result);
+});
+
+adminRouter.post('/platform-reset/confirm', async (req, res) => {
+  const result = await confirmPlatformReset(req.currentUser, req.body?.confirmationId, req.body?.confirmationPhrase);
+  try {
+    await destroyCurrentSession(req);
+  } catch (error) {
+    writeSystemLog('warn', 'platform-reset', 'Session cleanup after the platform reset reported an error', {
+      actorId: req.currentUser.id,
+      errorName: String(error?.name || 'Error').slice(0, 100),
+      errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+    });
+  } finally {
+    finishPlatformReset();
+  }
+  res.json(result);
+});
 
 function textQuery(value, label, maxLength) {
   if (value === undefined) return '';
