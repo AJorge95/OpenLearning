@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Verify administrator role select hit area
+
+- **Reviewed:** The account-details role control's live markup, computed width, pointer-event boundaries, the older screenshot's label target, and the existing custom-select structure guard.
+- **Result:** No code change. The current page renders a 152px trigger inside a non-interactive `div`; clicking 10px beyond the right edge leaves the menu closed, and the same outside click closes an open menu. The screenshot's native-label selector does not match the current DOM.
+- **Why it helps:** Confirms that only the visible trigger opens the role menu and avoids duplicating the existing fix for oversized label click areas.
+- **Checked:** `node --test src/app-select-label.test.js src/app-select-position.test.js` passed all 7 tests. In the local admin account page, the menu opened from the trigger and closed from the right-side outside click.
+
 ## 2026-10-10 — Bound administrator password reset work
 
 - **Reviewed:** The administrator reset route, its scrypt hashing cost, per-user rate-limit conventions, and how account details display API errors.
