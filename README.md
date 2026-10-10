@@ -1,12 +1,16 @@
 # OpenLearning
 
-OpenLearning is a lightweight, self-hosted learning platform for a single organization. It provides a searchable course catalog, video lessons, module quizzes, learner progress, course access grants, and role-based course management.
+OpenLearning is a lightweight, self-hosted learning platform for a single organization. It provides a searchable course catalog, video lessons, module quizzes, learning paths, competencies, learner progress, course access grants, and role-based course management.
 
 ## Features
 
 - Username-and-password sign-in, email addresses for new accounts, configurable learner registration fields and account limits, and a one-time setup wizard for the initial administrator.
 - Administrator, moderator, and learner roles.
-- Public courses for signed-in learners and private courses available through individual access grants.
+- Public courses for signed-in learners, plus private courses available through an individual grant or an unlocked step in an assigned learning path.
+- Guided learning paths that order courses, optionally require earlier courses to be completed, and can be assigned by staff. Learner self-enrollment is available for paths made only of public courses.
+- Course competency mappings and learner progress toward an organization’s competency map.
+- Versioned course publication with review workflows, restoration of earlier versions, and optional completion windows.
+- A learner calendar for course deadlines and completion status.
 - Courses organized into ordered modules, described video lessons with optional text transcripts and WebVTT caption tracks, lesson links and documents, and optional single-answer quizzes.
 - Lesson-level likes, dislikes, and learner comments, with reactions limited to one per learner per lesson.
 - Verified video watch progress before lesson completion, saved quiz attempts, unlimited retries, course completion tracking, and learner-specific certificates.
@@ -67,11 +71,11 @@ The suite uses Node's built-in test runner, in-memory and isolated temporary SQL
 
 ## Roles and permissions
 
-- **Administrator:** Create and manage accounts, roles, passwords, and course activity; manage settings, courses, learner assignments, and access grants.
-- **Moderator:** Create and manage all courses, assign learners, and review course dashboards. Moderators cannot manage accounts, roles, or platform settings.
-- **Learner:** Browse and learn from published public courses, plus private courses for which they have an active grant.
+- **Administrator:** Create and manage accounts, roles, passwords, and course activity; manage settings, courses, learning paths, competencies, learner assignments, and access grants.
+- **Moderator:** Create and manage courses and learning paths, assign learners, map course competencies, and review course dashboards. Moderators cannot manage accounts, roles, or platform settings.
+- **Learner:** Browse and learn from published public courses, plus private courses available through an individual grant or an unlocked step in an assigned learning path.
 
-All course and lesson viewing requires sign-in. Video lessons must be watched through verified playback in the learning player before they can be marked complete. Learners encounter prior-lesson locks; administrators and moderators can open later lessons to review them. Assignments place a course in a learner's My learning list; private courses require an active assignment for access. Revoking a private-course assignment takes effect on the next API or media request.
+All course and lesson viewing requires sign-in. Video lessons must be watched through verified playback in the learning player before they can be marked complete. Learners encounter prior-lesson locks; administrators and moderators can open later lessons to review them. Course assignments and learning-path enrollments place eligible courses in a learner's My learning list. Assigned paths can provide access to private courses one step at a time as prerequisites are completed. Revoking a course or path assignment takes effect on the next API or media request. Completion windows appear in the learner calendar and do not block course access.
 
 Administrators can manually create learner, moderator, or administrator accounts, change roles or account status, and reset passwords. New accounts require a unique email address; sign-in still uses the username and password. Account details show the last successful login, and failed sign-in attempts do not update it. From **Settings** → **Registration fields**, administrators can add up to 30 text, date, select-list, or checkbox fields to public signup and choose which are required. Saved learner answers remain on the account if a field is later changed or removed, and administrators can review them on the account-details page. The account list and course-assignment list can search by username or email.
 
