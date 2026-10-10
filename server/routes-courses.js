@@ -81,7 +81,7 @@ async function removeCourseMediaFile(courseId, fileName, message, details = {}) 
 }
 
 function accessiblePublishedCourses(user, filters = {}) {
-  const clauses = ["c.status = 'published'"];
+  const clauses = ["c.status = 'published'", 'c.logical_course_id IS NULL'];
   const params = [];
   if (filters.query) {
     const search = textSearchPredicate(['c.title', 'c.description', 'c.category'], filters.query);
@@ -160,7 +160,7 @@ courseRouter.get('/courses', (req, res) => {
   const sort = enumQuery(req.query.sort, 'sort order', ['recent', 'title'], 'recent');
   const { courses, total, page, pageSize } = accessiblePublishedCourses(req.currentUser, { query, category, sort, page: req.query.page });
   const categories = db.prepare(`
-    SELECT DISTINCT c.category FROM courses c WHERE c.status = 'published' AND (
+    SELECT DISTINCT c.category FROM courses c WHERE c.status = 'published' AND c.logical_course_id IS NULL AND (
       c.visibility = 'public' OR ? IN ('admin', 'moderator') OR
       EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?)
     ) ORDER BY c.category COLLATE NOCASE
