@@ -4,7 +4,7 @@ import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
 import { AppSelect, Button, ImageWithFallback, PalettePicker, PlatformBrand, PlatformIconPicker } from './components';
 import { findMissingRequiredRegistrationField } from './registration-fields';
-import { getPasswordConfirmationError } from './password-confirmation';
+import { clearPasswordConfirmationError, getPasswordConfirmationError } from './password-confirmation';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import type { RegistrationField, RegistrationFieldValues } from './types';
@@ -156,8 +156,8 @@ export function SetupPage() {
             <label>Admin email<input required type="email" maxLength={254} autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
             <div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} /></label></div>
             <label>Admin username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
-            <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} /><small>Use at least 12 characters.</small></label>
-            <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
+            <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} /><small>Use at least 12 characters.</small></label>
+            <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} /></label>
             {error && <p className="form-error" role="alert">{error}</p>}
             <Button type="submit">Continue to access settings</Button>
           </form>
@@ -283,8 +283,8 @@ export function RegisterPage() {
       {registrationFieldsLoading ? <p className="registration-fields-loading" role="status">Loading registration details…</p> : registrationFieldsError
         ? <div className="registration-fields-load-error"><p className="form-error" role="alert">{registrationFieldsError}</p><Button type="button" variant="secondary" onClick={() => setRegistrationFieldsRetryVersion((version) => version + 1)}>Retry</Button></div>
         : <RegistrationFieldsForm fields={registrationFields} values={registrationFieldValues} disabled={saving} invalidFieldId={invalidRegistrationFieldId} onChange={(id, value) => { setRegistrationFieldValues((current) => ({ ...current, [id]: value })); if (id === invalidRegistrationFieldId) { setInvalidRegistrationFieldId(''); setError(''); } }} />}
-      <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /><small>Use at least 12 characters.</small></label>
-      <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} /></label>
+      <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} /><small>Use at least 12 characters.</small></label>
+      <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} /></label>
       {error && <p id="registration-form-error" className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving || registrationFieldsLoading || Boolean(registrationFieldsError)}>{saving ? 'Creating account…' : 'Create account'}</Button>
     </form>
@@ -367,8 +367,8 @@ export function AccountSecurityPage() {
     <section className="account-settings-section"><h2>Change password</h2><p className="lead-copy">Choose a new password. Other signed-in devices will be signed out after you save.</p>
     <form className="surface-form form-stack" onSubmit={submit} aria-busy={saving}>
       <label>Current password<input type="password" required maxLength={256} autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} disabled={saving} /></label>
-      <label>New password<input type="password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /><small>Use at least 12 characters.</small></label>
-      <label>Confirm new password<input type="password" required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} /></label>
+      <label>New password<input type="password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} /><small>Use at least 12 characters.</small></label>
+      <label>Confirm new password<input type="password" required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} /></label>
       {message && <p className="form-success" role="status">{message}</p>}{error && <p className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Update password'}</Button>
     </form>
