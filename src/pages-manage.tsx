@@ -13,6 +13,8 @@ import { canonicalCaptionLanguageTag, captionFileSizeError, captionLanguageError
 import { courseEditingNote } from './course-editing-note';
 import { firstQuizTextIssue } from './quiz-validation';
 import { lessonResourceUrlError } from './resource-validation';
+import { userListEmptyMessage } from './user-list-empty-state';
+import type { UserRoleFilter } from './user-list-empty-state';
 import type { Competency, Course, CourseAccessUser, CourseAnalytics, CourseModule, CourseVersion, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
 
 type CourseListResponse = { courses: Course[]; total: number; page: number; pageSize: number };
@@ -1405,13 +1407,14 @@ export function AdminUsersPage() {
   const loadControllerRef = useRef<AbortController | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [query, setQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
+  const [appliedQuery, setAppliedQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<UserRoleFilter>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [failedRequest, setFailedRequest] = useState<{ page: number; query: string; roleFilter: string } | null>(null);
+  const [failedRequest, setFailedRequest] = useState<{ page: number; query: string; roleFilter: UserRoleFilter } | null>(null);
   const [savingIds, setSavingIds] = useState<Set<string>>(() => new Set());
   const savingIdsRef = useRef(savingIds);
   const [resetUser, setResetUser] = useState<User | null>(null);
@@ -1450,7 +1453,7 @@ export function AdminUsersPage() {
     setError('');
   }
 
-  async function load(requestedPage = page, requestedQuery = query, requestedRoleFilter = roleFilter): Promise<boolean> {
+  async function load(requestedPage = page, requestedQuery = appliedQuery, requestedRoleFilter = roleFilter): Promise<boolean> {
     const requestSequence = ++loadSequenceRef.current;
     loadControllerRef.current?.abort();
     const controller = new AbortController();
@@ -1462,6 +1465,7 @@ export function AdminUsersPage() {
       const response = await api.get<{ users: User[]; total: number; page: number; pageSize: number }>(`/api/admin/users?${params}`, { signal: controller.signal });
       if (requestSequence === loadSequenceRef.current) {
         setUsers(response.users); setTotal(response.total); setPage(response.page); setPageSize(response.pageSize);
+        setAppliedQuery(requestedQuery.trim());
         return true;
       }
       return false;
@@ -1574,7 +1578,7 @@ export function AdminUsersPage() {
   }
 
   return <div className="management-page users-page"><PageHeading title="Users" subtitle="Create accounts, review learning activity, and manage roles and access." action={<Link className="button button-primary" to="/admin/users/new"><Plus size={17} />Create account</Link>} />
-    <div className="user-filter-row"><form className="management-search" onSubmit={(event) => { event.preventDefault(); load(1); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search username or email" aria-label="Search username or email" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter user-role-filter"><span className="catalog-filter-label">Role</span><AppSelect className="app-select--filter" ariaLabel="Filter by role" leadingIcon={<UsersRound size={16} />} value={roleFilter} onChange={setRoleFilter} options={[{ value: 'all', label: 'All roles' }, { value: 'admin', label: 'Administrators' }, { value: 'moderator', label: 'Moderators' }, { value: 'learner', label: 'Learners' }]} /></div></div>
+    <div className="user-filter-row"><form className="management-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); void load(1, search, roleFilter); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search username or email" aria-label="Search username or email" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter user-role-filter"><span className="catalog-filter-label">Role</span><AppSelect className="app-select--filter" ariaLabel="Filter by role" leadingIcon={<UsersRound size={16} />} value={roleFilter} onChange={setRoleFilter} options={[{ value: 'all', label: 'All roles' }, { value: 'admin', label: 'Administrators' }, { value: 'moderator', label: 'Moderators' }, { value: 'learner', label: 'Learners' }]} /></div></div>
     {error && !resetUser && (failedRequest
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest.query, failedRequest.roleFilter); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
@@ -1585,7 +1589,7 @@ export function AdminUsersPage() {
       <td><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span></td>
       <td>{user.createdAt ? <DateText value={user.createdAt} /> : '—'}</td>
       <td><div className="user-row-actions"><Link className="text-action" to={`/admin/users/${user.id}`} aria-label={`Details for ${user.username}`}>Details</Link><button type="button" className="text-action" aria-label={`Reset password for ${user.username}`} disabled={savingIds.has(user.id)} onClick={(event) => openPasswordReset(user, event.currentTarget)}>Reset password</button><button type="button" className={user.disabled ? 'text-action' : 'text-action danger-text'} aria-label={`${user.disabled ? 'Enable' : 'Disable'} account for ${user.username}`} disabled={savingIds.has(user.id)} onClick={() => updateUser(user, { disabled: !user.disabled })}>{user.disabled ? 'Enable' : 'Disable'}</button></div></td>
-    </tr>)}</tbody></table>{!users.length && <div className="access-empty">No users match this search.</div>}</div>}
+    </tr>)}</tbody></table>{!users.length && <div className="access-empty">{userListEmptyMessage(appliedQuery, roleFilter)}</div>}</div>}
     {!loading && !failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
     {resetUser && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePasswordReset(); }}><section ref={resetDialogRef} className="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title" aria-describedby="reset-description" tabIndex={-1}><button className="modal-close" type="button" onClick={() => closePasswordReset()} aria-label="Close" disabled={savingIds.has(resetUser.id)}>×</button><h2 id="reset-title">Reset password</h2><p id="reset-description">Set a temporary password for <strong>{resetUser.username}</strong>. Their active sessions will be signed out.</p><form className="form-stack" onSubmit={resetPassword} aria-busy={savingIds.has(resetUser.id)}><label>New password<input autoFocus required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} disabled={savingIds.has(resetUser.id)} /></label><label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={savingIds.has(resetUser.id)} /></label>{error && <Notice>{error}</Notice>}<Button type="submit" disabled={savingIds.has(resetUser.id)}>{savingIds.has(resetUser.id) ? 'Saving…' : 'Reset password'}</Button></form></section></div>}
   </div>;

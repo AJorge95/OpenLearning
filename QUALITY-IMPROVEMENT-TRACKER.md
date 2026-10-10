@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Match account-list empty states to active filters
+
+- **Reviewed:** The admin account search and role filter, the query used for pagination and role changes, the empty table message, and the `/api/admin/users` query validation and page limit.
+- **Improvement:** Keep the successfully applied search separate from text still being edited. Pagination and role changes now use the applied search; empty states describe the role-only, search-only, or combined filter that produced no results. Add focused coverage for the message variants.
+- **Why it helps:** Administrators can tell why the list is empty, and typing a new search without submitting no longer changes which filters the existing results represent.
+- **Backend review:** The existing endpoint already validates the role, parameterizes and escapes search input, and caps pages at 50 users, so no API change was needed.
+- **Checked:** The new empty-state test passed; full `npm test` passed all 205 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. In the authenticated local `/admin/users` page, selecting Moderators showed “No moderator accounts found”; a submitted search combined with a role filter showed combined wording; changing the draft query preserved the active result explanation until submission, then returned the matching learner. No production behavior was checked.
+
 ## 2026-10-10 — Keep learner navigation usable on narrow screens
 
 - **Reviewed:** The shared learner header’s navigation structure, the existing 720px breakpoint, and how the brand, account menu, and five links fit at phone widths.
