@@ -33,7 +33,7 @@
 - **Reviewed:** The account role field used a native label connected to the custom combobox, and CSS made that label a pointer target. Clicking anywhere in the label's hit area could open the menu outside the visible select trigger.
 - **Improvement:** Render the visible field name as a non-interactive span and expose it through `aria-labelledby`; retain pointer events only on the actual combobox trigger.
 - **Why it helps:** The dropdown opens only when users activate the select itself, while assistive technology still receives the visible field name.
-- **Interface review:** Kept the existing 9rem desktop width, trigger-matched menu, and responsive full-width behavior. Browser verification remains unavailable under the current local-page URL policy.
+- **Interface review:** Kept the existing 9rem desktop width, trigger-matched menu, and responsive full-width behavior. Rendered verification confirmed the field and trigger are 144px wide; clicking 8px beyond the trigger's right edge leaves `aria-expanded=false` and no listbox open.
 - **Backend review:** No role-update endpoint change was indicated; server authorization and audit handling are unchanged.
 - **Checked:** AppSelect label/hit-area regressions, full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
 
