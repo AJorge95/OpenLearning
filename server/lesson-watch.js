@@ -25,6 +25,7 @@ const beginWatchStatement = db.prepare(`INSERT INTO lesson_watch_progress
   ON CONFLICT(user_id, lesson_id) DO UPDATE SET
     last_position_seconds = CASE WHEN EXISTS (SELECT 1 FROM lesson_progress
       WHERE user_id = lesson_watch_progress.user_id AND lesson_id = lesson_watch_progress.lesson_id)
+      OR lesson_watch_progress.watched_until_seconds >= lesson_watch_progress.duration_seconds - 0.5
       THEN 0 ELSE lesson_watch_progress.watched_until_seconds END,
     duration_seconds = excluded.duration_seconds,
     last_heartbeat_at = excluded.last_heartbeat_at,

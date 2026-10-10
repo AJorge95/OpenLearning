@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recover video playback from the right resume point
+
+- **Reviewed:** Video retry stored a resume position for every player, but the metadata handler only applied pending retries inside the watch-tracked branch. Ordinary videos could reload without resuming; retry eligibility also relied on a stale `started` flag without confirming its lesson ID. Recovery status copy claimed server-verified progress even for videos without watch tracking.
+- **Improvement:** Resolve retry and watch-progress resume targets through a tested helper, require the current lesson to be server-started before auto-resuming tracked playback, and show recovery text that matches the active tracking mode. Keep recovery status visually neutral instead of styling it as an error.
+- **Why it helps:** Both ordinary and tracked videos resume from the intended position, while completion replay starts at zero without losing the watched high-water mark.
+- **Interface review:** Buffering/reconnecting messages use status semantics and neutral guidance styling; retry failures and stalled playback retain alert styling.
+- **Backend review:** Beginning a replay resets the stored playback position only after completion while preserving the watched high-water mark used to enforce lesson completion.
+- **Checked:** Client recovery decisions/status copy and server replay progress tests, full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Keep equivalent registration choices unique
 
 - **Reviewed:** The selector now matches canonically equivalent accented text, while the registration editor and API compared option and field labels using raw lowercase strings. That allowed visually identical values such as composed and decomposed “Café” to be saved twice.
