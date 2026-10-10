@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Show missing custom-select values accurately
+
+- **Reviewed:** `AppSelect` falls back to `options[0]` for display when its controlled value is absent. The audit log filter builds action options from current log rows, so refreshed options can omit an older selected action while the filter value remains unchanged.
+- **Improvement:** Resolve the visible option label only from the controlled value and show “Choose an option” when the value is missing or the list is empty.
+- **Why it helps:** The selector no longer presents a different option as selected, which avoids making a still-filtered audit log appear to use “All actions.”
+- **Interface review:** Existing matched-width layout, selected-option behavior, and role-menu hit target are unchanged; browser verification remains unavailable under the current local-page URL policy.
+- **Backend review:** The audit query and retention behavior are unchanged; the display now reflects missing dynamic option state honestly.
+- **Checked:** Focused AppSelect display/accessibility tests passed (13/13); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Associate the account role label with its selector
 
 - **Reviewed:** The account-detail Platform role field uses a separate visible label and custom combobox so clicks outside the trigger do not open it, but the label was not programmatically connected to the control.

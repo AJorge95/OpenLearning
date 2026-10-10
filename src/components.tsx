@@ -6,7 +6,7 @@ import { ApiError } from './api';
 import { useAuth } from './auth-context';
 import { BRAND_PALETTES, MAX_BRAND_ICON_BYTES } from './branding';
 import type { BrandingPalette } from './branding';
-import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex } from './app-select-navigation';
+import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel } from './app-select-navigation';
 import { getAppSelectHorizontalPosition, getAppSelectVerticalPosition } from './app-select-position';
 import { formatCountLabel } from './count-label';
 import { getHorizontalRevealScrollLeft } from './navigation-scroll';
@@ -256,7 +256,6 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 220, maxHeight: 280 });
-  const selectedOption = options.find((option) => option.value === value) ?? options[0];
 
   function focusIndex(index: number, direction: 1 | -1 = 1) {
     const nextIndex = findEnabledAppSelectIndex(options, index, direction);
@@ -357,7 +356,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
 
   return <div ref={rootRef} className={`app-select ${className}`.trim()}>
     <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined} aria-activedescendant={open ? `${menuId}-option-${activeIndex}` : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
-      {leadingIcon && <span className="app-select-leading" aria-hidden="true">{leadingIcon}</span>}<span className="app-select-value">{selectedOption?.label ?? 'Choose an option'}</span><ChevronDown className="app-select-chevron" size={16} aria-hidden="true" />
+      {leadingIcon && <span className="app-select-leading" aria-hidden="true">{leadingIcon}</span>}<span className="app-select-value">{getAppSelectDisplayLabel(options, value)}</span><ChevronDown className="app-select-chevron" size={16} aria-hidden="true" />
     </button>
     {open && createPortal(<div ref={menuRef} id={menuId} className={`app-select-menu${matchTriggerWidth ? ' app-select-menu--match-trigger' : ''}`} role="listbox" aria-label={`${ariaLabel} options`} style={position}>
       {options.map((option, index) => <div key={String(option.value)} id={`${menuId}-option-${index}`} className={`app-select-option${option.value === value ? ' selected' : ''}${index === activeIndex ? ' active' : ''}`} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined} onPointerDown={(event) => event.preventDefault()} onPointerEnter={() => !option.disabled && setActiveIndex(index)} onClick={() => choose(index)}>

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex } from '../../src/app-select-navigation.ts';
+import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel } from '../../src/app-select-navigation.ts';
 
 const options = [{}, { disabled: true }, {}];
 
@@ -51,4 +51,12 @@ test('custom-select repeated-letter typeahead cycles from the active option', ()
   assert.equal(findAppSelectTypeaheadIndex(labeledOptions, 1, 'aa', true), 0);
   assert.equal(findAppSelectTypeaheadIndex(labeledOptions, 0, 'zz'), -1);
   assert.equal(findAppSelectTypeaheadIndex(labeledOptions, 0, ''), -1);
+});
+
+test('custom-select displays an explicit placeholder when its value is absent from live options', () => {
+  const currentOptions = [{ value: '', label: 'All actions' }, { value: 'user.created', label: 'User created' }];
+
+  assert.equal(getAppSelectDisplayLabel(currentOptions, ''), 'All actions');
+  assert.equal(getAppSelectDisplayLabel(currentOptions, 'course.deleted'), 'Choose an option');
+  assert.equal(getAppSelectDisplayLabel([], 'course.deleted'), 'Choose an option');
 });
