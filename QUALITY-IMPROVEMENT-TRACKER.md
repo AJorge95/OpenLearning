@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reuse course-access row statements
+
+- **Reviewed:** `courseById()` and learner course visibility checks, which repeatedly prepared fixed lookups for a course row, its canonical root, and its active published storage version.
+- **Improvement:** Prepare those three access/read statements once when the HTTP helpers load, while still executing them against the current database rows on each uncached check.
+- **Why it helps:** Course, lesson, and media access paths avoid repeated SQL compilation without retaining stale course status or active-version decisions.
+- **Interface review:** No visible changes; existing access responses and course-page behavior are unchanged.
+- **Checked:** A regression verifies repeated course reads observe a title update and visibility checks reject an old snapshot as soon as a newer version is inserted, without preparing the three statements again. Focused course analytics tests passed (78/78); `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Full `npm test` has one separate failure in `lesson-watch.test.js`: the uncommitted video-rewind response adds `lastPositionSeconds` while that test expects the prior response shape.
+
 ## 2026-10-11 — Reuse the published-version lookup statement
 
 - **Reviewed:** `publishedVersionForLogicalCourse()` runs for course payloads and certificate checks, preparing the same parameterized latest-version query each time.

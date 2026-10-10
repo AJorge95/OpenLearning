@@ -29,6 +29,8 @@ let isLessonUnlocked;
 let syncPathStates;
 let hasCourseGrant;
 let createCourseAccessChecker;
+let canViewCourse;
+let readCourseById;
 let logicalCourseId;
 let publishedVersionForLogicalCourse;
 
@@ -64,7 +66,7 @@ before(async () => {
   });
 
   ({ db: database } = await import('../../server/db.js'));
-  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler, hasCourseGrant: checkCourseGrant, createCourseAccessChecker: makeCourseAccessChecker }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests, logicalCourseId: resolveLogicalCourseId, publishedVersionForLogicalCourse: readPublishedVersionForLogicalCourse }] = await Promise.all([
+  const [{ courseRouter }, { programsRouter, syncUnlockedPathStates }, { errorHandler, hasCourseGrant: checkCourseGrant, createCourseAccessChecker: makeCourseAccessChecker, canViewCourse: checkCourseVisibility, courseById: readCourseByIdForTests }, { courseSummaries, isLessonUnlocked: checkLessonUnlocked }, { editableCourse: createEditableCourse, currentPublishedCourse: currentPublishedCourseForTests, logicalCourseId: resolveLogicalCourseId, publishedVersionForLogicalCourse: readPublishedVersionForLogicalCourse }] = await Promise.all([
     import('../../server/routes-courses.js'),
     import('../../server/routes-programs.js'),
     import('../../server/http.js'),
@@ -78,6 +80,8 @@ before(async () => {
   readCurrentPublishedCourse = currentPublishedCourseForTests;
   hasCourseGrant = checkCourseGrant;
   createCourseAccessChecker = makeCourseAccessChecker;
+  canViewCourse = checkCourseVisibility;
+  readCourseById = readCourseByIdForTests;
   logicalCourseId = resolveLogicalCourseId;
   publishedVersionForLogicalCourse = readPublishedVersionForLogicalCourse;
   database.exec(`
@@ -439,8 +443,8 @@ test('course detail reuses its published version in the progress summary', async
       'expected course access to use the loaded root row without resolving its logical ID again');
     assert.equal(preparedSql.some((sql) => sql.startsWith('SELECT * FROM courses WHERE id = COALESCE(')), false,
       'expected the course row lookup to reuse the preloaded storage course ID');
-    assert.equal(preparedSql.filter((sql) => sql === 'SELECT * FROM courses WHERE id = ?').length, 2,
-      'expected the canonical root row to be reused instead of fetched again for its summary');
+    assert.equal(preparedSql.filter((sql) => sql === 'SELECT * FROM courses WHERE id = ?').length, 1,
+      'expected the preprepared course lookup and only the separate storage-row lookup for the request');
     assert.equal(preparedSql.some((sql) => sql.startsWith('SELECT * FROM courses WHERE id IN (')), false,
       'expected the preloaded published row to serve the course summary');
     const duplicateProgressQueries = preparedSql.filter((sql) => [
@@ -3143,6 +3147,52 @@ test('published version lookup reuses its statement while reading the latest liv
   }
 
   assert.equal(lookupPreparations, 0, 'published-version lookup should reuse the statement prepared at module load');
+});
+
+test('course row and version-access lookups reuse prepared statements and read current rows', () => {
+  const rootId = 'course-access-prepared-root';
+  const firstStorageId = 'course-access-prepared-v1';
+  const secondStorageId = 'course-access-prepared-v2';
+  database.prepare(`INSERT INTO courses (id, title, status, visibility, created_by, updated_by)
+    VALUES (?, 'Course access root', 'published', 'public', 'admin-1', 'admin-1')`).run(rootId);
+  database.prepare(`INSERT INTO courses (id, title, status, visibility, created_by, updated_by, logical_course_id)
+    VALUES (?, 'Course access version one', 'published', 'public', 'admin-1', 'admin-1', ?)`)
+    .run(firstStorageId, rootId);
+  database.prepare(`INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+    VALUES ('course-access-prepared-v1-row', ?, ?, 1, 'admin-1')`).run(rootId, firstStorageId);
+
+  const watchedQueries = new Set([
+    'SELECT * FROM courses WHERE id = ?',
+    'SELECT * FROM courses WHERE id = ? AND logical_course_id IS NULL',
+    'SELECT storage_course_id FROM course_versions WHERE course_id = ? ORDER BY version_number DESC LIMIT 1',
+  ]);
+  const originalPrepare = database.prepare;
+  let watchedPreparations = 0;
+  database.prepare = (sql) => {
+    if (watchedQueries.has(sql.replace(/\s+/g, ' ').trim())) watchedPreparations += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    assert.equal(readCourseById(rootId)?.title, 'Course access root');
+    originalPrepare.call(database, "UPDATE courses SET title = 'Updated course access root' WHERE id = ?").run(rootId);
+    assert.equal(readCourseById(rootId)?.title, 'Updated course access root');
+
+    const versionSnapshot = originalPrepare.call(database, 'SELECT * FROM courses WHERE id = ?').get(firstStorageId);
+    const learner = { id: 'learner-active', role: 'learner', disabled: 0 };
+    assert.equal(canViewCourse(versionSnapshot, learner), true);
+    originalPrepare.call(database, `INSERT INTO courses (id, title, status, visibility, created_by, updated_by, logical_course_id)
+      VALUES (?, 'Course access version two', 'published', 'public', 'admin-1', 'admin-1', ?)`)
+      .run(secondStorageId, rootId);
+    originalPrepare.call(database, `INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+      VALUES ('course-access-prepared-v2-row', ?, ?, 2, 'admin-1')`).run(rootId, secondStorageId);
+    assert.equal(canViewCourse(versionSnapshot, learner), false, 'old snapshots should stop being visible after a newer version is published');
+  } finally {
+    database.prepare = originalPrepare;
+    originalPrepare.call(database, 'DELETE FROM courses WHERE id = ?').run(rootId);
+  }
+
+  assert.equal(watchedPreparations, 0, 'course-access and row lookups should be prepared once when the module loads');
 });
 
 test('course access reuses complete canonical rows supplied by list queries', () => {
