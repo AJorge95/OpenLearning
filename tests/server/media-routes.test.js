@@ -103,6 +103,69 @@ function apiUrl(pathname) {
   return `http://127.0.0.1:${address.port}/api${pathname}`;
 }
 
+function pngCoverHeader(width, height) {
+  const contents = Buffer.alloc(45);
+  contents.set([137, 80, 78, 71, 13, 10, 26, 10]);
+  contents.writeUInt32BE(13, 8);
+  contents.write('IHDR', 12, 'ascii');
+  contents.writeUInt32BE(width, 16);
+  contents.writeUInt32BE(height, 20);
+  contents.write('IEND', 37, 'ascii');
+  return contents;
+}
+
+function jpegCoverHeader(width, height) {
+  const contents = Buffer.from([
+    0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x01, 0x00, 0x01, 0x03,
+    0x01, 0x11, 0x00, 0x02, 0x11, 0x00, 0x03, 0x11, 0x00, 0xff, 0xd9,
+  ]);
+  contents.writeUInt16BE(height, 7);
+  contents.writeUInt16BE(width, 9);
+  return contents;
+}
+
+function webpCoverHeader(chunkType, width, height) {
+  const chunkSize = chunkType === 'VP8L' ? 5 : 10;
+  const paddedChunkSize = chunkSize + (chunkSize % 2);
+  const riffSize = 4 + 8 + paddedChunkSize;
+  const contents = Buffer.alloc(8 + riffSize);
+  contents.write('RIFF', 0, 'ascii');
+  contents.writeUInt32LE(riffSize, 4);
+  contents.write('WEBP', 8, 'ascii');
+  contents.write(chunkType, 12, 'ascii');
+  contents.writeUInt32LE(chunkSize, 16);
+  if (chunkType === 'VP8X') {
+    contents.writeUIntLE(width - 1, 24, 3);
+    contents.writeUIntLE(height - 1, 27, 3);
+  } else if (chunkType === 'VP8L') {
+    const encodedWidth = width - 1;
+    const encodedHeight = height - 1;
+    contents[20] = 0x2f;
+    contents[21] = encodedWidth & 0xff;
+    contents[22] = ((encodedWidth >> 8) & 0x3f) | ((encodedHeight & 0x03) << 6);
+    contents[23] = (encodedHeight >> 2) & 0xff;
+    contents[24] = (encodedHeight >> 10) & 0x0f;
+  } else {
+    contents[23] = 0x9d;
+    contents[24] = 0x01;
+    contents[25] = 0x2a;
+    contents.writeUInt16LE(width, 26);
+    contents.writeUInt16LE(height, 28);
+  }
+  return contents;
+}
+
+async function uploadCourseCover(filename, contents, mimeType) {
+  const form = new FormData();
+  form.set('kind', 'cover');
+  form.set('file', new File([contents], filename, { type: mimeType }));
+  return fetch(apiUrl('/manage/courses/course-caption-audit/media'), {
+    method: 'POST',
+    headers: { 'x-test-user': 'admin-media', connection: 'close' },
+    body: form,
+  });
+}
+
 test('rejects a truncated PNG cover and removes the temporary upload', async () => {
   const courseMediaDirectory = path.dirname(captionPath);
   const originalFiles = (await fs.readdir(courseMediaDirectory)).sort();
@@ -164,6 +227,65 @@ test('rejects truncated WebP RIFF headers and image chunks without saving media'
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM media_files').get().count, originalMediaCount);
   assert.equal(database.prepare("SELECT cover_media_id FROM courses WHERE id = 'course-caption-audit'").get().cover_media_id, null);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.cover_uploaded'").get().count, originalAuditCount);
+  assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
+});
+
+test('bounds course cover dimensions for PNG, JPEG, and each supported WebP encoding', async () => {
+  const courseId = 'course-caption-audit';
+  const courseMediaDirectory = path.dirname(captionPath);
+  const originalFiles = (await fs.readdir(courseMediaDirectory)).sort();
+  const originalCourse = database.prepare('SELECT cover_media_id, updated_at, updated_by FROM courses WHERE id = ?').get(courseId);
+  const originalMediaIds = new Set(database.prepare('SELECT id FROM media_files').all().map(({ id }) => id));
+  const originalCoverAuditIds = new Set(database.prepare("SELECT id FROM audit_logs WHERE action = 'course.cover_uploaded' AND entity_id = ?").all(courseId).map(({ id }) => id));
+  const invalidCovers = [
+    ['wide-cover.png', pngCoverHeader(4097, 1), 'image/png'],
+    ['tall-cover.jpg', jpegCoverHeader(1, 4097), 'image/jpeg'],
+    ['wide-lossy-cover.webp', webpCoverHeader('VP8 ', 4097, 1), 'image/webp'],
+    ['tall-lossless-cover.webp', webpCoverHeader('VP8L', 1, 4097), 'image/webp'],
+    ['oversized-extended-cover.webp', webpCoverHeader('VP8X', 4097, 4097), 'image/webp'],
+  ];
+
+  try {
+    for (const [filename, contents, mimeType] of invalidCovers) {
+      const response = await uploadCourseCover(filename, contents, mimeType);
+      const payload = await response.json();
+      assert.equal(response.status, 400, filename);
+      assert.equal(payload.code, 'invalid_media_type', filename);
+      assert.match(payload.error, /4096 × 4096 pixels/, filename);
+    }
+
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM media_files').get().count, originalMediaIds.size);
+    assert.equal(database.prepare('SELECT cover_media_id FROM courses WHERE id = ?').get(courseId).cover_media_id, originalCourse.cover_media_id);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.cover_uploaded' AND entity_id = ?").get(courseId).count, originalCoverAuditIds.size);
+    assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
+
+    for (const [filename, contents, mimeType] of [
+      ['boundary-cover.png', pngCoverHeader(4096, 4096), 'image/png'],
+      ['small-cover.jpg', jpegCoverHeader(1, 1), 'image/jpeg'],
+      ['small-lossy-cover.webp', webpCoverHeader('VP8 ', 1, 1), 'image/webp'],
+      ['small-lossless-cover.webp', webpCoverHeader('VP8L', 1, 1), 'image/webp'],
+      ['small-extended-cover.webp', webpCoverHeader('VP8X', 1, 1), 'image/webp'],
+    ]) {
+      const response = await uploadCourseCover(filename, contents, mimeType);
+      assert.equal(response.status, 201, filename);
+    }
+  } finally {
+    database.prepare('UPDATE courses SET cover_media_id = ?, updated_at = ?, updated_by = ? WHERE id = ?')
+      .run(originalCourse.cover_media_id, originalCourse.updated_at, originalCourse.updated_by, courseId);
+    const createdMedia = database.prepare('SELECT id, file_name FROM media_files WHERE course_id = ?').all(courseId)
+      .filter(({ id }) => !originalMediaIds.has(id));
+    for (const { file_name: fileName } of createdMedia) {
+      await fs.rm(path.join(courseMediaDirectory, fileName), { force: true });
+    }
+    for (const { id } of createdMedia) database.prepare('DELETE FROM media_files WHERE id = ?').run(id);
+    const createdAuditIds = database.prepare("SELECT id FROM audit_logs WHERE action = 'course.cover_uploaded' AND entity_id = ?").all(courseId)
+      .filter(({ id }) => !originalCoverAuditIds.has(id));
+    for (const { id } of createdAuditIds) database.prepare('DELETE FROM audit_logs WHERE id = ?').run(id);
+  }
+
+  assert.deepEqual(database.prepare('SELECT cover_media_id, updated_at, updated_by FROM courses WHERE id = ?').get(courseId), originalCourse);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM media_files').get().count, originalMediaIds.size);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.cover_uploaded' AND entity_id = ?").get(courseId).count, originalCoverAuditIds.size);
   assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
 });
 
