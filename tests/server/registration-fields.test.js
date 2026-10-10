@@ -23,6 +23,7 @@ const previousConfig = new Map(Object.keys(isolatedConfig).map((key) => [key, pr
 let fixtureDirectory;
 let database;
 let setSetting;
+let hashPassword;
 let verifyPassword;
 let registrationFields;
 let adminPasswordResetLimiter;
@@ -77,7 +78,7 @@ before(async () => {
   });
 
   ({ db: database, setSetting } = await import('../../server/db.js'));
-  ({ verifyPassword } = await import('../../server/auth.js'));
+  ({ hashPassword, verifyPassword } = await import('../../server/auth.js'));
   registrationFields = await import('../../server/registration-fields.js');
   ({ adminPasswordResetLimiter } = await import('../../server/rate-limits.js'));
   const { authRouter } = await import('../../server/routes-auth.js');
@@ -455,6 +456,61 @@ test('administrator password resets and session revocations roll back when audit
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get('password-reset-session').count, 0);
   assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
     WHERE action = 'account.password_reset' AND entity_id = ?`).get(userId).count, originalAuditCount + 1);
+});
+
+test('administrator password reset validates password length for legacy usernames', async () => {
+  const userId = 'registration-fields-password-target';
+  const user = database.prepare('SELECT username, password_hash FROM users WHERE id = ?').get(userId);
+  database.prepare('UPDATE users SET username = ? WHERE id = ?').run('legacy username', userId);
+
+  try {
+    const response = await fetch(apiUrl(`/admin/users/${userId}/password`), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ password: 'short', confirmPassword: 'short' }),
+    });
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: 'Password must be between 12 and 256 characters.',
+      code: 'invalid_password',
+    });
+    assert.equal(database.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId).password_hash, user.password_hash);
+  } finally {
+    database.prepare('UPDATE users SET username = ? WHERE id = ?').run(user.username, userId);
+  }
+  assert.equal(database.prepare('SELECT username FROM users WHERE id = ?').get(userId).username, user.username);
+});
+
+test('self-service password change validates password length for legacy usernames', async () => {
+  const userId = 'registration-fields-admin';
+  const user = database.prepare('SELECT username, password_hash FROM users WHERE id = ?').get(userId);
+  const currentPasswordHash = await hashPassword('KnownCurrentPassphrase-2026');
+  database.prepare('UPDATE users SET username = ?, password_hash = ? WHERE id = ?')
+    .run('legacy username', currentPasswordHash, userId);
+
+  try {
+    const response = await fetch(apiUrl('/auth/password'), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        currentPassword: 'KnownCurrentPassphrase-2026',
+        password: 'short',
+        confirmPassword: 'short',
+      }),
+    });
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: 'Password must be between 12 and 256 characters.',
+      code: 'invalid_password',
+    });
+    assert.equal(database.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId).password_hash, currentPasswordHash);
+  } finally {
+    database.prepare('UPDATE users SET username = ?, password_hash = ? WHERE id = ?')
+      .run(user.username, user.password_hash, userId);
+  }
+  assert.deepEqual(database.prepare('SELECT username, password_hash FROM users WHERE id = ?').get(userId), user);
 });
 
 test('administrator password reset route throttles requests per admin before target lookup', async () => {

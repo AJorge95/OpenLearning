@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db, setting } from './db.js';
-import { hashPassword, normalizeEmail, validateCredentials, validateEmail } from './auth.js';
+import { hashPassword, normalizeEmail, validateCredentials, validateEmail, validatePassword } from './auth.js';
 import { enumQuery, fail, pageQuery, requireAdmin, requireObjectBody } from './http.js';
 import { invalidateUserSessions } from './session-store.js';
 import { textSearchPredicate } from './sql.js';
@@ -288,8 +288,8 @@ adminRouter.put('/users/:userId/password', adminPasswordResetLimiter, async (req
   if (!user) fail(404, 'User not found.', 'not_found');
   const { password, confirmPassword } = req.body || {};
   if (password !== confirmPassword) fail(400, 'Passwords do not match.', 'password_mismatch');
-  const credentialError = validateCredentials(user.username, password);
-  if (credentialError && !credentialError.startsWith('Username')) fail(400, credentialError, 'invalid_password');
+  const passwordError = validatePassword(password);
+  if (passwordError) fail(400, passwordError, 'invalid_password');
   const passwordHash = await hashPassword(password);
   const resetPassword = db.transaction(() => {
     const currentUser = db.prepare('SELECT id, username FROM users WHERE id = ?').get(user.id);

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { db, setSetting, setting, setupComplete } from './db.js';
-import { createUser, hashPassword, normalizeEmail, normalizeUsername, publicUser, regenerateSession, validateCredentials, validateEmail, verifyLoginPassword, verifyPassword } from './auth.js';
+import { createUser, hashPassword, normalizeEmail, normalizeUsername, publicUser, regenerateSession, validateCredentials, validateEmail, validatePassword, verifyLoginPassword, verifyPassword } from './auth.js';
 import { ApiError, fail, newCsrfToken, requireAuth, requireAdmin } from './http.js';
 import { invalidateUserSessions } from './session-store.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
@@ -385,8 +385,8 @@ authRouter.put('/auth/password', requireAuth, passwordChangeLimiter, async (req,
   }
   const currentPasswordValue = currentPassword;
   if (password !== confirmPassword) fail(400, 'Passwords do not match.', 'password_mismatch');
-  const credentialError = validateCredentials(req.currentUser.username, password);
-  if (credentialError && !credentialError.startsWith('Username')) fail(400, credentialError, 'invalid_password');
+  const passwordError = validatePassword(password);
+  if (passwordError) fail(400, passwordError, 'invalid_password');
   const user = db.prepare('SELECT id, password_hash FROM users WHERE id = ?').get(req.currentUser.id);
   if (!user) fail(401, 'Sign in to continue.', 'unauthorized');
   if (!await verifyPassword(currentPasswordValue, user.password_hash)) fail(400, 'Your current password is incorrect.', 'password_incorrect');
