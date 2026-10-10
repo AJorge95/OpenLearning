@@ -16,8 +16,11 @@ import { adminRouter } from './routes-admin.js';
 import { mediaUploadRouter, protectedMediaRouter } from './routes-media.js';
 import { writeSystemLog } from './log-store.js';
 import { cleanupOrphanedCourseMedia } from './media-cleanup.js';
+import { programsRouter } from './routes-programs.js';
+import { isReadyToServe } from './readiness.js';
 
 const app = express();
+let isShuttingDown = false;
 if (config.trustProxy) app.set('trust proxy', 1);
 
 app.disable('x-powered-by');
@@ -42,16 +45,9 @@ app.use(noStoreApiResponses);
 app.get('/healthz', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({ status: 'ok' }));
 app.get('/readyz', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  try {
-    const schemaVersion = db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()?.version;
-    const setupState = db.prepare("SELECT 1 FROM app_settings WHERE key = 'setup_complete'").get();
-    if (!Number.isSafeInteger(schemaVersion) || schemaVersion < 1 || !setupState) {
-      return res.status(503).json({ status: 'unavailable' });
-    }
-    return res.json({ status: 'ok' });
-  } catch {
-    return res.status(503).json({ status: 'unavailable' });
-  }
+  return isReadyToServe(db, isShuttingDown)
+    ? res.json({ status: 'ok' })
+    : res.status(503).json({ status: 'unavailable' });
 });
 app.use('/assets', express.static(path.join(config.clientDir, 'assets'), {
   index: false,
@@ -103,6 +99,7 @@ app.use('/api', csrfMiddleware);
 mountAuthenticationRateLimits(app, loginLimiter, authLimiter);
 app.use('/api', authRouter);
 app.use('/api', courseRouter);
+app.use('/api', programsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', mediaUploadRouter);
 app.use('/media', protectedMediaRouter);
@@ -118,8 +115,6 @@ if (fs.existsSync(path.join(config.clientDir, 'index.html'))) {
 }
 
 app.use(errorHandler);
-
-let isShuttingDown = false;
 
 function cleanupOrphanedMedia() {
   if (isShuttingDown) return;

@@ -3,8 +3,8 @@ import type { Course } from './types';
 export function courseEditingNote(status: Course['status'], visibility: Course['visibility']) {
   if (status === 'published') {
     return visibility === 'private'
-      ? 'Changes you save to this published course are visible right away to learners with course access.'
-      : 'Changes you save to this published course are visible right away to learners.';
+      ? 'Learners with access continue to see the current published version while you work on a revision. Publish it when it is ready.'
+      : 'Learners continue to see the current published version while you work on a revision. Publish it when it is ready.';
   }
   if (status === 'archived') {
     return 'This course is archived and hidden from learners. Save it as a draft or publish it to make it available again.';

@@ -2,13 +2,18 @@ import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { db, setting } from './db.js';
+import { db } from './db.js';
 import { config } from './config.js';
-import { enumQuery, fail, pageQuery, requireAuth, requireObjectBody, requireStaff, requireCourseManager, requireCourseViewer } from './http.js';
-import { assertPublishable, canLearnerAccess, courseFromLesson, courseSummaries, courseSummary, enrollLearner, getCoursePayload, moduleCourse, quizCourse } from './course-service.js';
+import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAuth, requireObjectBody, requireStaff, requireCourseManager, requireCourseViewer } from './http.js';
+import { assertPublishable, canLearnerAccess, courseFromLesson, courseSummaries, courseSummary, enrollLearner, getCoursePayload, isLessonUnlocked, moduleCourse, quizCourse } from './course-service.js';
 import { likeContains, textSearchPredicate } from './sql.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
 import { learnerCommentLimiter, learnerReactionLimiter, quizAttemptLimiter } from './rate-limits.js';
+import { canonicalCourse, logicalCourseId, publishRevision, publishedVersion } from './course-versioning.js';
+import { certificatePayload, findCourseCertificate, issueCertificateIfComplete } from './certificate-service.js';
+import { syncUnlockedPathStates } from './routes-programs.js';
+import { beginLessonWatch, getLessonWatchProgress, lessonVideoWasWatched, recordLessonWatchProgress } from './lesson-watch.js';
+import { readMp4Duration } from './mp4-duration.js';
 
 export const courseRouter = Router();
 courseRouter.use(requireAuth);
@@ -40,16 +45,31 @@ function intField(value, label, min, max) {
   return number;
 }
 
+function booleanField(value, label) {
+  if (typeof value !== 'boolean') fail(400, `${label} must be true or false.`, 'validation_error');
+  return value;
+}
+
 function courseFileDirectory(courseId) {
   const root = path.resolve(config.mediaRoot);
-  const candidate = path.resolve(root, courseId);
+  const candidate = path.resolve(root, logicalCourseId(courseId) || courseId);
   if (!candidate.startsWith(`${root}${path.sep}`)) fail(400, 'Invalid course identifier.', 'invalid_path');
   return candidate;
 }
 
+function syncLearnerPathsForCourse(courseId, userId) {
+  const logicalId = logicalCourseId(courseId) || courseId;
+  const paths = db.prepare(`SELECT DISTINCT e.path_id FROM learning_path_enrollments e
+    JOIN learning_path_courses pc ON pc.path_id = e.path_id
+    WHERE e.user_id = ? AND pc.course_id = ?`).all(userId, logicalId);
+  for (const path of paths) syncUnlockedPathStates(path.path_id, userId);
+}
+
 async function removeCourseMediaFile(courseId, fileName, message, details = {}) {
+  const logicalId = logicalCourseId(courseId) || courseId;
+  if (db.prepare('SELECT 1 FROM course_versions WHERE course_id = ? LIMIT 1').get(logicalId)) return;
   try {
-    await fs.promises.rm(path.join(courseFileDirectory(courseId), fileName), { force: true });
+    await fs.promises.rm(path.join(courseFileDirectory(logicalId), fileName), { force: true });
   } catch (error) {
     writeSystemLog('error', 'media', message, {
       courseId,
@@ -58,38 +78,6 @@ async function removeCourseMediaFile(courseId, fileName, message, details = {}) 
       errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
     });
   }
-}
-
-function certificatePayload(row) {
-  return {
-    id: row.id,
-    courseId: row.course_id,
-    certificateCode: row.certificate_code,
-    recipientName: row.recipient_name,
-    courseTitle: row.course_title,
-    platformName: row.platform_name,
-    issuedAt: row.issued_at,
-  };
-}
-
-function findCourseCertificate(courseId, userId) {
-  return db.prepare('SELECT * FROM course_certificates WHERE course_id = ? AND user_id = ?').get(courseId, userId);
-}
-
-function issueCertificateIfComplete(courseId, user) {
-  if (user.role !== 'learner') return null;
-  const existing = findCourseCertificate(courseId, user.id);
-  if (existing) return certificatePayload(existing);
-  const course = db.prepare('SELECT * FROM courses WHERE id = ?').get(courseId);
-  if (!course || course.status !== 'published' || !courseSummary(course, user).completed) return null;
-  const id = randomUUID();
-  const code = `OL-${randomUUID().replaceAll('-', '').toUpperCase()}`;
-  db.prepare(`INSERT OR IGNORE INTO course_certificates
-      (id, certificate_code, user_id, course_id, recipient_name, course_title, platform_name)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, code, user.id, course.id, user.username, course.title, setting('platform_name') || 'OpenLearning');
-  const issued = findCourseCertificate(course.id, user.id);
-  return issued ? certificatePayload(issued) : null;
 }
 
 function accessiblePublishedCourses(user, filters = {}) {
@@ -125,14 +113,43 @@ function requireLearnerLesson(lessonId, user) {
   if (user.role !== 'learner') fail(403, 'Only learners can react to or comment on lessons.', 'forbidden');
   requireCourseViewer(lesson.id, user);
   if (lesson.status !== 'published') fail(404, 'Lesson not found.', 'not_found');
+  if (!isLessonUnlocked(lessonId, user)) fail(423, 'Complete the previous lesson before opening this one.', 'lesson_locked');
   return lesson;
+}
+
+function requireWatchableLesson(lessonId, user) {
+  const lesson = courseFromLesson(lessonId);
+  if (!lesson) fail(404, 'Lesson not found.', 'not_found');
+  requireCourseViewer(lesson.id, user);
+  if (lesson.status !== 'published' || !lesson.media_id) fail(404, 'Lesson video is not available.', 'not_found');
+  if (user.role !== 'learner') fail(403, 'Only learners have required video progress.', 'forbidden');
+  if (!isLessonUnlocked(lessonId, user)) fail(423, 'Complete the previous lesson before opening this one.', 'lesson_locked');
+  return lesson;
+}
+
+async function verifiedVideoDuration(lesson) {
+  const media = db.prepare('SELECT id, file_name, duration_seconds FROM media_files WHERE id = ? AND media_kind = \'video\'')
+    .get(lesson.media_id);
+  if (!media) fail(404, 'Lesson video is not available.', 'not_found');
+  if (Number.isFinite(media.duration_seconds) && media.duration_seconds > 0) return media.duration_seconds;
+  const base = courseFileDirectory(lesson.id);
+  const filePath = path.resolve(base, media.file_name);
+  if (!filePath.startsWith(`${base}${path.sep}`)) fail(404, 'Lesson video is not available.', 'not_found');
+  let duration;
+  try { duration = await readMp4Duration(filePath); }
+  catch { fail(422, 'This video duration could not be verified. Contact your course administrator.', 'video_duration_unavailable'); }
+  if (!Number.isFinite(duration) || duration <= 0) {
+    fail(422, 'This video duration could not be verified. Contact your course administrator.', 'video_duration_unavailable');
+  }
+  db.prepare('UPDATE media_files SET duration_seconds = ? WHERE id = ? AND duration_seconds IS NULL').run(duration, media.id);
+  return db.prepare('SELECT duration_seconds FROM media_files WHERE id = ?').get(media.id).duration_seconds;
 }
 
 function requireFeedbackLesson(lessonId, user) {
   const lesson = courseFromLesson(lessonId);
   if (!lesson) fail(404, 'Lesson not found.', 'not_found');
   if (user.role === 'learner') requireCourseViewer(lesson.id, user);
-  else requireCourseManager(lesson.id, user);
+  else if (!['admin', 'moderator'].includes(user.role)) fail(403, 'You do not have permission to view lesson feedback.', 'forbidden');
   if (lesson.status !== 'published') fail(404, 'Lesson not found.', 'not_found');
   return lesson;
 }
@@ -152,21 +169,24 @@ courseRouter.get('/courses', (req, res) => {
 });
 
 courseRouter.get('/my-learning', (req, res) => {
-  const where = `c.status = 'published'
+  const canViewLearnerCourse = createCourseAccessChecker(req.currentUser);
+  const candidates = db.prepare(`
+    SELECT c.* FROM courses c WHERE c.status = 'published'
       AND (EXISTS (SELECT 1 FROM enrollments e WHERE e.course_id = c.id AND e.user_id = ?)
-        OR EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?))
-      AND (c.visibility = 'public' OR ? IN ('admin', 'moderator')
-        OR EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?))`;
-  const filters = [req.currentUser.id, req.currentUser.id, req.currentUser.role, req.currentUser.id];
-  const total = db.prepare(`SELECT COUNT(*) AS count FROM courses c WHERE ${where}`).get(...filters).count;
-  const { page, pageSize, offset, hasMore } = paginationWindow(total, req.query.page);
-  const rows = db.prepare(`
-    SELECT c.* FROM courses c WHERE ${where}
+        OR EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?)
+        OR EXISTS (SELECT 1 FROM learning_path_enrollments e JOIN learning_path_courses pc ON pc.path_id = e.path_id
+          JOIN learning_paths lp ON lp.id = e.path_id WHERE e.user_id = ? AND pc.course_id = c.id AND lp.status = 'published'))
     ORDER BY COALESCE(
       (SELECT e.enrolled_at FROM enrollments e WHERE e.course_id = c.id AND e.user_id = ?),
-      (SELECT g.granted_at FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?)
-    ) DESC, c.id ASC LIMIT ? OFFSET ?
-  `).all(...filters, req.currentUser.id, req.currentUser.id, pageSize, offset);
+      (SELECT g.granted_at FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?),
+      (SELECT MAX(e.enrolled_at) FROM learning_path_enrollments e JOIN learning_path_courses pc ON pc.path_id = e.path_id
+        JOIN learning_paths lp ON lp.id = e.path_id WHERE e.user_id = ? AND pc.course_id = c.id AND lp.status = 'published')
+    ) DESC, c.id ASC
+  `).all(req.currentUser.id, req.currentUser.id, req.currentUser.id, req.currentUser.id, req.currentUser.id, req.currentUser.id)
+    .filter(canViewLearnerCourse);
+  const total = candidates.length;
+  const { page, pageSize, offset, hasMore } = paginationWindow(total, req.query.page);
+  const rows = candidates.slice(offset, offset + pageSize);
   const includeCertificates = enumQuery(req.query.includeCertificates, 'certificate option', ['0', '1'], '1');
   const certificateData = includeCertificates === '0' ? {} : learnerCertificatePage(req.currentUser.id, req.query.certificatesPage);
   res.json({ courses: courseSummaries(rows, req.currentUser), total, page, pageSize, hasMore, ...certificateData });
@@ -222,8 +242,35 @@ courseRouter.get('/certificates/:certificateRef', (req, res) => {
   const course = requireCourseViewer(req.params.certificateRef, req.currentUser);
   if (course.status !== 'published') fail(404, 'Course not found.', 'not_found');
   const certificate = issueCertificateIfComplete(course.id, req.currentUser);
+  if (!certificate && courseSummary(course, req.currentUser).completed
+      && (!req.currentUser.first_name?.trim() || !req.currentUser.last_name?.trim())) {
+    fail(409, 'Add your first and last name in Account settings to receive your certificate.', 'certificate_name_required');
+  }
   if (!certificate) fail(409, 'Complete all lessons and pass the required quizzes to earn this certificate.', 'course_incomplete');
   res.json({ certificate });
+});
+
+courseRouter.get('/lessons/:lessonId/watch-progress', async (req, res) => {
+  const lesson = courseFromLesson(req.params.lessonId);
+  if (!lesson) fail(404, 'Lesson not found.', 'not_found');
+  requireCourseViewer(lesson.id, req.currentUser);
+  if (lesson.status !== 'published' || !lesson.media_id) fail(404, 'Lesson video is not available.', 'not_found');
+  if (req.currentUser.role === 'learner' && !isLessonUnlocked(lesson.lesson_id, req.currentUser)) {
+    fail(423, 'Complete the previous lesson before opening this one.', 'lesson_locked');
+  }
+  const duration = req.currentUser.role === 'learner' ? await verifiedVideoDuration(lesson) : 0;
+  res.json(getLessonWatchProgress(req.currentUser, lesson.lesson_id, duration));
+});
+
+courseRouter.post('/lessons/:lessonId/watch-progress/start', async (req, res) => {
+  const lesson = requireWatchableLesson(req.params.lessonId, req.currentUser);
+  const duration = await verifiedVideoDuration(lesson);
+  res.json(beginLessonWatch(req.currentUser, lesson.lesson_id, duration));
+});
+
+courseRouter.put('/lessons/:lessonId/watch-progress', (req, res) => {
+  const lesson = requireWatchableLesson(req.params.lessonId, req.currentUser);
+  res.json(recordLessonWatchProgress(req.currentUser, lesson.lesson_id, req.body?.positionSeconds));
 });
 
 courseRouter.get('/manage/courses/:courseId', requireStaff, (req, res) => {
@@ -234,22 +281,20 @@ courseRouter.get('/manage/courses/:courseId', requireStaff, (req, res) => {
 courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res) => {
   const course = requireCourseManager(req.params.courseId, req.currentUser);
   const pageSize = 50;
-  const eligibility = `u.role = 'learner' AND (
-    EXISTS (SELECT 1 FROM enrollments e WHERE e.course_id = ? AND e.user_id = u.id) OR
-    EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = ? AND g.user_id = u.id)
-  )`;
-  const learnerTotals = db.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(u.disabled), 0) AS disabled_count
-    FROM users u WHERE ${eligibility}`).get(course.id, course.id);
+  const eligibleLearners = `SELECT u.id, u.username, u.disabled FROM (
+    SELECT user_id AS id FROM enrollments WHERE course_id = ?
+    UNION SELECT user_id FROM course_grants WHERE course_id = ?
+  ) member CROSS JOIN users u ON u.id = member.id WHERE u.role = 'learner'`;
+  const learnerTotals = db.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(disabled), 0) AS disabled_count
+    FROM (${eligibleLearners})`).get(course.id, course.id);
   const { page, pageSize: responsePageSize, offset } = paginationWindow(learnerTotals.total, req.query.page, pageSize);
   const learnerRows = db.prepare(`
-    SELECT u.id, u.username, u.disabled,
-      (SELECT enrolled_at FROM enrollments e WHERE e.course_id = ? AND e.user_id = u.id LIMIT 1) AS enrolled_at,
-      (SELECT granted_at FROM course_grants g WHERE g.course_id = ? AND g.user_id = u.id LIMIT 1) AS granted_at
-    FROM users u
-    WHERE u.role = 'learner' AND (
-      EXISTS (SELECT 1 FROM enrollments e WHERE e.course_id = ? AND e.user_id = u.id) OR
-      EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = ? AND g.user_id = u.id)
-    ) ORDER BY u.username COLLATE NOCASE, u.id ASC LIMIT ? OFFSET ?
+    WITH eligible AS (${eligibleLearners})
+    SELECT eligible.id, eligible.username, eligible.disabled, e.enrolled_at, g.granted_at
+    FROM eligible
+    LEFT JOIN enrollments e ON e.course_id = ? AND e.user_id = eligible.id
+    LEFT JOIN course_grants g ON g.course_id = ? AND g.user_id = eligible.id
+    ORDER BY eligible.username COLLATE NOCASE, eligible.id ASC LIMIT ? OFFSET ?
   `).all(course.id, course.id, course.id, course.id, responsePageSize, offset);
   const lessons = db.prepare(`
     SELECT l.id, l.title, l.position, m.id AS module_id, m.title AS module_title, m.position AS module_position
@@ -265,10 +310,7 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
   const requiredItemCount = lessons.length + quizzes.length;
   const globalProgress = db.prepare(`
     WITH eligible AS (
-      SELECT u.id FROM users u WHERE u.role = 'learner' AND (
-        EXISTS (SELECT 1 FROM enrollments e WHERE e.course_id = ? AND e.user_id = u.id) OR
-        EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = ? AND g.user_id = u.id)
-      )
+      ${eligibleLearners}
     ),
     lesson_by_user AS (
       SELECT lp.user_id, COUNT(*) AS lesson_completions
@@ -307,10 +349,7 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
 
   const lessonCompletionCounts = db.prepare(`
     WITH eligible AS (
-      SELECT u.id FROM users u WHERE u.role = 'learner' AND (
-        EXISTS (SELECT 1 FROM enrollments e WHERE e.course_id = ? AND e.user_id = u.id) OR
-        EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = ? AND g.user_id = u.id)
-      )
+      ${eligibleLearners}
     )
     SELECT l.id, COUNT(lp.user_id) AS completed_count
     FROM lessons l JOIN course_modules m ON m.id = l.module_id
@@ -322,10 +361,7 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
   const lessonCompletionById = new Map(lessonCompletionCounts.map((row) => [row.id, row.completed_count]));
   const quizTotals = db.prepare(`
     WITH eligible AS (
-      SELECT u.id FROM users u WHERE u.role = 'learner' AND (
-        EXISTS (SELECT 1 FROM enrollments e WHERE e.course_id = ? AND e.user_id = u.id) OR
-        EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = ? AND g.user_id = u.id)
-      )
+      ${eligibleLearners}
     ),
     learner_quiz AS (
       SELECT a.quiz_id, a.user_id, COUNT(*) AS attempts, MAX(a.passed) AS passed, AVG(a.score) AS average_score
@@ -502,31 +538,78 @@ courseRouter.patch('/manage/courses/:courseId', requireStaff, (req, res) => {
     const category = body.category === undefined ? current.category : textField(body.category, 'Category', 100, { required: true });
     const visibility = body.visibility === undefined ? current.visibility : body.visibility;
     const status = body.status === undefined ? current.status : body.status;
+    const completionWindowDays = body.completionWindowDays === undefined ? (current.completion_window_days ?? null) : body.completionWindowDays;
+    const requiresRecompletion = body.requiresRecompletion === undefined ? false : booleanField(body.requiresRecompletion, 'Recompletion option');
     if (!['public', 'private'].includes(visibility)) fail(400, 'Visibility must be public or private.', 'validation_error');
     if (!['draft', 'published', 'archived'].includes(status)) fail(400, 'Choose a valid course status.', 'validation_error');
-    if (status === 'published') assertPublishable(current.id);
-    const nextValues = { title, description, category, visibility, status };
+    if (completionWindowDays !== null && (!Number.isSafeInteger(completionWindowDays) || completionWindowDays < 1 || completionWindowDays > 3650)) {
+      fail(400, 'Completion time must be between 1 and 3,650 days, or left blank.', 'validation_error');
+    }
+    const logicalId = current.logical_course_id || current.id;
+    const canonical = canonicalCourse(logicalId);
+    if (!canonical) fail(404, 'Course not found.', 'not_found');
+    if (visibility === 'private' && db.prepare(`SELECT 1 FROM learning_path_courses pc JOIN learning_paths p ON p.id = pc.path_id
+      WHERE pc.course_id = ? AND p.status = 'published' AND p.self_enrollment = 1 LIMIT 1`).get(logicalId)) {
+      fail(409, 'This course is in a self-enrollable path. Remove it from that path before making it private.', 'course_in_public_self_enrollment_path');
+    }
+    if (status === 'published') {
+      const changeNote = body.changeNote === undefined ? '' : textField(body.changeNote, 'Publication note', 500);
+      const revision = db.prepare('SELECT * FROM course_revisions WHERE course_id = ?').get(logicalId);
+      if (revision?.review_status === 'in_review' && revision.submitted_by === req.currentUser.id) {
+        fail(409, 'This revision is awaiting independent review. A different staff member must approve it.', 'review_pending');
+      }
+      db.prepare(`UPDATE courses SET title = ?, description = ?, category = ?, visibility = ?, completion_window_days = ?,
+        updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .run(title, description, category, visibility, completionWindowDays, req.currentUser.id, current.id);
+      const readyCourse = db.prepare('SELECT * FROM courses WHERE id = ?').get(current.id);
+      assertPublishable(readyCourse.id);
+      const version = publishRevision(logicalId, req.currentUser, {
+        requiresRecompletion,
+        changeNote,
+      });
+      if (!version) fail(404, 'Course could not be published.', 'not_found');
+      const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.published', entityType: 'course', entityId: logicalId,
+        summary: `Published ${title} as version ${version.version_number}`, details: { versionId: version.id, version: version.version_number, requiresRecompletion } });
+      if (!auditId) fail(500, 'Course could not be published because the audit log is unavailable.', 'audit_unavailable');
+      const updated = db.prepare('SELECT * FROM courses WHERE id = ?').get(logicalId);
+      return { updated, contentCourse: db.prepare('SELECT * FROM courses WHERE id = ?').get(version.storage_course_id) };
+    }
+    if (status === 'archived' && db.prepare("SELECT 1 FROM learning_path_courses pc JOIN learning_paths p ON p.id = pc.path_id WHERE pc.course_id = ? AND p.status = 'published' LIMIT 1").get(logicalId)) {
+      fail(409, 'Remove this course from published learning paths before archiving it.', 'course_in_published_path');
+    }
+    const nextValues = { title, description, category, visibility, completion_window_days: completionWindowDays };
     const changedFields = Object.keys(nextValues).filter((field) => current[field] !== nextValues[field]);
     let updated = current;
     if (changedFields.length) {
-      db.prepare(`UPDATE courses SET title = ?, description = ?, category = ?, visibility = ?, status = ?,
+      db.prepare(`UPDATE courses SET title = ?, description = ?, category = ?, visibility = ?, completion_window_days = ?,
           updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-        .run(title, description, category, visibility, status, req.currentUser.id, current.id);
+        .run(title, description, category, visibility, completionWindowDays, req.currentUser.id, current.id);
       updated = db.prepare('SELECT * FROM courses WHERE id = ?').get(current.id);
-      const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.updated', entityType: 'course', entityId: current.id,
-        summary: `${status === 'archived' && current.status !== 'archived' ? 'Archived' : 'Updated'} course: ${title}`,
+      const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.updated', entityType: 'course', entityId: logicalId,
+        summary: `Updated course revision: ${title}`,
         details: { changedFields, category, visibility, status } });
       if (!auditId) fail(500, 'Course could not be updated because the audit log is unavailable.', 'audit_unavailable');
     }
+    const unpublish = status === 'draft' && body.unpublish === true;
+    if (status === 'archived' || unpublish || (status === 'draft' && canonical.status === 'archived')) {
+      db.prepare(`UPDATE courses SET status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(status, req.currentUser.id, logicalId);
+      const auditId = writeAuditLog({ actor: req.currentUser, action: status === 'archived' ? 'course.archived' : 'course.unpublished',
+        entityType: 'course', entityId: logicalId, summary: `${status === 'archived' ? 'Archived' : 'Unpublished'} ${canonical.title}` });
+      if (!auditId) fail(500, 'Course status could not be changed because the audit log is unavailable.', 'audit_unavailable');
+    }
     return { current, title, category, visibility, status, changedFields, updated };
   });
-  const { updated } = saveCourse.immediate();
-  res.json({ course: getCoursePayload(updated, req.currentUser, { includeAnswers: true }) });
+  const result = saveCourse.immediate();
+  res.json({ course: getCoursePayload(result.updated, req.currentUser, {
+    includeAnswers: true,
+    ...(result.contentCourse ? { storageCourseId: result.contentCourse.id } : {}),
+  }) });
 });
 
 courseRouter.delete('/manage/courses/:courseId', requireStaff, async (req, res) => {
   const deleteCourse = db.transaction(() => {
-    const course = requireCourseManager(req.params.courseId, req.currentUser);
+    const course = canonicalCourse(req.params.courseId);
+    if (!course) fail(404, 'Course not found.', 'not_found');
     if (course.status !== 'archived') fail(409, 'Archive this course before permanently deleting it.', 'archive_required');
     const directory = courseFileDirectory(course.id);
     db.prepare('DELETE FROM courses WHERE id = ?').run(course.id);
@@ -577,10 +660,12 @@ courseRouter.patch('/manage/modules/:moduleId', requireStaff, (req, res) => {
     if (current.module_title === title) return null;
     db.prepare('UPDATE course_modules SET title = ? WHERE id = ?').run(title, current.module_id);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, current.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.module_updated', entityType: 'module', entityId: current.module_id,
+      summary: `Renamed a module in ${current.title} to "${title}"`, details: { courseId: current.id } });
+    if (!auditId) fail(500, 'Module could not be renamed because the audit log is unavailable.', 'audit_unavailable');
     return current;
   });
-  const changedModule = updateModule.immediate();
-  if (changedModule) writeAuditLog({ actor: req.currentUser, action: 'course.module_updated', entityType: 'module', entityId: changedModule.module_id, summary: `Renamed a module in ${changedModule.title} to "${title}"` });
+  updateModule.immediate();
   res.json({ ok: true });
 });
 
@@ -705,10 +790,12 @@ courseRouter.post('/manage/lessons/:lessonId/resources', requireStaff, (req, res
     db.prepare(`INSERT INTO lesson_resources (id, lesson_id, resource_type, title, href, position)
       VALUES (?, ?, 'link', ?, ?, ?)`).run(id, currentLesson.lesson_id, title, url.href, position);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, currentLesson.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.resource_link_added', entityType: 'lesson', entityId: currentLesson.lesson_id,
+      summary: `Added a resource link to ${currentLesson.lesson_title}`, details: { courseId: currentLesson.id, title } });
+    if (!auditId) fail(500, 'Resource link could not be added because the audit log is unavailable.', 'audit_unavailable');
     return currentLesson;
   });
-  const createdInLesson = createResource.immediate();
-  writeAuditLog({ actor: req.currentUser, action: 'course.resource_link_added', entityType: 'lesson', entityId: createdInLesson.lesson_id, summary: `Added a resource link to ${createdInLesson.lesson_title}`, details: { courseId: createdInLesson.id, title } });
+  createResource.immediate();
   res.status(201).json({ resource: { id, kind: 'link', title, url: url.href, fileName: null } });
 });
 
@@ -776,8 +863,11 @@ courseRouter.post('/manage/modules/:moduleId/move', requireStaff, (req, res) => 
   const direction = req.body?.direction;
   if (!['up', 'down'].includes(direction)) fail(400, 'Choose up or down.', 'validation_error');
   const move = db.transaction(() => {
-    const modules = db.prepare('SELECT id, position FROM course_modules WHERE course_id = ? ORDER BY position, id').all(module.id);
-    const index = modules.findIndex((item) => item.id === module.module_id);
+    const currentModule = moduleCourse(req.params.moduleId);
+    if (!currentModule) fail(404, 'Module not found.', 'not_found');
+    requireCourseManager(currentModule.id, req.currentUser);
+    const modules = db.prepare('SELECT id, position FROM course_modules WHERE course_id = ? ORDER BY position, id').all(currentModule.id);
+    const index = modules.findIndex((item) => item.id === currentModule.module_id);
     if (index < 0) return false;
     const current = modules[index];
     const other = modules[index + (direction === 'up' ? -1 : 1)];
@@ -786,12 +876,13 @@ courseRouter.post('/manage/modules/:moduleId/move', requireStaff, (req, res) => 
     db.prepare('UPDATE course_modules SET position = ? WHERE id = ?').run(temporaryPosition, current.id);
     db.prepare('UPDATE course_modules SET position = ? WHERE id = ?').run(current.position, other.id);
     db.prepare('UPDATE course_modules SET position = ? WHERE id = ?').run(other.position, current.id);
-    db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, module.id);
+    db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, currentModule.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.module_reordered', entityType: 'course', entityId: currentModule.id,
+      summary: `Reordered modules in ${currentModule.title}`, details: { direction } });
+    if (!auditId) fail(500, 'Modules could not be reordered because the audit log is unavailable.', 'audit_unavailable');
     return true;
   });
-  if (move.immediate()) {
-    writeAuditLog({ actor: req.currentUser, action: 'course.module_reordered', entityType: 'course', entityId: module.id, summary: `Reordered modules in ${module.title}`, details: { direction } });
-  }
+  move.immediate();
   res.json({ ok: true });
 });
 
@@ -802,8 +893,11 @@ courseRouter.post('/manage/lessons/:lessonId/move', requireStaff, (req, res) => 
   const direction = req.body?.direction;
   if (!['up', 'down'].includes(direction)) fail(400, 'Choose up or down.', 'validation_error');
   const move = db.transaction(() => {
-    const lessons = db.prepare('SELECT id, position FROM lessons WHERE module_id = ? ORDER BY position, id').all(lesson.module_id);
-    const index = lessons.findIndex((item) => item.id === lesson.lesson_id);
+    const currentLesson = courseFromLesson(req.params.lessonId);
+    if (!currentLesson) fail(404, 'Lesson not found.', 'not_found');
+    requireCourseManager(currentLesson.id, req.currentUser);
+    const lessons = db.prepare('SELECT id, position FROM lessons WHERE module_id = ? ORDER BY position, id').all(currentLesson.module_id);
+    const index = lessons.findIndex((item) => item.id === currentLesson.lesson_id);
     if (index < 0) return false;
     const current = lessons[index];
     const other = lessons[index + (direction === 'up' ? -1 : 1)];
@@ -812,12 +906,13 @@ courseRouter.post('/manage/lessons/:lessonId/move', requireStaff, (req, res) => 
     db.prepare('UPDATE lessons SET position = ? WHERE id = ?').run(temporaryPosition, current.id);
     db.prepare('UPDATE lessons SET position = ? WHERE id = ?').run(current.position, other.id);
     db.prepare('UPDATE lessons SET position = ? WHERE id = ?').run(other.position, current.id);
-    db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, lesson.id);
+    db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, currentLesson.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.lesson_reordered', entityType: 'lesson', entityId: currentLesson.lesson_id,
+      summary: `Reordered lesson: ${currentLesson.lesson_title}`, details: { direction, courseId: currentLesson.id } });
+    if (!auditId) fail(500, 'Lessons could not be reordered because the audit log is unavailable.', 'audit_unavailable');
     return true;
   });
-  if (move.immediate()) {
-    writeAuditLog({ actor: req.currentUser, action: 'course.lesson_reordered', entityType: 'lesson', entityId: lesson.lesson_id, summary: `Reordered lesson: ${lesson.lesson_title}`, details: { direction, courseId: lesson.id } });
-  }
+  move.immediate();
   res.json({ ok: true });
 });
 
@@ -928,7 +1023,9 @@ courseRouter.delete('/manage/modules/:moduleId/quiz', requireStaff, (req, res) =
 });
 
 courseRouter.get('/manage/courses/:courseId/access', requireStaff, (req, res) => {
-  const course = requireCourseManager(req.params.courseId, req.currentUser);
+  const managed = requireCourseManager(req.params.courseId, req.currentUser);
+  const course = canonicalCourse(managed.logical_course_id || managed.id);
+  if (!course) fail(404, 'Course not found.', 'not_found');
   const query = textField(req.query.q, 'Search', 100);
   const pageSize = 50;
   const requestedPage = pageQuery(req.query.page, MAX_COURSE_PAGE);
@@ -939,40 +1036,68 @@ courseRouter.get('/manage/courses/:courseId/access', requireStaff, (req, res) =>
     WHERE u.role = 'learner'${searchClause}`)
     .get(...searchParams).count;
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
-  const users = db.prepare(`
+  const offset = (page - 1) * pageSize;
+  const assignedCount = db.prepare(`SELECT COUNT(*) AS count FROM course_grants g
+    JOIN users u ON u.id = g.user_id
+    WHERE g.course_id = ? AND u.role = 'learner'${searchClause}`)
+    .get(course.id, ...searchParams).count;
+  const assignedLimit = Math.min(pageSize, Math.max(0, assignedCount - offset));
+  const users = assignedLimit ? db.prepare(`
     SELECT u.id, u.username, u.role, u.disabled, g.id AS grant_id, g.granted_at, gu.username AS granted_by
-    FROM users u LEFT JOIN course_grants g ON g.user_id = u.id AND g.course_id = ?
+    FROM course_grants g CROSS JOIN users u ON u.id = g.user_id
     LEFT JOIN users gu ON gu.id = g.granted_by
-    WHERE u.role = 'learner'${searchClause}
-    ORDER BY CASE WHEN g.id IS NULL THEN 1 ELSE 0 END, u.username COLLATE NOCASE, u.id ASC LIMIT ? OFFSET ?
-  `).all(course.id, ...searchParams, pageSize, (page - 1) * pageSize);
+    WHERE g.course_id = ? AND u.role = 'learner'${searchClause}
+    ORDER BY u.username COLLATE NOCASE, u.id ASC LIMIT ? OFFSET ?
+  `).all(course.id, ...searchParams, assignedLimit, offset) : [];
+  const unassignedLimit = pageSize - users.length;
+  if (unassignedLimit) users.push(...db.prepare(`
+    SELECT u.id, u.username, u.role, u.disabled, NULL AS grant_id, NULL AS granted_at, NULL AS granted_by
+    FROM users u
+    WHERE u.role = 'learner' AND NOT EXISTS (
+      SELECT 1 FROM course_grants g WHERE g.course_id = ? AND g.user_id = u.id
+    )${searchClause}
+    ORDER BY u.username COLLATE NOCASE, u.id ASC LIMIT ? OFFSET ?
+  `).all(course.id, ...searchParams, unassignedLimit, Math.max(0, offset - assignedCount)));
   res.json({ users: users.map((user) => ({ id: user.id, username: user.username, disabled: Boolean(user.disabled), granted: Boolean(user.grant_id), grantedAt: user.granted_at, grantedBy: user.granted_by })), total, page, pageSize });
 });
 
 courseRouter.put('/manage/courses/:courseId/access/:userId', requireStaff, (req, res) => {
   const grantAccess = db.transaction(() => {
-    const course = requireCourseManager(req.params.courseId, req.currentUser);
+    const managed = requireCourseManager(req.params.courseId, req.currentUser);
+    const course = canonicalCourse(managed.logical_course_id || managed.id);
+    if (!course) fail(404, 'Course not found.', 'not_found');
     const learner = db.prepare("SELECT id, username FROM users WHERE id = ? AND role = 'learner' AND disabled = 0").get(req.params.userId);
     if (!learner) fail(404, 'Active learner not found.', 'learner_not_found');
     const result = db.prepare('INSERT OR IGNORE INTO course_grants (id, course_id, user_id, granted_by) VALUES (?, ?, ?, ?)')
       .run(randomUUID(), course.id, learner.id, req.currentUser.id);
-    if (course.visibility === 'private') enrollLearner(course.id, learner.id);
+    enrollLearner(course.id, learner.id);
+    if (result.changes) {
+      const auditId = writeAuditLog({ actor: req.currentUser, action: course.visibility === 'private' ? 'course.access_granted' : 'course.learner_assigned',
+        entityType: 'course', entityId: course.id, summary: `Assigned ${learner.username} to ${course.title}`,
+        details: { learnerId: learner.id, learnerUsername: learner.username, visibility: course.visibility } });
+      if (!auditId) fail(500, 'Learner access could not be granted because the audit log is unavailable.', 'audit_unavailable');
+    }
     return { created: result.changes > 0, course, learner };
   });
-  const { created, course, learner } = grantAccess.immediate();
-  if (created) {
-    writeAuditLog({ actor: req.currentUser, action: course.visibility === 'private' ? 'course.access_granted' : 'course.learner_assigned', entityType: 'course', entityId: course.id, summary: `Assigned ${learner.username} to ${course.title}`, details: { learnerId: learner.id, learnerUsername: learner.username, visibility: course.visibility } });
-  }
+  grantAccess.immediate();
   res.status(204).end();
 });
 
 courseRouter.delete('/manage/courses/:courseId/access/:userId', requireStaff, (req, res) => {
-  const course = requireCourseManager(req.params.courseId, req.currentUser);
-  const result = db.prepare('DELETE FROM course_grants WHERE course_id = ? AND user_id = ?').run(course.id, req.params.userId);
-  if (result.changes) {
-    const user = db.prepare('SELECT username FROM users WHERE id = ?').get(req.params.userId);
-    writeAuditLog({ actor: req.currentUser, action: course.visibility === 'private' ? 'course.access_revoked' : 'course.learner_unassigned', entityType: 'course', entityId: course.id, summary: `Unassigned ${user?.username || 'a learner'} from ${course.title}`, details: { learnerId: req.params.userId, learnerUsername: user?.username || null, visibility: course.visibility } });
-  }
+  const revokeAccess = db.transaction(() => {
+    const managed = requireCourseManager(req.params.courseId, req.currentUser);
+    const course = canonicalCourse(managed.logical_course_id || managed.id);
+    if (!course) fail(404, 'Course not found.', 'not_found');
+    const result = db.prepare('DELETE FROM course_grants WHERE course_id = ? AND user_id = ?').run(course.id, req.params.userId);
+    if (result.changes) {
+      const user = db.prepare('SELECT username FROM users WHERE id = ?').get(req.params.userId);
+      const auditId = writeAuditLog({ actor: req.currentUser, action: course.visibility === 'private' ? 'course.access_revoked' : 'course.learner_unassigned',
+        entityType: 'course', entityId: course.id, summary: `Unassigned ${user?.username || 'a learner'} from ${course.title}`,
+        details: { learnerId: req.params.userId, learnerUsername: user?.username || null, visibility: course.visibility } });
+      if (!auditId) fail(500, 'Learner access could not be revoked because the audit log is unavailable.', 'audit_unavailable');
+    }
+  });
+  revokeAccess.immediate();
   res.status(204).end();
 });
 
@@ -1087,8 +1212,17 @@ courseRouter.put('/lessons/:lessonId/completion', (req, res) => {
     if (!lesson) fail(404, 'Lesson not found.', 'not_found');
     requireCourseViewer(lesson.id, req.currentUser);
     if (lesson.status !== 'published' || !lesson.media_id) fail(404, 'Lesson video is not available.', 'not_found');
+    const alreadyCompleted = Boolean(db.prepare('SELECT 1 FROM lesson_progress WHERE user_id = ? AND lesson_id = ?')
+      .get(req.currentUser.id, lesson.lesson_id));
+    if (req.currentUser.role === 'learner' && !isLessonUnlocked(lesson.lesson_id, req.currentUser)) {
+      fail(423, 'Complete the previous lesson before opening this one.', 'lesson_locked');
+    }
+    if (req.currentUser.role === 'learner' && !alreadyCompleted && !lessonVideoWasWatched(req.currentUser.id, lesson.lesson_id)) {
+      fail(409, 'Watch the full lesson video before marking it complete.', 'video_watch_required');
+    }
     enrollLearner(lesson.id, req.currentUser.id);
     db.prepare('INSERT OR IGNORE INTO lesson_progress (user_id, lesson_id) VALUES (?, ?)').run(req.currentUser.id, lesson.lesson_id);
+    syncLearnerPathsForCourse(lesson.id, req.currentUser.id);
     return issueCertificateIfComplete(lesson.id, req.currentUser);
   });
   const certificate = completeLesson.immediate();
@@ -1152,6 +1286,7 @@ courseRouter.post('/quizzes/:quizId/attempts', quizAttemptLimiter, (req, res) =>
     db.prepare(`INSERT INTO quiz_attempts (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json)
       VALUES (?, ?, ?, ?, ?, ?, ?)`)
       .run(attemptId, quiz.quiz_id, req.currentUser.id, score, passed ? 1 : 0, JSON.stringify(answers), JSON.stringify(snapshot));
+    if (passed) syncLearnerPathsForCourse(quiz.id, req.currentUser.id);
     const certificate = issueCertificateIfComplete(quiz.id, req.currentUser);
     return { attempt: { id: attemptId, score, passed, passMark, questions: snapshot }, certificate };
   });

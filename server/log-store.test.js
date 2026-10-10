@@ -63,6 +63,20 @@ after(() => {
   }
 });
 
+test('filtered log pages use indexes for newest-first ordering', () => {
+  const auditPlan = database.prepare(`EXPLAIN QUERY PLAN SELECT id, occurred_at, actor_username, action, entity_type, entity_id, summary, details_json
+    FROM audit_logs WHERE action = ? ORDER BY id DESC LIMIT ? OFFSET ?`).all('account.created', 50, 0)
+    .map((step) => step.detail).join('\n');
+  const systemPlan = database.prepare(`EXPLAIN QUERY PLAN SELECT id, occurred_at, level, source, message, details_json
+    FROM system_logs WHERE level = ? ORDER BY id DESC LIMIT ? OFFSET ?`).all('error', 50, 0)
+    .map((step) => step.detail).join('\n');
+
+  assert.match(auditPlan, /USING INDEX audit_logs_action \(action=\?\)/);
+  assert.doesNotMatch(auditPlan, /USE TEMP B-TREE FOR ORDER BY/);
+  assert.match(systemPlan, /USING INDEX system_logs_level \(level=\?\)/);
+  assert.doesNotMatch(systemPlan, /USE TEMP B-TREE FOR ORDER BY/);
+});
+
 test('log writes redact credentials and retain only the newest configured rows', () => {
   const seedAudit = database.prepare(`INSERT INTO audit_logs (actor_username, action, entity_type, summary)
     VALUES ('System', 'seed', 'test', ?)`);
@@ -105,4 +119,32 @@ test('log writes redact credentials and retain only the newest configured rows',
   assert.equal(systemDetails.apiKey, '[redacted]');
   assert.match(systemDetails.note, /\[redacted\]/);
   assert.doesNotMatch(systemEntry.details_json, /sensitive-api-key|sensitive-detail-token/);
+});
+
+test('audit retention recounts after the caller transaction rolls back a write', async () => {
+  database.exec('DELETE FROM audit_logs');
+  const rollbackAwareLogStore = await import('./log-store.js?caller-rollback-test');
+  const abortAfterAuditWrite = database.transaction(() => {
+    assert.ok(rollbackAwareLogStore.writeAuditLog({ action: 'test.rolled_back', entityType: 'test', summary: 'Rolled-back audit' }));
+    throw new Error('abort outer transaction');
+  });
+  assert.throws(abortAfterAuditWrite, /abort outer transaction/);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_logs').get().count, 0);
+
+  const seedAudit = database.prepare(`INSERT INTO audit_logs (actor_username, action, entity_type, summary)
+    VALUES ('System', 'seed', 'test', ?)`);
+  const seedRows = database.transaction(() => {
+    for (let index = 1; index <= 10_000; index += 1) seedAudit.run(`rollback-recovery-seed-${index}`);
+  });
+  seedRows();
+  const oldestSeedId = database.prepare('SELECT MIN(id) AS id FROM audit_logs').get().id;
+
+  const recoveredId = rollbackAwareLogStore.writeAuditLog({
+    action: 'test.after_rollback', entityType: 'test', summary: 'Retention counter recovered',
+  });
+  assert.ok(recoveredId);
+  assert.deepEqual(
+    database.prepare('SELECT COUNT(*) AS count, MIN(id) AS oldestId, MAX(id) AS newestId FROM audit_logs').get(),
+    { count: 10_000, oldestId: oldestSeedId + 1, newestId: recoveredId },
+  );
 });

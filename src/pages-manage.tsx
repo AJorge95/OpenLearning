@@ -13,7 +13,7 @@ import { canonicalCaptionLanguageTag, captionFileSizeError, captionLanguageError
 import { courseEditingNote } from './course-editing-note';
 import { firstQuizTextIssue } from './quiz-validation';
 import { lessonResourceUrlError } from './resource-validation';
-import type { Course, CourseAccessUser, CourseAnalytics, CourseModule, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
+import type { Competency, Course, CourseAccessUser, CourseAnalytics, CourseModule, CourseVersion, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
 
 type CourseListResponse = { courses: Course[]; total: number; page: number; pageSize: number };
 type CourseRowAction = 'publish' | 'unpublish' | 'archive' | 'delete';
@@ -142,14 +142,15 @@ function DateTimeText({ value }: { value: string }) {
 export function CourseManagementPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [query, setQuery] = useState('');
+  const [appliedQuery, setAppliedQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [total, setTotal] = useState(0);
   const loadSequenceRef = useRef(0);
   const loadControllerRef = useRef<AbortController | null>(null);
-  const filtersRef = useRef({ query, status });
-  filtersRef.current = { query, status };
+  const filtersRef = useRef({ query: appliedQuery, status });
+  filtersRef.current = { query: appliedQuery, status };
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [failedRequest, setFailedRequest] = useState<FailedCourseListRequest | null>(null);
@@ -190,6 +191,12 @@ export function CourseManagementPage() {
       if (requestSequence === loadSequenceRef.current) setLoading(false);
     }
   }
+  function submitSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextQuery = query.trim();
+    setAppliedQuery(nextQuery);
+    void load(1, { query: nextQuery, status });
+  }
   useEffect(() => {
     load(1);
     return () => {
@@ -203,7 +210,7 @@ export function CourseManagementPage() {
     if (busyActionsRef.current[course.id]) return;
     const action: CourseRowAction = nextStatus === 'published' ? 'publish' : nextStatus === 'draft' ? 'unpublish' : 'archive';
     markCourseAction(course.id, action); setError('');
-    try { await api.patch(`/api/manage/courses/${course.id}`, { status: nextStatus }); await load(); }
+    try { await api.patch(`/api/manage/courses/${course.id}`, { status: nextStatus, ...(nextStatus === 'draft' ? { unpublish: true } : {}) }); await load(); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Course status could not be changed.'); }
     finally { markCourseAction(course.id, null); }
   }
@@ -221,16 +228,27 @@ export function CourseManagementPage() {
     { label: 'All courses', value: 'all' }, { label: 'Published', value: 'published' },
     { label: 'Drafts', value: 'draft' }, { label: 'Archived', value: 'archived' },
   ];
+  const emptyCourseState = appliedQuery
+    ? { title: 'No matching courses', detail: 'Try another search term or choose a different status filter.' }
+    : status === 'published'
+      ? { title: 'No published courses', detail: 'Courses published for learners will appear here.' }
+      : status === 'draft'
+        ? { title: 'No draft courses', detail: 'Courses saved as drafts will appear here.' }
+        : status === 'archived'
+          ? { title: 'No archived courses', detail: 'Courses you archive will appear here.' }
+          : { title: 'Your course catalog is ready', detail: 'Create a course, add modules and video lessons, then publish it for learners.' };
+  const hasEmptyCourseResult = !loading && !failedRequest && courses.length === 0;
   return <div className="management-page">
     <PageHeading title="Courses" action={<Link className="button button-primary" to="/manage/courses/new"><Plus size={18} />Create course</Link>} />
     <div className="management-tabs" role="group" aria-label="Filter courses by status">
       {tabs.map((tab) => <button type="button" key={tab.value} aria-pressed={status === tab.value} className={status === tab.value ? 'active' : ''} onClick={() => setStatus(tab.value)}>{tab.label}</button>)}
     </div>
-    <form className="management-search" onSubmit={(event) => { event.preventDefault(); load(1); }}><Search size={19} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses" aria-label="Search courses" maxLength={120} /><button type="submit">Search</button></form>
+    <form className="management-search" onSubmit={submitSearch}><Search size={19} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses" aria-label="Search courses" maxLength={120} /><button type="submit">Search</button></form>
     {error && (failedRequest
       ? <div className="course-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
-    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading courses…</div> : failedRequest ? null : courses.length ? <div className="course-table-wrap" role="region" aria-label="Scrollable course list" tabIndex={0}><table className="course-table"><caption className="sr-only">Courses</caption><thead><tr><th scope="col">Course</th><th scope="col">Owner</th><th scope="col">Visibility</th><th scope="col">Status</th><th scope="col">Updated</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>
+    {hasEmptyCourseResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyCourseState.title}. {emptyCourseState.detail}</p>}
+    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading courses…</div> : failedRequest ? null : courses.length ? <div className="course-table-wrap" role="region" aria-label="Scrollable course list" tabIndex={0}><p className="table-scroll-hint">Scroll horizontally to see all course columns.</p><table className="course-table"><caption className="sr-only">Courses</caption><thead><tr><th scope="col">Course</th><th scope="col">Owner</th><th scope="col">Visibility</th><th scope="col">Status</th><th scope="col">Updated</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>
       {courses.map((course) => {
         const busyAction = busyActions[course.id];
         return <tr key={course.id}>
@@ -242,7 +260,7 @@ export function CourseManagementPage() {
         <td><div className="table-actions"><Link className="text-action" to={`/manage/courses/${course.id}/edit`}>Edit</Link><Link className="text-action" to={`/manage/courses/${course.id}/analytics`}>Analytics</Link><CourseRowMenu course={course} busyAction={busyAction} onStatusChange={changeStatus} onDelete={deleteCourse} /></div></td>
         </tr>;
       })}
-    </tbody></table></div> : <EmptyState title={query ? 'No matching courses' : 'Your course catalog is ready'} detail={query ? 'Try another search term.' : 'Create a course, add modules and video lessons, then publish it for learners.'} action={!query && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} />Create course</Link>} />}
+    </tbody></table></div> : <EmptyState title={emptyCourseState.title} detail={emptyCourseState.detail} action={status === 'all' && !appliedQuery && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} />Create course</Link>} />}
     {!loading && !failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
   </div>;
 }
@@ -460,7 +478,7 @@ function QuizEditor({ module, onSaved, onError }: { module: CourseModule; onSave
     <div className="quiz-editor-head"><div><span className="editor-type"><CircleHelp size={15} />Module quiz</span><h4>{existing ? 'Edit quiz' : 'Add a quiz'}</h4></div>{existing && <button type="button" className="icon-button danger-icon" aria-label={busyAction === 'remove' ? 'Removing quiz' : 'Remove quiz'} disabled={busyAction !== null} onClick={remove}><Trash2 size={16} /></button>}</div>
     {textValidationIssue && <Notice>Enter text for every quiz question and answer choice before saving.</Notice>}
     <fieldset className="quiz-editor-fields" aria-label="Quiz fields" disabled={busyAction !== null}>
-    <div className="quiz-settings-row"><label>Quiz title<input value={title} maxLength={quizTitleLimit} onChange={(event) => setTitle(event.target.value)} /></label><label>Pass mark<AppSelect<number> ariaLabel="Quiz pass mark" value={passMark} onChange={setPassMark} options={[50, 60, 70, 80, 90, 100].map((value) => ({ value, label: `${value}%` }))} /></label></div>
+    <div className="quiz-settings-row"><label>Quiz title<input value={title} maxLength={quizTitleLimit} onChange={(event) => setTitle(event.target.value)} /></label><div className="app-select-field"><span>Pass mark</span><AppSelect<number> ariaLabel="Quiz pass mark" value={passMark} onChange={setPassMark} options={[50, 60, 70, 80, 90, 100].map((value) => ({ value, label: `${value}%` }))} /></div></div>
     {questions.map((question, questionIndex) => <div className="question-editor" key={question.id || question.editorKey || questionIndex}>
       <div className="question-editor-head"><span>Question {questionIndex + 1}</span><button type="button" className="text-action danger-text" aria-label={`Remove question ${questionIndex + 1}`} onClick={() => removeQuestion(questionIndex)}>Remove</button></div>
       <label className="sr-only" htmlFor={`question-${module.id}-${questionIndex}`}>Question {questionIndex + 1} text</label><textarea ref={(node) => { questionInputRefs.current[questionIndex] = node; }} id={`question-${module.id}-${questionIndex}`} rows={2} maxLength={1000} placeholder="Write a question" value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} aria-invalid={textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === undefined || undefined} aria-describedby={textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === undefined ? `quiz-question-error-${module.id}-${questionIndex}` : undefined} />
@@ -732,9 +750,12 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
 export function CourseEditorPage() {
   const route = useParams();
   const navigate = useNavigate();
+  const { user: editorUser } = useAuth();
   const createCourseRequestRef = useRef<Promise<{ course: Course }> | null>(null);
   const courseLoadSequenceRef = useRef(0);
+  const governanceLoadSequenceRef = useRef(0);
   const courseLoadControllerRef = useRef<AbortController | null>(null);
+  const governanceLoadControllerRef = useRef<AbortController | null>(null);
   const routeCourseIdRef = useRef(route.courseId || '');
   routeCourseIdRef.current = route.courseId || '';
   const [courseId, setCourseId] = useState(route.courseId || '');
@@ -743,6 +764,25 @@ export function CourseEditorPage() {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('General');
   const [visibility, setVisibility] = useState<Course['visibility']>('public');
+  const [completionWindowDays, setCompletionWindowDays] = useState('');
+  const [requiresRecompletion, setRequiresRecompletion] = useState(false);
+  const [changeNote, setChangeNote] = useState('');
+  const [versions, setVersions] = useState<CourseVersion[]>([]);
+  const [review, setReview] = useState<{ status: string; author: string | null; submittedBy: string | null; submittedAt: string | null; reviewedBy: string | null; reviewNote: string } | null>(null);
+  const [showChangeRequestForm, setShowChangeRequestForm] = useState(false);
+  const [changeRequestNote, setChangeRequestNote] = useState('');
+  const [savingReviewDecision, setSavingReviewDecision] = useState(false);
+  const reviewDecisionRequestRef = useRef(false);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const reviewSubmissionRequestRef = useRef(false);
+  const requestChangesButtonRef = useRef<HTMLButtonElement>(null);
+  const [competencies, setCompetencies] = useState<Competency[]>([]);
+  const [selectedCompetencies, setSelectedCompetencies] = useState<string[]>([]);
+  const [savingCompetencyMapping, setSavingCompetencyMapping] = useState(false);
+  const competencyMappingSaveRef = useRef(false);
+  const [governanceCourseId, setGovernanceCourseId] = useState('');
+  const [governanceLoading, setGovernanceLoading] = useState(false);
+  const [governanceError, setGovernanceError] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
@@ -770,16 +810,24 @@ export function CourseEditorPage() {
   const [coverProgress, setCoverProgress] = useState<number | null>(null);
   const coverUploadRef = useRef(false);
   const uploadControllersRef = useRef(new Map<string, { controller: AbortController; input: HTMLInputElement; cancelledByUser: boolean }>());
+  const governanceReady = Boolean(route.courseId && governanceCourseId === route.courseId);
   const courseDetailsChanged = Boolean(course && (
     title.trim() !== course.title
     || description.trim() !== course.description
     || category.trim() !== course.category
     || visibility !== course.visibility
+    || (completionWindowDays ? Number(completionWindowDays) : null) !== (course.completionWindowDays ?? null)
   ));
 
   function abortActiveUploads() {
     for (const upload of uploadControllersRef.current.values()) upload.controller.abort();
     uploadControllersRef.current.clear();
+  }
+
+  function abortGovernanceLoad() {
+    governanceLoadSequenceRef.current += 1;
+    governanceLoadControllerRef.current?.abort();
+    governanceLoadControllerRef.current = null;
   }
 
   function cancelUpload(key: string) {
@@ -797,20 +845,30 @@ export function CourseEditorPage() {
     const controller = new AbortController();
     courseLoadControllerRef.current = controller;
     const isCurrentRequest = () => requestSequence === courseLoadSequenceRef.current && routeCourseIdRef.current === id;
+    abortGovernanceLoad();
+    setGovernanceCourseId(''); setGovernanceError(''); setGovernanceLoading(true);
     try {
       const response = await fetchCourse(id, true, { signal: controller.signal });
       if (!isCurrentRequest()) return;
       setCourse(response.course);
+      setCompletionWindowDays(response.course.completionWindowDays ? String(response.course.completionWindowDays) : '');
+      void loadGovernance(id, isCurrentRequest).catch((cause) => {
+        if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'Course settings could not be loaded.');
+      });
       if (!previousCourse) {
         setTitle(response.course.title); setDescription(response.course.description); setCategory(response.course.category); setVisibility(response.course.visibility);
       } else {
+        setCompletionWindowDays((current) => current === String(previousCourse.completionWindowDays ?? '') ? String(response.course.completionWindowDays ?? '') : current);
         setTitle((current) => current === previousCourse.title ? response.course.title : current);
         setDescription((current) => current === previousCourse.description ? response.course.description : current);
         setCategory((current) => current === previousCourse.category ? response.course.category : current);
         setVisibility((current) => current === previousCourse.visibility ? response.course.visibility : current);
       }
     } catch (cause) {
-      if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'Course could not be loaded.');
+      if (isCurrentRequest()) {
+        setError(cause instanceof ApiError ? cause.message : 'Course could not be loaded.');
+        setGovernanceLoading(false);
+      }
     } finally {
       if (isCurrentRequest()) {
         courseLoadControllerRef.current = null;
@@ -827,10 +885,14 @@ export function CourseEditorPage() {
       createCourseRequestRef.current = null;
       setCourseId(route.courseId);
       setCourse(null);
+      setVersions([]); setReview(null); setCompetencies([]); setSelectedCompetencies([]);
+      setShowChangeRequestForm(false); setChangeRequestNote('');
+      abortGovernanceLoad();
+      setGovernanceCourseId(''); setGovernanceLoading(false); setGovernanceError('');
       setError(''); setNotice(''); setSavingStatus(null);
       setLoading(true);
       load(route.courseId);
-      return () => { active = false; courseLoadSequenceRef.current += 1; courseLoadControllerRef.current?.abort(); abortActiveUploads(); };
+      return () => { active = false; courseLoadSequenceRef.current += 1; abortGovernanceLoad(); courseLoadControllerRef.current?.abort(); abortActiveUploads(); };
     }
     setCourse(null);
     setError('');
@@ -842,14 +904,14 @@ export function CourseEditorPage() {
         if (!active) return;
         setCourseId(response.course.id);
         navigate(`/manage/courses/${response.course.id}/edit`, { replace: true });
-        setCourse(response.course); setTitle(response.course.title); setDescription(response.course.description); setCategory(response.course.category); setVisibility(response.course.visibility);
+        setCourse(response.course); setTitle(response.course.title); setDescription(response.course.description); setCategory(response.course.category); setVisibility(response.course.visibility); setCompletionWindowDays(response.course.completionWindowDays ? String(response.course.completionWindowDays) : '');
       }).catch((cause) => {
         if (active) setError(cause instanceof ApiError ? cause.message : 'Course could not be created.');
       }).finally(() => {
         if (createCourseRequestRef.current === createRequest) createCourseRequestRef.current = null;
         if (active) setLoading(false);
       });
-    return () => { active = false; courseLoadSequenceRef.current += 1; courseLoadControllerRef.current?.abort(); abortActiveUploads(); };
+    return () => { active = false; courseLoadSequenceRef.current += 1; abortGovernanceLoad(); courseLoadControllerRef.current?.abort(); abortActiveUploads(); };
   }, [route.courseId]);
 
   async function saveCourse(status: 'draft' | 'published') {
@@ -859,9 +921,15 @@ export function CourseEditorPage() {
     courseLoadControllerRef.current?.abort();
     setSavingStatus(status); setError(''); setNotice('');
     try {
-      const response = await api.patch<{ course: Course }>(`/api/manage/courses/${requestedCourseId}`, { title, description, category, visibility, ...(status ? { status } : {}) });
+      const response = await api.patch<{ course: Course }>(`/api/manage/courses/${requestedCourseId}`, {
+        title, description, category, visibility,
+        completionWindowDays: completionWindowDays ? Number(completionWindowDays) : null,
+        ...(status ? { status } : {}),
+      ...(status === 'published' ? { requiresRecompletion, changeNote } : {}),
+      });
       if (routeCourseIdRef.current !== requestedCourseId || requestSequence !== courseLoadSequenceRef.current) return;
       setCourse(response.course); setNotice(status === 'published' ? 'Course published for learners.' : status === 'draft' ? 'Draft saved.' : 'Course details saved.');
+      if (status === 'published') { setRequiresRecompletion(false); setChangeNote(''); await loadGovernance(requestedCourseId); }
     } catch (cause) {
       if (routeCourseIdRef.current === requestedCourseId && requestSequence === courseLoadSequenceRef.current) setError(cause instanceof ApiError ? cause.message : 'Course could not be saved.');
     } finally {
@@ -871,9 +939,121 @@ export function CourseEditorPage() {
 
   async function saveCourseDetailsIfChanged() {
     if (!courseId || !course) return;
-    if (title === course.title && description === course.description && category === course.category && visibility === course.visibility) return;
-    const response = await api.patch<{ course: Course }>(`/api/manage/courses/${courseId}`, { title, description, category, visibility });
+    if (title === course.title && description === course.description && category === course.category && visibility === course.visibility
+      && (completionWindowDays ? Number(completionWindowDays) : null) === (course.completionWindowDays ?? null)) return;
+    const response = await api.patch<{ course: Course }>(`/api/manage/courses/${courseId}`, {
+      title, description, category, visibility,
+      completionWindowDays: completionWindowDays ? Number(completionWindowDays) : null,
+    });
     setCourse(response.course);
+  }
+
+  async function loadGovernance(id = courseId, isRouteRequestCurrent = () => routeCourseIdRef.current === id) {
+    if (!id || routeCourseIdRef.current !== id || !isRouteRequestCurrent()) return;
+    governanceLoadControllerRef.current?.abort();
+    const controller = new AbortController();
+    const requestSequence = ++governanceLoadSequenceRef.current;
+    governanceLoadControllerRef.current = controller;
+    const isCurrentRequest = () => requestSequence === governanceLoadSequenceRef.current
+      && routeCourseIdRef.current === id && isRouteRequestCurrent()
+      && governanceLoadControllerRef.current === controller;
+    setGovernanceCourseId(''); setGovernanceError(''); setGovernanceLoading(true);
+    try {
+      const [history, mapping] = await Promise.all([
+        api.get<{ versions: CourseVersion[]; revision: typeof review }>(`/api/manage/courses/${id}/versions`, { signal: controller.signal }),
+        api.get<{ competencies: Competency[]; selected: string[] }>(`/api/manage/courses/${id}/competencies`, { signal: controller.signal }),
+      ]);
+      if (!isCurrentRequest()) return;
+      setVersions(history.versions); setReview(history.revision);
+      setCompetencies(mapping.competencies); setSelectedCompetencies(mapping.selected);
+      setGovernanceCourseId(id);
+    } catch (cause) {
+      if (!isCurrentRequest() && controller.signal.aborted) return;
+      if (isCurrentRequest()) {
+        setGovernanceError(cause instanceof ApiError ? cause.message : 'Course settings could not be loaded.');
+        controller.abort();
+      }
+      throw cause;
+    } finally {
+      if (governanceLoadControllerRef.current === controller) {
+        governanceLoadControllerRef.current = null;
+        setGovernanceLoading(false);
+      }
+    }
+  }
+
+  function retryGovernanceLoad() {
+    const id = route.courseId;
+    if (!id) return;
+    setError('');
+    void loadGovernance(id).catch((cause) => {
+      if (routeCourseIdRef.current === id) setError(cause instanceof ApiError ? cause.message : 'Course settings could not be loaded.');
+    });
+  }
+
+  async function submitForReview() {
+    if (!courseId || reviewSubmissionRequestRef.current) return;
+    const requestedCourseId = courseId;
+    const isCurrentRequest = () => routeCourseIdRef.current === requestedCourseId;
+    reviewSubmissionRequestRef.current = true;
+    setSubmittingReview(true);
+    setError(''); setNotice('');
+    try {
+      await saveCourseDetailsIfChanged();
+      if (!isCurrentRequest()) return;
+      await api.post(`/api/manage/courses/${requestedCourseId}/review`, { note: changeNote });
+      if (!isCurrentRequest()) return;
+      await loadGovernance(requestedCourseId);
+      if (isCurrentRequest()) setNotice('Course revision submitted for review.');
+    } catch (cause) { if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'The course could not be submitted for review.'); }
+    finally { reviewSubmissionRequestRef.current = false; setSubmittingReview(false); }
+  }
+
+  async function decideReview(decision: 'approve' | 'changes_requested', reviewNote = changeNote) {
+    if (!courseId || reviewDecisionRequestRef.current) return;
+    const note = decision === 'changes_requested' ? reviewNote.trim() : reviewNote;
+    if (decision === 'changes_requested' && !note) {
+      setError('Describe the changes the editor should make.');
+      return;
+    }
+    reviewDecisionRequestRef.current = true;
+    setSavingReviewDecision(true);
+    setError(''); setNotice('');
+    try {
+      await api.post(`/api/manage/courses/${courseId}/review/decision`, {
+        decision, note, requiresRecompletion: decision === 'approve' && requiresRecompletion,
+      });
+      await loadGovernance(); await load();
+      setNotice(decision === 'approve' ? 'Revision approved and published.' : 'Changes requested from the editor.');
+      if (decision === 'changes_requested') { setShowChangeRequestForm(false); setChangeRequestNote(''); }
+    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'The review decision could not be saved.'); }
+    finally { reviewDecisionRequestRef.current = false; setSavingReviewDecision(false); }
+  }
+
+  async function restoreVersion(version: CourseVersion) {
+    if (!courseId || !window.confirm(`Publish version ${version.version_number} as a new course version?`)) return;
+    setError(''); setNotice('');
+    try {
+      await api.post(`/api/manage/courses/${courseId}/versions/${version.id}/restore`, { requiresRecompletion });
+      setRequiresRecompletion(false); await load(); await loadGovernance();
+      setNotice(`Version ${version.version_number} was restored and published as a new version.`);
+    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'This version could not be restored.'); }
+  }
+
+  async function saveCompetencyMapping() {
+    if (!courseId || competencyMappingSaveRef.current) return;
+    const requestedCourseId = courseId;
+    const isCurrentRequest = () => routeCourseIdRef.current === requestedCourseId;
+    competencyMappingSaveRef.current = true;
+    setSavingCompetencyMapping(true);
+    setError(''); setNotice('');
+    try {
+      const response = await api.put<{ selected: string[] }>(`/api/manage/courses/${requestedCourseId}/competencies`, { competencyIds: selectedCompetencies });
+      if (!isCurrentRequest()) return;
+      setSelectedCompetencies(response.selected);
+      setNotice('Course competencies saved.');
+    } catch (cause) { if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'Course competencies could not be saved.'); }
+    finally { competencyMappingSaveRef.current = false; setSavingCompetencyMapping(false); }
   }
 
   async function deleteArchivedCourse() {
@@ -1030,7 +1210,7 @@ export function CourseEditorPage() {
   if (!course) return <div className="management-page">{error && <Notice>{error}</Notice>}<Link className="back-link" to="/manage/courses"><ArrowLeft size={17} />Back to courses</Link></div>;
 
   return <div className="editor-page">
-    <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>Edit course</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
+    <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>Edit course</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving || (review?.status === 'in_review' && review.submittedBy === editorUser?.id)} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
     {error && <Notice>{error}</Notice>}{notice && <Notice kind="success">{notice}</Notice>}
     <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{movingCurriculumItems.size ? 'Updating course content order…' : ''}</p>
     <p className="course-editing-note">{courseEditingNote(course.status, course.visibility)}</p>
@@ -1038,9 +1218,41 @@ export function CourseEditorPage() {
       <div className="editor-field-grid"><label className="field-wide">Course title<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} placeholder="Give your course a clear title" disabled={saving} /></label>
         <label>Category<input value={category} maxLength={100} onChange={(event) => setCategory(event.target.value)} placeholder="e.g. Professional development" disabled={saving} /></label>
         <fieldset className="visibility-field" disabled={saving}><legend>Visibility</legend><label><input type="radio" name="visibility" checked={visibility === 'public'} onChange={() => setVisibility('public')} />Public</label><label><input type="radio" name="visibility" checked={visibility === 'private'} onChange={() => setVisibility('private')} />Private</label></fieldset>
+        <label className="completion-window-field">Completion window (optional)<input type="number" min="1" max="3650" inputMode="numeric" value={completionWindowDays} onChange={(event) => setCompletionWindowDays(event.target.value)} placeholder="No deadline" disabled={saving} /><small>Days are 24-hour periods. Deadlines do not block course access.</small></label>
         <label className="field-wide">Description<textarea rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What will learners understand or be able to do after this course?" disabled={saving} /></label>
       </div>
       <div className="cover-upload-row"><div><ImageWithFallback src={course.coverUrl} className="course-cover-image" alt="Course cover preview" fallback={<span className="cover-preview-empty"><BookOpen size={22} /></span>} /><div><strong>Course cover</strong><small>JPG, PNG, or WebP</small></div></div><label className={`button button-secondary file-button ${coverProgress !== null || saving ? 'file-button-busy' : ''}`} aria-disabled={coverProgress !== null || saving}><Upload size={16} />{coverProgress === null ? course.coverUrl ? 'Replace cover' : 'Upload cover' : coverProgress >= 100 ? 'Saving cover…' : 'Uploading cover…'}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={coverProgress !== null || saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCover(file, event.currentTarget); event.currentTarget.value = ''; }} /></label>{coverProgress !== null && (coverProgress >= 100 ? <span className="upload-percent upload-progress-saving-compact" role="status">Saving cover…</span> : <span className="upload-percent" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverProgress} aria-label="Course cover upload progress">{coverProgress}%</span>)}{coverProgress !== null && coverProgress < 100 && <button type="button" className="text-action upload-cancel-action" aria-label="Cancel cover upload" onClick={() => cancelUpload('cover')}>Cancel upload</button>}</div>
+    </section>
+    <section className="editor-section course-governance-section" aria-label="Course publication and learning settings" aria-busy={governanceLoading}>
+      <div className="curriculum-editor-title"><div><h2>Publication and learning settings</h2><p>Choose how a new publication affects learners and manage its review history.</p></div></div>
+      <label className="program-toggle version-reset-option"><input type="checkbox" checked={requiresRecompletion} onChange={(event) => setRequiresRecompletion(event.target.checked)} /><span><strong>Require learners to complete the next published version</strong><small>Previous completions, quiz attempts, and certificates remain in history. The default keeps existing completions valid.</small></span></label>
+      <label className="version-change-note">Publication note (up to 500 characters)<input value={changeNote} onChange={(event) => setChangeNote(event.target.value)} maxLength={500} placeholder="Optional note for the version history" /><small>Saved with this version in its history.</small></label>
+      {governanceLoading && <p className="course-governance-load-status" role="status">Loading version history and competency settings…</p>}
+      {governanceError && <div className="course-governance-load-error"><Button type="button" variant="secondary" onClick={retryGovernanceLoad}>Retry loading course settings</Button></div>}
+      {course.status === 'published' && governanceReady && <div className="revision-actions">
+        {review?.status === 'in_review' && <div className="review-state"><span className="program-status draft">Awaiting review</span><p>Submitted by {review.author || 'a staff member'}{review.submittedAt ? ` · ${logTimestampFormatter.format(new Date(review.submittedAt))}` : ''}</p>{review.reviewNote && <small>{review.reviewNote}</small>}</div>}
+        {review?.status !== 'in_review' && <div className="review-submit-actions">{review?.status === 'changes_requested' && <div className="review-state"><span className="program-status draft">Changes requested</span>{review.reviewNote && <small>{review.reviewNote}</small>}</div>}<Button type="button" variant="secondary" onClick={() => void submitForReview()} disabled={saving || submittingReview || savingReviewDecision} aria-busy={submittingReview}>{submittingReview ? 'Submitting revision…' : 'Submit revision for review'}</Button></div>}
+        {review?.status === 'in_review' && review.submittedBy !== editorUser?.id && <>
+          <div className="review-decision-actions">
+            <Button ref={requestChangesButtonRef} type="button" variant="secondary" aria-expanded={showChangeRequestForm} aria-controls={showChangeRequestForm ? `review-change-request-${courseId}` : undefined} onClick={() => setShowChangeRequestForm(true)} disabled={savingReviewDecision}>Request changes</Button>
+            <Button type="button" onClick={() => void decideReview('approve')} disabled={saving || savingReviewDecision} aria-busy={savingReviewDecision}>{savingReviewDecision ? 'Saving review…' : 'Approve and publish'}</Button>
+          </div>
+          {showChangeRequestForm && <form id={`review-change-request-${courseId}`} className="review-request-form" onSubmit={(event) => { event.preventDefault(); void decideReview('changes_requested', changeRequestNote); }} aria-busy={savingReviewDecision}>
+            <label htmlFor={`review-change-note-${courseId}`}>Changes requested (up to 1,000 characters)
+              <textarea id={`review-change-note-${courseId}`} value={changeRequestNote} onChange={(event) => setChangeRequestNote(event.target.value)} maxLength={1000} rows={4} required autoFocus aria-describedby={`review-change-note-help-${courseId}`} placeholder="Describe what the editor should update before this revision can be published." />
+            </label>
+            <div className="review-request-form-footer"><small id={`review-change-note-help-${courseId}`}>The course editor will see this feedback. {changeRequestNote.length}/1,000 characters.</small><div className="review-request-form-actions">
+              <Button type="button" variant="secondary" disabled={savingReviewDecision} onClick={() => { setShowChangeRequestForm(false); setChangeRequestNote(''); setError(''); requestChangesButtonRef.current?.focus(); }}>Cancel</Button>
+              <Button type="submit" disabled={savingReviewDecision}>{savingReviewDecision ? 'Sending…' : 'Send request'}</Button>
+            </div></div>
+          </form>}
+        </>}
+      </div>}
+      {governanceReady && competencies.length > 0 && <fieldset className="course-competency-picker" disabled={savingCompetencyMapping} aria-busy={savingCompetencyMapping}><legend>Mapped competencies</legend><p>Any completed mapped course marks an active competency achieved for that learner.</p><div>{competencies.map((competency) => <label key={competency.id}><input type="checkbox" checked={selectedCompetencies.includes(competency.id)} onChange={(event) => setSelectedCompetencies((current) => event.target.checked ? [...current, competency.id] : current.filter((id) => id !== competency.id))} /><span>{competency.title}{!competency.active && <small>Inactive · hidden from learners</small>}</span></label>)}</div><Button type="button" variant="secondary" onClick={() => void saveCompetencyMapping()} disabled={savingCompetencyMapping}>{savingCompetencyMapping ? 'Saving mapping…' : 'Save competency mapping'}</Button></fieldset>}
+      {governanceReady && versions.length > 0 && <div className="course-version-history"><h3>Published version history</h3><ol>{versions.map((version, index) => <li key={version.id}>
+        <div><strong>Version {version.version_number}{index === 0 && <span className="current-version-label">Current</span>}</strong><small>{version.title} · Published {logTimestampFormatter.format(new Date(version.published_at))}{version.publisher ? ` by ${version.publisher}` : ''}</small>{version.change_note && <p>{version.change_note}</p>}</div>
+        {index > 0 && <Button type="button" variant="secondary" onClick={() => void restoreVersion(version)}>Restore as new version</Button>}
+      </li>)}</ol></div>}
     </section>
     <section className="editor-section curriculum-editor-section">
       <div className="curriculum-editor-title"><div><h2>Course curriculum</h2><p>Organize lessons into modules and add a quiz when you are ready.</p></div><div className="curriculum-editor-actions"><Button ref={addModuleButtonRef} variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} onClick={(event) => { if (addingModule) setAddingModule(false); else { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); } }}><Plus size={17} />Add module</Button></div></div>
@@ -1360,7 +1572,7 @@ export function AdminUsersPage() {
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest.query, failedRequest.roleFilter); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
     {success && <Notice kind="success">{success}</Notice>}
-    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading accounts…</div> : failedRequest ? null : <div className="user-table-wrap" role="region" aria-label="Scrollable account list" tabIndex={0}><table className="user-table"><caption className="sr-only">Accounts</caption><thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Account</th><th scope="col">Created</th><th scope="col">Actions</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}>
+    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading accounts…</div> : failedRequest ? null : <div className="user-table-wrap" role="region" aria-label="Scrollable account list" tabIndex={0}><p className="table-scroll-hint">Scroll horizontally to see all account columns.</p><table className="user-table"><caption className="sr-only">Accounts</caption><thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Account</th><th scope="col">Created</th><th scope="col">Actions</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}>
       <td><Link className="owner-cell user-detail-link" to={`/admin/users/${user.id}`}><UserInitial username={user.username} /><strong>{user.username}</strong></Link></td>
       <td><AppSelect<Role> className="app-select--compact" ariaLabel={`Role for ${user.username}`} value={user.role} disabled={savingIds.has(user.id)} onChange={(role) => updateUser(user, { role })} options={[{ value: 'admin', label: 'Administrator' }, { value: 'moderator', label: 'Moderator' }, { value: 'learner', label: 'Learner' }]} /></td>
       <td><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span></td>
@@ -1376,6 +1588,8 @@ export function AdminUserCreatePage() {
   const navigate = useNavigate();
   const roleHelpId = useId();
   const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
   const [role, setRole] = useState<Role>('learner');
   const [password, setPassword] = useState('');
@@ -1388,7 +1602,7 @@ export function AdminUserCreatePage() {
     if (saving) return;
     setSaving(true); setError('');
     try {
-      const response = await api.post<{ user: User }>('/api/admin/users', { email, username, role, password, confirmPassword });
+      const response = await api.post<{ user: User }>('/api/admin/users', { email, firstName, lastName, username, role, password, confirmPassword });
       navigate(`/admin/users/${response.user.id}`, { replace: true });
     } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'The account could not be created.'); }
     finally { setSaving(false); }
@@ -1398,6 +1612,7 @@ export function AdminUserCreatePage() {
     <PageHeading title="Create account" subtitle="Set up a sign-in account and assign its platform role." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} />Back to users</Link>} />
     <section className="account-form-card"><form className="form-stack" onSubmit={createAccount} aria-busy={saving}>
       <label>Email<input required type="email" maxLength={254} autoComplete="email" autoFocus value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} /></label>
+      <div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} disabled={saving} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} disabled={saving} /></label></div>
       <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>3–32 letters, numbers, dots, underscores, or hyphens.</small></label>
       <div className="account-form-role-field"><span>Platform role</span><AppSelect<Role> ariaLabel="Platform role" describedBy={roleHelpId} value={role} onChange={setRole} disabled={saving} options={[{ value: 'learner', label: 'Learner' }, { value: 'moderator', label: 'Moderator' }, { value: 'admin', label: 'Administrator' }]} /><small id={roleHelpId}>Choose administrator or moderator only when the person needs management access.</small></div>
       <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /><small>Use at least 12 characters. You can reset it later from account details.</small></label>
@@ -1438,6 +1653,8 @@ export function AdminUserDetailsPage() {
   const saving = savingAction !== null;
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [profileFirstName, setProfileFirstName] = useState('');
+  const [profileLastName, setProfileLastName] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -1455,10 +1672,15 @@ export function AdminUserDetailsPage() {
     return () => { active = false; controller.abort(); };
   }, [userId, page, loadRetryVersion]);
   useEffect(() => {
+    if (!account || account.user.id !== userId) return;
+    setProfileFirstName(account.user.firstName || '');
+    setProfileLastName(account.user.lastName || '');
+  }, [account?.user.id, account?.user.firstName, account?.user.lastName, userId]);
+  useEffect(() => {
     setError(''); setSuccess(''); setSavingAction(null); setPassword(''); setConfirmPassword('');
   }, [userId]);
 
-  async function updateAccount(changes: { role?: Role; disabled?: boolean }) {
+  async function updateAccount(changes: { role?: Role; disabled?: boolean; firstName?: string; lastName?: string }, successMessage = 'Account settings were updated.') {
     if (!account || saving) return;
     const requestedUserId = account.user.id;
     const actionSequence = ++actionSequenceRef.current;
@@ -1474,16 +1696,22 @@ export function AdminUserDetailsPage() {
         updatedAt: response.user.updatedAt ?? current.user.updatedAt,
         isCurrentUser: current.user.isCurrentUser,
       } } : current);
-      if (signedInUser?.id === response.user.id && (signedInUser.role !== response.user.role || signedInUser.disabled !== response.user.disabled)) {
+      if (signedInUser?.id === response.user.id && (signedInUser.role !== response.user.role || signedInUser.disabled !== response.user.disabled
+        || signedInUser.firstName !== response.user.firstName || signedInUser.lastName !== response.user.lastName)) {
         try { await refresh(); }
         catch {
           if (isCurrentAction()) setError('Account updated, but your access could not be refreshed. Reload this page to apply the change.');
           return;
         }
       }
-      if (isCurrentAction()) setSuccess('Account settings were updated.');
+      if (isCurrentAction()) setSuccess(successMessage);
     } catch (cause) { if (isCurrentAction()) setError(cause instanceof ApiError ? cause.message : 'Account settings could not be updated.'); }
     finally { if (isCurrentAction()) setSavingAction(null); }
+  }
+
+  async function saveAccountName(event: React.FormEvent) {
+    event.preventDefault();
+    await updateAccount({ firstName: profileFirstName, lastName: profileLastName }, 'Certificate name was updated.');
   }
 
   async function resetPassword(event: React.FormEvent) {
@@ -1518,6 +1746,7 @@ export function AdminUserDetailsPage() {
     <section className="account-detail-grid">
       <article className="account-detail-card account-overview-card"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><small>Account overview</small></div></div><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span></div>
         <dl className="account-meta-list"><div><dt>Email</dt><dd>{user.email || 'Not provided'}</dd></div><div><dt>User ID</dt><dd>{user.id}</dd></div><div><dt>Created</dt><dd><DateText value={user.createdAt} /></dd></div><div><dt>Last login</dt><dd>{user.lastLoginAt ? <DateTimeText value={user.lastLoginAt} /> : 'Not recorded'}</dd></div><div><dt>Last updated</dt><dd><DateText value={user.updatedAt} /></dd></div><div><dt>Courses assigned or enrolled</dt><dd>{account.total}</dd></div></dl>
+        <form className="account-profile-form form-stack" onSubmit={saveAccountName} aria-busy={savingAction === 'account'}><div><h3>Certificate name</h3><p>Set the first and last name shown on this user’s certificates.</p></div><div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={profileFirstName} onChange={(event) => setProfileFirstName(event.target.value)} disabled={saving} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={profileLastName} onChange={(event) => setProfileLastName(event.target.value)} disabled={saving} /></label></div><Button type="submit" variant="secondary" disabled={saving}>{savingAction === 'account' ? 'Saving…' : 'Save certificate name'}</Button></form>
         {registrationFields.length > 0 && <section className="account-registration-fields"><h3>Registration details</h3><dl>{registrationFields.map((field) => <div key={field.id}><dt>{field.label}</dt><dd>{typeof field.value === 'boolean' ? field.value ? 'Yes' : 'No' : field.value || 'Not provided'}</dd></div>)}</dl></section>}
         <div className="account-control-row" aria-busy={savingAction === 'account'}><div className="account-role-control"><span>Platform role</span><AppSelect<Role> ariaLabel="Platform role" value={user.role} disabled={saving} onChange={(role) => updateAccount({ role })} options={[{ value: 'learner', label: 'Learner' }, { value: 'moderator', label: 'Moderator' }, { value: 'admin', label: 'Administrator' }]} /></div><Button variant={user.disabled ? 'secondary' : 'danger'} onClick={() => updateAccount({ disabled: !user.disabled })} disabled={saving} aria-busy={savingAction === 'account'}>{savingAction === 'account' ? 'Saving account…' : user.disabled ? 'Enable account' : 'Disable account'}</Button>{savingAction === 'account' && <span className="sr-only" role="status" aria-live="polite">Saving account settings…</span>}</div>
       </article>
@@ -1609,7 +1838,7 @@ export function AdminSettingsPage() {
       <PlatformIconPicker value={icon} onChange={(nextIcon) => { setIcon(nextIcon); setIconEdited(true); }} />
       <div className="branding-choice-field"><span className="branding-choice-label">Color palette</span><small>Preview a palette and save to apply it for everyone.</small><PalettePicker value={palette} onChange={choosePalette} /></div>
       <div className="settings-section-divider"><span>Connection and accounts</span></div>
-      <label>Public connection protocol<AppSelect<ConnectionProtocol> ariaLabel="Public connection protocol" describedBy="protocol-help" value={protocol} onChange={setProtocol} options={[{ value: 'http', label: 'HTTP' }, { value: 'https', label: 'HTTPS' }]} /></label>
+      <div className="app-select-field"><span>Public connection protocol</span><AppSelect<ConnectionProtocol> ariaLabel="Public connection protocol" describedBy="protocol-help" value={protocol} onChange={setProtocol} options={[{ value: 'http', label: 'HTTP' }, { value: 'https', label: 'HTTPS' }]} /></div>
       <p id="protocol-help" className="protocol-help">This controls secure session cookies. HTTPS requires a TLS certificate on this server or a reverse proxy. For TLS behind a proxy, set <code>TRUST_PROXY=true</code>.{connectionProtocol === 'https' && protocol === 'http' && <span className="protocol-session-warning">If you then open the site over HTTP, browsers will not send the existing secure session cookie, so you will need to sign in again.</span>}</p>
       <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={allowRegistration} onChange={(event) => setAllowRegistration(event.target.checked)} /></label>
       <label>Maximum registered accounts<input className="user-limit-input" type="number" min={0} max={1000000} step={1} required value={userLimitValue} onChange={(event) => setUserLimitValue(event.target.value)} /><small>0 means no limit. The cap includes administrators, moderators, and learners.</small></label>
@@ -1657,13 +1886,14 @@ export function AdminRegistrationFieldsPage() {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     setLoading(true);
     setLoadError('');
-    api.get<{ fields: RegistrationField[]; configurationValid: boolean }>('/api/admin/registration-fields')
+    api.get<{ fields: RegistrationField[]; configurationValid: boolean }>('/api/admin/registration-fields', { signal: controller.signal })
       .then((result) => { if (active) { setFields(result.fields); setConfigurationWarning(result.configurationValid ? '' : 'The saved registration form is invalid. Public signup is paused. Add replacement fields and save, or save with no fields to clear the custom questions.'); } })
       .catch((cause) => { if (active) setLoadError(cause instanceof ApiError ? cause.message : 'Registration fields could not be loaded.'); })
       .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    return () => { active = false; controller.abort(); };
   }, [retryVersion]);
 
   function updateField(id: string, changes: Partial<RegistrationField>) {
@@ -1710,7 +1940,7 @@ export function AdminRegistrationFieldsPage() {
           <div className="registration-field-editor-heading"><h3 id={`registration-field-title-${field.id}`}>Field {index + 1}</h3><Button type="button" variant="quiet" className="registration-field-remove" aria-label={`Remove ${field.label || `field ${index + 1}`}`} onClick={() => { setFields((current) => current.filter((item) => item.id !== field.id)); setError(''); setSuccess(''); setInvalidField(null); }}><Trash2 size={15} />Remove</Button></div>
           <div className="registration-field-editor-grid">
             <label>Field label<input id={`registration-field-editor-${field.id}-label`} required minLength={1} maxLength={80} value={field.label} aria-invalid={invalidField?.fieldId === field.id && invalidField.target === 'label' || undefined} aria-describedby={invalidField?.fieldId === field.id && invalidField.target === 'label' ? 'registration-fields-error' : undefined} onChange={(event) => updateField(field.id, { label: event.target.value })} placeholder="e.g. Department" /></label>
-            <label>Field type<AppSelect<RegistrationFieldType> ariaLabel={`Type for field ${index + 1}`} value={field.type} onChange={(type) => updateField(field.id, { type, options: type === 'select' ? (field.options.length >= 2 ? field.options : ['Option 1', 'Option 2']) : [] })} options={registrationFieldTypeOptions} /></label>
+            <div className="app-select-field"><span>Field type</span><AppSelect<RegistrationFieldType> ariaLabel={`Type for field ${index + 1}`} value={field.type} onChange={(type) => updateField(field.id, { type, options: type === 'select' ? (field.options.length >= 2 ? field.options : ['Option 1', 'Option 2']) : [] })} options={registrationFieldTypeOptions} /></div>
             <label className="registration-required-toggle"><input type="checkbox" checked={field.required} onChange={(event) => updateField(field.id, { required: event.target.checked })} /><span>Required for signup</span></label>
           </div>
           {field.type === 'select' && <label className="registration-options-field">Options<textarea id={`registration-field-editor-${field.id}-options`} required rows={4} value={field.options.join('\n')} aria-invalid={invalidField?.fieldId === field.id && invalidField.target === 'options' || undefined} aria-describedby={invalidField?.fieldId === field.id && invalidField.target === 'options' ? 'registration-fields-error' : undefined} onChange={(event) => updateField(field.id, { options: event.target.value.split('\n') })} placeholder={'One option per line\nDepartment A\nDepartment B'} /><small>Enter one choice per line, with 2–30 unique choices.</small></label>}
@@ -1799,15 +2029,18 @@ export function AdminAuditLogPage() {
       .finally(() => { if (active && requestSequence === requestSequenceRef.current) setLoading(false); });
     return () => { active = false; controller.abort(); };
   }, [appliedQuery, action, page, refreshVersion]);
+  const emptyMessage = appliedQuery || action ? 'No audit entries match these filters.' : 'No audit entries have been recorded yet.';
+  const hasEmptyResult = !loading && !failedRequest && entries.length === 0;
 
   return <div className="management-page logs-page"><PageHeading title="Audit log" subtitle="Review account, course, and platform changes, including access and comment removals." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
     <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" aria-label="Search audit log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter log-role-filter"><span className="catalog-filter-label">Action</span><AppSelect className="app-select--filter" ariaLabel="Filter by action" leadingIcon={<Filter size={16} />} value={action} onChange={(value) => { setAction(value); setPage(1); }} options={[{ value: '', label: 'All actions' }, ...actions.map((item) => ({ value: item.action, label: `${item.action.replaceAll('_', ' ')} (${item.count})` }))]} /></div></div>
     {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
+    {hasEmptyResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyMessage}</p>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable audit log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">Audit log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Change</th><th scope="col">Details</th></tr></thead><tbody>
       {failedRequest ? <tr><td colSpan={5} className="log-empty">Audit entries are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} details={entry.details} label={entry.summary} columnCount={5}>{(toggle) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td>{entry.actorUsername}</td><td><span className="log-action">{entry.action.replaceAll('_', ' ')}</span></td><td><strong>{entry.summary}</strong><small>{entry.entityType}{entry.entityId ? ` · ${entry.entityId}` : ''}</small></td><td>{toggle}</td></tr>}</LogDetailsDisclosure>)}
-      {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty">{appliedQuery || action ? 'No audit entries match these filters.' : 'No audit entries have been recorded yet.'}</td></tr>}
+      {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty">{emptyMessage}</td></tr>}
     </tbody></table>{loading && <div className="log-loading" role="status" aria-live="polite">Loading audit entries…</div>}</div>
-    {!failedRequest && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
+    {!failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
   </div>;
 }
 
@@ -1842,14 +2075,17 @@ export function AdminSystemLogPage() {
       .finally(() => { if (active && requestSequence === requestSequenceRef.current) setLoading(false); });
     return () => { active = false; controller.abort(); };
   }, [appliedQuery, level, page, refreshVersion]);
+  const emptyMessage = appliedQuery || level !== 'all' ? 'No system events match these filters.' : 'No system events have been recorded yet.';
+  const hasEmptyResult = !loading && !failedRequest && entries.length === 0;
 
   return <div className="management-page logs-page"><PageHeading title="System log" subtitle="Inspect server startup, runtime errors, and operational events." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
     <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search system events" aria-label="Search system log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter log-role-filter"><span className="catalog-filter-label">Severity</span><AppSelect className="app-select--filter" ariaLabel="Filter by severity" leadingIcon={<Activity size={16} />} value={level} onChange={(value) => { setLevel(value); setPage(1); }} options={[{ value: 'all', label: 'All levels' }, { value: 'error', label: 'Errors' }, { value: 'warn', label: 'Warnings' }, { value: 'info', label: 'Info' }]} /></div></div>
     {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
+    {hasEmptyResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyMessage}</p>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable system log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">System log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Level</th><th scope="col">Source</th><th scope="col">Event</th><th scope="col">Details</th></tr></thead><tbody>
       {failedRequest ? <tr><td colSpan={5} className="log-empty">System events are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} details={entry.details} label={entry.message} columnCount={5}>{(toggle) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td><span className={`log-level log-level-${entry.level}`}>{entry.level}</span></td><td>{entry.source}</td><td><strong>{entry.message}</strong></td><td>{toggle}</td></tr>}</LogDetailsDisclosure>)}
-      {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty">{appliedQuery || level !== 'all' ? 'No system events match these filters.' : 'No system events have been recorded yet.'}</td></tr>}
+      {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty">{emptyMessage}</td></tr>}
     </tbody></table>{loading && <div className="log-loading" role="status" aria-live="polite">Loading system events…</div>}</div>
-    {!failedRequest && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
+    {!failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
   </div>;
 }

@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 
-const latestSchemaVersion = 18;
+const latestSchemaVersion = 29;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -457,6 +457,310 @@ export function migrateDatabase(database = db) {
         );
         CREATE INDEX user_registration_fields_order ON user_registration_field_values(user_id, position);
         INSERT INTO schema_migrations (version) VALUES (18);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 19) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        ALTER TABLE courses ADD COLUMN logical_course_id TEXT REFERENCES courses(id) ON DELETE CASCADE;
+        ALTER TABLE courses ADD COLUMN completion_window_days INTEGER;
+        ALTER TABLE course_modules ADD COLUMN stable_id TEXT;
+        ALTER TABLE lessons ADD COLUMN stable_id TEXT;
+        ALTER TABLE quizzes ADD COLUMN stable_id TEXT;
+        UPDATE course_modules SET stable_id = id WHERE stable_id IS NULL;
+        UPDATE lessons SET stable_id = id WHERE stable_id IS NULL;
+        UPDATE quizzes SET stable_id = id WHERE stable_id IS NULL;
+
+        CREATE INDEX courses_logical_course ON courses(logical_course_id);
+        CREATE TABLE course_versions (
+          id TEXT PRIMARY KEY,
+          course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+          storage_course_id TEXT NOT NULL UNIQUE REFERENCES courses(id) ON DELETE CASCADE,
+          version_number INTEGER NOT NULL,
+          published_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+          published_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          requires_recompletion INTEGER NOT NULL DEFAULT 0 CHECK (requires_recompletion IN (0, 1)),
+          change_note TEXT NOT NULL DEFAULT '',
+          UNIQUE(course_id, version_number)
+        );
+        CREATE INDEX course_versions_course_order ON course_versions(course_id, version_number DESC);
+
+        CREATE TABLE course_revisions (
+          course_id TEXT PRIMARY KEY REFERENCES courses(id) ON DELETE CASCADE,
+          revision_course_id TEXT NOT NULL UNIQUE REFERENCES courses(id) ON DELETE CASCADE,
+          author_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          review_status TEXT NOT NULL DEFAULT 'draft' CHECK (review_status IN ('draft', 'in_review', 'changes_requested')),
+          submitted_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+          submitted_at TEXT,
+          reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+          reviewed_at TEXT,
+          review_note TEXT NOT NULL DEFAULT '',
+          requires_recompletion INTEGER NOT NULL DEFAULT 0 CHECK (requires_recompletion IN (0, 1)),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE course_learning_state (
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+          target_version_id TEXT REFERENCES course_versions(id) ON DELETE SET NULL,
+          deadline_at TEXT,
+          deadline_window_days INTEGER,
+          started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY(user_id, course_id)
+        );
+        CREATE INDEX course_learning_deadline ON course_learning_state(user_id, deadline_at);
+
+        CREATE TABLE learning_paths (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
+          self_enrollment INTEGER NOT NULL DEFAULT 0 CHECK (self_enrollment IN (0, 1)),
+          created_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          updated_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX learning_paths_status ON learning_paths(status, title COLLATE NOCASE);
+        CREATE TABLE learning_path_courses (
+          id TEXT PRIMARY KEY,
+          path_id TEXT NOT NULL REFERENCES learning_paths(id) ON DELETE CASCADE,
+          course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+          position INTEGER NOT NULL DEFAULT 0,
+          requires_previous INTEGER NOT NULL DEFAULT 1 CHECK (requires_previous IN (0, 1)),
+          UNIQUE(path_id, course_id),
+          UNIQUE(path_id, position)
+        );
+        CREATE INDEX learning_path_courses_order ON learning_path_courses(path_id, position);
+        CREATE TABLE learning_path_enrollments (
+          id TEXT PRIMARY KEY,
+          path_id TEXT NOT NULL REFERENCES learning_paths(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          enrollment_source TEXT NOT NULL CHECK (enrollment_source IN ('assigned', 'self')),
+          assigned_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+          enrolled_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(path_id, user_id)
+        );
+        CREATE INDEX learning_path_enrollments_user ON learning_path_enrollments(user_id, enrolled_at DESC);
+
+        CREATE TABLE competencies (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL COLLATE NOCASE UNIQUE,
+          description TEXT NOT NULL DEFAULT '',
+          active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+          created_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE course_competencies (
+          course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+          competency_id TEXT NOT NULL REFERENCES competencies(id) ON DELETE CASCADE,
+          created_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY(course_id, competency_id)
+        );
+        CREATE INDEX course_competencies_competency ON course_competencies(competency_id, course_id);
+
+        INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by, published_at, requires_recompletion, change_note)
+        SELECT lower(hex(randomblob(16))), c.id, c.id, 1, c.updated_by, c.updated_at, 0, 'Version history begins here'
+        FROM courses c
+        WHERE c.logical_course_id IS NULL AND (
+          c.status = 'published' OR EXISTS (SELECT 1 FROM course_certificates cc WHERE cc.course_id = c.id)
+        );
+
+        CREATE TABLE course_certificates_v19 (
+          id TEXT PRIMARY KEY,
+          certificate_code TEXT NOT NULL UNIQUE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          course_id TEXT REFERENCES courses(id) ON DELETE SET NULL,
+          course_version_id TEXT REFERENCES course_versions(id) ON DELETE SET NULL,
+          recipient_name TEXT NOT NULL,
+          course_title TEXT NOT NULL,
+          platform_name TEXT NOT NULL,
+          issued_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id, course_id, course_version_id)
+        );
+        INSERT INTO course_certificates_v19
+          (id, certificate_code, user_id, course_id, course_version_id, recipient_name, course_title, platform_name, issued_at)
+        SELECT cc.id, cc.certificate_code, cc.user_id, cc.course_id,
+          (SELECT cv.id FROM course_versions cv WHERE cv.course_id = cc.course_id ORDER BY cv.version_number LIMIT 1),
+          cc.recipient_name, cc.course_title, cc.platform_name, cc.issued_at
+        FROM course_certificates cc;
+        DROP TABLE course_certificates;
+        ALTER TABLE course_certificates_v19 RENAME TO course_certificates;
+        CREATE INDEX course_certificates_user_issued ON course_certificates(user_id, issued_at DESC);
+        CREATE INDEX course_certificates_course ON course_certificates(course_id);
+
+        INSERT INTO schema_migrations (version) VALUES (19);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 20) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        ALTER TABLE courses ADD COLUMN completion_window_activated INTEGER NOT NULL DEFAULT 0
+          CHECK (completion_window_activated IN (0, 1));
+        UPDATE courses SET completion_window_activated = 1
+        WHERE logical_course_id IS NULL AND completion_window_days > 0;
+        UPDATE course_learning_state
+        SET deadline_at = strftime('%Y-%m-%dT%H:%M:%fZ', julianday('now') + (
+              SELECT c.completion_window_days FROM courses c WHERE c.id = course_learning_state.course_id
+            )),
+            deadline_window_days = (SELECT c.completion_window_days FROM courses c WHERE c.id = course_learning_state.course_id)
+        WHERE deadline_at IS NULL AND EXISTS (
+          SELECT 1 FROM courses c WHERE c.id = course_learning_state.course_id
+            AND c.logical_course_id IS NULL AND c.completion_window_days > 0
+        );
+        INSERT INTO schema_migrations (version) VALUES (20);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 21) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE lesson_captions_v21 (
+          id TEXT PRIMARY KEY,
+          lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+          language TEXT NOT NULL CHECK (length(language) BETWEEN 2 AND 35),
+          label TEXT NOT NULL CHECK (length(label) BETWEEN 1 AND 80),
+          file_name TEXT NOT NULL,
+          original_name TEXT NOT NULL,
+          byte_size INTEGER NOT NULL CHECK (byte_size BETWEEN 1 AND 5242880),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(lesson_id, language)
+        );
+        INSERT INTO lesson_captions_v21
+          (id, lesson_id, language, label, file_name, original_name, byte_size, created_at)
+        SELECT id, lesson_id, language, label, file_name, original_name, byte_size, created_at
+        FROM lesson_captions;
+        DROP TABLE lesson_captions;
+        ALTER TABLE lesson_captions_v21 RENAME TO lesson_captions;
+        INSERT INTO schema_migrations (version) VALUES (21);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 22) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        ALTER TABLE users ADD COLUMN first_name TEXT NOT NULL DEFAULT '';
+        ALTER TABLE users ADD COLUMN last_name TEXT NOT NULL DEFAULT '';
+        ALTER TABLE course_certificates ADD COLUMN recipient_email TEXT NOT NULL DEFAULT '';
+        UPDATE course_certificates
+        SET recipient_email = COALESCE((SELECT email FROM users WHERE users.id = course_certificates.user_id), '')
+        WHERE recipient_email = '';
+        INSERT INTO schema_migrations (version) VALUES (22);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 23) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE INDEX learning_paths_active_updated ON learning_paths(updated_at DESC, id)
+          WHERE status != 'archived';
+        CREATE INDEX learning_paths_status_updated ON learning_paths(status, updated_at DESC, id);
+        INSERT INTO schema_migrations (version) VALUES (23);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 24) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE INDEX courses_updated_order ON courses(updated_at DESC, id);
+        CREATE INDEX courses_status_updated_order ON courses(status, updated_at DESC, id);
+        INSERT INTO schema_migrations (version) VALUES (24);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 25) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        DROP INDEX IF EXISTS audit_logs_action;
+        CREATE INDEX audit_logs_action ON audit_logs(action, id DESC);
+        DROP INDEX IF EXISTS system_logs_level;
+        CREATE INDEX system_logs_level ON system_logs(level, id DESC);
+        INSERT INTO schema_migrations (version) VALUES (25);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 26) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE INDEX courses_status_title_order ON courses(status, title COLLATE NOCASE, id);
+        INSERT INTO schema_migrations (version) VALUES (26);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 27) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        DROP INDEX IF EXISTS course_certificates_user_issued;
+        CREATE INDEX course_certificates_user_issued ON course_certificates(user_id, issued_at DESC, id DESC);
+        INSERT INTO schema_migrations (version) VALUES (27);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 28) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        ALTER TABLE media_files ADD COLUMN duration_seconds REAL;
+        CREATE TABLE lesson_watch_progress (
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+          watched_until_seconds REAL NOT NULL DEFAULT 0 CHECK (watched_until_seconds >= 0),
+          duration_seconds REAL NOT NULL DEFAULT 0 CHECK (duration_seconds >= 0),
+          last_position_seconds REAL NOT NULL DEFAULT 0 CHECK (last_position_seconds >= 0),
+          last_heartbeat_at INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY(user_id, lesson_id)
+        );
+        CREATE INDEX lesson_watch_progress_lesson ON lesson_watch_progress(lesson_id, user_id);
+        INSERT INTO schema_migrations (version) VALUES (28);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 29) {
+    const migration = database.transaction(() => {
+      const mediaColumns = database.prepare('PRAGMA table_info(media_files)').all();
+      if (!mediaColumns.some((column) => column.name === 'duration_seconds')) {
+        database.exec('ALTER TABLE media_files ADD COLUMN duration_seconds REAL');
+      }
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS lesson_watch_progress (
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+          watched_until_seconds REAL NOT NULL DEFAULT 0 CHECK (watched_until_seconds >= 0),
+          duration_seconds REAL NOT NULL DEFAULT 0 CHECK (duration_seconds >= 0),
+          last_position_seconds REAL NOT NULL DEFAULT 0 CHECK (last_position_seconds >= 0),
+          last_heartbeat_at INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY(user_id, lesson_id)
+        );
+        CREATE INDEX IF NOT EXISTS lesson_watch_progress_lesson ON lesson_watch_progress(lesson_id, user_id);
+        INSERT INTO schema_migrations (version) VALUES (29);
       `);
     });
     migration();

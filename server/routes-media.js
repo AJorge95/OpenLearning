@@ -7,13 +7,20 @@ import { db } from './db.js';
 import { config } from './config.js';
 import { ApiError, fail, requireAuth, requireCourseManager, requireCourseViewer } from './http.js';
 import { courseById } from './http.js';
-import { courseFromLesson } from './course-service.js';
+import { courseFromLesson, isLessonUnlocked } from './course-service.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
 import { streamFileToResponse } from './file-stream.js';
 import { hasValidWebVttCueTimings } from './webvtt-validation.js';
+import { logicalCourseId } from './course-versioning.js';
 
 export const mediaUploadRouter = Router();
 export const protectedMediaRouter = Router();
+
+function requireUnlockedLesson(lessonId, user) {
+  if (user.role === 'learner' && !isLessonUnlocked(lessonId, user)) {
+    throw new ApiError(423, 'Complete the previous lesson before opening this one.', 'lesson_locked');
+  }
+}
 
 const maxResourceTitleLength = 160;
 const imageTypes = new Map([
@@ -37,6 +44,7 @@ const documentTypes = new Map([
   ['.ods', ['application/vnd.oasis.opendocument.spreadsheet']],
 ]);
 const supportedUploadExtensions = new Set([...imageTypes.keys(), ...documentTypes.keys(), '.mp4', '.vtt']);
+const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const pdfHeader = Buffer.from('%PDF-');
 const pdfEndMarker = Buffer.from('%%EOF');
 const compoundFileHeader = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
@@ -146,10 +154,18 @@ async function fileSignatureMatchesKind(file, kind) {
       return /^[\x00\t\f\n\r ]*$/.test(tail.subarray(endOffset + pdfEndMarker.length).toString('ascii'));
     }
     if (ext === '.png') {
-      const header = Buffer.alloc(16);
-      return (await fileHandle.read(header, 0, header.length, 0)).bytesRead === header.length
-        && header.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-        && header.toString('ascii', 12, 16) === 'IHDR';
+      if (size < 45) return false;
+      const header = Buffer.alloc(33);
+      if ((await fileHandle.read(header, 0, header.length, 0)).bytesRead !== header.length
+        || !header.subarray(0, 8).equals(pngSignature)
+        || header.readUInt32BE(8) !== 13
+        || header.toString('ascii', 12, 16) !== 'IHDR'
+        || header.readUInt32BE(16) === 0
+        || header.readUInt32BE(20) === 0) return false;
+      const trailer = Buffer.alloc(12);
+      return (await fileHandle.read(trailer, 0, trailer.length, size - trailer.length)).bytesRead === trailer.length
+        && trailer.readUInt32BE(0) === 0
+        && trailer.toString('ascii', 4, 8) === 'IEND';
     }
     if (ext === '.jpg' || ext === '.jpeg') {
       if (size < 5) return false;
@@ -296,7 +312,7 @@ mediaUploadRouter.post('/manage/courses/:courseId/media', requireAuth, authorize
   const lessonId = req.body?.lessonId ? String(req.body.lessonId) : '';
   if (kind === 'video') {
     const lesson = lessonId && courseFromLesson(lessonId);
-    if (!lesson || lesson.id !== course.id) {
+    if (!lesson || logicalCourseId(lesson.id) !== course.id) {
       await cleanupTemporaryUpload(req.file, 'Rejected video upload cleanup failed', { courseId: course.id });
       fail(400, 'Choose a lesson in this course before uploading a video.', 'invalid_lesson');
     }
@@ -320,14 +336,21 @@ mediaUploadRouter.post('/manage/courses/:courseId/media', requireAuth, authorize
         const previous = currentCourse.cover_media_id;
         db.prepare('UPDATE courses SET cover_media_id = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
           .run(id, req.currentUser.id, currentCourse.id);
-        return previous;
+        previousId = previous;
+      } else {
+        previousId = currentLesson.media_id;
+        const updatedLesson = db.prepare(`UPDATE lessons SET media_id = ? WHERE id = ?
+          AND module_id IN (SELECT id FROM course_modules WHERE course_id = ?)`).run(id, lessonId, currentCourse.id);
+        if (updatedLesson.changes !== 1) fail(400, 'Choose a lesson in this course before uploading a video.', 'invalid_lesson');
+        db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, currentCourse.id);
       }
-      const previous = currentLesson.media_id;
-      const updatedLesson = db.prepare(`UPDATE lessons SET media_id = ? WHERE id = ?
-        AND module_id IN (SELECT id FROM course_modules WHERE course_id = ?)`).run(id, lessonId, currentCourse.id);
-      if (updatedLesson.changes !== 1) fail(400, 'Choose a lesson in this course before uploading a video.', 'invalid_lesson');
-      db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, currentCourse.id);
-      return previous;
+      const lessonTitle = currentLesson?.lesson_title || null;
+      const auditId = writeAuditLog({ actor: req.currentUser, action: kind === 'cover' ? 'course.cover_uploaded' : 'course.video_uploaded',
+        entityType: 'course', entityId: currentCourse.id,
+        summary: `Uploaded ${kind === 'cover' ? 'cover image' : `video for ${lessonTitle || 'a lesson'}`} to ${currentCourse.title}`,
+        details: { kind, lessonId: lessonId || null, originalName, byteSize: req.file.size } });
+      if (!auditId) fail(500, 'Media could not be uploaded because the audit log is unavailable.', 'audit_unavailable');
+      return previousId;
     });
     previousId = save.immediate();
   } catch (error) {
@@ -339,8 +362,11 @@ mediaUploadRouter.post('/manage/courses/:courseId/media', requireAuth, authorize
     try {
       const previous = db.prepare('SELECT file_name FROM media_files WHERE id = ?').get(previousId);
       if (previous) {
-        db.prepare('DELETE FROM media_files WHERE id = ?').run(previousId);
-        await fs.promises.rm(path.join(config.mediaRoot, course.id, previous.file_name), { force: true });
+        const hasHistory = Boolean(db.prepare('SELECT 1 FROM course_versions WHERE course_id = ? LIMIT 1').get(course.id));
+        if (!hasHistory) {
+          db.prepare('DELETE FROM media_files WHERE id = ?').run(previousId);
+          await fs.promises.rm(path.join(config.mediaRoot, course.id, previous.file_name), { force: true });
+        }
       }
     } catch (error) {
       writeSystemLog('warn', 'media', 'Previous media cleanup failed after replacement', {
@@ -352,10 +378,6 @@ mediaUploadRouter.post('/manage/courses/:courseId/media', requireAuth, authorize
       });
     }
   }
-  const lessonTitle = kind === 'video' ? courseFromLesson(lessonId)?.lesson_title : null;
-  writeAuditLog({ actor: req.currentUser, action: kind === 'cover' ? 'course.cover_uploaded' : 'course.video_uploaded', entityType: 'course', entityId: course.id,
-    summary: `Uploaded ${kind === 'cover' ? 'cover image' : `video for ${lessonTitle || 'a lesson'}`} to ${course.title}`,
-    details: { kind, lessonId: lessonId || null, originalName, byteSize: req.file.size } });
   res.status(201).json({ media: { id, url: `/media/${id}`, name: originalName, bytes: req.file.size, kind } });
 });
 
@@ -372,7 +394,7 @@ mediaUploadRouter.post('/manage/courses/:courseId/lesson-documents', requireAuth
   }
   const lessonId = String(req.body?.lessonId || '');
   const lesson = lessonId && courseFromLesson(lessonId);
-  if (!lesson || lesson.id !== course.id) {
+  if (!lesson || logicalCourseId(lesson.id) !== course.id) {
     await cleanupTemporaryUpload(req.file, 'Rejected document upload cleanup failed', { courseId: course.id, lessonId: lessonId || null });
     fail(400, 'Choose a lesson in this course before uploading a document.', 'invalid_lesson');
   }
@@ -408,6 +430,10 @@ mediaUploadRouter.post('/manage/courses/:courseId/lesson-documents', requireAuth
         .run(id, currentLesson.lesson_id, title, req.file.filename, originalName, req.file.mimetype, req.file.size, position);
       db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
         .run(req.currentUser.id, currentCourse.id);
+      const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.document_uploaded', entityType: 'lesson', entityId: currentLesson.lesson_id,
+        summary: `Uploaded a document for ${currentLesson.lesson_title}`,
+        details: { courseId: currentCourse.id, title, originalName, byteSize: req.file.size } });
+      if (!auditId) fail(500, 'Document could not be added because the audit log is unavailable.', 'audit_unavailable');
       return currentLesson;
     });
     savedLesson = save.immediate();
@@ -415,8 +441,6 @@ mediaUploadRouter.post('/manage/courses/:courseId/lesson-documents', requireAuth
     await cleanupTemporaryUpload(req.file, 'Uploaded document cleanup failed after resource save failed', { courseId: course.id, lessonId: lesson.lesson_id, resourceId: id });
     throw error;
   }
-  writeAuditLog({ actor: req.currentUser, action: 'course.document_uploaded', entityType: 'lesson', entityId: savedLesson.lesson_id,
-    summary: `Uploaded a document for ${savedLesson.lesson_title}`, details: { courseId: course.id, title, originalName, byteSize: req.file.size } });
   res.status(201).json({ resource: { id, kind: 'document', title, url: `/media/resources/${id}`, fileName: originalName } });
 });
 
@@ -454,7 +478,7 @@ mediaUploadRouter.post('/manage/courses/:courseId/lesson-captions', requireAuth,
   }
   const label = rawLabel.trim();
   const lesson = courseFromLesson(lessonId.trim());
-  if (!lesson || lesson.id !== course.id) {
+  if (!lesson || logicalCourseId(lesson.id) !== course.id) {
     await cleanupTemporaryUpload(req.file, 'Rejected captions upload cleanup failed for invalid lesson', { courseId: course.id, lessonId });
     fail(400, 'Choose a lesson in this course before uploading captions.', 'invalid_lesson');
   }
@@ -482,7 +506,13 @@ mediaUploadRouter.post('/manage/courses/:courseId/lesson-captions', requireAuth,
       }
       db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
         .run(req.currentUser.id, currentCourse.id);
-      return { id: existing?.id || id, previousFileName: existing?.file_name || null, replaced: Boolean(existing) };
+      const savedId = existing?.id || id;
+      const replaced = Boolean(existing);
+      const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.caption_uploaded', entityType: 'lesson', entityId: currentLesson.lesson_id,
+        summary: `${replaced ? 'Replaced' : 'Uploaded'} ${language} captions for ${currentLesson.lesson_title}`,
+        details: { courseId: currentCourse.id, captionId: savedId, language, label, originalName, byteSize: req.file.size, replaced } });
+      if (!auditId) fail(500, 'Captions could not be saved because the audit log is unavailable.', 'audit_unavailable');
+      return { id: savedId, previousFileName: existing?.file_name || null, replaced };
     });
     saved = save.immediate();
   } catch (error) {
@@ -490,13 +520,10 @@ mediaUploadRouter.post('/manage/courses/:courseId/lesson-captions', requireAuth,
     throw error;
   }
 
-  if (saved.previousFileName && saved.previousFileName !== req.file.filename) {
+  if (saved.previousFileName && saved.previousFileName !== req.file.filename && !db.prepare('SELECT 1 FROM course_versions WHERE course_id = ? LIMIT 1').get(course.id)) {
     await cleanupTemporaryUpload({ path: path.join(config.mediaRoot, course.id, saved.previousFileName), filename: saved.previousFileName },
       'Previous captions cleanup failed after replacement', { courseId: course.id, lessonId: lesson.lesson_id, captionId: saved.id });
   }
-  writeAuditLog({ actor: req.currentUser, action: 'course.caption_uploaded', entityType: 'lesson', entityId: lesson.lesson_id,
-    summary: `${saved.replaced ? 'Replaced' : 'Uploaded'} ${language} captions for ${lesson.lesson_title}`,
-    details: { courseId: course.id, captionId: saved.id, language, label, originalName, byteSize: req.file.size, replaced: saved.replaced } });
   res.status(201).json({ caption: { id: saved.id, language, label, url: `/media/captions/${saved.id}`, fileName: originalName } });
 });
 
@@ -510,27 +537,33 @@ mediaUploadRouter.delete('/manage/lessons/:lessonId/captions/:captionId', requir
     if (!caption) fail(404, 'Caption track not found.', 'not_found');
     db.prepare('DELETE FROM lesson_captions WHERE id = ?').run(caption.id);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, course.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.caption_removed', entityType: 'lesson', entityId: lesson.lesson_id,
+      summary: `Removed ${caption.language} captions from ${lesson.lesson_title}`,
+      details: { courseId: course.id, captionId: caption.id, language: caption.language } });
+    if (!auditId) fail(500, 'Caption track could not be removed because the audit log is unavailable.', 'audit_unavailable');
     return { lesson, course, caption };
   });
   const { lesson, course, caption } = removeCaption.immediate();
-  await cleanupTemporaryUpload({ path: path.join(config.mediaRoot, course.id, caption.file_name), filename: caption.file_name },
-    'Caption file cleanup failed after track removal', { courseId: course.id, lessonId: lesson.lesson_id, captionId: caption.id });
-  writeAuditLog({ actor: req.currentUser, action: 'course.caption_removed', entityType: 'lesson', entityId: lesson.lesson_id,
-    summary: `Removed ${caption.language} captions from ${lesson.lesson_title}`,
-    details: { courseId: course.id, captionId: caption.id, language: caption.language } });
+  if (!db.prepare('SELECT 1 FROM course_versions WHERE course_id = ? LIMIT 1').get(logicalCourseId(course.id) || course.id)) {
+    await cleanupTemporaryUpload({ path: path.join(config.mediaRoot, logicalCourseId(course.id) || course.id, caption.file_name), filename: caption.file_name },
+      'Caption file cleanup failed after track removal', { courseId: course.id, lessonId: lesson.lesson_id, captionId: caption.id });
+  }
   res.status(204).end();
 });
 
 protectedMediaRouter.get('/captions/:captionId', requireAuth, (req, res, next) => {
   const caption = db.prepare(`
-    SELECT lc.*, c.id AS course_id FROM lesson_captions lc
+    SELECT lc.*, COALESCE(c.logical_course_id, c.id) AS course_id, c.id AS storage_course_id FROM lesson_captions lc
     JOIN lessons l ON l.id = lc.lesson_id
     JOIN course_modules m ON m.id = l.module_id
     JOIN courses c ON c.id = m.course_id
     WHERE lc.id = ?
   `).get(req.params.captionId);
   if (!caption) return res.status(404).json({ error: 'Caption track not found.', code: 'not_found' });
-  try { requireCourseViewer(caption.course_id, req.currentUser); }
+  try {
+    requireCourseViewer(caption.storage_course_id, req.currentUser);
+    requireUnlockedLesson(caption.lesson_id, req.currentUser);
+  }
   catch (error) { return next(error); }
   const base = path.resolve(config.mediaRoot, caption.course_id);
   const filePath = path.resolve(base, caption.file_name);
@@ -549,14 +582,17 @@ protectedMediaRouter.get('/captions/:captionId', requireAuth, (req, res, next) =
 
 protectedMediaRouter.get('/resources/:resourceId', requireAuth, (req, res, next) => {
   const resource = db.prepare(`
-    SELECT lr.*, c.id AS course_id FROM lesson_resources lr
+    SELECT lr.*, COALESCE(c.logical_course_id, c.id) AS course_id, c.id AS storage_course_id FROM lesson_resources lr
     JOIN lessons l ON l.id = lr.lesson_id
     JOIN course_modules m ON m.id = l.module_id
     JOIN courses c ON c.id = m.course_id
     WHERE lr.id = ? AND lr.resource_type = 'document'
   `).get(req.params.resourceId);
   if (!resource) return res.status(404).json({ error: 'Document not found.', code: 'not_found' });
-  try { requireCourseViewer(resource.course_id, req.currentUser); }
+  try {
+    requireCourseViewer(resource.storage_course_id, req.currentUser);
+    requireUnlockedLesson(resource.lesson_id, req.currentUser);
+  }
   catch (error) { return next(error); }
   const base = path.resolve(config.mediaRoot, resource.course_id);
   const filePath = path.resolve(base, resource.file_name);
@@ -579,9 +615,18 @@ protectedMediaRouter.get('/:mediaId', requireAuth, (req, res, next) => {
   const course = courseById(media.course_id);
   try { requireCourseViewer(media.course_id, req.currentUser); }
   catch (error) { return next(error); }
+  const latestStorage = db.prepare('SELECT storage_course_id FROM course_versions WHERE course_id = ? ORDER BY version_number DESC LIMIT 1').get(media.course_id)?.storage_course_id || media.course_id;
+  if (req.currentUser.role === 'learner') {
+    const activeCourse = db.prepare('SELECT cover_media_id FROM courses WHERE id = ?').get(latestStorage);
+    const activeMedia = activeCourse?.cover_media_id === media.id || db.prepare(`SELECT 1 FROM lessons l JOIN course_modules m ON m.id = l.module_id
+      WHERE m.course_id = ? AND l.media_id = ? LIMIT 1`).get(latestStorage, media.id);
+    if (!activeMedia) return res.status(404).json({ error: 'Media not found.', code: 'not_found' });
+  }
   if (media.media_kind === 'video') {
     const linkedLesson = db.prepare('SELECT id FROM lessons WHERE media_id = ?').get(media.id);
     if (!linkedLesson) return res.status(404).json({ error: 'Media not found.', code: 'not_found' });
+    try { requireUnlockedLesson(linkedLesson.id, req.currentUser); }
+    catch (error) { return next(error); }
   }
   const base = path.resolve(config.mediaRoot, course.id);
   const filePath = path.resolve(base, media.file_name);

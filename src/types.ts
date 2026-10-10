@@ -23,6 +23,8 @@ export interface User {
   id: string;
   username: string;
   email?: string | null;
+  firstName?: string;
+  lastName?: string;
   role: Role;
   disabled: boolean;
   createdAt?: string;
@@ -108,6 +110,7 @@ export interface Lesson {
   resources: LessonResource[];
   captions: LessonCaption[];
   completed: boolean;
+  locked?: boolean;
 }
 
 export interface CourseModule {
@@ -135,14 +138,74 @@ export interface Course {
   completedLessons: number;
   progress: number;
   completed: boolean;
+  completionWindowDays?: number | null;
+  deadlineAt?: string | null;
+  versionNumber?: number | null;
+  hasUnpublishedChanges?: boolean;
+  reviewStatus?: 'draft' | 'in_review' | 'changes_requested' | null;
   modules?: CourseModule[];
+}
+
+export interface LearningPathCourse extends Course {
+  position: number;
+  requiresPrevious: boolean;
+  unlocked: boolean;
+}
+
+export interface LearningPath {
+  id: string;
+  title: string;
+  description: string;
+  status: 'draft' | 'published' | 'archived';
+  selfEnrollment: boolean;
+  enrolled: boolean;
+  completedCourses: number;
+  courseCount: number;
+  completed: boolean;
+  courses: LearningPathCourse[];
+}
+
+export interface Competency {
+  id: string;
+  title: string;
+  description: string;
+  active: boolean | number;
+  achieved?: boolean;
+  completedCourses?: number;
+  courseCount?: number;
+  courses?: Array<{ id: string; title: string; completed: boolean }>;
+}
+
+export interface CourseDeadline {
+  courseId: string;
+  title: string;
+  category: string;
+  dueAt: string;
+  status: 'upcoming' | 'overdue' | 'completed';
+  completed: boolean;
+  url: string;
+}
+
+export interface CourseVersion {
+  id: string;
+  course_id: string;
+  storage_course_id: string;
+  version_number: number;
+  published_by: string | null;
+  publisher?: string | null;
+  published_at: string;
+  requires_recompletion: number;
+  change_note: string;
+  title: string;
 }
 
 export interface CourseCertificate {
   id: string;
   courseId: string | null;
+  courseVersionId?: string | null;
   certificateCode: string;
   recipientName: string;
+  recipientEmail: string;
   courseTitle: string;
   platformName: string;
   issuedAt: string;

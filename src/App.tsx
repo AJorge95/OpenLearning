@@ -16,6 +16,10 @@ const AdminSystemLogPage = lazy(() => import('./pages-manage').then((pages) => (
 const AdminUserCreatePage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminUserCreatePage })));
 const AdminUserDetailsPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminUserDetailsPage })));
 const AdminUsersPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminUsersPage })));
+const LearningPathsPage = lazy(() => import('./pages-programs').then((pages) => ({ default: pages.LearningPathsPage })));
+const CalendarPage = lazy(() => import('./pages-programs').then((pages) => ({ default: pages.CalendarPage })));
+const CompetenciesPage = lazy(() => import('./pages-programs').then((pages) => ({ default: pages.CompetenciesPage })));
+const AdminCompetenciesPage = lazy(() => import('./pages-programs').then((pages) => ({ default: pages.AdminCompetenciesPage })));
 
 function SignedIn() {
   const { user } = useAuth();
@@ -112,8 +116,13 @@ function fallbackPageTitle(pathname: string, configured: boolean) {
   if (pathname === '/login' || pathname === '/setup') return 'Sign in';
   if (pathname === '/register') return 'Create your account';
   if (pathname === '/my-learning') return 'My learning';
+  if (pathname === '/learning-paths') return 'Learning paths';
+  if (pathname === '/competencies') return 'Competencies';
+  if (pathname === '/calendar') return 'Learning calendar';
+  if (pathname === '/manage/learning-paths') return 'Learning paths';
+  if (pathname === '/admin/competencies') return 'Competency map';
   if (/^\/my-learning\/certificates\/[^/]+$/.test(pathname)) return 'Course certificate';
-  if (pathname === '/account/security') return 'Change password';
+  if (pathname === '/account/security') return 'Account settings';
   if (/^\/courses\/[^/]+\/learn\/[^/]+$/.test(pathname)) return 'Lesson';
   if (/^\/courses\/[^/]+\/quiz\/[^/]+$/.test(pathname)) return 'Quiz';
   if (/^\/courses\/[^/]+$/.test(pathname)) return 'Course';
@@ -191,6 +200,9 @@ function AuthRoutes() {
           <Route path="/courses/:courseId/learn/:lessonId" element={<CoursePlayerPage />} />
           <Route path="/courses/:courseId/quiz/:quizId" element={<QuizPage />} />
           <Route path="/my-learning" element={<MyLearningPage />} />
+          <Route path="/learning-paths" element={<Suspense fallback={<LoadingScreen label="Loading learning paths…" />}><LearningPathsPage /></Suspense>} />
+          <Route path="/competencies" element={<Suspense fallback={<LoadingScreen label="Loading competencies…" />}><CompetenciesPage /></Suspense>} />
+          <Route path="/calendar" element={<Suspense fallback={<LoadingScreen label="Loading calendar…" />}><CalendarPage /></Suspense>} />
           <Route path="/my-learning/certificates/:courseId" element={<CourseCertificatePage />} />
           <Route path="/account/security" element={<AccountSecurityPage />} />
         </Route>
@@ -202,7 +214,9 @@ function AuthRoutes() {
               <Route path="/manage/courses/:courseId/edit" element={<CourseEditorRoute />} />
               <Route path="/manage/courses/:courseId/analytics" element={<CourseAnalyticsPage />} />
               <Route path="/manage/courses/:courseId/access" element={<CourseAccessPage />} />
+              <Route path="/manage/learning-paths" element={<LearningPathsPage />} />
               <Route element={<AdminOnly />}>
+                <Route path="/admin/competencies" element={<AdminCompetenciesPage />} />
                 <Route path="/admin/users" element={<AdminUsersPage />} />
                 <Route path="/admin/users/new" element={<AdminUserCreatePage />} />
                 <Route path="/admin/users/:userId" element={<AdminUserDetailsPage />} />

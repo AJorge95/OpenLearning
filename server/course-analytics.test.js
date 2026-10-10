@@ -22,6 +22,8 @@ const previousConfig = new Map(Object.keys(isolatedConfig).map((key) => [key, pr
 let fixtureDirectory;
 let database;
 let server;
+let summarizeCourses;
+let editableCourse;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -55,10 +57,15 @@ before(async () => {
   });
 
   ({ db: database } = await import('./db.js'));
-  const [{ courseRouter }, { errorHandler }] = await Promise.all([
+  const [{ courseRouter }, { programsRouter }, { errorHandler }, { courseSummaries }, { editableCourse: createEditableCourse }] = await Promise.all([
     import('./routes-courses.js'),
+    import('./routes-programs.js'),
     import('./http.js'),
+    import('./course-service.js'),
+    import('./course-versioning.js'),
   ]);
+  summarizeCourses = courseSummaries;
+  editableCourse = createEditableCourse;
   database.exec(`
     INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES
       ('admin-1', 'admin', 'admin@example.invalid', 'not-used', 'admin', 0),
@@ -98,6 +105,7 @@ before(async () => {
     next();
   });
   app.use('/api', courseRouter);
+  app.use('/api', programsRouter);
   app.use(errorHandler);
   server = createServer(app);
   server.listen(0, '127.0.0.1');
@@ -128,6 +136,81 @@ function apiUrl(pathname) {
 function userHeaders(userId) {
   return { 'x-test-user': userId, connection: 'close' };
 }
+
+test('editing a versioned course clones caption references to shared media files', () => {
+  const courseId = 'course-caption-version';
+  try {
+    database.exec(`
+      INSERT INTO courses (id, title, status, created_by, updated_by)
+        VALUES ('course-caption-version', 'Caption version course', 'published', 'admin-1', 'admin-1');
+      INSERT INTO course_modules (id, course_id, title, position, stable_id)
+        VALUES ('module-caption-version', 'course-caption-version', 'Module', 0, 'module-caption-version-stable');
+      INSERT INTO lessons (id, module_id, title, position, stable_id)
+        VALUES ('lesson-caption-version', 'module-caption-version', 'Lesson', 0, 'lesson-caption-version-stable');
+      INSERT INTO lesson_captions (id, lesson_id, language, label, file_name, original_name, byte_size)
+        VALUES ('caption-version-source', 'lesson-caption-version', 'en', 'English', 'shared-caption.vtt', 'captions.vtt', 20);
+      INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+        VALUES ('version-caption-source', 'course-caption-version', 'course-caption-version', 1, 'admin-1');
+    `);
+
+    const revision = editableCourse(courseId, { id: 'admin-1' });
+    assert.ok(revision?.id);
+    assert.notEqual(revision.id, courseId);
+
+    const clonedCaption = database.prepare(`SELECT lc.id, lc.language, lc.file_name FROM lesson_captions lc
+      JOIN lessons l ON l.id = lc.lesson_id JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?`).get(revision.id);
+    assert.ok(clonedCaption?.id);
+    assert.equal(clonedCaption.language, 'en');
+    assert.equal(clonedCaption.file_name, 'shared-caption.vtt');
+    assert.notEqual(clonedCaption.id, 'caption-version-source');
+    assert.ok(database.prepare('SELECT 1 FROM course_revisions WHERE course_id = ? AND revision_course_id = ?').get(courseId, revision.id));
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
+test('concurrent versioned course editors reuse the revision created while they waited', () => {
+  const courseId = 'course-concurrent-editor';
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('course-concurrent-editor', 'Concurrent editor course', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+      VALUES ('version-concurrent-editor', 'course-concurrent-editor', 'course-concurrent-editor', 1, 'admin-1');
+  `);
+
+  const originalTransaction = database.transaction;
+  let competingRevision;
+  let transactionRequests = 0;
+  const interceptedTransaction = (callback) => {
+    const transaction = originalTransaction.call(database, callback);
+    return {
+      immediate(...args) {
+        transactionRequests += 1;
+        if (transactionRequests === 1) {
+          database.transaction = originalTransaction;
+          try {
+            competingRevision = editableCourse(courseId, { id: 'admin-1' });
+          } finally {
+            database.transaction = interceptedTransaction;
+          }
+        }
+        return transaction.immediate(...args);
+      },
+    };
+  };
+
+  database.transaction = interceptedTransaction;
+  try {
+    const revision = editableCourse(courseId, { id: 'admin-1' });
+    assert.ok(competingRevision?.id);
+    assert.equal(revision?.id, competingRevision.id);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_revisions WHERE course_id = ?').get(courseId).count, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM courses WHERE logical_course_id = ?').get(courseId).count, 1);
+  } finally {
+    database.transaction = originalTransaction;
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
 
 test('analytics count each eligible learner once and report course-wide completion and weighted quiz metrics', async () => {
   const response = await fetch(apiUrl('/manage/courses/course-analytics/analytics'), {
@@ -186,6 +269,18 @@ test('analytics count each eligible learner once and report course-wide completi
   assert.equal(result.learners.some((learner) => learner.id === 'learner-unassigned'), false);
 });
 
+test('course analytics eligibility reads course memberships before learner accounts', () => {
+  const plan = database.prepare(`EXPLAIN QUERY PLAN SELECT u.id, u.username, u.disabled FROM (
+    SELECT user_id AS id FROM enrollments WHERE course_id = ?
+    UNION SELECT user_id FROM course_grants WHERE course_id = ?
+  ) member CROSS JOIN users u ON u.id = member.id WHERE u.role = 'learner'`)
+    .all('course-analytics', 'course-analytics').map((row) => row.detail).join('\n');
+  assert.match(plan, /SEARCH enrollments USING COVERING INDEX .* \(course_id=\?\)/);
+  assert.match(plan, /SEARCH course_grants USING COVERING INDEX .* \(course_id=\?\)/);
+  assert.match(plan, /SEARCH u USING INDEX sqlite_autoindex_users_1 \(id=\?\)/);
+  assert.doesNotMatch(plan, /SCAN users|SCAN u/);
+});
+
 test('analytics use null rates for a course with no eligible learners or activities', async () => {
   const response = await fetch(apiUrl('/manage/courses/course-empty/analytics'), {
     headers: userHeaders('admin-1'),
@@ -206,6 +301,1032 @@ test('course analytics remain restricted to staff', async () => {
   assert.equal(response.status, 403);
 });
 
+test('course details resolve learner progress before version history exists', async () => {
+  const response = await fetch(apiUrl('/courses/course-analytics'), {
+    headers: userHeaders('learner-active'),
+  });
+  assert.equal(response.status, 200);
+  const { course } = await response.json();
+  assert.equal(course.id, 'course-analytics');
+  assert.equal(course.versionNumber, null);
+  assert.equal(course.progress, 100);
+  assert.equal(course.completed, true);
+  assert.equal(course.modules[0].lessons[0].completed, true);
+  assert.equal(course.modules[0].quiz.passed, true);
+});
+
+test('course summaries batch database reads and preserve progress across versions', () => {
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('course-summary-versioned', 'Versioned summary', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position, stable_id)
+      VALUES ('module-summary-v1', 'course-summary-versioned', 'Module', 0, 'module-summary');
+    INSERT INTO lessons (id, module_id, title, position, stable_id)
+      VALUES ('lesson-summary-v1', 'module-summary-v1', 'Lesson', 0, 'lesson-summary');
+    INSERT INTO quizzes (id, module_id, title, pass_mark, stable_id)
+      VALUES ('quiz-summary-v1', 'module-summary-v1', 'Quiz', 70, 'quiz-summary');
+    INSERT INTO courses (id, title, status, created_by, updated_by, logical_course_id)
+      VALUES ('course-summary-versioned-v2', 'Versioned summary', 'published', 'admin-1', 'admin-1', 'course-summary-versioned');
+    INSERT INTO course_modules (id, course_id, title, position, stable_id)
+      VALUES ('module-summary-v2', 'course-summary-versioned-v2', 'Module', 0, 'module-summary');
+    INSERT INTO lessons (id, module_id, title, position, stable_id)
+      VALUES ('lesson-summary-v2', 'module-summary-v2', 'Lesson', 0, 'lesson-summary');
+    INSERT INTO quizzes (id, module_id, title, pass_mark, stable_id)
+      VALUES ('quiz-summary-v2', 'module-summary-v2', 'Quiz', 70, 'quiz-summary');
+    INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by) VALUES
+      ('summary-version-1', 'course-summary-versioned', 'course-summary-versioned', 1, 'admin-1'),
+      ('summary-version-2', 'course-summary-versioned', 'course-summary-versioned-v2', 2, 'admin-1');
+    INSERT INTO lesson_progress (user_id, lesson_id, completed_at)
+      VALUES ('learner-active', 'lesson-summary-v1', '2026-10-01 10:00:00');
+    INSERT INTO quiz_attempts
+      (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json, submitted_at)
+      VALUES ('summary-attempt-v1', 'quiz-summary-v1', 'learner-active', 100, 1, '{}', '[]', '2026-10-02 10:00:00');
+    INSERT INTO course_learning_state (user_id, course_id, deadline_at)
+      VALUES ('learner-active', 'course-summary-versioned', '2026-11-01 00:00:00');
+  `);
+
+  const findCourse = database.prepare('SELECT * FROM courses WHERE id = ?');
+  const courses = ['course-summary-versioned', 'course-empty'].map((id) => findCourse.get(id));
+  const learner = database.prepare('SELECT id FROM users WHERE id = ?').get('learner-active');
+  function measureSummaries(rows) {
+    const originalPrepare = database.prepare;
+    let queryCount = 0;
+    database.prepare = (sql) => {
+      queryCount += 1;
+      return originalPrepare.call(database, sql);
+    };
+    try { return { summaries: summarizeCourses(rows, learner), queryCount }; }
+    finally { delete database.prepare; }
+  }
+
+  const oneCourse = measureSummaries(courses.slice(0, 1));
+  const twoCourses = measureSummaries(courses);
+  assert.equal(twoCourses.queryCount, oneCourse.queryCount);
+  const summary = twoCourses.summaries.find((course) => course.id === 'course-summary-versioned');
+  assert.equal(summary.versionNumber, 2);
+  assert.equal(summary.deadlineAt, '2026-11-01 00:00:00');
+  assert.equal(summary.completedLessons, 1);
+  assert.equal(summary.progress, 100);
+  assert.equal(summary.completed, true);
+
+  database.prepare("UPDATE course_learning_state SET target_version_id = 'summary-version-2' WHERE user_id = 'learner-active' AND course_id = 'course-summary-versioned'").run();
+  const resetSummary = summarizeCourses(courses.slice(0, 1), learner)[0];
+  assert.equal(resetSummary.progress, 0);
+  assert.equal(resetSummary.completed, false);
+});
+
+test('private path course access follows the current step prerequisite setting', async () => {
+  database.exec(`
+    INSERT INTO courses (id, title, visibility, status, created_by, updated_by) VALUES
+      ('path-course-first', 'Path course first', 'public', 'published', 'admin-1', 'admin-1'),
+      ('path-course-middle', 'Path course middle', 'public', 'published', 'admin-1', 'admin-1'),
+      ('path-course-target', 'Path course target', 'private', 'published', 'admin-1', 'admin-1');
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('path-prerequisite-check', 'Prerequisite check', 'published', 0, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+      ('path-step-first', 'path-prerequisite-check', 'path-course-first', 0, 0),
+      ('path-step-middle', 'path-prerequisite-check', 'path-course-middle', 1, 0),
+      ('path-step-target', 'path-prerequisite-check', 'path-course-target', 2, 1);
+    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by)
+      VALUES ('path-enrollment-active', 'path-prerequisite-check', 'learner-active', 'assigned', 'admin-1');
+  `);
+
+  const lockedPathResponse = await fetch(apiUrl('/learning-paths/path-prerequisite-check'), {
+    headers: userHeaders('learner-active'),
+  });
+  assert.equal(lockedPathResponse.status, 200);
+  const lockedPath = await lockedPathResponse.json();
+  assert.equal(lockedPath.path.courses.find((course) => course.id === 'path-course-target').unlocked, false);
+
+  const deniedCourse = await fetch(apiUrl('/courses/path-course-target'), {
+    headers: userHeaders('learner-active'),
+  });
+  assert.equal(deniedCourse.status, 403);
+
+  database.prepare(`UPDATE learning_path_courses SET requires_previous = 0 WHERE path_id = ? AND course_id = ?`)
+    .run('path-prerequisite-check', 'path-course-target');
+  const unlockedPathResponse = await fetch(apiUrl('/learning-paths/path-prerequisite-check'), {
+    headers: userHeaders('learner-active'),
+  });
+  assert.equal(unlockedPathResponse.status, 200);
+  const unlockedPath = await unlockedPathResponse.json();
+  assert.equal(unlockedPath.path.courses.find((course) => course.id === 'path-course-target').unlocked, true);
+
+  const allowedCourse = await fetch(apiUrl('/courses/path-course-target'), {
+    headers: userHeaders('learner-active'),
+  });
+  assert.equal(allowedCourse.status, 200);
+
+  const learningResponse = await fetch(apiUrl('/my-learning'), { headers: userHeaders('learner-active') });
+  assert.equal(learningResponse.status, 200);
+  assert.ok((await learningResponse.json()).courses.some((course) => course.id === 'path-course-target'));
+  database.prepare('DELETE FROM learning_path_enrollments WHERE path_id = ? AND user_id = ?')
+    .run('path-prerequisite-check', 'learner-active');
+  const revokedCourse = await fetch(apiUrl('/courses/path-course-target'), { headers: userHeaders('learner-active') });
+  assert.equal(revokedCourse.status, 403);
+  const afterRemoval = await fetch(apiUrl('/my-learning'), { headers: userHeaders('learner-active') });
+  assert.ok(!(await afterRemoval.json()).courses.some((course) => course.id === 'path-course-target'));
+});
+
+test('My learning caches prerequisite completion checks as enrolled paths grow', async () => {
+  const pathId = 'my-learning-prerequisite-cache';
+  database.prepare(`INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+    VALUES (?, 'My learning prerequisite cache', 'published', 0, 'admin-1', 'admin-1')`).run(pathId);
+  database.prepare(`INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by)
+    VALUES (?, ?, 'learner-active', 'assigned', 'admin-1')`).run('my-learning-cache-enrollment', pathId);
+
+  function addCourse(position) {
+    const courseId = `my-learning-cache-course-${position}`;
+    const moduleId = `my-learning-cache-module-${position}`;
+    const lessonId = `my-learning-cache-lesson-${position}`;
+    database.prepare(`INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+      VALUES (?, ?, 'private', 'published', 'admin-1', 'admin-1')`).run(courseId, `Private path course ${position}`);
+    database.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, 0)')
+      .run(moduleId, courseId, `Module ${position}`);
+    database.prepare('INSERT INTO lessons (id, module_id, title, position) VALUES (?, ?, ?, 0)')
+      .run(lessonId, moduleId, `Lesson ${position}`);
+    database.prepare('INSERT INTO lesson_progress (user_id, lesson_id) VALUES (?, ?)')
+      .run('learner-active', lessonId);
+    database.prepare(`INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+      VALUES (?, ?, ?, ?, ?)`)
+      .run(`my-learning-cache-step-${position}`, pathId, courseId, position, position === 0 ? 0 : 1);
+  }
+
+  async function measureListQueryCount() {
+    const originalPrepare = database.prepare;
+    let queryCount = 0;
+    database.prepare = (sql) => {
+      queryCount += 1;
+      return originalPrepare.call(database, sql);
+    };
+    try {
+      const response = await fetch(apiUrl('/my-learning'), { headers: userHeaders('learner-active') });
+      assert.equal(response.status, 200);
+      return { queryCount, courses: (await response.json()).courses };
+    } finally {
+      delete database.prepare;
+    }
+  }
+
+  for (let position = 0; position < 3; position += 1) addCourse(position);
+  const threeCourseResult = await measureListQueryCount();
+  assert.equal(threeCourseResult.courses.filter((course) => course.id.startsWith('my-learning-cache-course-')).length, 3);
+
+  for (let position = 3; position < 6; position += 1) addCourse(position);
+  const sixCourseResult = await measureListQueryCount();
+  assert.equal(sixCourseResult.courses.filter((course) => course.id.startsWith('my-learning-cache-course-')).length, 6);
+  assert.ok(sixCourseResult.queryCount - threeCourseResult.queryCount <= 40,
+    `Expected bounded additional visibility work, got ${threeCourseResult.queryCount} then ${sixCourseResult.queryCount} queries.`);
+});
+
+test('learning-path completion summaries use a fixed query count as path size grows', async () => {
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
+      ('path-query-first', 'Query count first', 'published', 'admin-1', 'admin-1'),
+      ('path-query-second', 'Query count second', 'published', 'admin-1', 'admin-1'),
+      ('path-query-third', 'Query count third', 'published', 'admin-1', 'admin-1');
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by) VALUES
+      ('path-query-one', 'One course path', 'published', 1, 'admin-1', 'admin-1'),
+      ('path-query-three', 'Three course path', 'published', 1, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+      ('path-query-one-step', 'path-query-one', 'path-query-first', 0, 0),
+      ('path-query-three-first', 'path-query-three', 'path-query-first', 0, 0),
+      ('path-query-three-second', 'path-query-three', 'path-query-second', 1, 1),
+      ('path-query-three-third', 'path-query-three', 'path-query-third', 2, 1);
+  `);
+
+  async function measurePath(pathId) {
+    const originalPrepare = database.prepare;
+    let queryCount = 0;
+    database.prepare = (sql) => {
+      queryCount += 1;
+      return originalPrepare.call(database, sql);
+    };
+    try {
+      const response = await fetch(apiUrl(`/learning-paths/${pathId}`), {
+        headers: userHeaders('learner-active'),
+      });
+      assert.equal(response.status, 200);
+      return { queryCount, path: (await response.json()).path };
+    } finally {
+      delete database.prepare;
+    }
+  }
+
+  const oneCourse = await measurePath('path-query-one');
+  const threeCourses = await measurePath('path-query-three');
+  assert.equal(threeCourses.queryCount, oneCourse.queryCount);
+  assert.deepEqual(threeCourses.path.courses.map((course) => course.unlocked), [true, false, false]);
+});
+
+test('learning-path management list batches payload queries as path count grows', async () => {
+  database.exec(`
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('path-list-batch-one', 'One list path', 'draft', 0, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+      VALUES ('path-list-batch-one-course', 'path-list-batch-one', 'course-empty', 0, 0);
+  `);
+
+  async function measureList() {
+    const originalPrepare = database.prepare;
+    let queryCount = 0;
+    database.prepare = (sql) => {
+      queryCount += 1;
+      return originalPrepare.call(database, sql);
+    };
+    try {
+      const response = await fetch(apiUrl('/manage/learning-paths'), { headers: userHeaders('admin-1') });
+      assert.equal(response.status, 200);
+      return { queryCount, paths: (await response.json()).paths };
+    } finally {
+      delete database.prepare;
+    }
+  }
+
+  try {
+    const onePathList = await measureList();
+    database.exec(`
+      INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by) VALUES
+        ('path-list-batch-two', 'Two list path', 'draft', 0, 'admin-1', 'admin-1'),
+        ('path-list-batch-three', 'Three list path', 'draft', 0, 'admin-1', 'admin-1');
+      INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+        ('path-list-batch-two-course', 'path-list-batch-two', 'course-empty', 0, 0),
+        ('path-list-batch-three-course', 'path-list-batch-three', 'course-empty', 0, 0);
+    `);
+    const threePathList = await measureList();
+    assert.equal(threePathList.queryCount, onePathList.queryCount);
+    assert.equal(threePathList.paths.length, onePathList.paths.length + 2);
+    assert.equal(threePathList.paths.find((path) => path.id === 'path-list-batch-three')?.courses[0]?.id, 'course-empty');
+  } finally {
+    database.prepare("DELETE FROM learning_paths WHERE id LIKE 'path-list-batch-%'").run();
+  }
+});
+
+test('learner learning-path lists preserve course progress, enrollment, and prerequisite state', async () => {
+  database.exec(`
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by) VALUES
+      ('path-list-learner-one', 'Completed learner path', 'published', 1, 'admin-1', 'admin-1'),
+      ('path-list-learner-two', 'Locked learner path', 'published', 1, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+      ('path-list-learner-one-course', 'path-list-learner-one', 'course-analytics', 0, 0),
+      ('path-list-learner-two-first', 'path-list-learner-two', 'course-empty', 0, 0),
+      ('path-list-learner-two-second', 'path-list-learner-two', 'course-analytics', 1, 1);
+    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source)
+      VALUES ('path-list-learner-enrollment', 'path-list-learner-one', 'learner-active', 'self');
+  `);
+
+  try {
+    const response = await fetch(apiUrl('/learning-paths'), { headers: userHeaders('learner-active') });
+    assert.equal(response.status, 200);
+    const paths = (await response.json()).paths;
+    const completedPath = paths.find((path) => path.id === 'path-list-learner-one');
+    const lockedPath = paths.find((path) => path.id === 'path-list-learner-two');
+    assert.equal(completedPath.enrolled, true);
+    assert.equal(completedPath.completedCourses, 1);
+    assert.equal(completedPath.courses[0].completed, true);
+    assert.equal(completedPath.courses[0].unlocked, true);
+    assert.equal(lockedPath.enrolled, false);
+    assert.equal(lockedPath.completedCourses, 1);
+    assert.deepEqual(lockedPath.courses.map((course) => course.unlocked), [true, false]);
+  } finally {
+    database.prepare("DELETE FROM learning_paths WHERE id IN ('path-list-learner-one', 'path-list-learner-two')").run();
+  }
+});
+
+test('learning-path lists paginate staff and learner results with stable boundaries', async () => {
+  const pathIds = Array.from({ length: 22 }, (_, index) => `path-pagination-${String(index + 1).padStart(3, '0')}`);
+  const staffTotalBefore = database.prepare("SELECT COUNT(*) AS count FROM learning_paths WHERE status != 'archived'").get().count;
+  const learnerTotalBefore = database.prepare(`SELECT COUNT(DISTINCT p.id) AS count FROM learning_paths p
+    LEFT JOIN learning_path_enrollments e ON e.path_id = p.id AND e.user_id = ?
+    WHERE p.status = 'published' AND (p.self_enrollment = 1 OR e.id IS NOT NULL)`).get('learner-active').count;
+  const addPath = database.prepare(`INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+    VALUES (?, ?, 'published', 1, 'admin-1', 'admin-1')`);
+  const addCourse = database.prepare(`INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+    VALUES (?, ?, 'course-empty', 0, 0)`);
+  for (const [index, pathId] of pathIds.entries()) {
+    const number = String(index + 1).padStart(3, '0');
+    addPath.run(pathId, `Pagination path ${number}`);
+    addCourse.run(`${pathId}-course`, pathId);
+  }
+
+  async function collectPages(userId, expectedTotal) {
+    const allPaths = [];
+    const pageCount = Math.max(1, Math.ceil(expectedTotal / 20));
+    for (let page = 1; page <= pageCount; page++) {
+      const response = await fetch(apiUrl(`/learning-paths?page=${page}`), { headers: userHeaders(userId) });
+      assert.equal(response.status, 200);
+      const result = await response.json();
+      assert.equal(result.total, expectedTotal);
+      assert.equal(result.page, page);
+      assert.equal(result.pageSize, 20);
+      assert.equal(result.paths.length, Math.min(20, expectedTotal - (page - 1) * 20));
+      assert.equal(result.hasMore, page < pageCount);
+      allPaths.push(...result.paths);
+    }
+    assert.equal(new Set(allPaths.map((path) => path.id)).size, expectedTotal);
+    return allPaths;
+  }
+
+  try {
+    const staffPaths = await collectPages('admin-1', staffTotalBefore + pathIds.length);
+    const learnerPaths = await collectPages('learner-active', learnerTotalBefore + pathIds.length);
+    assert.ok(staffPaths.some((path) => path.id === pathIds[0] && path.courses.length === 1));
+    assert.ok(learnerPaths.some((path) => path.id === pathIds[0] && path.selfEnrollment));
+  } finally {
+    database.prepare(`DELETE FROM learning_paths WHERE id IN (${pathIds.map(() => '?').join(', ')})`).run(...pathIds);
+  }
+});
+
+test('staff learning-path page queries use indexes for their update ordering', () => {
+  function queryPlan(sql, params = []) {
+    return database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params).map((row) => row.detail).join('\n');
+  }
+
+  const activePlan = queryPlan(`SELECT * FROM learning_paths WHERE status != 'archived'
+    ORDER BY updated_at DESC, id LIMIT ? OFFSET ?`, [20, 0]);
+  assert.match(activePlan, /learning_paths_active_updated/);
+  assert.doesNotMatch(activePlan, /USE TEMP B-TREE FOR ORDER BY/);
+
+  for (const status of ['published', 'archived']) {
+    const statusPlan = queryPlan(`SELECT * FROM learning_paths WHERE status = ?
+      ORDER BY updated_at DESC, id LIMIT ? OFFSET ?`, [status, 20, 0]);
+    assert.match(statusPlan, /learning_paths_status_updated/);
+    assert.doesNotMatch(statusPlan, /USE TEMP B-TREE FOR ORDER BY/);
+  }
+});
+
+test('staff course pages use indexes for their update ordering', () => {
+  const courseIds = Array.from({ length: 2000 }, (_, index) => `course-order-plan-${String(index).padStart(4, '0')}`);
+  const addCourse = database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by, updated_at)
+    VALUES (?, ?, ?, 'admin-1', 'admin-1', ?)`);
+  const addCourses = database.transaction(() => {
+    for (const [index, courseId] of courseIds.entries()) {
+      const status = ['draft', 'published', 'archived'][index % 3];
+      const updatedAt = `2026-10-${String((index % 9) + 1).padStart(2, '0')} 12:00:00`;
+      addCourse.run(courseId, `Ordered course ${index}`, status, updatedAt);
+    }
+  });
+  addCourses();
+
+  try {
+    database.exec('ANALYZE courses');
+    function queryPlan(sql, params = []) {
+      return database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params).map((row) => row.detail).join('\n');
+    }
+    const fromCourseOwners = 'SELECT c.*, u.username AS owner FROM courses c JOIN users u ON u.id = c.created_by';
+    const activePlan = queryPlan(`${fromCourseOwners} ORDER BY c.updated_at DESC, c.id ASC LIMIT ? OFFSET ?`, [50, 0]);
+    assert.match(activePlan, /courses_updated_order/);
+    assert.doesNotMatch(activePlan, /USE TEMP B-TREE FOR ORDER BY/);
+
+    for (const status of ['published', 'draft', 'archived']) {
+      const statusPlan = queryPlan(`${fromCourseOwners} WHERE c.status = ? ORDER BY c.updated_at DESC, c.id ASC LIMIT ? OFFSET ?`, [status, 50, 0]);
+      assert.match(statusPlan, /courses_status_updated_order/);
+      assert.doesNotMatch(statusPlan, /USE TEMP B-TREE FOR ORDER BY/);
+    }
+
+    const catalogTitlePlan = queryPlan(`SELECT c.* FROM courses c WHERE c.status = 'published'
+      AND (c.visibility = 'public' OR EXISTS (
+        SELECT 1 FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?
+      )) ORDER BY c.title COLLATE NOCASE ASC, c.id ASC LIMIT ? OFFSET ?`, ['learner-order-plan', 50, 0]);
+    assert.match(catalogTitlePlan, /courses_status_title_order/);
+    assert.doesNotMatch(catalogTitlePlan, /USE TEMP B-TREE FOR ORDER BY/);
+  } finally {
+    database.prepare(`DELETE FROM courses WHERE id IN (${courseIds.map(() => '?').join(', ')})`).run(...courseIds);
+    database.exec('ANALYZE courses');
+  }
+});
+
+test('course access pages keep assigned learners first and avoid sorting unassigned learners', async () => {
+  const courseId = 'course-access-roster-order';
+  const learnerIds = Array.from({ length: 125 }, (_, index) => `roster-learner-${String(index).padStart(3, '0')}`);
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Roster ordering course', 'published', 'admin-1', 'admin-1')`).run(courseId);
+  const addLearner = database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
+    VALUES (?, ?, ?, 'not-used', 'learner', ?)`);
+  const addGrant = database.prepare(`INSERT INTO course_grants (id, course_id, user_id, granted_by, granted_at)
+    VALUES (?, ?, ?, 'admin-1', '2026-10-01 08:00:00')`);
+  const addFixtures = database.transaction(() => {
+    for (const [index, learnerId] of learnerIds.entries()) {
+      const suffix = String(index).padStart(3, '0');
+      addLearner.run(learnerId, `roster_${suffix}`, `roster_${suffix}@example.invalid`, index === 52 ? 1 : 0);
+      if (index < 55) addGrant.run(`roster-grant-${suffix}`, courseId, learnerId);
+    }
+  });
+  addFixtures();
+
+  try {
+    const pageTwoResponse = await fetch(apiUrl(`/manage/courses/${courseId}/access?q=roster&page=2`), { headers: userHeaders('admin-1') });
+    assert.equal(pageTwoResponse.status, 200);
+    const pageTwo = await pageTwoResponse.json();
+    assert.equal(pageTwo.total, 125);
+    assert.equal(pageTwo.page, 2);
+    assert.deepEqual(pageTwo.users.map((user) => user.username), [
+      'roster_050', 'roster_051', 'roster_052', 'roster_053', 'roster_054',
+      ...Array.from({ length: 45 }, (_, index) => `roster_${String(index + 55).padStart(3, '0')}`),
+    ]);
+    assert.deepEqual(pageTwo.users.slice(0, 5).map((user) => user.granted), [true, true, true, true, true]);
+    assert.deepEqual(pageTwo.users.slice(5).map((user) => user.granted), Array(45).fill(false));
+    assert.equal(pageTwo.users[2].disabled, true);
+
+    const pageThreeResponse = await fetch(apiUrl(`/manage/courses/${courseId}/access?q=roster&page=3`), { headers: userHeaders('admin-1') });
+    assert.equal(pageThreeResponse.status, 200);
+    const pageThree = await pageThreeResponse.json();
+    assert.equal(pageThree.users.length, 25);
+    assert.deepEqual(pageThree.users.map((user) => user.username),
+      Array.from({ length: 25 }, (_, index) => `roster_${String(index + 100).padStart(3, '0')}`));
+
+    const combinedPlan = database.prepare(`EXPLAIN QUERY PLAN SELECT u.id, u.username FROM users u
+      LEFT JOIN course_grants g ON g.user_id = u.id AND g.course_id = ?
+      WHERE u.role = 'learner'
+      ORDER BY CASE WHEN g.id IS NULL THEN 1 ELSE 0 END, u.username COLLATE NOCASE, u.id ASC LIMIT ? OFFSET ?`)
+      .all(courseId, 50, 0).map((row) => row.detail).join('\n');
+    assert.match(combinedPlan, /USE TEMP B-TREE FOR ORDER BY/);
+
+    const unassignedPlan = database.prepare(`EXPLAIN QUERY PLAN SELECT u.id, u.username FROM users u
+      WHERE u.role = 'learner' AND NOT EXISTS (
+        SELECT 1 FROM course_grants g WHERE g.course_id = ? AND g.user_id = u.id
+      ) ORDER BY u.username COLLATE NOCASE, u.id ASC LIMIT ? OFFSET ?`)
+      .all(courseId, 50, 0).map((row) => row.detail).join('\n');
+    assert.match(unassignedPlan, /users_role_username/);
+    assert.doesNotMatch(unassignedPlan, /USE TEMP B-TREE FOR ORDER BY/);
+
+    const assignedPlan = database.prepare(`EXPLAIN QUERY PLAN SELECT u.id, u.username FROM course_grants g
+      CROSS JOIN users u ON u.id = g.user_id
+      WHERE g.course_id = ? AND u.role = 'learner'
+      ORDER BY u.username COLLATE NOCASE, u.id ASC LIMIT ? OFFSET ?`)
+      .all(courseId, 50, 0).map((row) => row.detail).join('\n');
+    assert.match(assignedPlan, /SEARCH g USING COVERING INDEX sqlite_autoindex_course_grants_2 \(course_id=\?\)/);
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+    database.prepare(`DELETE FROM users WHERE id IN (${learnerIds.map(() => '?').join(', ')})`).run(...learnerIds);
+  }
+});
+
+test('learners cannot discover or open unavailable self-enrollment paths', async () => {
+  async function readCatalog() {
+    const firstResponse = await fetch(apiUrl('/learning-paths?page=1'), { headers: userHeaders('learner-active') });
+    assert.equal(firstResponse.status, 200);
+    const firstPage = await firstResponse.json();
+    const paths = [...firstPage.paths];
+    const pageCount = Math.max(1, Math.ceil(firstPage.total / firstPage.pageSize));
+    for (let page = 2; page <= pageCount; page++) {
+      const response = await fetch(apiUrl(`/learning-paths?page=${page}`), { headers: userHeaders('learner-active') });
+      assert.equal(response.status, 200);
+      paths.push(...(await response.json()).paths);
+    }
+    return { total: firstPage.total, paths };
+  }
+
+  const baseline = await readCatalog();
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
+      ('course-path-availability', 'Availability course', 'published', 'admin-1', 'admin-1'),
+      ('course-path-unpublished', 'Unpublished path course', 'draft', 'admin-1', 'admin-1');
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by) VALUES
+      ('path-availability-private', 'Availability changes path', 'published', 1, 'admin-1', 'admin-1'),
+      ('path-availability-unpublished', 'Unpublished course path', 'published', 1, 'admin-1', 'admin-1'),
+      ('path-availability-empty', 'Empty legacy path', 'published', 1, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+      ('path-availability-private-course', 'path-availability-private', 'course-path-availability', 0, 0),
+      ('path-availability-unpublished-course', 'path-availability-unpublished', 'course-path-unpublished', 0, 0);
+  `);
+
+  const pathIds = ['path-availability-private', 'path-availability-unpublished', 'path-availability-empty'];
+  try {
+    const availableCatalog = await readCatalog();
+    assert.equal(availableCatalog.total, baseline.total + 1);
+    assert.ok(availableCatalog.paths.some((path) => path.id === pathIds[0]));
+    assert.equal(availableCatalog.paths.some((path) => path.id === pathIds[1] || path.id === pathIds[2]), false);
+
+    const availableDetail = await fetch(apiUrl(`/learning-paths/${pathIds[0]}`), { headers: userHeaders('learner-active') });
+    assert.equal(availableDetail.status, 200);
+    for (const unavailablePathId of pathIds.slice(1)) {
+      const detail = await fetch(apiUrl(`/learning-paths/${unavailablePathId}`), { headers: userHeaders('learner-active') });
+      assert.equal(detail.status, 404);
+      const enrollment = await fetch(apiUrl(`/learning-paths/${unavailablePathId}/enroll`), {
+        method: 'POST', headers: userHeaders('learner-active'),
+      });
+      assert.equal(enrollment.status, 409);
+      assert.equal((await enrollment.json()).code, 'path_unavailable');
+    }
+
+    database.prepare("UPDATE courses SET visibility = 'private' WHERE id = 'course-path-availability'").run();
+    const unavailableCatalog = await readCatalog();
+    assert.equal(unavailableCatalog.total, baseline.total);
+    assert.equal(unavailableCatalog.paths.some((path) => path.id === pathIds[0]), false);
+    const detail = await fetch(apiUrl(`/learning-paths/${pathIds[0]}`), { headers: userHeaders('learner-active') });
+    assert.equal(detail.status, 404);
+    const enrollment = await fetch(apiUrl(`/learning-paths/${pathIds[0]}/enroll`), {
+      method: 'POST', headers: userHeaders('learner-active'),
+    });
+    assert.equal(enrollment.status, 409);
+    assert.equal((await enrollment.json()).code, 'path_unavailable');
+  } finally {
+    database.prepare(`DELETE FROM learning_paths WHERE id IN (${pathIds.map(() => '?').join(', ')})`).run(...pathIds);
+    database.prepare("DELETE FROM courses WHERE id IN ('course-path-availability', 'course-path-unpublished')").run();
+  }
+});
+
+test('learning-path saves batch course validation and visibility lookups', async () => {
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
+      ('path-batch-third', 'Batch validation third', 'published', 'admin-1', 'admin-1');
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by) VALUES
+      ('path-batch-one', 'One-course path', 'draft', 0, 'admin-1', 'admin-1'),
+      ('path-batch-three', 'Three-course path', 'draft', 0, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+      ('path-batch-one-step', 'path-batch-one', 'course-empty', 0, 0),
+      ('path-batch-three-first', 'path-batch-three', 'course-analytics', 0, 0),
+      ('path-batch-three-second', 'path-batch-three', 'course-empty', 1, 1),
+      ('path-batch-three-third', 'path-batch-three', 'path-batch-third', 2, 1);
+  `);
+
+  async function measureRequest(url, init, expectedStatus = 200) {
+    const originalPrepare = database.prepare;
+    let queryCount = 0;
+    database.prepare = (sql) => {
+      queryCount += 1;
+      return originalPrepare.call(database, sql);
+    };
+    try {
+      const response = await fetch(url, init);
+      assert.equal(response.status, expectedStatus);
+      return queryCount;
+    } finally {
+      delete database.prepare;
+    }
+  }
+
+  const createHeaders = { ...userHeaders('admin-1'), 'content-type': 'application/json' };
+  try {
+    const oneCourseCreateQueries = await measureRequest(apiUrl('/manage/learning-paths'), {
+      method: 'POST', headers: createHeaders,
+      body: JSON.stringify({ title: 'One course batch path', courses: [{ courseId: 'course-empty' }] }),
+    }, 201);
+    const threeCourseCreateQueries = await measureRequest(apiUrl('/manage/learning-paths'), {
+      method: 'POST', headers: createHeaders,
+      body: JSON.stringify({ title: 'Three course batch path', courses: [
+        { courseId: 'course-analytics' }, { courseId: 'course-empty' }, { courseId: 'path-batch-third' },
+      ] }),
+    }, 201);
+    assert.equal(threeCourseCreateQueries, oneCourseCreateQueries);
+
+    const oneCourseUpdateQueries = await measureRequest(apiUrl('/manage/learning-paths/path-batch-one'), {
+      method: 'PATCH', headers: createHeaders, body: JSON.stringify({ selfEnrollment: true }),
+    });
+    const threeCourseUpdateQueries = await measureRequest(apiUrl('/manage/learning-paths/path-batch-three'), {
+      method: 'PATCH', headers: createHeaders, body: JSON.stringify({ selfEnrollment: true }),
+    });
+    assert.equal(threeCourseUpdateQueries, oneCourseUpdateQueries);
+  } finally {
+    database.prepare("DELETE FROM learning_paths WHERE id IN ('path-batch-one', 'path-batch-three')").run();
+    database.prepare("DELETE FROM learning_paths WHERE title IN ('One course batch path', 'Three course batch path')").run();
+    database.prepare("DELETE FROM courses WHERE id = 'path-batch-third'").run();
+  }
+});
+
+test('competency catalog batches mapped-course completion summaries', async () => {
+  database.exec(`
+    INSERT INTO competencies (id, title, description, active, created_by) VALUES
+      ('competency-query-one', 'One competency', '', 1, 'admin-1');
+    INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
+      ('competency-query-second-course', 'Second competency course', 'published', 'admin-1', 'admin-1'),
+      ('competency-query-third-course', 'Third competency course', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_competencies (course_id, competency_id, created_by) VALUES
+      ('course-analytics', 'competency-query-one', 'admin-1');
+  `);
+
+  async function measureCatalog() {
+    const originalPrepare = database.prepare;
+    let queryCount = 0;
+    database.prepare = (sql) => {
+      queryCount += 1;
+      return originalPrepare.call(database, sql);
+    };
+    try {
+      const response = await fetch(apiUrl('/competencies'), {
+        headers: userHeaders('learner-active'),
+      });
+      assert.equal(response.status, 200);
+      return { queryCount, competencies: (await response.json()).competencies };
+    } finally {
+      delete database.prepare;
+    }
+  }
+
+  const oneCompetency = await measureCatalog();
+  assert.equal(oneCompetency.competencies[0].achieved, true);
+  assert.equal(oneCompetency.competencies[0].completedCourses, 1);
+
+  database.exec(`
+    INSERT INTO competencies (id, title, description, active, created_by) VALUES
+      ('competency-query-two', 'Two competency', '', 1, 'admin-1'),
+      ('competency-query-three', 'Three competency', '', 1, 'admin-1');
+    INSERT INTO course_competencies (course_id, competency_id, created_by) VALUES
+      ('competency-query-second-course', 'competency-query-two', 'admin-1'),
+      ('competency-query-third-course', 'competency-query-three', 'admin-1');
+  `);
+
+  const threeCompetencies = await measureCatalog();
+  assert.equal(threeCompetencies.queryCount, oneCompetency.queryCount);
+  assert.deepEqual(threeCompetencies.competencies.map((item) => item.achieved), [true, false, false]);
+  assert.deepEqual(threeCompetencies.competencies.map((item) => item.courseCount), [1, 1, 1]);
+});
+
+test('admin competency creation returns a useful conflict for case-insensitive duplicate titles', async () => {
+  database.prepare(`INSERT INTO competencies (id, title, description, active, created_by)
+    VALUES (?, ?, '', 1, 'admin-1')`).run('competency-duplicate-title', 'Existing competency');
+  const auditCount = () => database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'competency.created'`).get().count;
+  const beforeDuplicate = auditCount();
+  let createdId;
+
+  try {
+    const duplicateResponse = await fetch(apiUrl('/admin/competencies'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'EXISTING COMPETENCY', description: '' }),
+    });
+    assert.equal(duplicateResponse.status, 409);
+    assert.deepEqual(await duplicateResponse.json(), {
+      error: 'A competency with this name already exists.',
+      code: 'duplicate_competency',
+    });
+    assert.equal(auditCount(), beforeDuplicate);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM competencies WHERE title = ?').get('existing competency').count, 1);
+
+    const createResponse = await fetch(apiUrl('/admin/competencies'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'A distinct competency', description: 'Created after the duplicate check.' }),
+    });
+    assert.equal(createResponse.status, 201);
+    const { competency } = await createResponse.json();
+    createdId = competency.id;
+    assert.equal(competency.title, 'A distinct competency');
+    assert.equal(auditCount(), beforeDuplicate + 1);
+  } finally {
+    if (createdId) {
+      database.prepare("DELETE FROM audit_logs WHERE action = 'competency.created' AND entity_id = ?").run(createdId);
+      database.prepare('DELETE FROM competencies WHERE id = ?').run(createdId);
+    }
+    database.prepare('DELETE FROM competencies WHERE id = ?').run('competency-duplicate-title');
+  }
+});
+
+test('admin competency updates reject duplicate titles without changing or auditing the record', async () => {
+  database.prepare(`INSERT INTO competencies (id, title, description, active, created_by) VALUES
+    ('competency-update-existing', 'Existing competency', 'Original description', 1, 'admin-1'),
+    ('competency-update-target', 'Target competency', 'Keep this description', 1, 'admin-1')`).run();
+  const auditCount = () => database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'competency.updated' AND entity_id = 'competency-update-target'`).get().count;
+  const beforeUpdate = auditCount();
+
+  try {
+    const response = await fetch(apiUrl('/admin/competencies/competency-update-target'), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'EXISTING COMPETENCY' }),
+    });
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), {
+      error: 'A competency with this name already exists.',
+      code: 'duplicate_competency',
+    });
+    assert.deepEqual(database.prepare('SELECT title, description, active FROM competencies WHERE id = ?')
+      .get('competency-update-target'), {
+      title: 'Target competency',
+      description: 'Keep this description',
+      active: 1,
+    });
+    assert.equal(auditCount(), beforeUpdate);
+  } finally {
+    database.prepare("DELETE FROM audit_logs WHERE action = 'competency.updated' AND entity_id = 'competency-update-target'").run();
+    database.prepare("DELETE FROM competencies WHERE id IN ('competency-update-existing', 'competency-update-target')").run();
+  }
+});
+
+test('competency catalog hides mapped private courses without current access', async () => {
+  const courseId = 'course-private-competency';
+  const competencyId = 'competency-private-course';
+  database.exec(`
+    INSERT INTO competencies (id, title, description, active, created_by)
+      VALUES ('${competencyId}', 'Private course skill', '', 1, 'admin-1');
+    INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+      VALUES ('${courseId}', 'Restricted course title', 'private', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('module-private-competency', '${courseId}', 'Module', 0);
+    INSERT INTO lessons (id, module_id, title, position)
+      VALUES ('lesson-private-competency', 'module-private-competency', 'Lesson', 0);
+    INSERT INTO lesson_progress (user_id, lesson_id, completed_at)
+      VALUES ('learner-active', 'lesson-private-competency', CURRENT_TIMESTAMP);
+    INSERT INTO course_competencies (course_id, competency_id, created_by)
+      VALUES ('${courseId}', '${competencyId}', 'admin-1');
+  `);
+
+  async function getCompetency() {
+    const response = await fetch(apiUrl('/competencies'), { headers: userHeaders('learner-active') });
+    assert.equal(response.status, 200);
+    return (await response.json()).competencies.find((item) => item.id === competencyId);
+  }
+
+  try {
+    const hidden = await getCompetency();
+    assert.deepEqual(hidden.courses, []);
+    assert.equal(hidden.courseCount, 0);
+    assert.equal(hidden.completedCourses, 0);
+    assert.equal(hidden.achieved, false);
+
+    database.prepare(`INSERT INTO course_grants (id, course_id, user_id, granted_by)
+      VALUES ('grant-private-competency', ?, 'learner-active', 'admin-1')`).run(courseId);
+    const granted = await getCompetency();
+    assert.deepEqual(granted.courses, [{ id: courseId, title: 'Restricted course title', completed: true }]);
+    assert.equal(granted.courseCount, 1);
+    assert.equal(granted.completedCourses, 1);
+    assert.equal(granted.achieved, true);
+
+    database.prepare('DELETE FROM course_grants WHERE id = ?').run('grant-private-competency');
+    const revoked = await getCompetency();
+    assert.deepEqual(revoked.courses, []);
+    assert.equal(revoked.achieved, false);
+  } finally {
+    database.prepare('DELETE FROM course_grants WHERE id = ?').run('grant-private-competency');
+    database.prepare('DELETE FROM competencies WHERE id = ?').run(competencyId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
+test('course competency mappings can remove legacy inactive competencies', async () => {
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('course-competency-mapping', 'Competency mapping', 'published', 'admin-1', 'admin-1');
+    INSERT INTO competencies (id, title, description, active, created_by) VALUES
+      ('competency-mapping-active', 'Active mapping option', '', 1, 'admin-1'),
+      ('competency-mapping-inactive', 'Inactive mapped option', '', 0, 'admin-1');
+    INSERT INTO course_competencies (course_id, competency_id, created_by)
+      VALUES ('course-competency-mapping', 'competency-mapping-inactive', 'admin-1');
+  `);
+
+  const listResponse = await fetch(apiUrl('/manage/courses/course-competency-mapping/competencies'), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(listResponse.status, 200);
+  const mapping = await listResponse.json();
+  assert.ok(mapping.competencies.some((item) => item.id === 'competency-mapping-active' && item.active));
+  assert.ok(mapping.competencies.some((item) => item.id === 'competency-mapping-inactive' && !item.active));
+  assert.deepEqual(mapping.selected, ['competency-mapping-inactive']);
+
+  function mappingAuditCount() {
+    return database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+      WHERE action = 'competency.course_mapping_changed' AND entity_id = 'course-competency-mapping'`).get().count;
+  }
+  const initialAuditCount = mappingAuditCount();
+  const unchangedResponse = await fetch(apiUrl('/manage/courses/course-competency-mapping/competencies'), {
+    method: 'PUT',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ competencyIds: ['competency-mapping-inactive'] }),
+  });
+  assert.equal(unchangedResponse.status, 200);
+  assert.equal(mappingAuditCount(), initialAuditCount);
+
+  const removeResponse = await fetch(apiUrl('/manage/courses/course-competency-mapping/competencies'), {
+    method: 'PUT',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ competencyIds: [] }),
+  });
+  assert.equal(removeResponse.status, 200);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_competencies WHERE course_id = ?').get('course-competency-mapping').count, 0);
+  assert.equal(mappingAuditCount(), initialAuditCount + 1);
+
+  const readdResponse = await fetch(apiUrl('/manage/courses/course-competency-mapping/competencies'), {
+    method: 'PUT',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ competencyIds: ['competency-mapping-inactive'] }),
+  });
+  assert.equal(readdResponse.status, 400);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_competencies WHERE course_id = ?').get('course-competency-mapping').count, 0);
+});
+
+test('program boolean request fields reject strings without changing access settings', async () => {
+  const invalidCreate = await fetch(apiUrl('/manage/learning-paths'), {
+    method: 'POST',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Invalid self-enrollment flag', selfEnrollment: 'false', courses: [] }),
+  });
+  assert.equal(invalidCreate.status, 400);
+  assert.equal((await invalidCreate.json()).code, 'validation_error');
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM learning_paths WHERE title = 'Invalid self-enrollment flag'").get().count, 0);
+
+  const createResponse = await fetch(apiUrl('/manage/learning-paths'), {
+    method: 'POST',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Valid enrollment option', selfEnrollment: false, courses: [] }),
+  });
+  assert.equal(createResponse.status, 201);
+  const { path } = await createResponse.json();
+  assert.equal(path.selfEnrollment, false);
+
+  const invalidUpdate = await fetch(apiUrl(`/manage/learning-paths/${path.id}`), {
+    method: 'PATCH',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ selfEnrollment: 'false' }),
+  });
+  assert.equal(invalidUpdate.status, 400);
+  assert.equal((await invalidUpdate.json()).code, 'validation_error');
+  assert.equal(database.prepare('SELECT self_enrollment FROM learning_paths WHERE id = ?').get(path.id).self_enrollment, 0);
+});
+
+test('archiving a self-enrollment path preserves enrollments after a course becomes private', async () => {
+  database.exec(`
+    INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+      VALUES ('course-archive-regression', 'Archive regression course', 'public', 'published', 'admin-1', 'admin-1');
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('path-archive-regression', 'Archive regression path', 'published', 1, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+      VALUES ('path-archive-regression-course', 'path-archive-regression', 'course-archive-regression', 0, 0);
+    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by)
+      VALUES ('path-archive-regression-enrollment', 'path-archive-regression', 'learner-active', 'self', NULL);
+    UPDATE courses SET visibility = 'private' WHERE id = 'course-archive-regression';
+  `);
+
+  const response = await fetch(apiUrl('/manage/learning-paths/path-archive-regression'), {
+    method: 'PATCH',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'archived' }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).path.status, 'archived');
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_path_courses WHERE path_id = ?').get('path-archive-regression').count, 1);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_path_enrollments WHERE path_id = ? AND user_id = ?').get('path-archive-regression', 'learner-active').count, 1);
+  const audit = database.prepare("SELECT action, entity_id, details_json FROM audit_logs WHERE action = 'path.updated' AND entity_id = ?").get('path-archive-regression');
+  assert.equal(audit.action, 'path.updated');
+  assert.equal(JSON.parse(audit.details_json).status, 'archived');
+
+  for (const endpoint of ['/learning-paths?status=archived', '/manage/learning-paths?status=archived']) {
+    const archivedList = await fetch(apiUrl(endpoint), { headers: userHeaders('admin-1') });
+    assert.equal(archivedList.status, 200);
+    assert.ok((await archivedList.json()).paths.some((path) => path.id === 'path-archive-regression'));
+  }
+  const activeList = await fetch(apiUrl('/learning-paths'), { headers: userHeaders('admin-1') });
+  assert.equal(activeList.status, 200);
+  assert.ok(!(await activeList.json()).paths.some((path) => path.id === 'path-archive-regression'));
+
+  const restore = await fetch(apiUrl('/manage/learning-paths/path-archive-regression'), {
+    method: 'PATCH',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'draft', selfEnrollment: false }),
+  });
+  assert.equal(restore.status, 200);
+  assert.equal((await restore.json()).path.status, 'draft');
+  assert.equal(database.prepare('SELECT self_enrollment FROM learning_paths WHERE id = ?').get('path-archive-regression').self_enrollment, 0);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_path_enrollments WHERE path_id = ? AND user_id = ?').get('path-archive-regression', 'learner-active').count, 1);
+  const restoredList = await fetch(apiUrl('/learning-paths'), { headers: userHeaders('admin-1') });
+  assert.equal(restoredList.status, 200);
+  assert.ok((await restoredList.json()).paths.some((path) => path.id === 'path-archive-regression'));
+});
+
+test('calendar date ranges reject impossible and overwide dates while accepting supported boundaries', async () => {
+  const invalidDate = await fetch(apiUrl('/calendar?from=2026-02-31&to=2026-03-01'), {
+    headers: userHeaders('learner-active'),
+  });
+  assert.equal(invalidDate.status, 400);
+  assert.equal((await invalidDate.json()).code, 'validation_error');
+
+  const invalidLeapDay = await fetch(apiUrl('/calendar?from=2025-02-29&to=2025-03-01'), {
+    headers: userHeaders('learner-active'),
+  });
+  assert.equal(invalidLeapDay.status, 400);
+
+  const overwideRange = await fetch(apiUrl('/calendar?from=2026-01-01&to=2026-03-04'), {
+    headers: userHeaders('learner-active'),
+  });
+  assert.equal(overwideRange.status, 400);
+  assert.deepEqual(await overwideRange.json(), {
+    error: 'Calendar date range must be 62 days or fewer.',
+    code: 'validation_error',
+  });
+
+  const maximumRange = await fetch(apiUrl('/calendar?from=2026-01-01&to=2026-03-03'), {
+    headers: userHeaders('learner-active'),
+  });
+  assert.equal(maximumRange.status, 200);
+
+  const validLeapDay = await fetch(apiUrl('/calendar?from=2024-02-29&to=2024-02-29'), {
+    headers: userHeaders('learner-active'),
+  });
+  assert.equal(validLeapDay.status, 200);
+  assert.deepEqual((await validLeapDay.json()).items, []);
+});
+
+test('calendar deadline results use version-aware course completion and batched summaries', async () => {
+  database.prepare(`INSERT INTO course_learning_state (user_id, course_id, deadline_at, started_at)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(user_id, course_id) DO UPDATE SET deadline_at = excluded.deadline_at`)
+    .run('learner-active', 'course-analytics', '2099-01-01T00:00:00.000Z');
+
+  async function measureCalendar() {
+    const originalPrepare = database.prepare;
+    let queryCount = 0;
+    database.prepare = (sql) => {
+      queryCount += 1;
+      return originalPrepare.call(database, sql);
+    };
+    try {
+      const response = await fetch(apiUrl('/calendar?from=2099-01-01&to=2099-01-01'), {
+        headers: userHeaders('learner-active'),
+      });
+      assert.equal(response.status, 200);
+      return { queryCount, items: (await response.json()).items };
+    } finally {
+      delete database.prepare;
+    }
+  }
+
+  const oneDeadline = await measureCalendar();
+  assert.deepEqual(oneDeadline.items.map((item) => [item.courseId, item.status, item.completed]), [
+    ['course-analytics', 'completed', true],
+  ]);
+
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('calendar-incomplete', 'Calendar incomplete course', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_learning_state (user_id, course_id, deadline_at, started_at)
+      VALUES ('learner-active', 'calendar-incomplete', '2099-01-01T00:00:00.000Z', CURRENT_TIMESTAMP);
+  `);
+
+  const twoDeadlines = await measureCalendar();
+  assert.equal(twoDeadlines.queryCount, oneDeadline.queryCount);
+  assert.deepEqual(twoDeadlines.items.map((item) => [item.courseId, item.status, item.completed]), [
+    ['course-analytics', 'completed', true],
+    ['calendar-incomplete', 'upcoming', false],
+  ]);
+});
+
+test('calendar deadline date bounds include the final day and use the deadline index', async () => {
+  const learnerId = 'learner-calendar-index';
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
+    VALUES (?, 'calendar_index', 'calendar-index@example.invalid', 'not-used', 'learner', 0)`).run(learnerId);
+  const insertCourse = database.prepare(`INSERT INTO courses (id, title, status, visibility, created_by, updated_by)
+    VALUES (?, ?, 'published', 'public', 'admin-1', 'admin-1')`);
+  const insertDeadline = database.prepare('INSERT INTO course_learning_state (user_id, course_id, deadline_at) VALUES (?, ?, ?)');
+  insertCourse.run('calendar-index-before', 'Before range');
+  insertCourse.run('calendar-index-final', 'On final day');
+  insertCourse.run('calendar-index-after', 'After range');
+  insertDeadline.run(learnerId, 'calendar-index-before', '2098-12-31T23:59:59.999Z');
+  insertDeadline.run(learnerId, 'calendar-index-final', '2099-01-01 23:59:59');
+  insertDeadline.run(learnerId, 'calendar-index-after', '2099-01-02T00:00:00.000Z');
+
+  let calendarQuery = '';
+  const originalPrepare = database.prepare;
+  database.prepare = (sql) => {
+    if (sql.includes('FROM course_learning_state s')) calendarQuery = sql;
+    return originalPrepare.call(database, sql);
+  };
+  let response;
+  try {
+    response = await fetch(apiUrl('/calendar?from=2099-01-01&to=2099-01-01'), {
+      headers: userHeaders(learnerId),
+    });
+  } finally {
+    delete database.prepare;
+  }
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).items.map((item) => item.courseId), ['calendar-index-final']);
+  assert.ok(calendarQuery.includes('s.deadline_at >= ? AND s.deadline_at < ?'));
+  const plan = originalPrepare.call(database, `EXPLAIN QUERY PLAN ${calendarQuery}`)
+    .all(learnerId, '2099-01-01', '2099-01-01Z');
+  assert.ok(plan.some((entry) => entry.detail.includes('course_learning_deadline')), JSON.stringify(plan));
+});
+
+test('calendar hides private course deadlines after access is revoked', async () => {
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
+    VALUES ('learner-calendar', 'calendar_learner', 'calendar@example.invalid', 'not-used', 'learner', 0)`).run();
+  database.exec(`
+    INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+      VALUES ('calendar-private', 'Private calendar course', 'private', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_learning_state (user_id, course_id, deadline_at, started_at)
+      VALUES ('learner-calendar', 'calendar-private', '2099-01-01T00:00:00.000Z', CURRENT_TIMESTAMP);
+  `);
+
+  async function calendarItems() {
+    const response = await fetch(apiUrl('/calendar?from=2099-01-01&to=2099-01-01'), {
+      headers: userHeaders('learner-calendar'),
+    });
+    assert.equal(response.status, 200);
+    return (await response.json()).items;
+  }
+
+  assert.deepEqual(await calendarItems(), []);
+  database.prepare(`INSERT INTO course_grants (id, course_id, user_id, granted_by, granted_at)
+    VALUES ('calendar-private-grant', 'calendar-private', 'learner-calendar', 'admin-1', CURRENT_TIMESTAMP)`).run();
+  assert.deepEqual((await calendarItems()).map((item) => item.courseId), ['calendar-private']);
+
+  database.prepare('DELETE FROM course_grants WHERE id = ?').run('calendar-private-grant');
+  assert.deepEqual(await calendarItems(), []);
+});
+
 test('course access learner search matches email and remains limited to learners', async () => {
   const response = await fetch(apiUrl(`/manage/courses/course-analytics/access?q=${encodeURIComponent('UNASSIGNED@EXAMPLE.INVALID')}`), {
     headers: userHeaders('admin-1'),
@@ -215,6 +1336,72 @@ test('course access learner search matches email and remains limited to learners
   assert.equal(result.total, 1);
   assert.deepEqual(result.users.map((learner) => learner.id), ['learner-unassigned']);
   assert.equal(result.users[0].granted, false);
+});
+
+test('private course grants and revocations roll back when audit persistence fails', async () => {
+  const courseId = 'course-access-audit';
+  const learnerId = 'learner-unassigned';
+  database.prepare('INSERT INTO courses (id, title, visibility, status, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(courseId, 'Access audit course', 'private', 'published', 'admin-1', 'admin-1');
+  const grantAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.access_granted' AND entity_id = ?").get(courseId).count;
+  const revokeAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.access_revoked' AND entity_id = ?").get(courseId).count;
+
+  database.exec(`CREATE TRIGGER reject_access_granted_audit BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'course.access_granted' BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`);
+  try {
+    const failedGrant = await fetch(apiUrl(`/manage/courses/${courseId}/access/${learnerId}`), {
+      method: 'PUT',
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(failedGrant.status, 500);
+    assert.equal((await failedGrant.json()).code, 'audit_unavailable');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_grants WHERE course_id = ? AND user_id = ?').get(courseId, learnerId).count, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM enrollments WHERE course_id = ? AND user_id = ?').get(courseId, learnerId).count, 0);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.access_granted' AND entity_id = ?").get(courseId).count, grantAuditCount);
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS reject_access_granted_audit');
+  }
+
+  const retryGrant = await fetch(apiUrl(`/manage/courses/${courseId}/access/${learnerId}`), {
+    method: 'PUT',
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(retryGrant.status, 204);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_grants WHERE course_id = ? AND user_id = ?').get(courseId, learnerId).count, 1);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM enrollments WHERE course_id = ? AND user_id = ?').get(courseId, learnerId).count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.access_granted' AND entity_id = ?").get(courseId).count, grantAuditCount + 1);
+
+  const duplicateGrant = await fetch(apiUrl(`/manage/courses/${courseId}/access/${learnerId}`), {
+    method: 'PUT',
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(duplicateGrant.status, 204);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.access_granted' AND entity_id = ?").get(courseId).count, grantAuditCount + 1);
+
+  database.exec(`CREATE TRIGGER reject_access_revoked_audit BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'course.access_revoked' BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`);
+  try {
+    const failedRevoke = await fetch(apiUrl(`/manage/courses/${courseId}/access/${learnerId}`), {
+      method: 'DELETE',
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(failedRevoke.status, 500);
+    assert.equal((await failedRevoke.json()).code, 'audit_unavailable');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_grants WHERE course_id = ? AND user_id = ?').get(courseId, learnerId).count, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM enrollments WHERE course_id = ? AND user_id = ?').get(courseId, learnerId).count, 1);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.access_revoked' AND entity_id = ?").get(courseId).count, revokeAuditCount);
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS reject_access_revoked_audit');
+  }
+
+  const retryRevoke = await fetch(apiUrl(`/manage/courses/${courseId}/access/${learnerId}`), {
+    method: 'DELETE',
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(retryRevoke.status, 204);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_grants WHERE course_id = ? AND user_id = ?').get(courseId, learnerId).count, 0);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM enrollments WHERE course_id = ? AND user_id = ?').get(courseId, learnerId).count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.access_revoked' AND entity_id = ?").get(courseId).count, revokeAuditCount + 1);
 });
 
 test('module creation rolls back when its audit entry cannot be saved', async () => {
@@ -247,6 +1434,100 @@ test('module creation rolls back when its audit entry cannot be saved', async ()
   assert.equal(module.title, 'Audited module');
   assert.equal(module.position, initialModuleCount);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.module_created' AND entity_id = ?").get(module.id).count, 1);
+});
+
+test('module renames roll back when their audit entry cannot be saved and skip audit for unchanged titles', async () => {
+  const originalModule = database.prepare("SELECT title FROM course_modules WHERE id = 'module-analytics'").get();
+  const originalCourseTimestamp = database.prepare("SELECT updated_at FROM courses WHERE id = 'course-analytics'").get().updated_at;
+  const initialAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.module_updated' AND entity_id = 'module-analytics'").get().count;
+  database.exec(`CREATE TRIGGER reject_module_updated_audit BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'course.module_updated' BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`);
+
+  try {
+    const failedResponse = await fetch(apiUrl('/manage/modules/module-analytics'), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Unaudited module rename' }),
+    });
+    assert.equal(failedResponse.status, 500);
+    assert.equal((await failedResponse.json()).code, 'audit_unavailable');
+    assert.deepEqual(database.prepare("SELECT title FROM course_modules WHERE id = 'module-analytics'").get(), originalModule);
+    assert.equal(database.prepare("SELECT updated_at FROM courses WHERE id = 'course-analytics'").get().updated_at, originalCourseTimestamp);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.module_updated' AND entity_id = 'module-analytics'").get().count, initialAuditCount);
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS reject_module_updated_audit');
+  }
+
+  const retryResponse = await fetch(apiUrl('/manage/modules/module-analytics'), {
+    method: 'PATCH',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Audited module rename' }),
+  });
+  assert.equal(retryResponse.status, 200);
+  assert.equal(database.prepare("SELECT title FROM course_modules WHERE id = 'module-analytics'").get().title, 'Audited module rename');
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.module_updated' AND entity_id = 'module-analytics'").get().count, initialAuditCount + 1);
+
+  const unchangedResponse = await fetch(apiUrl('/manage/modules/module-analytics'), {
+    method: 'PATCH',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Audited module rename' }),
+  });
+  assert.equal(unchangedResponse.status, 200);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.module_updated' AND entity_id = 'module-analytics'").get().count, initialAuditCount + 1);
+});
+
+test('module reordering rolls back when its audit entry cannot be saved and skips audit at the boundary', async () => {
+  const moduleId = 'module-reorder-neighbor';
+  const courseId = 'course-analytics';
+  const originalCourse = database.prepare('SELECT updated_at, updated_by FROM courses WHERE id = ?').get(courseId);
+  database.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, ?)')
+    .run(moduleId, courseId, 'Adjacent module', 1);
+  const originalPositions = database.prepare('SELECT id, position FROM course_modules WHERE course_id = ? ORDER BY position, id').all(courseId);
+  const initialAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.module_reordered' AND entity_id = ?").get(courseId).count;
+
+  try {
+    database.exec(`CREATE TRIGGER reject_module_reordered_audit BEFORE INSERT ON audit_logs
+      WHEN NEW.action = 'course.module_reordered' BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`);
+    try {
+      const failedResponse = await fetch(apiUrl(`/manage/modules/${moduleId}/move`), {
+        method: 'POST',
+        headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+        body: JSON.stringify({ direction: 'up' }),
+      });
+      assert.equal(failedResponse.status, 500);
+      assert.equal((await failedResponse.json()).code, 'audit_unavailable');
+      assert.deepEqual(database.prepare('SELECT id, position FROM course_modules WHERE course_id = ? ORDER BY position, id').all(courseId), originalPositions);
+      assert.deepEqual(database.prepare('SELECT updated_at, updated_by FROM courses WHERE id = ?').get(courseId), originalCourse);
+      assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.module_reordered' AND entity_id = ?").get(courseId).count, initialAuditCount);
+    } finally {
+      database.exec('DROP TRIGGER IF EXISTS reject_module_reordered_audit');
+    }
+
+    const retryResponse = await fetch(apiUrl(`/manage/modules/${moduleId}/move`), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ direction: 'up' }),
+    });
+    assert.equal(retryResponse.status, 200);
+    assert.deepEqual(database.prepare('SELECT id, position FROM course_modules WHERE course_id = ? ORDER BY position, id').all(courseId), [
+      { id: moduleId, position: 0 },
+      { id: 'module-analytics', position: 1 },
+    ]);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.module_reordered' AND entity_id = ?").get(courseId).count, initialAuditCount + 1);
+
+    const boundaryResponse = await fetch(apiUrl(`/manage/modules/${moduleId}/move`), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ direction: 'up' }),
+    });
+    assert.equal(boundaryResponse.status, 200);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.module_reordered' AND entity_id = ?").get(courseId).count, initialAuditCount + 1);
+  } finally {
+    database.prepare('DELETE FROM course_modules WHERE id = ?').run(moduleId);
+    database.prepare('UPDATE course_modules SET position = 0 WHERE id = ?').run('module-analytics');
+    database.prepare('UPDATE courses SET updated_at = ?, updated_by = ? WHERE id = ?')
+      .run(originalCourse.updated_at, originalCourse.updated_by, courseId);
+  }
 });
 
 test('lesson creation rolls back when its audit entry cannot be saved', async () => {
@@ -309,6 +1590,67 @@ test('lesson edits roll back when their audit entry cannot be saved', async () =
   assert.equal(retryResponse.status, 200);
   assert.equal(database.prepare("SELECT title FROM lessons WHERE id = 'lesson-analytics'").get().title, 'Audited lesson edit');
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.lesson_updated' AND entity_id = 'lesson-analytics'").get().count, 1);
+});
+
+test('lesson reordering rolls back when its audit entry cannot be saved and skips audit at the boundary', async () => {
+  const lessonId = 'lesson-reorder-neighbor';
+  const firstLessonId = 'lesson-reorder-first';
+  const moduleId = 'module-lesson-reorder';
+  const courseId = 'course-analytics';
+  const originalCourse = database.prepare('SELECT updated_at, updated_by FROM courses WHERE id = ?').get(courseId);
+  const modulePosition = database.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM course_modules WHERE course_id = ?').get(courseId).next;
+  database.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, ?)')
+    .run(moduleId, courseId, 'Ordering fixture', modulePosition);
+  database.prepare('INSERT INTO lessons (id, module_id, title, position) VALUES (?, ?, ?, ?)')
+    .run(firstLessonId, moduleId, 'First lesson', 0);
+  database.prepare('INSERT INTO lessons (id, module_id, title, position) VALUES (?, ?, ?, ?)')
+    .run(lessonId, moduleId, 'Adjacent lesson', 1);
+  const originalPositions = database.prepare('SELECT id, position FROM lessons WHERE module_id = ? ORDER BY position, id').all(moduleId);
+  const initialAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.lesson_reordered' AND entity_id = ?").get(lessonId).count;
+
+  try {
+    database.exec(`CREATE TRIGGER reject_lesson_reordered_audit BEFORE INSERT ON audit_logs
+      WHEN NEW.action = 'course.lesson_reordered' BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`);
+    try {
+      const failedResponse = await fetch(apiUrl(`/manage/lessons/${lessonId}/move`), {
+        method: 'POST',
+        headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+        body: JSON.stringify({ direction: 'up' }),
+      });
+      assert.equal(failedResponse.status, 500);
+      assert.equal((await failedResponse.json()).code, 'audit_unavailable');
+      assert.deepEqual(database.prepare('SELECT id, position FROM lessons WHERE module_id = ? ORDER BY position, id').all(moduleId), originalPositions);
+      assert.deepEqual(database.prepare('SELECT updated_at, updated_by FROM courses WHERE id = ?').get(courseId), originalCourse);
+      assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.lesson_reordered' AND entity_id = ?").get(lessonId).count, initialAuditCount);
+    } finally {
+      database.exec('DROP TRIGGER IF EXISTS reject_lesson_reordered_audit');
+    }
+
+    const retryResponse = await fetch(apiUrl(`/manage/lessons/${lessonId}/move`), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ direction: 'up' }),
+    });
+    assert.equal(retryResponse.status, 200);
+    assert.deepEqual(database.prepare('SELECT id, position FROM lessons WHERE module_id = ? ORDER BY position, id').all(moduleId), [
+      { id: lessonId, position: 0 },
+      { id: firstLessonId, position: 1 },
+    ]);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.lesson_reordered' AND entity_id = ?").get(lessonId).count, initialAuditCount + 1);
+
+    const boundaryResponse = await fetch(apiUrl(`/manage/lessons/${lessonId}/move`), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ direction: 'up' }),
+    });
+    assert.equal(boundaryResponse.status, 200);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.lesson_reordered' AND entity_id = ?").get(lessonId).count, initialAuditCount + 1);
+  } finally {
+    database.prepare('DELETE FROM lessons WHERE module_id = ?').run(moduleId);
+    database.prepare('DELETE FROM course_modules WHERE id = ?').run(moduleId);
+    database.prepare('UPDATE courses SET updated_at = ?, updated_by = ? WHERE id = ?')
+      .run(originalCourse.updated_at, originalCourse.updated_by, courseId);
+  }
 });
 
 test('quiz saves roll back when their audit entry cannot be saved', async () => {
@@ -645,4 +1987,218 @@ test('resource removal preserves its document when its audit entry cannot be sav
   assert.equal(database.prepare("SELECT id FROM lesson_resources WHERE id = 'resource-audit'").get(), undefined);
   assert.equal(fs.existsSync(mediaPath), false);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.resource_removed' AND entity_id = 'lesson-resource-audit'").get().count, 1);
+});
+
+test('resource link creation rolls back when its audit entry cannot be saved', async () => {
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('course-resource-link-audit', 'Resource link audit course', 'draft', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('module-resource-link-audit', 'course-resource-link-audit', 'Resource link module', 0);
+    INSERT INTO lessons (id, module_id, title, position)
+      VALUES ('lesson-resource-link-audit', 'module-resource-link-audit', 'Lesson with link', 0);
+  `);
+  const originalCourse = database.prepare("SELECT updated_at, updated_by FROM courses WHERE id = 'course-resource-link-audit'").get();
+  const initialAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.resource_link_added' AND entity_id = 'lesson-resource-link-audit'").get().count;
+  database.exec(`CREATE TRIGGER reject_resource_link_added_audit BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'course.resource_link_added' BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`);
+
+  try {
+    const failedResponse = await fetch(apiUrl('/manage/lessons/lesson-resource-link-audit/resources'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Reference guide', url: 'https://example.com/guide' }),
+    });
+    assert.equal(failedResponse.status, 500);
+    assert.equal((await failedResponse.json()).code, 'audit_unavailable');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM lesson_resources WHERE lesson_id = 'lesson-resource-link-audit'").get().count, 0);
+    assert.deepEqual(database.prepare("SELECT updated_at, updated_by FROM courses WHERE id = 'course-resource-link-audit'").get(), originalCourse);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.resource_link_added' AND entity_id = 'lesson-resource-link-audit'").get().count, initialAuditCount);
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS reject_resource_link_added_audit');
+  }
+
+  const retryResponse = await fetch(apiUrl('/manage/lessons/lesson-resource-link-audit/resources'), {
+    method: 'POST',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Reference guide', url: 'https://example.com/guide' }),
+  });
+  assert.equal(retryResponse.status, 201);
+  const { resource } = await retryResponse.json();
+  assert.equal(resource.kind, 'link');
+  assert.equal(resource.title, 'Reference guide');
+  assert.equal(resource.url, 'https://example.com/guide');
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM lesson_resources WHERE lesson_id = 'lesson-resource-link-audit' AND resource_type = 'link'").get().count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.resource_link_added' AND entity_id = 'lesson-resource-link-audit'").get().count, initialAuditCount + 1);
+});
+
+test('publication notes over the stored version-history limit are rejected before publishing', async () => {
+  const publishResponse = await fetch(apiUrl('/manage/courses/course-empty'), {
+    method: 'PATCH',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Should remain unchanged', status: 'published', changeNote: 'n'.repeat(501) }),
+  });
+  assert.equal(publishResponse.status, 400);
+  assert.equal((await publishResponse.json()).error, 'Publication note must be 500 characters or fewer.');
+  assert.equal(database.prepare("SELECT title FROM courses WHERE id = 'course-empty'").get().title, 'Empty course');
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM course_versions WHERE course_id = 'course-empty'").get().count, 0);
+
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
+    VALUES ('reviewer-note-limit', 'reviewer_note_limit', 'reviewer-note-limit@example.invalid', 'not-used', 'moderator', 0)`).run();
+  database.prepare(`INSERT INTO course_revisions (course_id, revision_course_id, author_id, review_status, submitted_by, submitted_at)
+    VALUES ('course-empty', 'course-empty', 'admin-1', 'in_review', 'admin-1', CURRENT_TIMESTAMP)`).run();
+  try {
+    const reviewResponse = await fetch(apiUrl('/manage/courses/course-empty/review/decision'), {
+      method: 'POST',
+      headers: { ...userHeaders('reviewer-note-limit'), 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'approve', note: 'n'.repeat(501) }),
+    });
+    assert.equal(reviewResponse.status, 400);
+    assert.equal((await reviewResponse.json()).error, 'Publication note must be 500 characters or fewer.');
+    assert.equal(database.prepare("SELECT review_status FROM course_revisions WHERE course_id = 'course-empty'").get().review_status, 'in_review');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM course_versions WHERE course_id = 'course-empty'").get().count, 0);
+  } finally {
+    database.prepare("DELETE FROM course_revisions WHERE course_id = 'course-empty'").run();
+    database.prepare("DELETE FROM users WHERE id = 'reviewer-note-limit'").run();
+  }
+});
+
+test('course revision submission rejects a duplicate while review is pending', async () => {
+  const courseId = 'course-review-submission-guard';
+  const initialAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.revision_submitted' AND entity_id = ?").get(courseId).count;
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Review submission guard', 'published', 'admin-1', 'admin-1')`).run(courseId);
+  database.prepare(`INSERT INTO course_revisions (course_id, revision_course_id, author_id, review_status)
+    VALUES (?, ?, 'admin-1', 'draft')`).run(courseId, courseId);
+
+  try {
+    const submit = (note) => fetch(apiUrl(`/manage/courses/${courseId}/review`), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ note }),
+    });
+    const firstResponse = await submit('Please review the latest revision.');
+    assert.equal(firstResponse.status, 200);
+    assert.deepEqual(await firstResponse.json(), { status: 'in_review' });
+
+    const submitted = database.prepare('SELECT review_status, submitted_by, review_note FROM course_revisions WHERE course_id = ?').get(courseId);
+    assert.deepEqual(submitted, { review_status: 'in_review', submitted_by: 'admin-1', review_note: 'Please review the latest revision.' });
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.revision_submitted' AND entity_id = ?").get(courseId).count, initialAuditCount + 1);
+
+    const duplicateResponse = await submit('Duplicate review request.');
+    assert.equal(duplicateResponse.status, 409);
+    assert.deepEqual(await duplicateResponse.json(), {
+      error: 'This revision is already awaiting review.',
+      code: 'review_already_pending',
+    });
+    assert.deepEqual(database.prepare('SELECT review_status, submitted_by, review_note FROM course_revisions WHERE course_id = ?').get(courseId), submitted);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.revision_submitted' AND entity_id = ?").get(courseId).count, initialAuditCount + 1);
+  } finally {
+    database.prepare("DELETE FROM audit_logs WHERE action = 'course.revision_submitted' AND entity_id = ?").run(courseId);
+    database.prepare('DELETE FROM course_revisions WHERE course_id = ?').run(courseId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
+test('direct course publication rejects non-boolean recompletion options before saving', async () => {
+  const response = await fetch(apiUrl('/manage/courses/course-empty'), {
+    method: 'PATCH',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Should remain unchanged', status: 'published', requiresRecompletion: 'false' }),
+  });
+  assert.equal(response.status, 400);
+  const result = await response.json();
+  assert.equal(result.code, 'validation_error');
+  assert.equal(result.error, 'Recompletion option must be true or false.');
+  assert.equal(database.prepare("SELECT title FROM courses WHERE id = 'course-empty'").get().title, 'Empty course');
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM course_versions WHERE course_id = 'course-empty'").get().count, 0);
+});
+
+test('path assignment rejects missing and malformed learner IDs as client errors', async () => {
+  database.prepare(`INSERT INTO learning_paths (id, title, status, created_by, updated_by)
+    VALUES ('path-assignment-validation', 'Assignment validation', 'published', 'admin-1', 'admin-1')`).run();
+  for (const body of [{}, { userId: 42 }, { userId: '   ' }]) {
+    const response = await fetch(apiUrl('/manage/learning-paths/path-assignment-validation/assignments'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: 'Choose a learner to assign.', code: 'validation_error' });
+  }
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM learning_path_enrollments WHERE path_id = 'path-assignment-validation'").get().count, 0);
+});
+
+test('repeated self-enrollment requests create one enrollment and one audit event', async () => {
+  database.exec(`
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('path-self-enrollment-idempotency', 'Self-enrollment idempotency', 'published', 1, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+      VALUES ('path-self-enrollment-course', 'path-self-enrollment-idempotency', 'course-analytics', 0, 0);
+  `);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await fetch(apiUrl('/learning-paths/path-self-enrollment-idempotency/enroll'), {
+      method: 'POST',
+      headers: userHeaders('learner-unassigned'),
+    });
+    assert.equal(response.status, 201);
+    assert.equal((await response.json()).path.enrolled, true);
+  }
+
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM learning_path_enrollments
+    WHERE path_id = 'path-self-enrollment-idempotency' AND user_id = 'learner-unassigned'`).get().count, 1);
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'path.enrolled' AND entity_id = 'path-self-enrollment-idempotency'`).get().count, 1);
+});
+
+test('path learner directory searches and paginates active learners without hiding accounts', async () => {
+  database.prepare(`INSERT INTO learning_paths (id, title, status, created_by, updated_by)
+    VALUES ('path-learner-directory', 'Learner directory', 'published', 'admin-1', 'admin-1')`).run();
+  const insertLearner = database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
+    VALUES (?, ?, ?, 'not-used', 'learner', 0)`);
+  for (let index = 1; index <= 52; index++) {
+    const suffix = String(index).padStart(3, '0');
+    insertLearner.run(`directory-learner-${suffix}`, `page-learner-${suffix}`, `page-${suffix}@example.invalid`);
+  }
+  database.prepare(`INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by)
+    VALUES ('directory-enrollment', 'path-learner-directory', 'directory-learner-052', 'assigned', 'admin-1')`).run();
+  const expectedTotal = database.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'learner' AND disabled = 0").get().count;
+
+  const firstPageResponse = await fetch(apiUrl('/manage/learning-paths/path-learner-directory/learners'), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(firstPageResponse.status, 200);
+  const firstPage = await firstPageResponse.json();
+  assert.equal(firstPage.total, expectedTotal);
+  assert.equal(firstPage.page, 1);
+  assert.equal(firstPage.pageSize, 50);
+  assert.equal(firstPage.hasMore, true);
+  assert.equal(firstPage.learners.length, 50);
+  assert.equal(firstPage.learners[0].id, 'directory-learner-052');
+
+  const secondPageResponse = await fetch(apiUrl('/manage/learning-paths/path-learner-directory/learners?page=2'), {
+    headers: userHeaders('admin-1'),
+  });
+  const secondPage = await secondPageResponse.json();
+  assert.equal(secondPage.page, 2);
+  assert.equal(secondPage.hasMore, false);
+  assert.equal(secondPage.learners.length, expectedTotal - 50);
+  assert.equal(new Set([...firstPage.learners, ...secondPage.learners].map((learner) => learner.id)).size, expectedTotal);
+  assert.equal([...firstPage.learners, ...secondPage.learners].some((learner) => learner.id === 'learner-disabled'), false);
+
+  const searchResponse = await fetch(apiUrl('/manage/learning-paths/path-learner-directory/learners?q=PAGE-LEARNER-052'), {
+    headers: userHeaders('admin-1'),
+  });
+  const search = await searchResponse.json();
+  assert.equal(search.total, 1);
+  assert.equal(search.learners[0].id, 'directory-learner-052');
+  assert.equal(search.learners[0].enrolled, true);
+  assert.equal(search.learners[0].source, 'assigned');
+
+  const invalidSearch = await fetch(apiUrl(`/manage/learning-paths/path-learner-directory/learners?q=${'x'.repeat(101)}`), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(invalidSearch.status, 400);
+  assert.equal((await invalidSearch.json()).code, 'validation_error');
 });

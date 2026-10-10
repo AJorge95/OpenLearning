@@ -19,8 +19,8 @@ interface AuthContextValue {
   retryStartup: () => Promise<void>;
   refresh: () => Promise<void>;
   signIn: (username: string, password: string) => Promise<void>;
-  signUp: (email: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => Promise<void>;
-  completeSetup: (platformName: string, email: string, username: string, password: string, confirmPassword: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => Promise<void>;
+  signUp: (email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => Promise<void>;
+  completeSetup: (platformName: string, email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => Promise<void>;
   signOut: () => Promise<void>;
   setBranding: (name: string, themePalette: BrandingPalette, platformIcon: string | null) => void;
   setPlatformAccessSettings: (connectionProtocol: ConnectionProtocol, registrationEnabled: boolean, registrationAvailable: boolean, userLimit: number) => void;
@@ -89,16 +89,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const themeColor = BRAND_PALETTES.find((palette) => palette.id === themePalette)?.color ?? BRAND_PALETTES[0].color;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor);
     let favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (platformIcon) {
-      if (!favicon) {
-        favicon = document.createElement('link');
-        favicon.rel = 'icon';
-        document.head.append(favicon);
-      }
-      favicon.href = platformIcon;
-    } else {
-      favicon?.remove();
+    if (!favicon) {
+      favicon = document.createElement('link');
+      favicon.rel = 'icon';
+      document.head.append(favicon);
     }
+    favicon.href = platformIcon ?? '/favicon.svg';
+    if (platformIcon) favicon.removeAttribute('type');
+    else favicon.type = 'image/svg+xml';
   }, [platformIcon, platformName, themePalette]);
 
   useEffect(() => {
@@ -119,17 +117,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserLimitState(result.userLimit ?? 0);
   }, []);
 
-  const signUp = useCallback(async (email: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => {
-    const result = await api.post<{ user: User; registrationAvailable: boolean }>('/api/auth/register', { email, username, password, confirmPassword, registrationFieldValues });
+  const signUp = useCallback(async (email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => {
+    const result = await api.post<{ user: User; registrationAvailable: boolean }>('/api/auth/register', { email, firstName, lastName, username, password, confirmPassword, registrationFieldValues });
     authStateRevision.current += 1;
     api.clearCsrf();
     setUser(result.user);
     setRegistrationAvailableState(result.registrationAvailable);
   }, []);
 
-  const completeSetup = useCallback(async (name: string, email: string, username: string, password: string, confirmPassword: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => {
+  const completeSetup = useCallback(async (name: string, email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => {
     const result = await api.post<{ user: User } & PlatformConfiguration>('/api/setup', {
-      platformName: name, email, username, password, confirmPassword, ...configuration,
+      platformName: name, email, firstName, lastName, username, password, confirmPassword, ...configuration,
     });
     authStateRevision.current += 1;
     api.clearCsrf();
