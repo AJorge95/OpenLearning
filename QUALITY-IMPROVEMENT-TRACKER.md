@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Clear legacy decoration from the certificate accent
+
+- **Reviewed:** The older certificate pseudo-element rule and the later certificate style that reuses `::before` as a full-width accent, including the print override.
+- **Improvement:** Reset the legacy fixed width, circular border, radius, and shadow on the accent while preserving the old decorative ring on `::after`.
+- **Why it helps:** The certificate accent stays a clean edge-to-edge bar on screen and in print, without inheriting the older circle treatment.
+- **Checked:** The focused CSS regression test passed; full `npm test` passed all 241 tests; `npm run build` and `git diff --check` passed. `npx tsc --noEmit` still reports TS18047 in the separately modified `src/components.tsx:430`; rendered print/PDF output was not checked.
+
 ## 2026-10-10 — Enforce password length for legacy usernames
 
 - **Reviewed:** Shared credential validation, administrator password resets, and self-service password changes for accounts whose stored usernames predate current username rules.
