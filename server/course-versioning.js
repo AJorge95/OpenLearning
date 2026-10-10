@@ -14,12 +14,16 @@ export function logicalCourseId(courseId) {
   return row ? (row.logical_course_id || row.id) : null;
 }
 
-export function publishedVersion(courseId) {
-  const id = logicalCourseId(courseId) || courseId;
+export function publishedVersionForLogicalCourse(logicalCourseIdValue) {
   return db.prepare(`SELECT v.*, c.title, c.description, c.category, c.visibility, c.status,
       c.cover_media_id, c.created_by, c.updated_by, c.updated_at, c.completion_window_days
     FROM course_versions v JOIN courses c ON c.id = v.storage_course_id
-    WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT 1`).get(id) ?? null;
+    WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT 1`).get(logicalCourseIdValue) ?? null;
+}
+
+export function publishedVersion(courseId) {
+  const id = logicalCourseId(courseId) || courseId;
+  return publishedVersionForLogicalCourse(id);
 }
 
 function copyPublishedContent(sourceId, targetId, logicalId, actorId) {
