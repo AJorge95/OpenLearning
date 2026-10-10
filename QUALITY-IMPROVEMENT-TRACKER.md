@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Recheck overlapping authentication refreshes
+
+- **Reviewed:** Auth-provider startup and retry sequencing, overlapping `refresh()` calls, auth-state revision guards around sign-in/setup/sign-out, the startup error/retry screen, and existing auth/session tracker decisions.
+- **Result:** No code change. Startup loads are gated behind the loading screen; latest-request IDs and auth-state revisions prevent stale refresh responses from replacing a newer session or settings state. The current startup retry remains visible through an accessible alert and returns to loading while it runs.
+- **Why no change:** I found no reproducible stale-state path in the current call sites, and the tracker already records the startup preflight and session-rotation behavior. A targeted AuthProvider harness or a concrete delayed-response reproduction would be needed to justify changing these guards.
+- **Checked:** Compared `src/auth-context.tsx` and the startup branch in `src/App.tsx` with the existing auth-transition and startup-recovery entries; confirmed there is no direct AuthProvider test module. `git diff --check` passed.
+
 ## 2026-10-10 — Cover shared API client recovery paths
 
 - **Reviewed:** The shared request helper’s CSRF token refresh and retry flow, concurrent writes, invalid response handling, the current account-role `AppSelect` structure and its geometry/keyboard regressions, and the working tree.
