@@ -29,6 +29,10 @@ if (rawRequestTimeout && (!/^\d+$/.test(rawRequestTimeout) || !Number.isSafeInte
 const defaultSessionSecret = 'development-only-change-this-session-secret';
 const exampleSessionSecret = 'change-this-to-a-random-secret-of-at-least-32-characters';
 const sessionSecret = process.env.SESSION_SECRET?.trim() || defaultSessionSecret;
+const setupToken = process.env.SETUP_TOKEN?.trim() || '';
+if (setupToken && (setupToken.length < 32 || setupToken.length > 256)) {
+  throw new Error('SETUP_TOKEN must be between 32 and 256 characters when configured.');
+}
 
 export const config = {
   nodeEnv,
@@ -39,6 +43,7 @@ export const config = {
   maxUploadBytes,
   requestTimeoutMs,
   sessionSecret,
+  setupToken,
   trustProxy: rawTrustProxy === 'true',
   clientDir: path.resolve(baseDir, 'dist/client'),
 };

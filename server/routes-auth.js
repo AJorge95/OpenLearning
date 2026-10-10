@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { config } from './config.js';
 import { db, setSetting, setting, setupComplete } from './db.js';
 import { createUser, hashPassword, normalizeEmail, normalizeUsername, publicUser, regenerateSession, validateCredentials, validateEmail, validatePassword, verifyLoginPassword, verifyPassword } from './auth.js';
@@ -225,8 +225,26 @@ authRouter.get('/registration-fields', (_req, res) => {
   res.json({ fields: setting('registration_enabled') === '0' ? [] : getRegistrationFields() });
 });
 
+function setupTokenMatches(value) {
+  if (!config.setupToken || typeof value !== 'string' || value.length > 256) return false;
+  const expected = createHash('sha256').update(config.setupToken, 'utf8').digest();
+  const provided = createHash('sha256').update(value, 'utf8').digest();
+  return timingSafeEqual(expected, provided);
+}
+
+function registrationConflict() {
+  fail(409, 'An account with those details could not be registered.', 'registration_conflict');
+}
+
+function isUserIdentifierUniqueConstraint(error) {
+  return error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
+    && /users\.(?:username|email)/i.test(String(error.message || ''));
+}
+
 authRouter.post('/setup', async (req, res) => {
   if (setupComplete()) fail(409, 'This platform is already configured.', 'already_configured');
+  if (!config.setupToken) fail(503, 'Initial setup is unavailable because no bootstrap credential is configured.', 'setup_credential_unavailable');
+  if (!setupTokenMatches(req.body?.setupToken)) fail(403, 'The bootstrap credential is invalid.', 'invalid_setup_token');
   const { platformName, username, password, confirmPassword } = req.body || {};
   const { firstName, lastName } = accountNames(req.body);
   const email = normalizeEmail(req.body?.email);
@@ -289,24 +307,27 @@ authRouter.post('/auth/register', async (req, res) => {
   const submittedRegistrationFieldValues = req.body?.registrationFieldValues;
   normalizeRegistrationFieldValues(submittedRegistrationFieldValues, getRegistrationFields());
   const passwordHash = await hashPassword(password);
-  const user = db.transaction(() => {
-    assertRegistrationAvailable();
-    if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(normalized)) {
-      fail(409, 'That username is already in use.', 'username_taken');
-    }
-    if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) {
-      fail(409, 'That email address is already in use.', 'email_taken');
-    }
-    const fields = getRegistrationFields();
-    const answers = normalizeRegistrationFieldValues(submittedRegistrationFieldValues, fields);
-    const createdUser = createUser({ username: normalized, email, firstName, lastName, passwordHash, role: 'learner' });
-    saveUserRegistrationFieldValues(createdUser.id, answers);
-    recordLastLogin(createdUser.id);
-    const auditId = writeAuditLog({ actor: createdUser, action: 'account.registered', entityType: 'user', entityId: createdUser.id,
-      summary: `Learner account created: ${createdUser.username}` });
-    if (!auditId) fail(500, 'Account could not be created because the audit log is unavailable.', 'audit_unavailable');
-    return createdUser;
-  }).immediate();
+  let user;
+  try {
+    user = db.transaction(() => {
+      assertRegistrationAvailable();
+      if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE LIMIT 1').get(normalized, email)) {
+        registrationConflict();
+      }
+      const fields = getRegistrationFields();
+      const answers = normalizeRegistrationFieldValues(submittedRegistrationFieldValues, fields);
+      const createdUser = createUser({ username: normalized, email, firstName, lastName, passwordHash, role: 'learner' });
+      saveUserRegistrationFieldValues(createdUser.id, answers);
+      recordLastLogin(createdUser.id);
+      const auditId = writeAuditLog({ actor: createdUser, action: 'account.registered', entityType: 'user', entityId: createdUser.id,
+        summary: `Learner account created: ${createdUser.username}` });
+      if (!auditId) fail(500, 'Account could not be created because the audit log is unavailable.', 'audit_unavailable');
+      return createdUser;
+    }).immediate();
+  } catch (error) {
+    if (isUserIdentifierUniqueConstraint(error)) registrationConflict();
+    throw error;
+  }
   await regenerateSession(req, user.id);
   res.status(201).json({ user: publicUser(user), registrationAvailable: registrationAvailable() });
 });

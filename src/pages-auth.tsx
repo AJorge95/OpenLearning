@@ -82,6 +82,7 @@ export function SetupPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [setupToken, setSetupToken] = useState('');
   const [platformIcon, setPlatformIcon] = useState<string | null>(null);
   const [themePalette, setThemePalette] = useState<BrandingPalette>('violet');
   const [connectionProtocol, setConnectionProtocol] = useState<ConnectionProtocol>(initialProtocol);
@@ -124,7 +125,7 @@ export function SetupPage() {
     setError('');
     setSaving(true);
     try {
-      await completeSetup(platformName, email, firstName, lastName, username, password, confirmPassword, {
+      await completeSetup(platformName, email, firstName, lastName, username, password, confirmPassword, setupToken, {
         themePalette, platformIcon, connectionProtocol, registrationEnabled, userLimit: Number(userLimit),
       });
       navigate('/courses');
@@ -158,6 +159,7 @@ export function SetupPage() {
             <label>Admin username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
             <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} /><small>Use at least 12 characters.</small></label>
             <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} /></label>
+            <label>One-time setup token<input required minLength={32} maxLength={256} type="password" autoComplete="off" value={setupToken} onChange={(event) => setSetupToken(event.target.value)} /><small>Enter the private bootstrap credential configured by the server operator.</small></label>
             {error && <p className="form-error" role="alert">{error}</p>}
             <Button type="submit">Continue to access settings</Button>
           </form>
