@@ -83,3 +83,37 @@ test('reports a stable invalid-response error for non-JSON API responses', async
     error instanceof ApiError && error.status === 200 && error.code === 'invalid_response'
   ));
 });
+
+test('does not construct or send an upload when its signal is already aborted', async (t) => {
+  restoreFetch(t);
+  const originalFormData = globalThis.FormData;
+  const originalXhr = globalThis.XMLHttpRequest;
+  let fetchRequests = 0;
+  let formDataConstructed = false;
+  let xhrConstructed = false;
+  globalThis.fetch = async () => {
+    fetchRequests += 1;
+    return jsonResponse({ token: 'unused-token' });
+  };
+  globalThis.FormData = class {
+    constructor() { formDataConstructed = true; }
+    append() {}
+  };
+  globalThis.XMLHttpRequest = class {
+    constructor() { xhrConstructed = true; }
+  };
+  t.after(() => {
+    globalThis.FormData = originalFormData;
+    if (originalXhr === undefined) delete globalThis.XMLHttpRequest;
+    else globalThis.XMLHttpRequest = originalXhr;
+  });
+
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(api.upload('/api/upload', {}, new Blob(['test']), () => {}, { signal: controller.signal }), (error) => (
+    error.name === 'AbortError'
+  ));
+  assert.equal(fetchRequests, 0);
+  assert.equal(formDataConstructed, false);
+  assert.equal(xhrConstructed, false);
+});
