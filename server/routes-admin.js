@@ -135,13 +135,14 @@ adminRouter.get('/users', (req, res) => {
   const requestedPage = pageQuery(req.query.page);
   const pageSize = 50;
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
-  const users = db.prepare(`SELECT id, username, role, disabled, created_at FROM users
+  const users = db.prepare(`SELECT id, username, email, role, disabled, created_at FROM users
     ${where}
     ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
     .all(...params, pageSize, (page - 1) * pageSize);
   res.json({ users: users.map((user) => ({
     id: user.id,
     username: user.username,
+    email: user.email,
     role: user.role,
     disabled: Boolean(user.disabled),
     createdAt: user.created_at,

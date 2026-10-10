@@ -485,6 +485,7 @@ test('setup, registration, and successful sign-in record last login for admin de
   const emailSearch = await emailSearchResponse.json();
   assert.equal(emailSearch.total, 1);
   assert.equal(emailSearch.users[0].id, registration.user.id);
+  assert.equal(emailSearch.users[0].email, 'learner.last-login@example.invalid');
 
   const priorLoginAt = '2000-01-01 00:00:00';
   database.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(priorLoginAt, adminId);
