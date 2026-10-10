@@ -1006,6 +1006,54 @@ test('admin competency updates reject duplicate titles without changing or audit
   }
 });
 
+test('admin competency updates reject non-object bodies and keep empty patches unaudited', async () => {
+  const competencyId = 'competency-update-body-shape';
+  database.prepare(`INSERT INTO competencies (id, title, description, active, created_by, updated_at)
+    VALUES (?, 'Body shape target', 'Original description', 1, 'admin-1', '2000-01-01 00:00:00')`).run(competencyId);
+  const auditCount = () => database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'competency.updated' AND entity_id = ?`).get(competencyId).count;
+  const original = database.prepare('SELECT title, description, active, updated_at FROM competencies WHERE id = ?').get(competencyId);
+
+  try {
+    for (const body of ['[]']) {
+      const response = await fetch(apiUrl(`/admin/competencies/${competencyId}`), {
+        method: 'PATCH',
+        headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+        body,
+      });
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), {
+        error: 'Competency changes must be an object.',
+        code: 'validation_error',
+      });
+      assert.deepEqual(database.prepare('SELECT title, description, active, updated_at FROM competencies WHERE id = ?').get(competencyId), original);
+      assert.equal(auditCount(), 0);
+    }
+
+    const emptyPatch = await fetch(apiUrl(`/admin/competencies/${competencyId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(emptyPatch.status, 200);
+    assert.deepEqual((await emptyPatch.json()).competency, database.prepare('SELECT * FROM competencies WHERE id = ?').get(competencyId));
+    assert.deepEqual(database.prepare('SELECT title, description, active, updated_at FROM competencies WHERE id = ?').get(competencyId), original);
+    assert.equal(auditCount(), 0);
+
+    const realChange = await fetch(apiUrl(`/admin/competencies/${competencyId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ description: 'Updated description' }),
+    });
+    assert.equal(realChange.status, 200);
+    assert.equal((await realChange.json()).competency.description, 'Updated description');
+    assert.equal(auditCount(), 1);
+  } finally {
+    database.prepare('DELETE FROM audit_logs WHERE action = ? AND entity_id = ?').run('competency.updated', competencyId);
+    database.prepare('DELETE FROM competencies WHERE id = ?').run(competencyId);
+  }
+});
+
 test('competency catalog hides mapped private courses without current access', async () => {
   const courseId = 'course-private-competency';
   const competencyId = 'competency-private-course';

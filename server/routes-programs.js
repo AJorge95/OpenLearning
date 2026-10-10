@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
-import { canViewCourse, createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireStaff } from './http.js';
+import { canViewCourse, createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireObjectBody, requireStaff } from './http.js';
 import { courseSummaries, courseSummary, ensureCourseLearningState } from './course-service.js';
 import { courseVersionHistory, logicalCourseId, publishRevision, restoreCourseVersion } from './course-versioning.js';
 import { writeAuditLog } from './log-store.js';
@@ -427,15 +427,17 @@ programsRouter.post('/admin/competencies', requireAdmin, (req, res) => {
 });
 
 programsRouter.patch('/admin/competencies/:competencyId', requireAdmin, (req, res) => {
+  const body = requireObjectBody(req.body, 'Competency changes');
   const change = db.transaction(() => {
     const current = db.prepare('SELECT * FROM competencies WHERE id = ?').get(req.params.competencyId);
     if (!current) fail(404, 'Competency not found.', 'not_found');
-    const title = req.body?.title === undefined ? current.title : text(req.body.title, 'Competency title', 160, true);
-    const description = req.body?.description === undefined ? current.description : text(req.body.description, 'Description', 2000);
-    const active = req.body?.active === undefined ? current.active : Number(booleanValue(req.body.active, 'Competency active status'));
+    const title = body.title === undefined ? current.title : text(body.title, 'Competency title', 160, true);
+    const description = body.description === undefined ? current.description : text(body.description, 'Description', 2000);
+    const active = body.active === undefined ? current.active : Number(booleanValue(body.active, 'Competency active status'));
     if (title !== current.title && db.prepare('SELECT 1 FROM competencies WHERE title = ? AND id <> ?').get(title, current.id)) {
       fail(409, 'A competency with this name already exists.', 'duplicate_competency');
     }
+    if (title === current.title && description === current.description && active === current.active) return current;
     db.prepare(`UPDATE competencies SET title = ?, description = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(title, description, active, current.id);
     logAudit(req.currentUser, 'competency.updated', 'competency', current.id, `Updated competency: ${title}`, { active: Boolean(active) });

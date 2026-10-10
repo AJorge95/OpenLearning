@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Validate competency patches and skip no-op audits
+
+- **Reviewed:** The administrator competency edit route, its duplicate-title transaction test, and the current learner catalog's filter, search, and course-card structure.
+- **Improvement:** Require competency changes to be a JSON object and return the existing row for an unchanged patch without updating its timestamp or writing an audit event.
+- **Why it helps:** Arrays can no longer masquerade as successful updates, and empty retries no longer make a competency appear recently edited or add misleading history.
+- **Interface review:** The rendered catalog exposes names for its filters, search, and course link; no separate UI change was warranted in this cycle.
+- **Checked:** The focused Express/SQLite route suite passed 54 tests; malformed arrays returned `400` with no write or audit, `{}` preserved the timestamp and audit count, and a real description change was saved and audited. Full `npm test` passed all 164 cases; `npx tsc --noEmit`, `npm run build`, `node --check server/routes-programs.js`, and `git diff --check` passed.
+
 ## 2026-10-10 — Guard custom selects against label hit areas
 
 - **Reviewed:** The repeated account-role dropdown report, the existing separate field-container fix, and all TSX usages of the button-based `AppSelect`.
