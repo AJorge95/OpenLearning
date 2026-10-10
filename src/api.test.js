@@ -118,7 +118,7 @@ test('does not construct or send an upload when its signal is already aborted', 
   assert.equal(xhrConstructed, false);
 });
 
-test('does not construct a multipart body if cancelled while fetching the CSRF token', async (t) => {
+test('rejects promptly without multipart creation when cancelled while fetching the CSRF token', async (t) => {
   restoreFetch(t);
   const originalFormData = globalThis.FormData;
   const originalXhr = globalThis.XMLHttpRequest;
@@ -146,11 +146,25 @@ test('does not construct a multipart body if cancelled while fetching the CSRF t
 
   const controller = new AbortController();
   const upload = api.upload('/api/upload', {}, new Blob(['test']), () => {}, { signal: controller.signal });
+  const outcomePromise = upload.then(
+    () => ({ fulfilled: true }),
+    (error) => ({ fulfilled: false, error }),
+  );
   assert.equal(fetchRequests, 1);
   controller.abort();
+  let timeoutId;
+  const rejectedPromptly = await Promise.race([
+    outcomePromise.then(() => true),
+    new Promise((resolve) => { timeoutId = setTimeout(() => resolve(false), 50); }),
+  ]);
+  clearTimeout(timeoutId);
   resolveCsrfResponse(jsonResponse({ token: 'unused-token' }));
+  const outcome = await outcomePromise;
+  await new Promise((resolve) => setImmediate(resolve));
 
-  await assert.rejects(upload, (error) => error.name === 'AbortError');
+  assert.equal(rejectedPromptly, true);
+  assert.equal(outcome.fulfilled, false);
+  assert.equal(outcome.error.name, 'AbortError');
   assert.equal(fetchRequests, 1);
   assert.equal(formDataConstructed, false);
   assert.equal(xhrConstructed, false);

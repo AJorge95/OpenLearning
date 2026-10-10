@@ -75,6 +75,24 @@ async function ensureCsrf(): Promise<string> {
   return csrfToken ?? refreshCsrf();
 }
 
+function uploadAbortError() {
+  return new DOMException('Upload cancelled.', 'AbortError');
+}
+
+function waitForAbort<T>(promise: Promise<T>, signal?: AbortSignal | null): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(uploadAbortError());
+  return new Promise<T>((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener('abort', abort);
+    const abort = () => { cleanup(); reject(uploadAbortError()); };
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(
+      (value) => { cleanup(); resolve(value); },
+      (error) => { cleanup(); reject(error); },
+    );
+  });
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const method = (options.method || 'GET').toUpperCase();
   const requiresCsrf = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
@@ -115,15 +133,15 @@ export const api = {
   refreshCsrf,
   clearCsrf: () => { csrfToken = null; },
   upload: async <T>(path: string, fields: Record<string, string>, file: File, onProgress: (value: number) => void, options: Pick<RequestInit, 'signal'> = {}): Promise<T> => {
-    if (options.signal?.aborted) throw new DOMException('Upload cancelled.', 'AbortError');
-    const token = await ensureCsrf();
-    if (options.signal?.aborted) throw new DOMException('Upload cancelled.', 'AbortError');
+    if (options.signal?.aborted) throw uploadAbortError();
+    const token = await waitForAbort(ensureCsrf(), options.signal);
+    if (options.signal?.aborted) throw uploadAbortError();
     const body = new FormData();
     for (const [key, value] of Object.entries(fields)) body.append(key, value);
     body.append('file', file);
     const send = (token: string, hasRetried: boolean): Promise<T> => new Promise<T>((resolve, reject) => {
       if (options.signal?.aborted) {
-        reject(new DOMException('Upload cancelled.', 'AbortError'));
+        reject(uploadAbortError());
         return;
       }
       const xhr = new XMLHttpRequest();
@@ -137,7 +155,7 @@ export const api = {
         if (!options.signal?.aborted && event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
       };
       xhr.onerror = () => { removeAbortListener(); reject(new ApiError(0, 'Upload failed. Check your connection and try again.')); };
-      xhr.onabort = () => { removeAbortListener(); reject(new DOMException('Upload cancelled.', 'AbortError')); };
+      xhr.onabort = () => { removeAbortListener(); reject(uploadAbortError()); };
       xhr.onload = () => {
         removeAbortListener();
         if (xhr.status === 204) {
@@ -156,8 +174,12 @@ export const api = {
           if (isCsrfRejection(data?.code)) {
             csrfToken = null;
             if (!hasRetried) {
-              void refreshCsrf().then((freshToken) => {
-                if (options.signal?.aborted) throw new DOMException('Upload cancelled.', 'AbortError');
+              if (options.signal?.aborted) {
+                reject(uploadAbortError());
+                return;
+              }
+              void waitForAbort(refreshCsrf(), options.signal).then((freshToken) => {
+                if (options.signal?.aborted) throw uploadAbortError();
                 onProgress(0);
                 return send(freshToken, true);
               }).then(resolve, reject);

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reject cancelled uploads while token refresh is pending
+
+- **Reviewed:** Upload cancellation before XHR creation, the shared single-flight CSRF refresh, the multipart deferral added in the previous cycle, and cancellation during an upload retry.
+- **Improvement:** Let each upload race its wait for a shared CSRF refresh against its own abort signal. Cancellation now rejects promptly without cancelling the shared refresh needed by other requests. Add a deferred-response regression that keeps the token request pending while verifying the upload has already rejected and created no multipart body or XHR.
+- **Why it helps:** A stalled token endpoint can no longer keep a cancelled upload promise pending after its owning page has gone away.
+- **Interface review:** Upload controls continue to use their existing abort signals; the change preserves shared token-refresh behavior and does not alter rendered controls.
+- **Checked:** All 5 API-client tests passed; full `npm test` passed all 198 tests; `npx tsc --noEmit`, `npm run build`, `node --check src/api.test.js`, and `git diff --check` passed.
+
 ## 2026-10-10 — Defer multipart creation until upload authorization is ready
 
 - **Reviewed:** The upload helper after pre-cancel handling, the shared CSRF refresh’s asynchronous boundary, multipart construction, retry behavior, and the upload consumers’ abort signals.
