@@ -32,7 +32,7 @@ function progressForStorage(logicalId, contentId, user, version) {
   return { completedLessonIds, passedQuizIds };
 }
 
-export function courseSummaries(courses, user, preloadedVersionsByCourse) {
+function courseSummaryDetails(courses, user, preloadedVersionsByCourse) {
   if (!courses.length) return [];
   const logicalIdsByCourse = courses.map((course) => course.logical_course_id || course.id);
   const logicalIds = [...new Set(logicalIdsByCourse)];
@@ -117,43 +117,54 @@ export function courseSummaries(courses, user, preloadedVersionsByCourse) {
     const quizHistory = quizHistoryByCourse.get(logicalId);
     const activeLessons = lessonsByCourse.get(content.id) ?? [];
     const activeQuizzes = quizzesByCourse.get(content.id) ?? [];
-    const completedLessons = activeLessons.filter((row) => resetRequired
+    const completedLessonIds = new Set(activeLessons.filter((row) => resetRequired
       ? lessonHistory?.ids.has(row.id)
-      : lessonHistory?.stableIds.has(row.stable_id)).length;
+      : lessonHistory?.stableIds.has(row.stable_id)).map((row) => row.id));
     const quizCount = activeQuizzes.length;
-    const passedQuizzes = activeQuizzes.filter((row) => resetRequired
+    const passedQuizIds = new Set(activeQuizzes.filter((row) => resetRequired
       ? quizHistory?.ids.has(row.id)
-      : quizHistory?.stableIds.has(row.stable_id)).length;
+      : quizHistory?.stableIds.has(row.stable_id)).map((row) => row.id));
+    const completedLessons = completedLessonIds.size;
+    const passedQuizzes = passedQuizIds.size;
     const requiredItems = counts.lesson_count + quizCount;
     const completedItems = completedLessons + passedQuizzes;
     const progress = requiredItems > 0 ? Math.round((completedItems / requiredItems) * 100) : 0;
     const completed = requiredItems > 0 && completedItems === requiredItems;
     return {
-      id: course.id,
-      title: course.title,
-      description: course.description,
-      category: course.category,
-      visibility: course.visibility,
-      status: course.status,
-      coverMediaId: course.cover_media_id,
-      coverUrl: course.cover_media_id ? `/media/${course.cover_media_id}` : null,
-      createdBy: course.created_by,
-      owner: course.owner ?? counts.owner,
-      updatedAt: course.updated_at,
-      moduleCount: counts.module_count,
-      lessonCount: counts.lesson_count,
-      completedLessons,
-      progress,
-      completed,
-      completionWindowDays: course.completion_window_days ?? null,
-      versionNumber: version?.version_number ?? null,
-      deadlineAt: learningState?.deadline_at ?? null,
+      summary: {
+        id: course.id,
+        title: course.title,
+        description: course.description,
+        category: course.category,
+        visibility: course.visibility,
+        status: course.status,
+        coverMediaId: course.cover_media_id,
+        coverUrl: course.cover_media_id ? `/media/${course.cover_media_id}` : null,
+        createdBy: course.created_by,
+        owner: course.owner ?? counts.owner,
+        updatedAt: course.updated_at,
+        moduleCount: counts.module_count,
+        lessonCount: counts.lesson_count,
+        completedLessons,
+        progress,
+        completed,
+        completionWindowDays: course.completion_window_days ?? null,
+        versionNumber: version?.version_number ?? null,
+        deadlineAt: learningState?.deadline_at ?? null,
+      },
+      contentId: content.id,
+      completedLessonIds,
+      passedQuizIds,
     };
   });
 }
 
+export function courseSummaries(courses, user, preloadedVersionsByCourse) {
+  return courseSummaryDetails(courses, user, preloadedVersionsByCourse).map(({ summary }) => summary);
+}
+
 export function courseSummary(course, user, preloadedVersionsByCourse) {
-  return courseSummaries([course], user, preloadedVersionsByCourse)[0];
+  return courseSummaryDetails([course], user, preloadedVersionsByCourse)[0].summary;
 }
 
 export function getCoursePayload(course, user, { includeAnswers = false, storageCourseId } = {}) {
@@ -163,7 +174,8 @@ export function getCoursePayload(course, user, { includeAnswers = false, storage
   const content = storageCourseId ? db.prepare('SELECT * FROM courses WHERE id = ?').get(storageCourseId)
     : editingCopy ? course : currentPublishedCourse(logicalId) || course;
   const rootCourse = db.prepare('SELECT * FROM courses WHERE id = ?').get(logicalId) || course;
-  const summary = courseSummary(rootCourse, user, new Map([[logicalId, version]]));
+  const summaryDetails = courseSummaryDetails([rootCourse], user, new Map([[logicalId, version]]))[0];
+  const summary = summaryDetails.summary;
   const resultSummary = editingCopy ? { ...summary, title: course.title, description: course.description,
     category: course.category, visibility: course.visibility,
     completionWindowDays: course.completion_window_days ?? null,
@@ -171,7 +183,7 @@ export function getCoursePayload(course, user, { includeAnswers = false, storage
     reviewStatus: db.prepare('SELECT review_status FROM course_revisions WHERE course_id = ?').get(logicalId)?.review_status || 'draft',
   } : summary;
   const contentId = content.id;
-  const versionProgress = progressForStorage(logicalId, contentId, user, version);
+  const versionProgress = contentId === summaryDetails.contentId ? summaryDetails : progressForStorage(logicalId, contentId, user, version);
   const lessonResources = new Map();
   for (const resource of db.prepare(`
     SELECT lr.id, lr.lesson_id, lr.resource_type, lr.title, lr.href, lr.original_name

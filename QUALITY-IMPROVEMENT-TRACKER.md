@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-10 — Reuse course summary progress in detail payloads
+
+- **Reviewed:** Published course detail assembly, which loaded lesson and quiz history, learning state, and active content again after calculating the summary.
+- **Improvement:** Build completion IDs alongside summary counts and reuse them for detail payloads when the payload uses the same published content. Keep the existing storage-specific calculation for edited copies.
+- **Why it helps:** A normal course detail read avoids a second set of five progress queries while preserving draft-preview behavior and version-aware completion rules.
+- **Interface review:** No visible change; course completion totals and per-lesson/per-quiz states use the same history and recompletion rules.
+- **Checked:** The focused course analytics/versioning suite passed (69/69), including a detail-route check for summary totals, completed lesson state, and absence of duplicate progress queries. Full `npm test` passed all 260 tests; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-10 — Reuse the published version in course detail summaries
 
 - **Reviewed:** Course detail assembly, which loaded the latest published version once for the summary and again for recompletion progress.
