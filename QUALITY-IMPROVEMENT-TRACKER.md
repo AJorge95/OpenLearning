@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Verify platform reset request draining
+
+- **Reviewed:** Reset preparation waits for in-flight API and media responses to finish, then blocks new requests until the administrator confirms or cancels.
+- **Improvement:** Add a regression that holds one API request open, checks that new API and media requests receive the reset-in-progress response, and verifies backup preparation proceeds after the active response finishes.
+- **Why it helps:** The reset backup and destructive phase cannot silently lose synchronization with requests already modifying platform data, and this request boundary stays covered as middleware changes.
+- **Interface review:** No visible changes; the existing pending-reset state and response message remain unchanged.
+- **Checked:** `node --test tests/server/platform-reset.test.js` passed (4/4); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Protect platform reset backup and rollback guarantees
 
 - **Reviewed:** The platform reset flow pauses requests, backs up SQLite and course media, requires confirmation, and restores media when the reset transaction fails; the committed flow had no dedicated server tests.
