@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Stabilize calendar ordering for duplicate course titles
+
+- **Reviewed:** Learner calendar deadlines were ordered by timestamp and case-insensitive course title. Distinct courses can share both values, leaving their visible order dependent on SQLite's chosen row order.
+- **Improvement:** Add course ID as the final ascending sort key and cover same-title, same-deadline courses inserted in reverse ID order.
+- **Why it helps:** Calendar entries retain a predictable order across reloads and query-plan changes, including when two courses have the same title and due date.
+- **Checked:** The regression failed before the SQL change (returned insertion order) and passed afterward. Calendar route tests passed (6/6), the full `npm test` suite passed (376/376), `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Preserve API errors when system-log writes fail
 
 - **Reviewed:** The HTTP error handler records unhandled request failures through the SQLite system-log writer before returning a generic 500 response. The writer catches persistence errors and falls back to the console.

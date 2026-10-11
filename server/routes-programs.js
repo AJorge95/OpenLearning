@@ -414,7 +414,7 @@ programsRouter.get('/calendar', (req, res) => {
   const items = db.prepare(`SELECT s.course_id AS id, s.course_id, s.deadline_at, s.started_at, c.title, c.category, c.visibility, c.status, c.logical_course_id
     FROM course_learning_state s JOIN courses c ON c.id = s.course_id
     WHERE s.user_id = ? AND s.deadline_at >= ? AND s.deadline_at < ?
-      AND c.status = 'published' ORDER BY s.deadline_at, c.title COLLATE NOCASE`).all(req.currentUser.id, from, endExclusive);
+      AND c.status = 'published' ORDER BY s.deadline_at, c.title COLLATE NOCASE, c.id ASC`).all(req.currentUser.id, from, endExclusive);
   const canView = createCourseAccessChecker(req.currentUser);
   const visibleItems = items.filter((item) => item.visibility === 'public' || canView(item));
   const summaries = courseSummaries(visibleItems, req.currentUser);

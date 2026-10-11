@@ -2254,6 +2254,27 @@ test('calendar deadline results use version-aware course completion and batched 
   ]);
 });
 
+test('calendar items use course ID as a stable tie-breaker for duplicate titles and deadlines', async () => {
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Calendar tie-breaker course', 'published', 'admin-1', 'admin-1')`)
+    .run('calendar-tie-z');
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Calendar tie-breaker course', 'published', 'admin-1', 'admin-1')`)
+    .run('calendar-tie-a');
+  const insertDeadline = database.prepare(`INSERT INTO course_learning_state (user_id, course_id, deadline_at)
+    VALUES ('learner-active', ?, '2099-01-05T00:00:00.000Z')`);
+  insertDeadline.run('calendar-tie-z');
+  insertDeadline.run('calendar-tie-a');
+
+  const response = await fetch(apiUrl('/calendar?from=2099-01-05&to=2099-01-05'), {
+    headers: userHeaders('learner-active'),
+  });
+
+  assert.equal(response.status, 200);
+  const items = (await response.json()).items;
+  assert.deepEqual(items.map((item) => item.courseId), ['calendar-tie-a', 'calendar-tie-z']);
+});
+
 test('calendar deadline date bounds include the final day and use the deadline index', async () => {
   const learnerId = 'learner-calendar-index';
   database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
