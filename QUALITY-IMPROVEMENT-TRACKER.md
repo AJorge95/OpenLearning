@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Explain the sign-in return destination
+
+- **Reviewed:** When sign-in preserved a requested admin or staff route, the login page still described the action as continuing learning.
+- **Improvement:** Show a return-page message for non-default destinations and keep the existing learner copy for regular sign-ins.
+- **Why it helps:** Users understand why they were asked to sign in and what will happen after authentication.
+- **Checked:** Focused destination tests passed (6/6); full `npm test` passed (384/384), `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The live login page showed the return-specific message after opening the protected user route, with no console warnings or errors.
+
 ## 2026-10-11 — Preserve requested routes through registration
 
 - **Reviewed:** The sign-in route preserves protected destinations, but the “Create an account” link dropped that destination and registration still navigated to `/courses`.
