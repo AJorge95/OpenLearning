@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reconfirm the account-role selector click boundary
+
+- **Reviewed:** The repeated report against the current account-details page, the role selector's trigger and popup widths, the user-supplied target path, and the administrator-update guard.
+- **Result:** No code change was needed. The current page uses a separate text label, a 9rem (144px) desktop trigger, a popup matched to that trigger, and pointer events only on the trigger. The reported account is the only active administrator, so its role control is disabled. On a fresh page, clicking the enabled selector opened it; clicking far to its right left it closed or dismissed it without changing the selected role. The supplied screenshot's wrapping-label DOM path is absent from the current served component.
+- **Backend review:** The administrator update remains transactional and rejects disabling or demoting the last active administrator; the existing route test covers that guard.
+- **Checked:** The fresh local account page rendered the disabled administrator selector; the enabled selector opened and dismissed on the outside-click sequence. The Vite source returned HTTP 200 with the current separate-label markup. Focused AppSelect and registration/admin tests passed (41/41), and `git diff --check` passed. No account or role data was changed.
+
 ## 2026-10-11 — Make public course enrollment atomic
 
 - **Reviewed:** Public course enrollment inserted the enrollment record before creating the learner's initial course state. If that second write failed, the API returned HTTP 500 while leaving the learner enrolled without the course state required for deadlines and progress.
