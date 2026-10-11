@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Validate approval policy before settings writes
+
+- **Reviewed:** Admin settings validation order, the immediate transaction that saves settings and audit history, and the labeled approval checkbox with its explanatory copy.
+- **Improvement:** Parse the registration-approval boolean with the other request fields before opening the write transaction. Add a regression test that blocks a platform-name write and confirms malformed approval input still returns its specific 400 validation error without changing the stored setting.
+- **Why it helps:** Invalid settings fail with the actionable policy error before acquiring the write path, instead of allowing an unrelated database failure to mask the input problem.
+- **Interface review:** The existing approval checkbox remains wrapped in its label with supporting text; no rendered UI change was needed.
+- **Checked:** Registration/settings server tests passed (28/28); the full suite passed (523/523); `npm run build` passed strict TypeScript checking and Vite bundling; `git diff --check` passed.
+
 ## 2026-10-11 — Align the API default with the local development proxy
 
 - **Reviewed:** Express's default listen port, the Vite `/api` and `/media` proxy targets, the environment example, README startup instructions, and config validation.

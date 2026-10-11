@@ -749,6 +749,10 @@ authRouter.put('/admin/settings', requireAdmin, (req, res) => {
   const registrationEnabled = req.body?.registrationEnabled === undefined
     ? setting('registration_enabled') !== '0'
     : parseRegistrationEnabled(req.body.registrationEnabled);
+  // Validate the full payload before opening the write transaction so invalid policies never enter the settings write path.
+  const registrationApprovalRequired = req.body?.registrationApprovalRequired === undefined
+    ? setting('registration_approval_required') === '1'
+    : parseRegistrationApprovalRequired(req.body.registrationApprovalRequired);
   const userLimit = req.body?.userLimit === undefined ? getUserLimit() : parseUserLimit(req.body.userLimit);
   const platformIcon = Object.hasOwn(req.body || {}, 'platformIcon') ? parsePlatformIcon(req.body.platformIcon) : undefined;
   const update = db.transaction(() => {
@@ -762,9 +766,6 @@ authRouter.put('/admin/settings', requireAdmin, (req, res) => {
     updateSetting('theme_palette', themePalette, 'themePalette');
     updateSetting('connection_protocol', connectionProtocol, 'connectionProtocol');
     updateSetting('registration_enabled', registrationEnabled ? '1' : '0', 'registrationEnabled');
-    const registrationApprovalRequired = req.body?.registrationApprovalRequired === undefined
-      ? setting('registration_approval_required') === '1'
-      : parseRegistrationApprovalRequired(req.body.registrationApprovalRequired);
     updateSetting('registration_approval_required', registrationApprovalRequired ? '1' : '0', 'registrationApprovalRequired');
     updateSetting('user_limit', userLimit, 'userLimit');
     if (platformIcon !== undefined && setting('platform_icon') !== platformIcon) {

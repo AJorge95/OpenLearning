@@ -423,6 +423,27 @@ test('platform setting changes roll back when their required audit entry cannot 
     WHERE action = 'platform.settings_updated'`).get().count, originalAuditCount + 1);
 });
 
+test('platform settings validate registration approval before attempting database writes', async () => {
+  const originalName = database.prepare('SELECT value FROM app_settings WHERE key = ?').get('platform_name')?.value ?? null;
+  database.exec(`CREATE TRIGGER reject_invalid_policy_write
+    BEFORE UPDATE ON app_settings
+    WHEN OLD.key = 'platform_name'
+    BEGIN SELECT RAISE(ABORT, 'settings write should not run for invalid input'); END`);
+
+  try {
+    const response = await fetch(apiUrl('/admin/settings'), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ platformName: 'Rejected settings update', registrationApprovalRequired: 'yes' }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'invalid_registration_approval_setting');
+    assert.equal(database.prepare('SELECT value FROM app_settings WHERE key = ?').get('platform_name')?.value ?? null, originalName);
+  } finally {
+    database.exec('DROP TRIGGER reject_invalid_policy_write');
+  }
+});
+
 test('platform settings roll back when their response count cannot be read', async () => {
   const currentSetting = (key) => database.prepare('SELECT value FROM app_settings WHERE key = ?').get(key)?.value ?? null;
   setSetting('platform_name', 'Before count failure');
