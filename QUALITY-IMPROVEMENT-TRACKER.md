@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recover from empty administrator log filters
+
+- **Reviewed:** The Audit log and System log empty states explained that filters matched no entries but left administrators to edit each filter manually before retrying.
+- **Improvement:** Add a “Clear filters” action to filtered empty results on both pages. It clears the draft and applied search, resets the action or severity selection, and returns pagination to page one; unfiltered empty states and request-error retry behavior stay distinct.
+- **Why it helps:** Administrators can recover from an overly restrictive search in one predictable step without losing the existing server-side filter and paging behavior.
+- **Backend review:** Existing admin-only endpoints continue to apply validated filters before paging; no API or persistence changes were needed.
+- **Checked:** The focused client regressions passed (3/3), the full `npm test -- --test-reporter=dot` suite and `npm run build` passed, and `git diff --check` passed. In the authenticated local browser, an unmatched query showed the clear action on both pages; clearing restored system-log rows (50 of 697) and audit-log rows (50 of 75). Both pages reported no console warnings or errors. The standalone Browser plugin was unavailable; rendered checks used the connected in-app browser through CUA.
+
 ## 2026-10-11 — Explain reset-status polling guards
 
 - **Reviewed:** The Settings page polls for status changes initiated by other administrators, and several lifecycle guards control when those requests run.
