@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Require WebP image data for platform icons
+
+- **Reviewed:** The platform-icon WebP dimension parser and the [WebP container specification](https://developers.google.com/speed/webp/docs/riff_container) for simple, extended, and animated RIFF layouts.
+- **Improvement:** Walk bounded RIFF chunks, validate VP8X and frame headers, and require image data for a static frame or at least one animation frame before accepting dimensions. Reject empty VP8X canvases and VP8 headers without a payload; retain simple, extended, and animated WebP support.
+- **Why it helps:** A structurally empty WebP can no longer replace the platform icon and then render as a broken image.
+- **Interface review:** The picker already lists WebP and announces server validation errors, so no interface change was needed.
+- **Checked:** The focused registration and platform-settings suite passed (26/26), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict type checking and Vite bundling, and `git diff --check` passed.
+
 ## 2026-10-11 — Require JPEG scan data for platform icons
 
 - **Reviewed:** The platform-icon JPEG marker parser, upload limits, settings write/audit rollback, and the picker’s visible format guidance and error announcement.
