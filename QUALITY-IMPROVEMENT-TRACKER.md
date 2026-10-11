@@ -1,5 +1,26 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep the current course version outside older-version pages
+
+- **Reviewed:** The editor now keeps the latest published version visible and collapses older versions, but the API still counted that pinned version in the paginated list. At exactly 21 published versions, the first page therefore held only 19 of the 20 prior versions and exposed an unnecessary second page.
+- **Improvement:** Return the current version separately, count and page only prior versions, and clamp requests using that prior-version count. Keep the current row visible even when a course has only one version, and show the exact number of older versions in the disclosure.
+- **Why it helps:** The always-visible current version no longer consumes a history slot. Staff get complete 20-row pages and accurate counts while preserving bounded requests, indexed ordering, and restore actions for each older version.
+- **Checked:** The course analytics route tests cover 42 versions over three pages, the exact 20-prior-version boundary, stale-page clamping, and the indexed query plan. The focused course-history/quiz tests passed (107/107); the full `npm test -- --test-reporter=dot` suite and `npm run build` (strict TypeScript plus Vite) passed. `git diff --check` passed. At 1999×1244 in the signed-in local browser, Version 8 remained visible, “Previous versions 7” started collapsed, and expanding it showed versions 7–1 with restore actions. No course data or publication controls were changed.
+
+## 2026-10-11 — Randomize quiz choices and return aggregate results
+
+- **Reviewed:** Choice order was fixed for every learner, and the attempt submission and result endpoints returned per-question snapshots containing selected and correct answer IDs.
+- **Improvement:** Shuffle choices once per attempt and reshuffle on retry. Return only the attempt score, correct-answer count, question count, pass state, and submission time; remove answer-review details and allow retries only after a failed attempt. Move focus to the result heading when submission completes.
+- **Why it helps:** Learners see consistent aggregate feedback and a clear result state, while attempt responses no longer disclose answer keys or selected answers to the learner client.
+- **Checked:** Deterministic shuffle, stable-per-attempt wiring, retry behavior, aggregate response fields, per-user result access, and incomplete-submission rejection passed in focused coverage. The full `npm test -- --test-reporter=dot` suite and `npm run build` (strict TypeScript plus Vite) passed; `git diff --check` passed. Live quiz-result rendering was not exercised in this cycle.
+
+## 2026-10-11 — Recheck the account-role selector's right edge
+
+- **Reviewed:** The supplied target path and screenshot against the current separate-label markup, 9rem trigger, trigger-sized popup, and outside-click behavior.
+- **Result:** No additional selector rule was needed. On the reported account page the selector was disabled because that account is the only active administrator, so I checked an enabled learner account without selecting a new role. A click in the blank area to the right left a closed menu closed; after opening the trigger, the same click dismissed the menu and the displayed role remained Learner.
+- **Why no change:** The current control's pointer target follows the visible trigger and outside clicks dismiss it; the supplied screenshot identifies an older wrapping-label structure that is absent from this checkout.
+- **Checked:** Local account-details page at 1999×1244, accessibility state before and after the closed/open/outside-click sequence, and `node --test tests/client/app-select-label.test.js tests/client/app-select-position.test.js` (14/14). No role or account action was submitted.
+
 ## 2026-10-11 — Close the session cleanup timer during shutdown
 
 - **Reviewed:** The SQLite session store starts a daily expiry-pruning timer, while graceful shutdown drained HTTP requests and closed SQLite without explicitly stopping that timer. Several tests also reached into the store's timer property to clean it up.

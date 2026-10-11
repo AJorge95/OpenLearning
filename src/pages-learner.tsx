@@ -8,6 +8,7 @@ import { courseCatalogCategoryOptions, courseCatalogParams, hasCourseCatalogFilt
 import { formatLearningDeadlineDate, getLearningDeadlineStatus } from './learning-deadline';
 import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from './course-navigation';
 import { summarizeCourseProgress } from './course-progress';
+import { shuffleQuizChoices } from './quiz-choice-order';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
 import { tryEnterFullscreen } from './video-fullscreen';
 import { selectVideoCaptionTrack } from './video-captions';
@@ -1477,9 +1478,10 @@ export function QuizPage() {
   const submitSequenceRef = useRef(0);
   const submitInFlightRouteKeyRef = useRef<string | null>(null);
   const firstAnswerRef = useRef<HTMLInputElement | null>(null);
-  const reviewHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const resultHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const focusFirstAnswerRef = useRef(false);
-  const focusReviewRef = useRef(false);
+  const focusResultRef = useRef(false);
+  const [choiceShuffleGeneration, setChoiceShuffleGeneration] = useState(0);
   const [course, setCourse] = useState<Course | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<QuizAttempt | null>(null);
@@ -1510,7 +1512,7 @@ export function QuizPage() {
           try {
             const response = await api.get<{ attempt: QuizAttempt }>(`/api/quizzes/${quizId}/attempts/${latestAttempt.id}`, { signal: requestController.signal });
             if (isCurrentRequest()) {
-              focusReviewRef.current = true;
+              focusResultRef.current = true;
               setResult(response.attempt);
               setResultRouteKey(requestedRouteKey);
             }
@@ -1536,16 +1538,20 @@ export function QuizPage() {
   }, [courseId, quizId, courseLoadRetryVersion]);
   useEffect(() => {
     submitSequenceRef.current += 1;
-    focusFirstAnswerRef.current = false; focusReviewRef.current = false;
+    focusFirstAnswerRef.current = false; focusResultRef.current = false;
     setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setSaving(false);
   }, [courseId, quizId]);
   const quiz = course?.modules?.find((module) => module.quiz?.id === quizId)?.quiz;
   const currentResult = resultRouteKey === routeKey ? result : null;
+  const choiceOrders = useMemo(() => new Map((quiz?.questions ?? []).map((question, index) => [
+    question.id || String(index),
+    shuffleQuizChoices(question.choices),
+  ])), [quiz?.questions, routeKey, choiceShuffleGeneration]);
 
   useEffect(() => {
-    if (currentResult && focusReviewRef.current) {
-      focusReviewRef.current = false;
-      reviewHeadingRef.current?.focus();
+    if (currentResult && focusResultRef.current) {
+      focusResultRef.current = false;
+      resultHeadingRef.current?.focus();
     } else if (!currentResult && focusFirstAnswerRef.current) {
       focusFirstAnswerRef.current = false;
       firstAnswerRef.current?.focus();
@@ -1563,7 +1569,7 @@ export function QuizPage() {
     try {
       const response = await api.post<{ attempt: QuizAttempt; certificate: CourseCertificate | null }>(`/api/quizzes/${quiz.id}/attempts`, { answers });
       if (isCurrentSubmission()) {
-        focusReviewRef.current = true;
+        focusResultRef.current = true;
         setResult(response.attempt); setAvailableCertificate(response.certificate); setResultRouteKey(requestedRouteKey);
         setCourse((currentCourse) => {
           if (!currentCourse?.modules || routeKeyRef.current !== requestedRouteKey) return currentCourse;
@@ -1595,7 +1601,6 @@ export function QuizPage() {
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading quiz…</div>;
   if (attemptLoadFailed) return <div className="narrow-content"><ErrorNotice message={error || 'Your latest quiz result could not be loaded.'} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} /><Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
   if (!course || !quiz) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
-  const questionsToShow = currentResult?.questions || quiz.questions;
   const answeredCount = quiz.questions.filter((question) => Boolean(answers[question.id || ''])).length;
   const allAnswered = quiz.questions.length > 0 && answeredCount === quiz.questions.length;
   const courseFinished = course.completed || availableCertificate?.courseId === course.id;
@@ -1603,6 +1608,7 @@ export function QuizPage() {
 
   function retryQuiz() {
     focusFirstAnswerRef.current = true;
+    setChoiceShuffleGeneration((generation) => generation + 1);
     setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey('');
   }
 
@@ -1610,39 +1616,22 @@ export function QuizPage() {
     <div className="breadcrumbs"><Link to={`/courses/${course.id}`}>{course.title}</Link><span>/</span><span>{quiz.title}</span></div>
     <div className="quiz-layout">
       <div className="quiz-main">
-        <div className="quiz-topline"><span>{formatCountLabel(quiz.questions.length, 'question', 'questions')}</span><span>Pass mark {quiz.passMark}%</span></div>
+        {!currentResult && <div className="quiz-topline"><span>{formatCountLabel(quiz.questions.length, 'question', 'questions')}</span><span>Pass mark {quiz.passMark}%</span></div>}
         <h1>{quiz.title}</h1>
         {!currentResult ? <><p className="lead-copy">Choose one answer for each question. You can retry this quiz if you need another attempt.</p>
           {error && <ErrorNotice message={error} />}
           <form onSubmit={submit} className="quiz-form" aria-busy={saving}>
             {quiz.questions.map((question, index) => <fieldset className="question-block" key={question.id || index} disabled={saving}>
               <legend><span className="question-number">{String(index + 1).padStart(2, '0')}</span>{question.prompt}</legend>
-              <div className="quiz-choices">{question.choices.map((choice, choiceIndex) => <label className={`quiz-choice ${answers[question.id || ''] === choice.id ? 'choice-selected' : ''}`} key={choice.id || choiceIndex}><input ref={index === 0 && choiceIndex === 0 ? firstAnswerRef : undefined} type="radio" name={question.id} value={choice.id} required checked={answers[question.id || ''] === choice.id} onChange={() => setAnswers({ ...answers, [question.id || '']: choice.id || '' })} /><span className="choice-letter">{String.fromCharCode(65 + choiceIndex)}</span><span>{choice.text}</span></label>)}</div>
+              <div className="quiz-choices">{(choiceOrders.get(question.id || String(index)) ?? question.choices).map((choice, choiceIndex) => <label className={`quiz-choice ${answers[question.id || ''] === choice.id ? 'choice-selected' : ''}`} key={choice.id || choiceIndex}><input ref={index === 0 && choiceIndex === 0 ? firstAnswerRef : undefined} type="radio" name={question.id} value={choice.id} required checked={answers[question.id || ''] === choice.id} onChange={() => setAnswers({ ...answers, [question.id || '']: choice.id || '' })} /><span className="choice-letter">{String.fromCharCode(65 + choiceIndex)}</span><span>{choice.text}</span></label>)}</div>
             </fieldset>)}
             {!quiz.questions.length && <EmptyState icon={<CircleHelp size={24} />} title="This quiz is being prepared" detail="Check back when your course moderator has added questions." />}
             {quiz.questions.length > 0 && <p id="quiz-submit-hint" className="quiz-submit-hint" role="status" aria-live="polite" aria-atomic="true">{allAnswered ? `All ${formatCountLabel(quiz.questions.length, 'question', 'questions')} answered.` : `${answeredCount} of ${formatCountLabel(quiz.questions.length, 'question', 'questions')} answered. Answer the rest to enable submission.`}</p>}
             <Button type="submit" aria-describedby={quiz.questions.length > 0 ? 'quiz-submit-hint' : undefined} disabled={!allAnswered || saving}>{saving ? 'Checking answers…' : 'Submit answers'}<ArrowRight size={17} /></Button>
           </form>
         </> : <div className="quiz-results">
-          <div className={`score-panel ${currentResult.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{currentResult.passed ? <Check size={22} /> : <Clock3 size={22} />}</span><div><span className="score-label">{currentResult.passed ? 'Quiz passed' : 'Keep practicing'}</span><strong>{currentResult.score}%</strong><small>{currentResult.passed ? `You reached the ${currentResult.passMark ?? quiz.passMark}% pass mark.` : `You need ${currentResult.passMark ?? quiz.passMark}% to pass.`}</small></div></div>
-          <h2 ref={reviewHeadingRef} tabIndex={-1}>Review your answers</h2>
-          {questionsToShow.map((question, index) => {
-            const attemptQuestion = question as NonNullable<QuizAttempt['questions']>[number];
-            const correctChoiceId = attemptQuestion.correctChoiceId;
-            const selectedChoiceId = attemptQuestion.selectedChoiceId;
-            const answerIsCorrect = Boolean(correctChoiceId && selectedChoiceId === correctChoiceId);
-            const selectedChoiceText = question.choices.find((choice) => choice.id === selectedChoiceId)?.text || 'No answer selected';
-            const correctChoiceText = question.choices.find((choice) => choice.id === correctChoiceId)?.text;
-            return <div className="result-question" key={question.id || index}>
-              <h3>{index + 1}. {question.prompt}</h3>
-              <p className={answerIsCorrect ? 'answer-correct' : 'answer-incorrect'}>
-                <strong>{answerIsCorrect ? 'Your answer is correct: ' : 'Your answer is incorrect: '}</strong>
-                {selectedChoiceText}
-              </p>
-              {!answerIsCorrect && <p className="correct-answer">Correct answer: {correctChoiceText}</p>}
-              {question.explanation && <p className="answer-explanation">{question.explanation}</p>}
-            </div>;
-          })}
+          <div className={`score-panel ${currentResult.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{currentResult.passed ? <Check size={22} /> : <Clock3 size={22} />}</span><div><span className="score-label">{currentResult.passed ? 'Quiz passed' : 'Quiz not passed'}</span><strong>{currentResult.correctCount} of {currentResult.questionCount} correct</strong><small>{currentResult.score}%</small></div></div>
+          <h2 ref={resultHeadingRef} tabIndex={-1}>Quiz result</h2>
           <div className="quiz-result-actions">
             {courseFinished && (user?.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} />Add name for certificate</Link>)}
             {nextResultActivity && <Link className="button button-primary" to={nextResultActivity.type === 'quiz'
@@ -1650,7 +1639,7 @@ export function QuizPage() {
               : `/courses/${course.id}/learn/${nextResultActivity.id}`}>
               {nextResultActivity.type === 'quiz' ? 'Continue to quiz' : 'Continue learning'}<ArrowRight size={17} />
             </Link>}
-            <Button variant="secondary" onClick={retryQuiz}>Try again</Button>
+            {!currentResult.passed && <Button variant="secondary" onClick={retryQuiz}>Try again</Button>}
             <Link className={`button ${nextResultActivity ? 'button-secondary' : 'button-primary'}`} to={`/courses/${course.id}`}>Back to course</Link>
           </div>
         </div>}

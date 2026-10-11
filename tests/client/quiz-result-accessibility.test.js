@@ -4,16 +4,17 @@ import test from 'node:test';
 
 const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
 
-test('quiz review labels each selected answer with its correctness in text', () => {
-  assert.match(source, /<strong>\{answerIsCorrect \? 'Your answer is correct: ' : 'Your answer is incorrect: '\}<\/strong>/);
-  assert.match(source, /className=\{answerIsCorrect \? 'answer-correct' : 'answer-incorrect'\}/);
-  assert.match(source, /!answerIsCorrect && <p className="correct-answer">Correct answer:/);
+test('quiz results provide an accessible aggregate score without answer review', () => {
+  assert.match(source, /<div className=\{`score-panel \$\{currentResult\.passed \? 'score-pass' : 'score-retry'\}`\} role="status">/);
+  assert.match(source, /\{currentResult\.correctCount\} of \{currentResult\.questionCount\} correct/);
+  assert.match(source, /<h2 ref=\{resultHeadingRef\} tabIndex=\{-1\}>Quiz result<\/h2>/);
+  assert.doesNotMatch(source, /Review your answers|Correct answer:|Your answer is (?:correct|incorrect)/);
 });
 
 test('quiz submission and retry move focus into the newly displayed view', () => {
-  assert.match(source, /if \(isCurrentSubmission\(\)\) \{\s*focusReviewRef\.current = true;\s*setResult\(response\.attempt\)/);
-  assert.match(source, /if \(currentResult && focusReviewRef\.current\) \{\s*focusReviewRef\.current = false;\s*reviewHeadingRef\.current\?\.focus\(\);\s*\} else if \(!currentResult && focusFirstAnswerRef\.current\) \{\s*focusFirstAnswerRef\.current = false;\s*firstAnswerRef\.current\?\.focus\(\);/);
-  assert.match(source, /function retryQuiz\(\) \{\s*focusFirstAnswerRef\.current = true;\s*setAnswers\(\{\}\); setResult\(null\);/);
+  assert.match(source, /if \(isCurrentSubmission\(\)\) \{\s*focusResultRef\.current = true;\s*setResult\(response\.attempt\)/);
+  assert.match(source, /if \(currentResult && focusResultRef\.current\) \{\s*focusResultRef\.current = false;\s*resultHeadingRef\.current\?\.focus\(\);\s*\} else if \(!currentResult && focusFirstAnswerRef\.current\) \{\s*focusFirstAnswerRef\.current = false;\s*firstAnswerRef\.current\?\.focus\(\);/);
+  assert.match(source, /function retryQuiz\(\) \{\s*focusFirstAnswerRef\.current = true;\s*setChoiceShuffleGeneration\(\(generation\) => generation \+ 1\);\s*setAnswers\(\{\}\); setResult\(null\);/);
 });
 
 test('each quiz question exposes its required answer through native radio semantics', () => {

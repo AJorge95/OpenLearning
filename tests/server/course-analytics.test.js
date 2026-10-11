@@ -159,8 +159,7 @@ function userHeaders(userId) {
   return { 'x-test-user': userId, connection: 'close' };
 }
 
-test('course version history pages are bounded, newest first, and clamp stale page requests', async () => {
-  const courseId = 'course-version-history-pagination';
+function insertCourseVersionHistory(courseId, versionCount) {
   const insertHistory = database.transaction(() => {
     database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
       VALUES (?, ?, 'published', 'admin-1', 'admin-1')`).run(courseId, 'Version history pagination');
@@ -168,15 +167,20 @@ test('course version history pages are bounded, newest first, and clamp stale pa
       VALUES (?, ?, 'published', 'admin-1', 'admin-1', ?)`);
     const addVersion = database.prepare(`INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
       VALUES (?, ?, ?, ?, 'admin-1')`);
-    for (let versionNumber = 1; versionNumber <= 42; versionNumber += 1) {
+    for (let versionNumber = 1; versionNumber <= versionCount; versionNumber += 1) {
       const storageCourseId = versionNumber === 1 ? courseId : `${courseId}-storage-${versionNumber}`;
       if (versionNumber > 1) addStorageCourse.run(storageCourseId, `Version ${versionNumber}`, courseId);
       addVersion.run(`${courseId}-version-${versionNumber}`, courseId, storageCourseId, versionNumber);
     }
   });
+  insertHistory();
+}
+
+test('course version history pages are bounded, newest first, and clamp stale page requests', async () => {
+  const courseId = 'course-version-history-pagination';
 
   try {
-    insertHistory();
+    insertCourseVersionHistory(courseId, 42);
     const fetchPage = async (page) => {
       const response = await fetch(apiUrl(`/manage/courses/${courseId}/versions?page=${page}`), {
         headers: userHeaders('admin-1'),
@@ -186,23 +190,24 @@ test('course version history pages are bounded, newest first, and clamp stale pa
     };
 
     const firstPage = await fetchPage(1);
-    assert.equal(firstPage.total, 42);
+    assert.equal(firstPage.total, 41);
     assert.equal(firstPage.pageSize, 20);
     assert.equal(firstPage.page, 1);
-    assert.equal(firstPage.currentVersionNumber, 42);
+    assert.equal(firstPage.currentVersion.version_number, 42);
     assert.equal(firstPage.hasMore, true);
-    assert.deepEqual(firstPage.versions.map((version) => version.version_number), Array.from({ length: 20 }, (_, index) => 42 - index));
+    assert.deepEqual(firstPage.versions.map((version) => version.version_number), Array.from({ length: 20 }, (_, index) => 41 - index));
 
     const secondPage = await fetchPage(2);
     assert.equal(secondPage.page, 2);
-    assert.equal(secondPage.currentVersionNumber, 42);
+    assert.equal(secondPage.currentVersion.version_number, 42);
     assert.equal(secondPage.hasMore, true);
-    assert.deepEqual(secondPage.versions.map((version) => version.version_number), Array.from({ length: 20 }, (_, index) => 22 - index));
+    assert.deepEqual(secondPage.versions.map((version) => version.version_number), Array.from({ length: 20 }, (_, index) => 21 - index));
 
     const lastPage = await fetchPage(99);
     assert.equal(lastPage.page, 3);
     assert.equal(lastPage.hasMore, false);
-    assert.deepEqual(lastPage.versions.map((version) => version.version_number), [2, 1]);
+    assert.equal(lastPage.currentVersion.version_number, 42);
+    assert.deepEqual(lastPage.versions.map((version) => version.version_number), [1]);
 
     const plan = database.prepare(`EXPLAIN QUERY PLAN SELECT v.*, u.username AS publisher, c.title
       FROM course_versions v LEFT JOIN users u ON u.id = v.published_by
@@ -210,6 +215,36 @@ test('course version history pages are bounded, newest first, and clamp stale pa
       WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT ? OFFSET ?`).all(courseId, 20, 20);
     assert.ok(plan.some((entry) => entry.detail.includes('course_versions_course_order')), JSON.stringify(plan));
     assert.ok(plan.every((entry) => !entry.detail.includes('USE TEMP B-TREE')), JSON.stringify(plan));
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
+test('course version history keeps twenty prior versions on a single page', async () => {
+  const courseId = 'course-version-history-page-boundary';
+  try {
+    insertCourseVersionHistory(courseId, 21);
+    const fetchPage = async (page) => {
+      const response = await fetch(apiUrl(`/manage/courses/${courseId}/versions?page=${page}`), {
+        headers: userHeaders('admin-1'),
+      });
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+
+    const firstPage = await fetchPage(1);
+    assert.equal(firstPage.total, 20);
+    assert.equal(firstPage.currentVersion.version_number, 21);
+    assert.equal(firstPage.pageSize, 20);
+    assert.equal(firstPage.page, 1);
+    assert.equal(firstPage.hasMore, false);
+    assert.deepEqual(firstPage.versions.map((version) => version.version_number), Array.from({ length: 20 }, (_, index) => 20 - index));
+
+    const stalePage = await fetchPage(2);
+    assert.equal(stalePage.page, 1);
+    assert.equal(stalePage.total, 20);
+    assert.equal(stalePage.hasMore, false);
+    assert.deepEqual(stalePage.versions.map((version) => version.version_number), Array.from({ length: 20 }, (_, index) => 20 - index));
   } finally {
     database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
   }
