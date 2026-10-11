@@ -6,7 +6,7 @@ import { ApiError } from './api';
 import { useAuth } from './auth-context';
 import { BRAND_PALETTES, MAX_BRAND_ICON_BYTES } from './branding';
 import type { BrandingPalette } from './branding';
-import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel, isAppSelectUnavailable } from './app-select-navigation';
+import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel, isAppSelectUnavailable, resolveAppSelectActiveIndex } from './app-select-navigation';
 import { getAppSelectHorizontalPosition, getAppSelectVerticalPosition } from './app-select-position';
 import { formatCountLabel } from './count-label';
 import { getHorizontalRevealScrollLeft } from './navigation-scroll';
@@ -283,6 +283,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   const menuOpen = open && !unavailable;
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
+  const activeOptionIndex = resolveAppSelectActiveIndex(options, activeIndex, selectedIndex);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 220, maxHeight: 280 });
 
   function focusIndex(index: number, direction: 1 | -1 = 1) {
@@ -315,7 +316,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   function searchByKey(key: string) {
     const char = key.toLocaleLowerCase();
     const nextPrefix = `${typeaheadRef.current}${char}`;
-    const startIndex = open ? activeIndex : selectedIndex;
+    const startIndex = open ? activeOptionIndex : selectedIndex;
     const characters = Array.from(nextPrefix);
     const repeatedCharacter = characters.length > 1 && characters.every((candidate) => candidate.toLocaleLowerCase() === char);
     let prefix = repeatedCharacter ? char : nextPrefix;
@@ -339,7 +340,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
       event.preventDefault();
       const direction = event.key === 'ArrowDown' ? 1 : -1;
       if (!open) openMenu();
-      else focusIndex(activeIndex + direction, direction);
+      else focusIndex(activeOptionIndex + direction, direction);
       return;
     }
     if (event.key === 'Home' && open) { event.preventDefault(); focusIndex(0, 1); return; }
@@ -347,7 +348,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
     if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(false); return; }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      if (open) choose(activeIndex);
+      if (open) choose(activeOptionIndex);
       else openMenu();
       return;
     }
@@ -383,7 +384,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   }, []);
 
   return <div ref={rootRef} className={`app-select ${className}`.trim()}>
-    <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-labelledby={ariaLabelledBy} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-required={required || undefined} aria-haspopup="listbox" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined} aria-activedescendant={menuOpen ? `${menuId}-option-${activeIndex}` : undefined} disabled={unavailable} onClick={() => menuOpen ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
+    <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-labelledby={ariaLabelledBy} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-required={required || undefined} aria-haspopup="listbox" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined} aria-activedescendant={menuOpen ? `${menuId}-option-${activeOptionIndex}` : undefined} disabled={unavailable} onClick={() => menuOpen ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
       {leadingIcon && <span className="app-select-leading" aria-hidden="true">{leadingIcon}</span>}<span className="app-select-value">{getAppSelectDisplayLabel(options, value)}</span><ChevronDown className="app-select-chevron" size={16} aria-hidden="true" />
     </button>
     {menuOpen && createPortal(<div ref={menuRef} id={menuId} className={`app-select-menu${matchTriggerWidth ? ' app-select-menu--match-trigger' : ''}`} role="listbox" aria-label={`${ariaLabel} options`} style={position}>

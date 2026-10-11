@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep AppSelect keyboard focus valid as options change
+
+- **Reviewed:** Shared custom-select typeahead, keyboard selection, active-descendant announcements, and call sites whose option lists can change as page data refreshes.
+- **Improvement:** Resolve the stored active index against the current enabled options before using it for keyboard search, Enter selection, or `aria-activedescendant`. If the current index was removed or disabled, fall back to the selected enabled option.
+- **Why it helps:** A live option refresh cannot leave assistive technology pointing at a missing listbox option or make Enter act on a stale index.
+- **Interface and backend review:** The selector's visible labels, popup positioning, and server contracts are unchanged; no backend change was needed.
+- **Checked:** Focused AppSelect navigation, label, and positioning tests passed (25/25), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict type checking and Vite bundling, and `git diff --check` passed. Live option-refresh interaction was not rendered in the signed-out browser session.
+
 ## 2026-10-11 — Keep the captioned video controls from overlapping on phones
 
 - **Reviewed:** The learner player's responsive control grid, its child order when captions are available, and the full-screen button placement rules below 600px.
