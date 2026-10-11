@@ -600,7 +600,8 @@ programsRouter.post('/manage/courses/:courseId/versions/:versionId/restore', req
   const restore = db.transaction(() => {
     const current = requireCourseManager(req.params.courseId, req.currentUser);
     const logicalId = current.logical_course_id || current.id;
-    const source = courseVersionHistory(logicalId).find((version) => version.id === req.params.versionId);
+    const source = db.prepare('SELECT id, version_number FROM course_versions WHERE id = ? AND course_id = ?')
+      .get(req.params.versionId, logicalId);
     if (!source) fail(404, 'Course version not found.', 'not_found');
     const requiresRecompletion = req.body?.requiresRecompletion === undefined
       ? false : booleanValue(req.body.requiresRecompletion, 'Recompletion option');
