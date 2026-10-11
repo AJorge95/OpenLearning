@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Make My Learning guidance fit every course state
+
+- **Reviewed:** The live My Learning page showed its only listed course as complete while the subtitle invited the user to “Pick up where you left off.” The page can also contain assigned but unstarted, in-progress, and completed courses, plus certificate history.
+- **Improvement:** Replace the in-progress-specific subtitle with “Start, continue, or review your courses.” The wording remains useful across all course states.
+- **Why it helps:** Learners with only completed courses are no longer prompted as though they have unfinished work, while new and active course options remain clear.
+- **Backend review:** The existing paginated `/api/my-learning` route returns accessible course progress and the separate certificate route supplies history; both already support the page’s available actions. No API change was needed.
+- **Checked:** The full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. At `http://127.0.0.1:5173/my-learning`, the accessibility tree and screenshot showed the new subtitle above the completed course card.
+
 ## 2026-10-11 — Name completed-course navigation as review
 
 - **Reviewed:** The live course overview showed 100% completion, while both primary actions said “Continue learning.” The existing navigation intentionally returns the first lesson when every activity is complete so the material stays reviewable; exact completion is available from lesson and quiz state through `summarizeCourseProgress`.

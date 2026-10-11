@@ -348,7 +348,7 @@ export function MyLearningPage() {
   const hasEmptyCourses = !loading && !error && courses.length === 0;
   const hasEmptyLearning = hasEmptyCourses && !loadingCertificates && !certificateError && certificates.length === 0;
   return <div className="catalog-page my-learning-page">
-    <PageHeading title="My learning" subtitle="Pick up where you left off." />
+    <PageHeading title="My learning" subtitle="Start, continue, or review your courses." />
     {error && <ErrorNotice message={error} onRetry={courseLoadMoreFailed ? loadMore : load} />}
     {hasEmptyLearning && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{learningEmptyState.title}. {learningEmptyState.detail}</p>}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading your courses…</div> : courses.length ? <div className="course-grid">{courses.map((course, index) => <div className="my-learning-card" key={course.id}><CourseCard course={course} continueLabel coverLoading={index === 0 ? 'eager' : 'lazy'} />{user?.role === 'learner' && course.deadlineAt && <LearningDeadlineLink deadlineAt={course.deadlineAt} completed={course.completed} />}{user?.role === 'learner' && course.completed && (user.firstName?.trim() && user.lastName?.trim() ? <Link className="certificate-card-link" to={`/my-learning/certificates/${course.id}`}><Award size={16} />View certificate</Link> : <Link className="certificate-card-link" to="/account/security"><Award size={16} />Add your name for certificate</Link>)}</div>)}</div> : hasEmptyCourses && !certificates.length && <EmptyState title={learningEmptyState.title} detail={learningEmptyState.detail} action={<Link className="button button-primary" to="/courses">Browse courses</Link>} />}
