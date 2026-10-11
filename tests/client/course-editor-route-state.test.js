@@ -69,6 +69,21 @@ test('a stale course refresh cannot abort the newly selected course request', ()
     'ignore stale refreshes before they can abort the active route request');
 });
 
+test('course navigation clears the inline add-module draft and scopes late responses', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  assert.match(source, /useEffect\(\(\) => \{\s*let active = true;\s*setModuleTitle\(''\); setAddingModule\(false\); addModuleInvokerRef\.current = null;/);
+
+  const addStart = source.indexOf('async function addModule(event: React.FormEvent)');
+  const addEnd = source.indexOf('\n\n  async function addLesson', addStart);
+  const addSource = source.slice(addStart, addEnd);
+  assert.ok(addStart >= 0 && addEnd > addStart);
+  assert.match(addSource, /const requestedCourseId = courseId/);
+  assert.match(addSource, /if \(routeCourseIdRef\.current !== requestedCourseId\) return;\s*await api\.post/);
+  assert.match(addSource, /await api\.post[\s\S]*?if \(routeCourseIdRef\.current !== requestedCourseId\) return;\s*setModuleTitle\(''\)/);
+  assert.match(addSource, /if \(routeCourseIdRef\.current === requestedCourseId\) setError\(/);
+  assert.match(source, /aria-expanded=\{addingModule\}[\s\S]*?disabled=\{Boolean\(editingModuleTitle\) \|\| saving \|\| deletingCourse \|\| addingModuleBusy\}/);
+});
+
 test('course publishing keeps save failures distinct from settings refresh failures', () => {
   const source = fs.readFileSync(sourcePath, 'utf8');
   const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
