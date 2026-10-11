@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
+import { deflateSync } from 'node:zlib';
 import express from 'express';
 import session from 'express-session';
 import { after, before, test } from 'node:test';
@@ -66,6 +67,34 @@ function apiUrl(pathname) {
 
 function assertApiError(action, code, status = 400) {
   assert.throws(action, (error) => error?.status === status && error?.code === code);
+}
+
+function pngCrc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const typeBytes = Buffer.from(type, 'ascii');
+  const chunk = Buffer.alloc(12 + data.length);
+  chunk.writeUInt32BE(data.length, 0);
+  typeBytes.copy(chunk, 4);
+  data.copy(chunk, 8);
+  chunk.writeUInt32BE(pngCrc32(Buffer.concat([typeBytes, data])), 8 + data.length);
+  return chunk;
+}
+
+function createPlatformIconPng(red, green, blue) {
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk('IHDR', Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0])),
+    pngChunk('IDAT', deflateSync(Buffer.from([0, red, green, blue, 255]))),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
 }
 
 before(async () => {
@@ -396,6 +425,66 @@ test('platform settings reject truncated and oversized icons without changing br
   assert.equal(settingValue('platform_icon_version'), originalVersion);
   assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
     WHERE action = 'platform.settings_updated'`).get().count, originalAuditCount);
+});
+
+test('platform icon URLs remain stable across unrelated changes and change when the icon is replaced', async () => {
+  const settingValue = (key) => database.prepare('SELECT value FROM app_settings WHERE key = ?').get(key)?.value ?? null;
+  const originalName = settingValue('platform_name');
+  const originalIcon = settingValue('platform_icon');
+  const originalVersion = settingValue('platform_icon_version');
+  const firstIcon = createPlatformIconPng(31, 116, 75);
+  const secondIcon = createPlatformIconPng(26, 89, 142);
+  const iconDataUrl = (bytes) => `data:image/png;base64,${bytes.toString('base64')}`;
+  const updateSettings = (body) => fetch(apiUrl('/admin/settings'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify(body),
+  });
+  const restoreSetting = (key, value) => {
+    if (value === null) database.prepare('DELETE FROM app_settings WHERE key = ?').run(key);
+    else setSetting(key, value);
+  };
+
+  try {
+    const initialResponse = await updateSettings({
+      platformName: 'Icon cache test',
+      platformIcon: iconDataUrl(firstIcon),
+    });
+    assert.equal(initialResponse.status, 200);
+    const initialBranding = await initialResponse.json();
+    const initialUrl = initialBranding.platformIcon;
+    assert.match(initialUrl, /^\/api\/branding\/icon\?v=[0-9a-f-]+$/);
+    const initialVersion = new URL(initialUrl, 'http://127.0.0.1').searchParams.get('v');
+    assert.ok(initialVersion);
+
+    const firstIconResponse = await fetch(new URL(initialUrl, apiUrl('/')));
+    assert.equal(firstIconResponse.status, 200);
+    assert.equal(firstIconResponse.headers.get('content-type'), 'image/png');
+    assert.equal(firstIconResponse.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+    assert.deepEqual(Buffer.from(await firstIconResponse.arrayBuffer()), firstIcon);
+
+    const unrelatedUpdate = await updateSettings({ platformName: 'Renamed cache test' });
+    assert.equal(unrelatedUpdate.status, 200);
+    assert.equal((await unrelatedUpdate.json()).platformIcon, initialUrl);
+
+    const replacementResponse = await updateSettings({
+      platformName: 'Renamed cache test',
+      platformIcon: iconDataUrl(secondIcon),
+    });
+    assert.equal(replacementResponse.status, 200);
+    const replacementUrl = (await replacementResponse.json()).platformIcon;
+    const replacementVersion = new URL(replacementUrl, 'http://127.0.0.1').searchParams.get('v');
+    assert.notEqual(replacementVersion, initialVersion);
+
+    const replacedIconResponse = await fetch(new URL(replacementUrl, apiUrl('/')));
+    assert.equal(replacedIconResponse.status, 200);
+    assert.equal(replacedIconResponse.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+    assert.deepEqual(Buffer.from(await replacedIconResponse.arrayBuffer()), secondIcon);
+  } finally {
+    restoreSetting('platform_name', originalName);
+    restoreSetting('platform_icon', originalIcon);
+    restoreSetting('platform_icon_version', originalVersion);
+  }
 });
 
 test('the last active administrator cannot be disabled or demoted', async () => {
