@@ -1735,7 +1735,10 @@ export function CourseEditorPage() {
         <label>Category<input value={category} maxLength={100} onChange={(event) => setCategory(event.target.value)} placeholder="e.g. Professional development" disabled={saving} /></label>
         <fieldset className="visibility-field" disabled={saving}><legend>Visibility</legend><label><input type="radio" name="visibility" checked={visibility === 'public'} onChange={() => setVisibility('public')} />Public</label><label><input type="radio" name="visibility" checked={visibility === 'private'} onChange={() => setVisibility('private')} />Private</label></fieldset>
         <label className="completion-window-field">Completion window (optional)<input ref={completionWindowInputRef} type="number" min="1" max="3650" step="1" inputMode="numeric" value={completionWindowDays} aria-invalid={completionWindow.error ? true : undefined} aria-describedby={completionWindow.error ? 'completion-window-help completion-window-error' : 'completion-window-help'} onChange={(event) => { setCompletionWindowDays(event.target.value); setError((currentError) => currentError === COMPLETION_WINDOW_ERROR ? '' : currentError); }} placeholder="No deadline" disabled={saving} /><small id="completion-window-help">Days are 24-hour periods. Deadlines do not block course access.</small>{completionWindow.error && <small id="completion-window-error" className="completion-window-error">{completionWindow.error}</small>}</label>
-        <label className="field-wide">Description<textarea rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What will learners understand or be able to do after this course?" disabled={saving} /></label>
+        <label className="field-wide">Description
+          <textarea id="course-description" aria-describedby="course-description-count" rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What will learners understand or be able to do after this course?" disabled={saving} />
+          <small id="course-description-count" className="field-character-count">{description.length} / 6,000 characters</small>
+        </label>
       </div>
       <div className="cover-upload-row" aria-busy={coverValidating || coverProgress !== null || undefined}>
         <div>
