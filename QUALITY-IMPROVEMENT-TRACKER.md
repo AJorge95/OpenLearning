@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Protect path access when learners undo completion
+
+- **Reviewed:** The learner lesson page lets a learner undo a saved completion, and private courses in an assigned learning path are gated by prerequisite completion. The delete route had no integration regression proving that this reverse transition immediately revokes access to later courses.
+- **Improvement:** Add an isolated course-route test that opens a later private course with its prerequisite complete, removes the prerequisite completion through the learner endpoint, and verifies the first course stays available while the later course is denied.
+- **Why it helps:** A completion toggle cannot leave learners with stale access to private course material after they undo the prerequisite that granted it.
+- **Interface review:** The lesson control already changes between “Mark lesson complete” and “Completed” and reloads course progress after the request. No markup change was needed; the test protects the server-side access rule behind that interaction.
+- **Checked:** `node --test tests/server/lesson-completion.test.js` passed (1/1), covering successful undo, persisted progress removal, and path-access revocation. `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/server/lesson-completion.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Keep profile updates atomic with certificate issuance
 
 - **Reviewed:** Self-service profile changes committed the learner name and audit event before backfilling certificates. If certificate persistence failed, the request returned an error while the profile appeared saved, and a retry could not reliably distinguish the partial result. The administrator profile route already kept those writes in one transaction.
