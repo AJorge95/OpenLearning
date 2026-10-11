@@ -34,6 +34,7 @@ function progressForStorage(logicalId, contentId, user, version) {
 
 function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloadedContentCoursesById) {
   if (!courses.length) return [];
+  // Batch related reads across the requested page to avoid per-course summary queries.
   const logicalIdsByCourse = courses.map((course) => course.logical_course_id || course.id);
   const logicalIds = [...new Set(logicalIdsByCourse)];
   const logicalPlaceholders = logicalIds.map(() => '?').join(', ');
