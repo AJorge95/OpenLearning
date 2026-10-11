@@ -63,13 +63,14 @@ The development client is available at `http://127.0.0.1:5173` and proxies API a
 
 ## Checks
 
-Run the automated server utility and persistence checks with:
+Run the automated server utility and persistence checks, then type-check the client source:
 
 ```sh
 npm test
+npm run typecheck
 ```
 
-The suite uses Node's built-in test runner, in-memory and isolated temporary SQLite databases, and temporary filesystem fixtures. It does not start the application server or use the configured application data directory.
+The suite uses Node's built-in test runner, in-memory and isolated temporary SQLite databases, and temporary filesystem fixtures. It does not start the application server or use the configured application data directory. `npm run build` runs the strict TypeScript check before creating the production client bundle.
 
 ## Roles and permissions
 
