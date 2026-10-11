@@ -482,6 +482,67 @@ test('account changes and session revocations roll back when their required audi
     WHERE action = 'account.updated' AND entity_id = 'registration-fields-role-target'`).get().count, originalAuditCount + 1);
 });
 
+test('certificate-name updates roll back with certificate backfill failures and can be retried', async () => {
+  const userId = 'registration-fields-certificate-target';
+  const courseId = 'registration-fields-certificate-course';
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role)
+    VALUES (?, ?, ?, ?, 'learner')`).run(userId, 'registration_fields_certificate_target', 'certificate-target@example.invalid', 'not-used');
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Certificate Backfill', 'published', 'registration-fields-admin', 'registration-fields-admin')`).run(courseId);
+  database.prepare(`INSERT INTO course_modules (id, course_id, title, position)
+    VALUES ('registration-fields-certificate-module', ?, 'Module', 0)`).run(courseId);
+  database.prepare(`INSERT INTO lessons (id, module_id, title, position)
+    VALUES ('registration-fields-certificate-lesson', 'registration-fields-certificate-module', 'Lesson', 0)`).run();
+  database.prepare(`INSERT INTO course_versions
+    (id, course_id, storage_course_id, version_number, published_by, requires_recompletion, change_note)
+    VALUES ('registration-fields-certificate-version', ?, ?, 1, 'registration-fields-admin', 0, 'Initial publication')`)
+    .run(courseId, courseId);
+  database.prepare('INSERT INTO enrollments (id, course_id, user_id) VALUES (?, ?, ?)')
+    .run('registration-fields-certificate-enrollment', courseId, userId);
+  database.prepare('INSERT INTO lesson_progress (user_id, lesson_id) VALUES (?, ?)')
+    .run(userId, 'registration-fields-certificate-lesson');
+  const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'account.updated' AND entity_id = ?`).get(userId).count;
+  const originalConsoleError = console.error;
+  database.exec(`CREATE TRIGGER fail_profile_certificate_insert
+    BEFORE INSERT ON course_certificates WHEN NEW.user_id = '${userId}'
+    BEGIN SELECT RAISE(ABORT, 'certificate storage unavailable'); END`);
+
+  console.error = () => {};
+  try {
+    const failedResponse = await fetch(apiUrl(`/admin/users/${userId}`), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ firstName: 'Morgan', lastName: 'Reed' }),
+    });
+    assert.equal(failedResponse.status, 500);
+    assert.equal((await failedResponse.json()).code, 'internal_error');
+    assert.deepEqual(database.prepare('SELECT first_name, last_name FROM users WHERE id = ?').get(userId), {
+      first_name: '', last_name: '',
+    });
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+      WHERE action = 'account.updated' AND entity_id = ?`).get(userId).count, originalAuditCount);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_certificates WHERE user_id = ?').get(userId).count, 0);
+  } finally {
+    console.error = originalConsoleError;
+    database.exec('DROP TRIGGER IF EXISTS fail_profile_certificate_insert');
+  }
+
+  const retryResponse = await fetch(apiUrl(`/admin/users/${userId}`), {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ firstName: 'Morgan', lastName: 'Reed' }),
+  });
+  assert.equal(retryResponse.status, 200);
+  assert.equal((await retryResponse.json()).certificatesIssued, 1);
+  assert.deepEqual(database.prepare('SELECT first_name, last_name FROM users WHERE id = ?').get(userId), {
+    first_name: 'Morgan', last_name: 'Reed',
+  });
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'account.updated' AND entity_id = ?`).get(userId).count, originalAuditCount + 1);
+  assert.equal(database.prepare('SELECT recipient_name FROM course_certificates WHERE user_id = ?').get(userId).recipient_name, 'Morgan Reed');
+});
+
 test('administrator password resets and session revocations roll back when audit persistence fails', async () => {
   const userId = 'registration-fields-password-target';
   const originalPasswordHash = database.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId).password_hash;
