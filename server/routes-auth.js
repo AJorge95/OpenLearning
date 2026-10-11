@@ -750,11 +750,10 @@ authRouter.put('/admin/settings', requireAdmin, (req, res) => {
         details: { changedFields, platformName, themePalette, connectionProtocol, registrationEnabled, userLimit, platformIconChanged: changedFields.includes('platformIcon') } });
       if (!auditId) fail(500, 'Platform settings could not be saved because the audit log is unavailable.', 'audit_unavailable');
     }
-    return changedFields;
+    const userCount = registeredUserCount();
+    return { ...getPlatformConfiguration(userCount), registeredUserCount: userCount };
   });
-  const changedFields = update.immediate();
-  const userCount = registeredUserCount();
-  res.json({ ...getPlatformConfiguration(userCount), registeredUserCount: userCount });
+  res.json(update.immediate());
 });
 
 export function authRateLimitError() {

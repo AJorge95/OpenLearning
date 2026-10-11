@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep platform settings response reads inside the write transaction
+
+- **Reviewed:** The platform-settings PUT route committed setting changes and its audit entry before counting registered accounts and reading the response configuration. A failure in those follow-up reads returned an error after the change had already succeeded.
+- **Improvement:** Build the complete response, including the registered-account count and effective settings, inside the immediate transaction. Response-read failures now roll back settings and the audit entry together.
+- **Why it helps:** Administrators no longer receive a failed-save message for a setting change that was committed, and the returned account count describes the same transaction as the saved settings.
+- **Checked:** A regression first reproduced the false failure: the route returned 500 while changing the platform name and palette. After the fix, the injected count-query failure returns 500 without changing either setting or adding an audit row. `node --test tests/server/registration-fields.test.js` passed (27/27); the full `npm test -- --test-reporter=tap` suite passed (494/494); `npm run build` passed strict TypeScript checking and Vite bundling; JavaScript syntax checks and `git diff --check` passed.
+
 ## 2026-10-11 — Keep the quiz pass threshold visible in results
 
 - **Reviewed:** The new aggregate result panel showed the learner's correct-answer count and percentage but no longer displayed the quiz's pass mark. A learner who failed could not see what score they needed without returning to the quiz.
