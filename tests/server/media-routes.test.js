@@ -262,6 +262,28 @@ test('streams protected video byte ranges and rejects unsatisfiable ranges', asy
   assert.deepEqual(Buffer.from(await fullResponse.arrayBuffer()), rangeMediaContents);
 });
 
+test('falls back to full protected video responses for unsupported ranges and ranged HEAD requests', async () => {
+  for (const range of ['bytes=0-1,3-4', 'items=0-1', 'bytes=not-a-range', 'bytes=-']) {
+    const response = await fetch(mediaUrl('/media-range-tests'), {
+      headers: { 'x-test-user': 'admin-media', range, connection: 'close' },
+    });
+
+    assert.equal(response.status, 200, range);
+    assert.equal(response.headers.get('content-length'), String(rangeMediaContents.length), range);
+    assert.equal(response.headers.get('content-range'), null, range);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), rangeMediaContents, range);
+  }
+
+  const headResponse = await fetch(mediaUrl('/media-range-tests'), {
+    method: 'HEAD',
+    headers: { 'x-test-user': 'admin-media', range: 'bytes=2-5', connection: 'close' },
+  });
+  assert.equal(headResponse.status, 200);
+  assert.equal(headResponse.headers.get('content-length'), String(rangeMediaContents.length));
+  assert.equal(headResponse.headers.get('content-range'), null);
+  assert.equal(await headResponse.text(), '');
+});
+
 test('checks video access before serving a byte range', async () => {
   const anonymousResponse = await fetch(mediaUrl('/media-range-tests'), {
     headers: { range: 'bytes=0-0', connection: 'close' },

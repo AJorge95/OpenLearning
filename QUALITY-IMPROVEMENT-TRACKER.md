@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve media range fallback behavior in route tests
+
+- **Reviewed:** The protected-media handler returns a full response when it cannot honor a range, including multi-range, unknown-unit, malformed, and `HEAD` requests. Committed route coverage only exercised single and suffix ranges, an unsatisfiable range, and `If-Range` fallback; the other cases existed only in a prior one-off check.
+- **Improvement:** Add route regressions for multi-range, unsupported-unit, malformed, and ranged `HEAD` requests, checking full-response status, length, body or empty HEAD body, and the absence of `Content-Range`.
+- **Why it helps:** Future changes cannot turn a valid full-file fallback into a misleading `416` or accidentally stream a ranged body for `HEAD`, preserving browser media compatibility.
+- **Interface review:** Protected playback continues to request ordinary single byte ranges; no player markup or layout change was needed.
+- **Checked:** `node --test tests/server/media-routes.test.js` passed (14/14); `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/server/media-routes.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Refresh registration availability after a rejected sign-up
 
 - **Reviewed:** The registration page uses platform availability loaded at app startup. If an administrator closes registration or another learner takes the final slot while the form is open, the server rejects sign-up correctly but the shared UI state stayed stale and left the form active.
