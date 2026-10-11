@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck the reported role-selector click boundary
+
+- **Reviewed:** The user-supplied screenshot and target path, current account-details markup, the selector's desktop width and pointer-event boundary, and the existing hit-area regressions.
+- **Result:** No runtime change. The screenshot targets a wrapping `<label>` structure that is absent from the current page. In the live account page, the enabled 144px selector opened from its visible trigger and closed after a click 7px to its right; the selected Learner role stayed unchanged.
+- **Why no change:** The current markup separates the visible label from the control, and pointer events reach only the trigger. Repeating the screenshot's older structure in source would duplicate the existing fix; a new runtime patch needs a repro against the current render.
+- **Checked:** The account role hit-area and `AppSelect` label regression tests passed (10/10). Browser interaction stayed on the existing authenticated account page and made no account changes.
+
 ## 2026-10-11 — Recheck learner video controls at desktop size
 
 - **Reviewed:** The rendered learner video controls, accessibility labels, watch-progress announcement, and existing 600px and 400px responsive layouts.
