@@ -3401,6 +3401,21 @@ test('path assignment rejects missing and malformed learner IDs as client errors
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM learning_path_enrollments WHERE path_id = 'path-assignment-validation'").get().count, 0);
 });
 
+test('path assignments reject draft paths before creating an enrollment', async () => {
+  database.prepare(`INSERT INTO learning_paths (id, title, status, created_by, updated_by)
+    VALUES ('path-draft-assignment', 'Draft assignment', 'draft', 'admin-1', 'admin-1')`).run();
+
+  const response = await fetch(apiUrl('/manage/learning-paths/path-draft-assignment/assignments'), {
+    method: 'POST',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ userId: 'learner-unassigned' }),
+  });
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: 'Published learning path not found.', code: 'not_found' });
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM learning_path_enrollments WHERE path_id = 'path-draft-assignment'").get().count, 0);
+});
+
 test('repeated self-enrollment requests create one enrollment and one audit event', async () => {
   database.exec(`
     INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
