@@ -888,6 +888,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .access-user strong, .access-user small { overflow-wrap: anywhere; }
 .access-user strong { font-size: 13px; font-weight: 630; }
 .access-user small { color: var(--muted); font-size: 11px; }
+.account-detail-card-heading .account-overview-title { margin: 0; color: var(--muted); font-size: 11px; font-weight: 450; line-height: 1.4; overflow-wrap: anywhere; }
 .access-state { color: var(--muted); font-size: 12px; }
 .access-state-granted { color: var(--green); font-weight: 650; }
 .access-empty { padding: 35px 18px; color: var(--muted); font-size: 13px; text-align: center; }

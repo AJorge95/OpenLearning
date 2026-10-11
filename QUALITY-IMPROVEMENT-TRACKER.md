@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Give the account overview card a semantic heading
+
+- **Reviewed:** The account-details page rendered “Account overview” as plain small text inside an article, so the card had no named heading and its “Certificate name” subsection began at H3 after the page H1.
+- **Improvement:** Promote the existing label to an H2 and use it to name the overview article. Match the heading’s font, color, and spacing to the previous label so the visible card layout stays consistent.
+- **Why it helps:** Screen-reader users can identify the overview card and navigate the page’s section hierarchy without adding visual weight or changing account actions.
+- **Backend review:** The account-details endpoint already provides the data used by this card; no backend or API change was needed.
+- **Checked:** `node --test tests/client/account-details-structure.test.js` passed (4/4), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed. Chrome at 1718 × 1214 showed the card label at its original 11px style and the accessibility tree exposed a named H2 article. The role trigger still opens, far-right clicks leave it closed or dismiss the open menu, and the Learner role remained unchanged. No account data was modified; browser console had no errors or warnings.
+
 ## 2026-10-11 — Mark quiz answers as required
 
 - **Reviewed:** The learner quiz requires every question to be answered and the API rejects incomplete submissions, but the radio groups did not expose that requirement through native form semantics.
