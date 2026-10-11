@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Show the next action for every My Learning course
+
+- **Reviewed:** The My Learning heading invites learners to start, continue, or review courses, but only completed course cards had a visible action cue; other cards showed progress without naming what opening them would do.
+- **Improvement:** Label My Learning cards “Start course,” “Continue course,” or “Review course” based on exact completion state and progress. Keep the existing single-card link and include the action in its accessible name.
+- **Why it helps:** Learners can scan mixed-state course lists and see the next step without interpreting the progress bar alone.
+- **Backend review:** The existing course response already includes progress and an exact completed flag; no API change was needed. The cue continues to use exact completion when the displayed percentage rounds to 100%.
+- **Checked:** Focused course-navigation tests, the full test suite, production build, rendered My Learning accessibility tree and screenshot, and `git diff --check` passed.
+
 ## 2026-10-11 — Make completed courses visibly reviewable from My Learning
 
 - **Reviewed:** The live My Learning page showed a completed course card with its status and progress, while the course overview already labels the matching action “Review course.” The entire card already opens that course.

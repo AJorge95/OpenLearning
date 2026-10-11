@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { completedCourseActionLabel, courseActivityActionLabel, nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from '../../src/course-navigation.ts';
+import { completedCourseActionLabel, courseActivityActionLabel, courseCardActionLabel, nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from '../../src/course-navigation.ts';
 
 const lesson = (id, completed) => ({ id, completed });
 const quiz = (id, passed) => ({ id, passed });
@@ -39,9 +39,13 @@ test('keeps lesson review available after all course activities are complete', (
   assert.equal(courseActivityActionLabel({ starting: false, completed: true, nextActivity: nextCourseActivity(modules), progress: 100 }), 'Review course');
 });
 
-test('shows review on learning cards only for exactly completed courses', () => {
+test('labels course cards according to exact completion and progress state', () => {
   assert.equal(completedCourseActionLabel(true), 'Review course');
   assert.equal(completedCourseActionLabel(false), null);
+  assert.equal(courseCardActionLabel({ completed: false, progress: 0 }), 'Start course');
+  assert.equal(courseCardActionLabel({ completed: false, progress: 45 }), 'Continue course');
+  assert.equal(courseCardActionLabel({ completed: false, progress: 100 }), 'Continue course');
+  assert.equal(courseCardActionLabel({ completed: true, progress: 100 }), 'Review course');
 });
 
 test('keeps the continuation label when rounded progress is 100 but an activity remains', () => {

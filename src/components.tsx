@@ -11,7 +11,7 @@ import { shouldCloseAppSelectForLayoutChange } from './app-select-layout';
 import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel, isAppSelectUnavailable, resolveAppSelectActiveIndex } from './app-select-navigation';
 import { getAppSelectHorizontalPosition, getAppSelectVerticalPosition } from './app-select-position';
 import { formatCountLabel } from './count-label';
-import { completedCourseActionLabel } from './course-navigation';
+import { courseCardActionLabel } from './course-navigation';
 import { getHorizontalRevealScrollLeft } from './navigation-scroll';
 import type { Course, CourseModule, Lesson } from './types';
 
@@ -543,19 +543,21 @@ export function ProgressBar({ value, label }: { value: number; label: string }) 
   return <div className="progress-line" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={label}><span style={{ width: `${progress}%` }} /></div>;
 }
 
-export function CourseCard({ course, continueLabel = false, coverLoading = 'lazy' }: {
+export function CourseCard({ course, showLearningProgress = false, coverLoading = 'lazy' }: {
   course: Course;
-  continueLabel?: boolean;
+  showLearningProgress?: boolean;
   coverLoading?: React.ImgHTMLAttributes<HTMLImageElement>['loading'];
 }) {
-  const reviewLabel = continueLabel ? completedCourseActionLabel(course.completed) : null;
+  const learningActionLabel = showLearningProgress
+    ? courseCardActionLabel({ completed: course.completed, progress: course.progress })
+    : null;
   return (
     <Link className="course-card" to={`/courses/${course.id}`}>
       <CourseCoverAsset course={course} className="course-cover" iconSize={34} loading={coverLoading} />
       <div className="course-card-copy">
         <h2>{course.title}</h2>
         <p className="course-author">{course.owner || 'OpenLearning course'}</p>
-        {continueLabel ? <><div className="card-progress-label"><span>{course.completed ? 'Completed' : `${course.progress}% complete`}</span><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} />{reviewLabel && <span className="course-card-action">{reviewLabel}<ChevronRight size={15} aria-hidden="true" /></span>}</> : <div className="card-meta"><BookOpen size={17} /><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div>}
+        {showLearningProgress ? <><div className="card-progress-label"><span>{course.completed ? 'Completed' : `${course.progress}% complete`}</span><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /><span className="course-card-action">{learningActionLabel}<ChevronRight size={15} aria-hidden="true" /></span></> : <div className="card-meta"><BookOpen size={17} /><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div>}
       </div>
     </Link>
   );
