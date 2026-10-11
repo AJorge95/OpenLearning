@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Make completed courses visibly reviewable from My Learning
+
+- **Reviewed:** The live My Learning page showed a completed course card with its status and progress, while the course overview already labels the matching action “Review course.” The entire card already opens that course.
+- **Improvement:** Show “Review course” with a directional cue on completed cards in My Learning. Share the exact-completion label with course navigation; the cue stays within the existing card link and does not rely on rounded progress.
+- **Why it helps:** Learners can distinguish a completed course they can revisit from a course that still needs progress, directly in their learning list.
+- **Backend review:** The paginated My Learning response already includes the exact `completed` flag; no API or persistence change was needed.
+- **Checked:** The focused course-navigation tests passed; `npm run build` passed strict TypeScript checking and Vite bundling; the full `npm test -- --test-reporter=dot` suite and `git diff --check` passed. The live My Learning card exposed “Review course” in its accessible name and remained a single link to the course overview.
+
 ## 2026-10-11 — Share defensive session-data parsing
 
 - **Reviewed:** Schema migration 7 and the runtime session store parsed the same stored JSON independently, with parallel checks for malformed data and non-object values.

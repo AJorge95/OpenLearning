@@ -6,6 +6,10 @@ export function shouldEnrollBeforeCourseActivity(role: Role | null | undefined):
   return role === 'learner';
 }
 
+export function completedCourseActionLabel(completed: boolean): string | null {
+  return completed ? 'Review course' : null;
+}
+
 export function courseActivityActionLabel({ starting, completed, nextActivity, progress }: {
   starting: boolean;
   completed: boolean;
@@ -14,7 +18,8 @@ export function courseActivityActionLabel({ starting, completed, nextActivity, p
 }): string {
   if (starting) return 'Starting…';
   // Completed courses remain reviewable; navigation intentionally starts at the first lesson.
-  if (completed) return 'Review course';
+  const reviewLabel = completedCourseActionLabel(completed);
+  if (reviewLabel) return reviewLabel;
   if (nextActivity?.type === 'quiz') return progress > 0 ? 'Continue to quiz' : 'Start quiz';
   return progress > 0 ? 'Continue learning' : 'Start learning';
 }

@@ -11,6 +11,7 @@ import { shouldCloseAppSelectForLayoutChange } from './app-select-layout';
 import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel, isAppSelectUnavailable, resolveAppSelectActiveIndex } from './app-select-navigation';
 import { getAppSelectHorizontalPosition, getAppSelectVerticalPosition } from './app-select-position';
 import { formatCountLabel } from './count-label';
+import { completedCourseActionLabel } from './course-navigation';
 import { getHorizontalRevealScrollLeft } from './navigation-scroll';
 import type { Course, CourseModule, Lesson } from './types';
 
@@ -547,13 +548,14 @@ export function CourseCard({ course, continueLabel = false, coverLoading = 'lazy
   continueLabel?: boolean;
   coverLoading?: React.ImgHTMLAttributes<HTMLImageElement>['loading'];
 }) {
+  const reviewLabel = continueLabel ? completedCourseActionLabel(course.completed) : null;
   return (
     <Link className="course-card" to={`/courses/${course.id}`}>
       <CourseCoverAsset course={course} className="course-cover" iconSize={34} loading={coverLoading} />
       <div className="course-card-copy">
         <h2>{course.title}</h2>
         <p className="course-author">{course.owner || 'OpenLearning course'}</p>
-        {continueLabel ? <><div className="card-progress-label"><span>{course.completed ? 'Completed' : `${course.progress}% complete`}</span><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /></> : <div className="card-meta"><BookOpen size={17} /><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div>}
+        {continueLabel ? <><div className="card-progress-label"><span>{course.completed ? 'Completed' : `${course.progress}% complete`}</span><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} />{reviewLabel && <span className="course-card-action">{reviewLabel}<ChevronRight size={15} aria-hidden="true" /></span>}</> : <div className="card-meta"><BookOpen size={17} /><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div>}
       </div>
     </Link>
   );
