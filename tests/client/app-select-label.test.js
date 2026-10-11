@@ -232,6 +232,7 @@ test('user list explains and disables inline changes for the last active adminis
   assert.match(pageSource, /describedBy=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\} value=\{user\.role\} disabled=\{savingIds\.has\(user\.id\) \|\| user\.isLastActiveAdmin\}/);
   assert.match(pageSource, /aria-describedby=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\} disabled=\{savingIds\.has\(user\.id\) \|\| user\.isLastActiveAdmin\} onClick=\{\(\) => updateUser\(user, \{ disabled: !user\.disabled \}\)\}/);
   assert.match(pageSource, /className="last-active-admin-note" id=\{lastAdminHelpId\}>This is the only active administrator\./);
+  assert.match(pageSource, /changes\.role !== undefined \|\| \(changes\.disabled !== undefined && user\.role === 'admin'\)/);
   assert.match(styles, /\.last-active-admin-note\s*\{[^}]*white-space:\s*normal;/);
 });
 
