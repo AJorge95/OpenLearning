@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
 import { AppSelect, Button, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
 import { formatCountLabel } from './count-label';
+import { courseCatalogCategoryOptions, courseCatalogParams, hasCourseCatalogFilters } from './course-catalog-filters';
 import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from './course-navigation';
 import { summarizeCourseProgress } from './course-progress';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
@@ -52,15 +53,6 @@ function formatCertificateDate(value: string, formatter: Intl.DateTimeFormat) {
   return Number.isNaN(date.getTime()) ? value : formatter.format(date);
 }
 
-function catalogParams(filters: { query: string; category: string; sort: string }, page: number) {
-  const params = new URLSearchParams();
-  if (filters.query) params.set('q', filters.query);
-  if (filters.category !== 'All courses') params.set('category', filters.category);
-  if (filters.sort === 'title') params.set('sort', filters.sort);
-  params.set('page', String(page));
-  return params;
-}
-
 function ErrorNotice({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return <div className={`error-notice${onRetry ? ' error-notice-actionable' : ''}`} role="alert"><span>{message}</span>{onRetry && <Button variant="secondary" onClick={onRetry}>Try again</Button>}</div>;
 }
@@ -69,7 +61,7 @@ export function CatalogPage() {
   const loadSequenceRef = useRef(0);
   const requestControllerRef = useRef<AbortController | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const filtersRef = useRef({ query: '', category: 'All courses', sort: 'recent' });
+  const filtersRef = useRef({ query: '', category: '', sort: 'recent' });
   const pageRef = useRef(1);
   const paginationStatusRef = useRef<HTMLParagraphElement>(null);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -77,7 +69,7 @@ export function CatalogPage() {
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('All courses');
+  const [category, setCategory] = useState('');
   const [sort, setSort] = useState('recent');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -95,7 +87,7 @@ export function CatalogPage() {
     setLoading(true); setError(''); setLoadMoreFailed(false);
     setLoadingMore(false); setHasMore(false); setCourses([]); setTotal(0);
     try {
-      const params = catalogParams(filters, 1);
+      const params = courseCatalogParams(filters, 1);
       const result = await api.get<CourseListResponse>(`/api/courses?${params.toString()}`, { signal: requestController.signal });
       if (requestSequence === loadSequenceRef.current) {
         setCourses(result.courses); setCategories(result.categories || []);
@@ -114,7 +106,7 @@ export function CatalogPage() {
   }
 
   function clearCatalogFilters() {
-    const defaults = { query: '', category: 'All courses', sort: 'recent' };
+    const defaults = { query: '', category: '', sort: 'recent' };
     filtersRef.current = defaults;
     setQuery('');
     searchInputRef.current?.focus();
@@ -135,7 +127,7 @@ export function CatalogPage() {
     const requestedPage = pageRef.current + 1;
     setLoadingMore(true); setError(''); setLoadMoreFailed(false);
     try {
-      const params = catalogParams(filtersRef.current, requestedPage);
+      const params = courseCatalogParams(filtersRef.current, requestedPage);
       const result = await api.get<CourseListResponse>(`/api/courses?${params.toString()}`, { signal: requestController.signal });
       if (requestSequence === loadSequenceRef.current) {
         if (coursePageHasDrift(courses, result, total, requestedPage)) {
@@ -165,7 +157,7 @@ export function CatalogPage() {
     };
   }, [category, sort]);
 
-  const hasAppliedFilters = Boolean(filtersRef.current.query) || filtersRef.current.category !== 'All courses';
+  const hasAppliedFilters = hasCourseCatalogFilters(filtersRef.current);
   const emptyCatalogState = hasAppliedFilters
     ? { title: 'No matching courses', detail: 'Try a different search or category.' }
     : { title: 'No courses are available yet', detail: 'When courses are published for your learning space, they will appear here.' };
@@ -175,7 +167,7 @@ export function CatalogPage() {
     <PageHeading title="Browse courses" subtitle="Find a course to build your skills." />
     <div className="catalog-tools">
       <div className="filter-controls">
-        <div className="select-wrap catalog-filter-control"><span className="catalog-filter-label">Category</span><AppSelect className="app-select--filter" ariaLabel="Course category" leadingIcon={<Filter size={16} />} value={category} onChange={setCategory} options={[{ value: 'All courses', label: 'All courses' }, ...categories.filter((item) => item !== 'All courses').map((item) => ({ value: item, label: item }))]} /></div>
+        <div className="select-wrap catalog-filter-control"><span className="catalog-filter-label">Category</span><AppSelect className="app-select--filter" ariaLabel="Course category" leadingIcon={<Filter size={16} />} value={category} onChange={setCategory} options={courseCatalogCategoryOptions(categories)} /></div>
         <div className="select-wrap catalog-filter-control catalog-filter-control--sort"><span className="catalog-filter-label">Sort by</span><AppSelect className="app-select--filter" ariaLabel="Sort by" leadingIcon={<ArrowDownUp size={16} />} value={sort} onChange={setSort} options={[{ value: 'recent', label: 'Recently updated' }, { value: 'title', label: 'Course title' }]} /></div>
       </div>
       <form className="search-field" onSubmit={(event) => { event.preventDefault(); load({ query: query.trim(), category, sort }); }}>

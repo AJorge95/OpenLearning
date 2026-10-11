@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Let learners filter a category named “All courses”
+
+- **Reviewed:** The catalog selector and query builder, server category filtering, category values accepted by course editing, empty-state logic, and narrow-screen filter layout. The catch-all selector value reused the text `All courses`, which is also a valid category, and both client and server treated that category as “no filter.”
+- **Improvement:** Use an empty value for the catch-all option, retain every real category in the selector, and label the colliding category `All courses (category)`. The API now filters every non-empty category value.
+- **Why it helps:** Learners can find courses in that valid category, and the no-results message correctly reflects when a category filter is active.
+- **Interface review:** The category selector keeps its visible Category label and accessible name; existing responsive rules still stack the filter controls on narrow screens. No structural or layout change was needed.
+- **Checked:** New client tests passed (3/3); the isolated API regression passed (1/1), proving the literal category returns only its matching course. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, syntax checks for changed source and test files, and `git diff --check` passed. Rendered interaction was unavailable because the local browser is signed out and this checkout has no Playwright package or e2e setup.
+
 ## 2026-10-11 — Page learning-path learner rosters without a global sort
 
 - **Reviewed:** The staff path-assignment directory, assigned-first ordering, active-account and search filters, 50-row pagination, and responsive assignment controls. The combined list query ordered every matching learner by enrollment presence, forcing SQLite to sort the full directory for each page.

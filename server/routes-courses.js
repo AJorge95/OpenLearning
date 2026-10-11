@@ -90,7 +90,7 @@ function accessiblePublishedCourses(user, filters = {}) {
     clauses.push(`(${search.sql})`);
     params.push(...search.params);
   }
-  if (filters.category && filters.category !== 'All courses') {
+  if (filters.category) {
     clauses.push('c.category = ?');
     params.push(filters.category);
   }
