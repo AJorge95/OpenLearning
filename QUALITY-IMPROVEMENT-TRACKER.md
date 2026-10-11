@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck catalog, calendar, account, and quiz flows
+
+- **Reviewed:** Learner catalog filter and pagination requests, local-time calendar ranges and access filtering, administrator account search and filter changes, and the empty-quiz preparation and publish-readiness contract.
+- **Result:** No runtime change. The current flows normalize and validate filters and date ranges, cancel or ignore stale list requests, clamp pagination, preserve recovery paths, hide inaccessible calendar items, and allow quiz preparation while preventing publication before questions are ready.
+- **Why no change:** The source behavior matches the documented workflow and existing route coverage; no new interaction mismatch or backend reliability gap surfaced. A future code change needs a reproducible defect or a defined product workflow not covered by the existing contracts.
+- **Checked:** Focused catalog, calendar, account-filter, quiz-editor, account-route, and course-analytics tests passed (138/138); `git diff --check` passed.
+
 ## 2026-10-12 — Recheck registration-field administration
 
 - **Reviewed:** The registration-field editor's load/retry lifecycle, edit and remove controls, client validation and focus recovery, save state, plus the administrative GET/PUT routes and audit-backed transaction.
