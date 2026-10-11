@@ -7420,3 +7420,10 @@
 - **Result:** No code change. Certificate history refreshes after a clamped page or changed total. The course picker merges duplicate IDs from successive pages, while the save route rechecks that every selected course is currently published inside its write transaction.
 - **Why no change:** A first-page-only refresh could hide selected courses loaded from later pages. A safe picker refresh needs to reconcile all pages already loaded and preserve selected course details and removability when the catalog changes concurrently.
 - **Checked:** `node --test tests/client/path-course-options.test.js` passed (3/3), and the published-course option API regression passed (1/1). Read the picker, pagination endpoint, and path-save transaction; `git diff --check` passed.
+
+## 2026-10-11 — Recheck the reported account-role click boundary
+
+- **Reviewed:** The browser comment’s target path and screenshot against the current account-details markup, the exact account route, and the role selector on an account where it is enabled.
+- **Result:** No source change was needed. The screenshot target identifies the old wrapping `<label>`; current markup uses a separate control container with pointer input disabled outside the trigger. The reported account is the only active administrator, so its role selector is disabled in the current data.
+- **Why no change:** On an enabled account, the wrapper and trigger measured the same 144px at a 1718×1270 viewport. Clicking 6px to the right left the menu closed; clicking the trigger opened it, and Escape closed it without changing the role.
+- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js` passed (10/10), and `git diff --check` passed. The connected Chrome page rendered the current account markup; the CUA surface did not expose a screenshot method (`tab.playwright.screenshot` is unavailable).
