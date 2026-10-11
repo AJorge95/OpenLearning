@@ -383,6 +383,12 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .player-heading h1 { margin: 0; font-size: 27px; line-height: 1.2; }
 .rail-toggle { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--line); color: #555b6c; background: #fff; border-radius: 4px; }
 .rail-toggle:hover { color: var(--purple); border-color: var(--purple-border-strong); }
+.video-player-frame { width: 100%; min-width: 0; }
+.video-player-frame:fullscreen { display: flex; flex-direction: column; width: 100vw; height: 100vh; height: 100dvh; background: #101117; }
+.video-player-frame:fullscreen .video-stage { flex: 1 1 0; min-height: 0; max-height: none; aspect-ratio: auto; }
+.video-player-frame:fullscreen .video-stage video { max-height: none; }
+.video-player-frame:fullscreen .video-missing { min-height: 0; }
+.video-player-frame:fullscreen .lesson-video-controls { flex: 0 0 auto; }
 .video-stage { width: 100%; aspect-ratio: 16 / 9; max-height: calc(100vh - 250px); min-height: 300px; background: #14161e; display: grid; place-items: center; }
 .video-stage video { width: 100%; height: 100%; max-height: inherit; object-fit: contain; background: #101117; }
 .video-missing { min-height: 300px; width: 100%; height: 100%; display: grid; place-content: center; justify-items: center; gap: 12px; color: #aeb1bd; }
