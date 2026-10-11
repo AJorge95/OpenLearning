@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck remaining request defaults and reviewed controls
+
+- **Reviewed:** Server-side `|| []` and `|| {}` fallbacks after the learning-path validation fixes, the current watch-tracked player caption selector and responsive toolbar rules, and the administrator role selector's accessible markup and pointer bounds.
+- **Result:** No additional source change. Remaining empty-array fallbacks apply to optional search parameters; request-body fallbacks still feed required-field validation. The player exposes caption choices, and the administrator role field is not wrapped in a clickable label. The in-app browser remains signed out at `/login`, so the reported authenticated click cannot be replayed.
+- **Why no change:** Another API coercion or selector rule would be speculative without a new failing case. If the role control still opens from outside its visible trigger, a refreshed authenticated page or fresh screenshot is needed to compare the live DOM with the current source.
+- **Checked:** Re-ran focused server fallback searches and source inspection for the player and administrator selector; inspected the current in-app browser state. `git diff --check` passed; no tests were run because no runtime code changed.
+
 ## 2026-10-11 — Validate learning-path courses inside the write transaction
 
 - **Reviewed:** Learning-path updates validate selected course status and visibility inside their immediate transaction, but creation performed the same lookups before acquiring its write transaction.
