@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Clear stale learning-path results on status changes
+
+- **Reviewed:** Staff status filters select the new tab before requesting its results. The previous status's cards and pagination totals remained visible during the request and after a failed request. The server already applies and validates the requested status filter.
+- **Improvement:** Clear the displayed path rows, page number, total, and next-page state when changing status. Keep the current results visible while paging within the same status. Add a client regression for both transitions.
+- **Why it helps:** Staff do not mistake paths from the previous filter for results in the newly selected status, especially when the request fails and offers a retry.
+- **Checked:** Focused learning-path status and assignment accessibility tests passed (6/6). The full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/learning-path-status-filter.test.js`, and `git diff --check` passed. The in-app browser is signed out at `/login`, and Playwright is not installed, so the staff-only status transition could not be replayed in a rendered browser.
+
 ## 2026-10-11 — Bound the administrator role selector to its trigger
 
 - **Reviewed:** The account row applies a general full-width rule to AppSelect, while the role field has its own fixed desktop width. The previous role-specific width relied on parent sizing and did not override the account-row selector rule directly.

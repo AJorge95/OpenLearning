@@ -254,6 +254,10 @@ export function LearningPathsPage() {
   function changePathStatus(status: LearningPathStatusFilter) {
     if (loading || saving || assignmentBusy || status === pathStatus) return;
     clearAssignmentPanel();
+    setPaths([]);
+    setPathPage(1);
+    setPathTotal(0);
+    setPathHasMore(false);
     setPathStatus(status);
     void load(1, status);
   }
