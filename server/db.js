@@ -300,7 +300,9 @@ export function migrateDatabase(database = db) {
             if (sessionData && typeof sessionData === 'object' && !Array.isArray(sessionData) && typeof sessionData.userId === 'string') {
               userId = sessionData.userId;
             }
-          } catch {}
+          } catch {
+            // Keep malformed legacy sessions unowned; the session store discards them on read.
+          }
           saveUserId.run(userId, row.row_id);
           lastRowId = row.row_id;
         }
