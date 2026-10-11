@@ -7,6 +7,13 @@
 - **Why no change:** The screenshot path describes stale label markup. Current source already restricts pointer input to the visible trigger and bounds the desktop selector; changing its width again would repeat the existing fix.
 - **Checked:** The live `antjorge` account route and `abjorge95` enabled account route rendered without browser warnings or errors. Desktop measurements confirmed a 144px wrapper and trigger. The menu opened from the trigger and closed from the adjacent blank area with the role still set to Learner. Focused source regressions and `git diff --check` were run for this recheck.
 
+## 2026-10-11 — Explain best-effort media validation cleanup
+
+- **Reviewed:** The asynchronous file-signature validator's `finally` path, which closes opened course-media handles while returning a boolean validation result.
+- **Improvement:** Add a short comment at the swallowed close error to explain that handle cleanup is best-effort and must not replace the signature decision.
+- **Why it helps:** The otherwise empty catch is easy to mistake for an accidental error suppression; the comment preserves the intent for future validation changes without altering upload behavior.
+- **Checked:** Existing course-media route coverage passed, including accepted and rejected signatures for supported cover formats; `node --check server/routes-media.js` and `git diff --check` passed. No test file or runtime behavior changed.
+
 ## 2026-10-11 — Recheck the narrow-screen caption controls
 
 - **Reviewed:** The learner player's two-row control grid below 400px, the caption-specific second row below 600px, and the course-content rail's mobile stacking behavior.

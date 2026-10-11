@@ -281,6 +281,7 @@ async function fileSignatureMatchesKind(file, kind) {
     return false;
   } finally {
     if (fileHandle) {
+      // Preserve the signature decision if best-effort handle cleanup fails.
       try { await fileHandle.close(); } catch {}
     }
   }
