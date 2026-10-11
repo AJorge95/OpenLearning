@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Validate course completion windows before saving
+
+- **Reviewed:** The course editor's optional completion-window input, its min/max range, the top-bar draft/publish actions, curriculum operations that save course details first, and the server's whole-day validation.
+- **Improvement:** Validate blank or whole-day values from 1 to 3,650 before any course metadata save. Invalid values now mark and focus the field, show its linked inline explanation, and stop draft, publish, and dependent editor requests; valid saves send the normalized number or `null`.
+- **Why it helps:** Clicking an editor action with a fractional or out-of-range value no longer waits for an avoidable API rejection, and the field itself identifies what needs correction.
+- **Backend review:** The existing server range check remains the authoritative validation; no endpoint or schema change was needed.
+- **Checked:** The focused completion-window regression passed (3/3); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/course-editor-validation.test.js`, and `git diff --check` passed. The connected browser is signed out, so the authenticated course editor could not be exercised live.
+
 ## 2026-10-11 — Identify learners in path removal actions
 
 - **Reviewed:** Repeated learner-removal buttons in expanded learning-path assignment panels, their pending labels, and the staff-only route that removes assigned enrollment records and audits successful changes.
