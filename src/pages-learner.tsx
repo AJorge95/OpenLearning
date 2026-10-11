@@ -1585,7 +1585,18 @@ export function QuizPage() {
             const attemptQuestion = question as NonNullable<QuizAttempt['questions']>[number];
             const correctChoiceId = attemptQuestion.correctChoiceId;
             const selectedChoiceId = attemptQuestion.selectedChoiceId;
-            return <div className="result-question" key={question.id || index}><h3>{index + 1}. {question.prompt}</h3><p className={selectedChoiceId === correctChoiceId ? 'answer-correct' : 'answer-incorrect'}>{question.choices.find((choice) => choice.id === selectedChoiceId)?.text || 'No answer selected'}</p>{correctChoiceId !== selectedChoiceId && <p className="correct-answer">Correct answer: {question.choices.find((choice) => choice.id === correctChoiceId)?.text}</p>}{question.explanation && <p className="answer-explanation">{question.explanation}</p>}</div>;
+            const answerIsCorrect = Boolean(correctChoiceId && selectedChoiceId === correctChoiceId);
+            const selectedChoiceText = question.choices.find((choice) => choice.id === selectedChoiceId)?.text || 'No answer selected';
+            const correctChoiceText = question.choices.find((choice) => choice.id === correctChoiceId)?.text;
+            return <div className="result-question" key={question.id || index}>
+              <h3>{index + 1}. {question.prompt}</h3>
+              <p className={answerIsCorrect ? 'answer-correct' : 'answer-incorrect'}>
+                <strong>{answerIsCorrect ? 'Your answer is correct: ' : 'Your answer is incorrect: '}</strong>
+                {selectedChoiceText}
+              </p>
+              {!answerIsCorrect && <p className="correct-answer">Correct answer: {correctChoiceText}</p>}
+              {question.explanation && <p className="answer-explanation">{question.explanation}</p>}
+            </div>;
           })}
           <div className="quiz-result-actions">
             {courseFinished && (user?.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} />Add name for certificate</Link>)}
