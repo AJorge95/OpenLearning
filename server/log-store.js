@@ -21,12 +21,12 @@ function insertRetainedRow(retention, insert) {
     const result = insert();
     retention.count += 1;
     if (retention.count > retention.maximum) {
-      retention.trimStatement ??= db.prepare(`DELETE FROM ${retention.table} WHERE id = (SELECT MIN(id) FROM ${retention.table})`);
-      while (retention.count > retention.maximum) {
-        const { changes } = retention.trimStatement.run();
-        if (!changes) break;
-        retention.count -= changes;
-      }
+      const excess = retention.count - retention.maximum;
+      retention.trimStatement ??= db.prepare(`DELETE FROM ${retention.table}
+        WHERE id <= (SELECT id FROM ${retention.table} ORDER BY id ASC LIMIT 1 OFFSET ?)`);
+      const { changes } = retention.trimStatement.run(excess - 1);
+      if (changes === excess) retention.count = retention.maximum;
+      else retention.count = Number(db.prepare(`SELECT COUNT(*) AS count FROM ${retention.table}`).get().count);
     }
     return result;
   });

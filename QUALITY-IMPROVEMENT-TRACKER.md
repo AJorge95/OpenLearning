@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Batch retained-log cleanup after oversized backlogs
+
+- **Reviewed:** Audit and system log retention when an existing database contains more than the configured row cap; normal writes at the cap; and the current administrator selector markup after the reported hit-area issue.
+- **Interface review:** The administrator role selector already has a separate visible label and a trigger-bounded hit area. Its regression passes, so this cycle did not add another UI rule.
+- **Improvement:** Replace the per-row retention-delete loop with one primary-key range delete for the full excess. Recount rows only if SQLite deletes a different number than the cached excess predicts.
+- **Why it helps:** A log write can recover a database with thousands of excess rows without issuing thousands of synchronous delete statements, while routine writes still prune only the single oldest row and retain the configured newest entries.
+- **Checked:** `node --test tests/server/log-store.test.js` passed (5/5). The new isolated regression confirmed audit and system backlogs were each trimmed in one delete to exactly 10,000 and 5,000 newest rows; `EXPLAIN QUERY PLAN` confirmed a primary-key range delete without a temporary sort. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, both changed-file syntax checks, and `git diff --check` passed.
+
 ## 2026-10-11 — Make course-version restores clear and repeat-safe
 
 - **Reviewed:** Version restore confirmation, the restore request and its post-write course/governance reloads, repeated restore-button names, and route changes while a restore is pending.

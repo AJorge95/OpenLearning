@@ -121,6 +121,60 @@ test('log writes redact credentials and retain only the newest configured rows',
   assert.doesNotMatch(systemEntry.details_json, /sensitive-api-key|sensitive-detail-token/);
 });
 
+test('large retention backlogs are trimmed in one indexed range delete per log', async () => {
+  database.exec('DELETE FROM audit_logs; DELETE FROM system_logs;');
+  const seedAudit = database.prepare(`INSERT INTO audit_logs (actor_username, action, entity_type, summary)
+    VALUES ('System', 'seed', 'test', ?)`);
+  const seedSystem = database.prepare(`INSERT INTO system_logs (level, source, message)
+    VALUES ('info', 'seed', ?)`);
+  const seedRows = database.transaction(() => {
+    for (let index = 1; index <= 12_500; index += 1) seedAudit.run(`backlog-audit-${index}`);
+    for (let index = 1; index <= 6_500; index += 1) seedSystem.run(`backlog-system-${index}`);
+  });
+  seedRows();
+
+  const trimRuns = [];
+  const originalPrepare = database.prepare;
+  database.prepare = (sql) => {
+    const statement = originalPrepare.call(database, sql);
+    if (!/^DELETE FROM (audit_logs|system_logs)\s+WHERE id <=/.test(sql)) return statement;
+    return { run(...parameters) {
+      trimRuns.push({ sql, parameters });
+      return statement.run(...parameters);
+    } };
+  };
+
+  let auditId;
+  let systemId;
+  try {
+    const backlogLogStore = await import('../../server/log-store.js?large-retention-backlog');
+    auditId = backlogLogStore.writeAuditLog({
+      action: 'test.backlog_trimmed', entityType: 'test', summary: 'Backlog trimmed',
+    });
+    systemId = backlogLogStore.writeSystemLog('info', 'test', 'Backlog trimmed');
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.equal(trimRuns.length, 2);
+  assert.deepEqual(trimRuns.map(({ parameters }) => parameters), [[2_500], [1_500]]);
+  assert.ok(trimRuns.every(({ sql }) => /ORDER BY id ASC LIMIT 1 OFFSET \?/.test(sql)));
+  assert.deepEqual(
+    database.prepare('SELECT COUNT(*) AS count, MIN(id) AS oldestId, MAX(id) AS newestId FROM audit_logs').get(),
+    { count: 10_000, oldestId: auditId - 9_999, newestId: auditId },
+  );
+  assert.deepEqual(
+    database.prepare('SELECT COUNT(*) AS count, MIN(id) AS oldestId, MAX(id) AS newestId FROM system_logs').get(),
+    { count: 5_000, oldestId: systemId - 4_999, newestId: systemId },
+  );
+
+  const plan = database.prepare(`EXPLAIN QUERY PLAN DELETE FROM audit_logs WHERE id <= (
+    SELECT id FROM audit_logs ORDER BY id ASC LIMIT 1 OFFSET ?
+  )`).all(2_500).map((step) => step.detail).join('\n');
+  assert.match(plan, /SEARCH audit_logs USING INTEGER PRIMARY KEY \(rowid<\?\)/);
+  assert.doesNotMatch(plan, /USE TEMP B-TREE/);
+});
+
 test('audit retention recounts after the caller transaction rolls back a write', async () => {
   database.exec('DELETE FROM audit_logs');
   const rollbackAwareLogStore = await import('../../server/log-store.js?caller-rollback-test');
