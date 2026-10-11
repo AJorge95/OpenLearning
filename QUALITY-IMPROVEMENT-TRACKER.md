@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Require JPEG scan data for platform icons
+
+- **Reviewed:** The platform-icon JPEG marker parser, upload limits, settings write/audit rollback, and the picker’s visible format guidance and error announcement.
+- **Improvement:** Validate JPEG frame and scan headers through image data and a terminal EOI marker before accepting dimensions. Reject frame-only JPEGs, empty scans, and trailing bytes; add a real one-pixel JPEG acceptance and byte-for-byte serving regression.
+- **Why it helps:** Header-only or truncated JPEG files can no longer replace platform branding with an image that lacks a complete scan; valid JPEG uploads remain supported.
+- **Interface review:** The picker already states that JPG is supported and announces validation or decode failures, so no UI change was needed.
+- **Checked:** The focused registration and platform-settings suite passed (25/25), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict type checking and Vite bundling, and `git diff --check` passed.
+
 ## 2026-10-11 — Let platform icon actions wrap on mobile
 
 - **Reviewed:** The platform icon picker’s action controls at the desktop layout and its narrow-screen flex rules.

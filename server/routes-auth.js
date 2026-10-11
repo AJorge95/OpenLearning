@@ -248,25 +248,74 @@ function platformIconDimensions(type, bytes) {
   }
   if (type === 'jpeg') {
     if (bytes.length < 5 || !bytes.subarray(0, 3).equals(brandIconJpegStart)
-      || bytes.lastIndexOf(brandIconJpegEnd) < Math.max(0, bytes.length - 4096)) return null;
+      || bytes.lastIndexOf(brandIconJpegEnd) !== bytes.length - brandIconJpegEnd.length) return null;
     let offset = 2;
+    let frame = null;
+    let frameComponents = new Set();
+    let hasScanData = false;
     while (offset < bytes.length) {
       if (bytes[offset] !== 0xff) return null;
       while (bytes[offset] === 0xff) offset += 1;
       if (offset >= bytes.length) return null;
       const marker = bytes[offset++];
-      if (marker === 0x00 || marker === 0xd9 || marker === 0xda) return null;
+      if (marker === 0xd9) return offset === bytes.length && hasScanData ? frame : null;
+      if (marker === 0x00 || marker === 0xd8) return null;
       if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) continue;
       if (offset + 2 > bytes.length) return null;
       const segmentLength = bytes.readUInt16BE(offset);
       if (segmentLength < 2 || offset + segmentLength > bytes.length) return null;
       if (brandIconJpegFrameMarkers.has(marker)) {
-        if (segmentLength < 8) return null;
+        if (frame || segmentLength < 8) return null;
         const componentCount = bytes[offset + 7];
-        if (componentCount < 1 || segmentLength < 8 + componentCount * 3) return null;
+        if (componentCount < 1 || segmentLength !== 8 + componentCount * 3) return null;
         const height = bytes.readUInt16BE(offset + 3);
         const width = bytes.readUInt16BE(offset + 5);
-        return width > 0 && height > 0 ? { width, height } : null;
+        if (width === 0 || height === 0) return null;
+        for (let componentIndex = 0; componentIndex < componentCount; componentIndex += 1) {
+          const componentId = bytes[offset + 8 + componentIndex * 3];
+          if (frameComponents.has(componentId)) return null;
+          frameComponents.add(componentId);
+        }
+        frame = { width, height };
+      }
+      if (marker === 0xda) {
+        if (!frame || segmentLength < 6) return null;
+        const scanComponentCount = bytes[offset + 2];
+        if (scanComponentCount < 1 || scanComponentCount > frameComponents.size
+          || segmentLength !== 6 + scanComponentCount * 2) return null;
+        const scanComponents = new Set();
+        for (let componentIndex = 0; componentIndex < scanComponentCount; componentIndex += 1) {
+          const componentId = bytes[offset + 3 + componentIndex * 2];
+          if (!frameComponents.has(componentId) || scanComponents.has(componentId)) return null;
+          scanComponents.add(componentId);
+        }
+        offset += segmentLength;
+        let scanHasData = false;
+        let foundFollowingMarker = false;
+        while (offset < bytes.length) {
+          if (bytes[offset] !== 0xff) {
+            scanHasData = true;
+            offset += 1;
+            continue;
+          }
+          const markerOffset = offset;
+          offset += 1;
+          while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+          if (offset >= bytes.length) return null;
+          const scanMarker = bytes[offset];
+          if (scanMarker === 0x00 || (scanMarker >= 0xd0 && scanMarker <= 0xd7)) {
+            if (scanMarker === 0x00) scanHasData = true;
+            offset += 1;
+            continue;
+          }
+          if (!scanHasData) return null;
+          hasScanData = true;
+          offset = markerOffset;
+          foundFollowingMarker = true;
+          break;
+        }
+        if (!foundFollowingMarker) return null;
+        continue;
       }
       offset += segmentLength;
     }
