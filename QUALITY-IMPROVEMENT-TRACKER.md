@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Make path enrollment lists heading-navigable
+
+- **Reviewed:** The expanded learning-path assignment panel, its “Assign a learner” heading, the enrolled-learner list label, responsive list styles, and the staff-only assignment routes.
+- **Improvement:** Render “Enrollments on this page” as a level-four heading beneath the panel's level-three heading. Retain the existing 11px muted visual styling.
+- **Why it helps:** Staff can navigate directly to the enrolled-learner list by heading when reviewing or removing assignments.
+- **Backend review:** Assignment listing and mutation remain scoped to the selected path and protected by staff authorization; no API change was indicated.
+- **Checked:** The focused program-card tests passed (2/2), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/program-card-layout.test.js`, and `git diff --check` passed. The browser is signed out, so the staff page could not be reviewed live.
+
 ## 2026-10-11 — Expose custom signup fields as a heading
 
 - **Reviewed:** The public signup form's conditional “About you” custom-field group, its existing visual heading treatment, server-side answer validation, and the current registration page.
