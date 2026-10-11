@@ -212,6 +212,15 @@ test('the administrator role selector keeps clicks inside its visible trigger', 
   assert.match(styles, /\.app-select-menu--match-trigger \.app-select-option-indicator \{\s*width:\s*16px;\s*flex-basis:\s*16px;\s*\}/);
 });
 
+test('AppSelect disables its trigger and popup when no enabled options remain', () => {
+  const componentSource = fs.readFileSync(path.join(sourceDirectory, 'components.tsx'), 'utf8');
+
+  assert.match(componentSource, /isAppSelectUnavailable\(options, disabled\)/);
+  assert.match(componentSource, /const menuOpen = open && !unavailable/);
+  assert.match(componentSource, /disabled=\{unavailable\}/);
+  assert.match(componentSource, /\{menuOpen && createPortal/);
+});
+
 test('catalog filter accessible names contain their visible labels', () => {
   const source = fs.readFileSync(path.join(sourceDirectory, 'pages-learner.tsx'), 'utf8');
   const sourceFile = ts.createSourceFile('pages-learner.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
