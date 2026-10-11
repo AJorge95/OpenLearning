@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { calendarMonthRequestRange, groupCalendarDeadlines, localDateKey, shouldShowCalendarEmptyState } from './calendar-dates';
 import { pathAssignmentRemovalConfirmation } from './path-assignment-confirmation';
-import { AppSelect, Button, EmptyState, PageHeading, ProgressBar } from './components';
+import { AppSelect, Button, ConfirmationDialog, EmptyState, PageHeading, ProgressBar } from './components';
 import type { Competency, Course, CourseDeadline, LearningPath } from './types';
 import { appendPublishedCourseOptions, hasMorePublishedCourseOptions, publishedCourseOptionsPageUrl, type PublishedCoursePage } from './path-course-options';
 import { canAssignLearningPathLearners } from './path-assignment-availability';
@@ -18,6 +18,7 @@ function requestMessage(error: unknown, fallback: string) {
 }
 
 type PathLearner = { id: string; username: string; email: string | null; enrolled: boolean; source: 'assigned' | 'self' | null };
+type PendingAssignmentRemoval = { pathId: string; pathTitle: string; learnerId: string; learnerUsername: string };
 type PathLearnerPage = { learners: PathLearner[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type LearningPathListPage = { paths: LearningPath[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type CompetencyAdminPage = { competencies: Competency[]; total: number; page: number; pageSize: number; hasMore: boolean };
@@ -186,6 +187,7 @@ export function LearningPathsPage() {
   const [assignmentLoadError, setAssignmentLoadError] = useState(false);
   const [assignmentAction, setAssignmentAction] = useState<'assign' | 'remove' | null>(null);
   const [removingLearnerId, setRemovingLearnerId] = useState('');
+  const [pendingAssignmentRemoval, setPendingAssignmentRemoval] = useState<PendingAssignmentRemoval | null>(null);
   const assignmentBusy = assignmentAction !== null;
   const assignmentRequestSequenceRef = useRef(0);
   const assignmentRequestControllerRef = useRef<AbortController | null>(null);
@@ -283,6 +285,7 @@ export function LearningPathsPage() {
     assignmentRequestControllerRef.current?.abort();
     assignmentRequestControllerRef.current = null;
     assignmentPathRef.current = null;
+    setPendingAssignmentRemoval(null);
     setAssignmentPath(null); setLearners([]); setSelectedLearner(''); setAssignmentSearch(''); setAssignmentAppliedSearch('');
     setAssignmentPage(1); setAssignmentTotal(0); setAssignmentHasMore(false); setAssignmentLoading(false); setAssignmentLoadError(false);
   }
@@ -326,6 +329,7 @@ export function LearningPathsPage() {
 
   async function loadPathLearners(pathId: string, query: string, page: number) {
     assignmentRequestControllerRef.current?.abort();
+    setPendingAssignmentRemoval(null);
     const requestController = new AbortController();
     assignmentRequestControllerRef.current = requestController;
     const requestSequence = ++assignmentRequestSequenceRef.current;
@@ -359,6 +363,7 @@ export function LearningPathsPage() {
       assignmentRequestControllerRef.current?.abort();
       assignmentRequestControllerRef.current = null;
       assignmentPathRef.current = null;
+      setPendingAssignmentRemoval(null);
       setAssignmentPath(null); setLearners([]); setSelectedLearner(''); setAssignmentSearch(''); setAssignmentAppliedSearch('');
       setAssignmentPage(1); setAssignmentTotal(0); setAssignmentHasMore(false); setAssignmentLoading(false); setAssignmentLoadError(false);
       return;
@@ -401,20 +406,29 @@ export function LearningPathsPage() {
     }
   }
 
-  async function removeAssignment(pathId: string, learnerId: string, learnerUsername: string, pathTitle: string) {
+  function requestAssignmentRemoval(path: LearningPath, learner: PathLearner) {
+    if (assignmentBusy || assignmentLoading || assignmentPathRef.current !== path.id || !canAssignLearningPathLearners(path.status) || !learner.enrolled || learner.source !== 'assigned') return;
+    setPendingAssignmentRemoval({ pathId: path.id, pathTitle: path.title, learnerId: learner.id, learnerUsername: learner.username });
+  }
+
+  async function confirmAssignmentRemoval() {
+    const pending = pendingAssignmentRemoval;
+    if (!pending) return;
     const requestSequence = assignmentRequestSequenceRef.current;
-    if (assignmentBusy || assignmentLoading || assignmentPathRef.current !== pathId) return;
-    if (!window.confirm(pathAssignmentRemovalConfirmation(learnerUsername, pathTitle))) return;
-    setAssignmentAction('remove'); setRemovingLearnerId(learnerId); setError(''); setNotice('');
+    const path = paths.find((item) => item.id === pending.pathId && item.title === pending.pathTitle && canAssignLearningPathLearners(item.status));
+    const learner = learners.find((item) => item.id === pending.learnerId && item.username === pending.learnerUsername && item.enrolled && item.source === 'assigned');
+    setPendingAssignmentRemoval(null);
+    if (assignmentBusy || assignmentLoading || assignmentPathRef.current !== pending.pathId || !path || !learner) return;
+    setAssignmentAction('remove'); setRemovingLearnerId(learner.id); setError(''); setNotice('');
     try {
-      await api.delete(`/api/manage/learning-paths/${pathId}/assignments/${learnerId}`);
-      if (requestSequence !== assignmentRequestSequenceRef.current || assignmentPathRef.current !== pathId) return;
-      setLearners((current) => current.map((learner) => learner.id === learnerId ? { ...learner, enrolled: false, source: null } : learner));
-      await loadPathLearners(pathId, assignmentAppliedSearch, assignmentPage);
+      await api.delete(`/api/manage/learning-paths/${pending.pathId}/assignments/${learner.id}`);
+      if (requestSequence !== assignmentRequestSequenceRef.current || assignmentPathRef.current !== pending.pathId) return;
+      setLearners((current) => current.map((item) => item.id === learner.id ? { ...item, enrolled: false, source: null } : item));
+      await loadPathLearners(pending.pathId, assignmentAppliedSearch, assignmentPage);
     } catch (cause) {
-      if (requestSequence === assignmentRequestSequenceRef.current && assignmentPathRef.current === pathId) setError(requestMessage(cause, 'Path assignment could not be removed.'));
+      if (requestSequence === assignmentRequestSequenceRef.current && assignmentPathRef.current === pending.pathId) setError(requestMessage(cause, 'Path assignment could not be removed.'));
     } finally {
-      if (assignmentPathRef.current === pathId) {
+      if (assignmentPathRef.current === pending.pathId) {
         setAssignmentAction(null); setRemovingLearnerId('');
       }
     }
@@ -428,6 +442,8 @@ export function LearningPathsPage() {
       : { title: `No ${pathStatus} learning paths`, detail: pathStatus === 'archived' ? 'Archived paths are kept here and can be restored as drafts.' : 'Try another status filter or create a learning path.' }
     : { title: 'No learning paths available', detail: 'When a path is published or assigned to you, it will appear here.' };
   const hasEmptyPathResult = !loading && !loadFailed && !error && paths.length === 0;
+  const pendingRemovalPath = pendingAssignmentRemoval && paths.find((path) => path.id === pendingAssignmentRemoval.pathId && path.title === pendingAssignmentRemoval.pathTitle && canAssignLearningPathLearners(path.status));
+  const pendingRemovalLearner = pendingAssignmentRemoval && learners.find((learner) => learner.id === pendingAssignmentRemoval.learnerId && learner.username === pendingAssignmentRemoval.learnerUsername && learner.enrolled && learner.source === 'assigned');
 
   return <div className="management-page programs-page">
     <PageHeading title="Learning paths" subtitle={staff ? 'Guide learners through a course sequence and assign paths.' : 'Follow a guided sequence of courses and track your progress.'} />
@@ -465,7 +481,7 @@ export function LearningPathsPage() {
           {!assignmentLoading && !assignmentLoadError && assignmentTotal === 0 && <p className="path-assignment-status" role="status">{assignmentAppliedSearch ? 'No active learners match this search.' : 'There are no active learner accounts yet.'}</p>}
           {!assignmentLoading && !assignmentLoadError && assignmentTotal > 0 && assignableLearners.length === 0 && <p className="path-assignment-status" role="status">All learners on this page are already enrolled. Search or move to another page to find someone else.</p>}
           {!assignmentLoading && !assignmentLoadError && assignmentTotal > 0 && <div className="log-pagination path-learner-pagination"><p role="status" aria-live="polite" aria-atomic="true">Showing {(assignmentPage - 1) * assignmentPageSize + 1}–{Math.min(assignmentPage * assignmentPageSize, assignmentTotal)} of {assignmentTotal} learners</p><div><Button variant="secondary" disabled={assignmentPage <= 1 || assignmentBusy} onClick={() => changeAssignmentPage(path.id, assignmentPage - 1)}>Previous</Button><span>Page {assignmentPage} of {Math.max(1, Math.ceil(assignmentTotal / assignmentPageSize))}</span><Button variant="secondary" disabled={!assignmentHasMore || assignmentBusy} onClick={() => changeAssignmentPage(path.id, assignmentPage + 1)}>Next</Button></div></div>}
-          {enrolledLearners.length > 0 && <><h4 className="path-assigned-heading">Enrollments on this page</h4><ul className="path-assigned-learners">{enrolledLearners.map((learner) => <li key={learner.id}><span>{learner.username}{learner.email && <small>{learner.email}</small>}<small>{learner.source === 'self' ? 'Self-enrolled' : 'Assigned'}</small></span>{learner.source === 'assigned' && <button type="button" className="text-action" aria-label={`${removingLearnerId === learner.id ? 'Removing assignment for' : 'Remove assignment for'} ${learner.username} from ${path.title}`} disabled={assignmentBusy || assignmentLoading} aria-busy={removingLearnerId === learner.id} onClick={() => void removeAssignment(path.id, learner.id, learner.username, path.title)}>{removingLearnerId === learner.id ? 'Removing…' : 'Remove assignment'}</button>}</li>)}</ul></>}
+          {enrolledLearners.length > 0 && <><h4 className="path-assigned-heading">Enrollments on this page</h4><ul className="path-assigned-learners">{enrolledLearners.map((learner) => <li key={learner.id}><span>{learner.username}{learner.email && <small>{learner.email}</small>}<small>{learner.source === 'self' ? 'Self-enrolled' : 'Assigned'}</small></span>{learner.source === 'assigned' && <button type="button" className="text-action" aria-label={`${removingLearnerId === learner.id ? 'Removing assignment for' : 'Remove assignment for'} ${learner.username} from ${path.title}`} disabled={assignmentBusy || assignmentLoading} aria-busy={removingLearnerId === learner.id} onClick={() => requestAssignmentRemoval(path, learner)}>{removingLearnerId === learner.id ? 'Removing…' : 'Remove assignment'}</button>}</li>)}</ul></>}
         </div>}
       </article>)}
       </div>
@@ -476,6 +492,7 @@ export function LearningPathsPage() {
           <Button variant="secondary" disabled={!pathHasMore || loading || assignmentBusy} onClick={() => changePathPage(pathPage + 1)}>Next</Button></div>
       </nav>}
     </> : loadFailed ? null : <EmptyState title={emptyPathState.title} detail={emptyPathState.detail} />}
+    {pendingAssignmentRemoval && assignmentPath === pendingAssignmentRemoval.pathId && pendingRemovalPath && pendingRemovalLearner && <ConfirmationDialog {...pathAssignmentRemovalConfirmation(pendingAssignmentRemoval.learnerUsername, pendingAssignmentRemoval.pathTitle)} confirmLabel="Remove assignment" onCancel={() => setPendingAssignmentRemoval(null)} onConfirm={() => void confirmAssignmentRemoval()} />}
   </div>;
 }
 
