@@ -2078,6 +2078,34 @@ test('learning-path course selection rejects requests over the shared limit', as
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_paths WHERE title = ?').get(title).count, 0);
 });
 
+test('learning-path creation rejects falsey non-array course lists', async () => {
+  const invalidCourseLists = [null, false, 0, ''];
+
+  for (const [index, courses] of invalidCourseLists.entries()) {
+    const title = `Invalid course list ${index}`;
+    const response = await fetch(apiUrl('/manage/learning-paths'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title, courses }),
+    });
+
+    assert.equal(response.status, 400, `courses=${JSON.stringify(courses)}`);
+    assert.deepEqual(await response.json(), {
+      error: `Provide an ordered list of up to ${MAX_LEARNING_PATH_COURSES} courses.`,
+      code: 'validation_error',
+    });
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_paths WHERE title = ?').get(title).count, 0);
+  }
+
+  const omittedResponse = await fetch(apiUrl('/manage/learning-paths'), {
+    method: 'POST',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Omitted course list remains a draft' }),
+  });
+  assert.equal(omittedResponse.status, 201);
+  assert.equal((await omittedResponse.json()).path.courseCount, 0);
+});
+
 test('program boolean request fields reject strings without changing access settings', async () => {
   const invalidCreate = await fetch(apiUrl('/manage/learning-paths'), {
     method: 'POST',

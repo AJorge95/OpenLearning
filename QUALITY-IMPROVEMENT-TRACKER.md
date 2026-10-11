@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reject malformed learning-path course lists
+
+- **Reviewed:** Learning-path creation and update both validate course lists, but creation used `body.courses || []`, which silently converted explicitly supplied `null`, `false`, `0`, and empty-string values into valid empty draft lists.
+- **Improvement:** Default only an omitted `courses` field to an empty list and reject any supplied non-array value. Add route regressions for the falsey values and preserve the supported omitted-list draft behavior.
+- **Why it helps:** Malformed API requests now receive the same validation response as other invalid course-list shapes and cannot unexpectedly create a draft.
+- **Checked:** `node --test tests/server/course-analytics.test.js` passed (92/92); full `npm test` passed (398/398); `npx tsc --noEmit`, `npm run build`, `node --check server/routes-programs.js`, `node --check tests/server/course-analytics.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Expose captions in watch-tracked lesson playback
 
 - **Reviewed:** Watch-tracked lessons render uploaded WebVTT tracks but replace native video controls with a custom playback toolbar that had no way to choose a caption language.
