@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck startup readiness and bounded storage paths
+
+- **Reviewed:** Startup readiness and shutdown behavior, environment-variable bounds, orphaned-media cleanup boundaries, audit/system-log redaction and retention, and the shared HTTP error mapping.
+- **Result:** No runtime change. Readiness fails closed until setup and an active administrator exist, short-circuits during shutdown, and maps database errors to not-ready. Configuration rejects unsupported values; media cleanup limits deletion to old, unreferenced generated files; and log writes redact credential values and retain only bounded newest rows.
+- **Why no change:** The reviewed contracts are explicit and existing regressions cover the failure cases; I found no missing case or reproduced defect. Storage tuning would need representative workload data.
+- **Checked:** `node --test tests/server/readiness.test.js tests/server/config.test.js tests/server/media-cleanup.test.js tests/server/log-store.test.js` passed (16/16).
+- **Needed to continue:** A reproducible startup/storage failure or workload measurements that identify a specific bottleneck.
+
 ## 2026-10-11 — Expose the playback clock as a named timer
 
 - **Reviewed:** The lesson player's changing playback clock was a generic `<span>` with an `aria-label`, which does not provide a valid accessible name on that implicit role.
