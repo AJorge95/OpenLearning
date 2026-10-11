@@ -239,6 +239,7 @@ async function replaceMediaRoot() {
 export async function confirmPlatformReset(actor, confirmationId, phrase) {
   const current = requireResetState(actor, confirmationId);
   if (phrase !== 'RESET') fail(400, 'Type RESET exactly to confirm the platform reset.', 'platform_reset_confirmation_phrase');
+  current.phase = 'resetting';
   let restoreMedia = null;
   let committed = false;
   try {
