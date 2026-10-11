@@ -21,7 +21,7 @@
 - **Reviewed:** Express middleware and fallback order, the shared HTTP error handler, startup media-cleanup reporting, protected byte-range streaming, caption access checks, and the current account-role selector report.
 - **Result:** No runtime change. Expected parser, upload, domain, and uniqueness errors receive structured client responses; unexpected errors are logged without exposing internal details; errors after response headers are forwarded. Protected media checks access before streaming, and missing files return a not-found response.
 - **Why no change:** The inspected boundaries have matching regression coverage and no new failure or interaction mismatch appeared. The role-selector report remains covered by the adjacent verification entry.
-- **Checked:** `node --test tests/server/last-login.test.js tests/server/media-routes.test.js` passed (35/35). Working tree was clean after the preceding push; the shared error and media paths were read directly.
+- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js tests/server/last-login.test.js tests/server/media-routes.test.js` passed (45/45). The open course-editor tab was left untouched; the role-control and HTTP/media source paths were reviewed directly.
 - **Needed to continue:** A reproducible API or media failure outside the existing cases, fresh workload measurements for performance work, or new current-build browser evidence contradicting the selector verification.
 
 ## 2026-10-12 — Retain quiz submission locks per route
