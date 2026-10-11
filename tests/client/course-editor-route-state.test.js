@@ -57,6 +57,18 @@ test('changing course routes resets publication-only options', () => {
   assert.ok(resetCalls.some(([name, value]) => name === 'setCoverValidating' && value === 'false'), 'cover validation state should reset on route changes');
 });
 
+test('a stale course refresh cannot abort the newly selected course request', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const loadStart = source.indexOf('async function load(id = courseId)');
+  const loadEnd = source.indexOf('\n\n  useEffect(() => {', loadStart);
+  const loadSource = source.slice(loadStart, loadEnd);
+
+  assert.ok(loadStart >= 0 && loadEnd > loadStart);
+  assert.match(loadSource, /async function load\(id = courseId\) \{\s*if \(!id \|\| routeCourseIdRef\.current !== id\) return;/);
+  assert.ok(loadSource.indexOf('routeCourseIdRef.current !== id') < loadSource.indexOf('courseLoadControllerRef.current?.abort()'),
+    'ignore stale refreshes before they can abort the active route request');
+});
+
 test('course publishing keeps save failures distinct from settings refresh failures', () => {
   const source = fs.readFileSync(sourcePath, 'utf8');
   const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
