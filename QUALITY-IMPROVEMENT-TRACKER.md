@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reveal learner competencies in bounded batches
+
+- **Reviewed:** The learner competency page renders every active competency card and each mapped course at once. Administrators can add competencies without a catalog cap, and each card can contain a list of mapped courses.
+- **Improvement:** Keep the complete competency data and achievement summary, but render the first 12 cards initially and reveal later cards in 12-item batches. Add a live count and move focus to that count when the final batch removes the action button.
+- **Why it helps:** Larger skill maps create fewer DOM nodes during the initial render, while learners retain the same full-map progress total and can reveal the entire catalog as needed.
+- **Backend review:** The existing endpoint already batches completion-summary queries rather than issuing queries per competency. No backend contract change was needed; this improvement bounds client rendering without repeating the summary computation on each page request.
+- **Checked:** Focused batch-boundary and page-contract tests passed (2/2), as did full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check` for the helper and test, and `git diff --check`. The authenticated learner route could not be rendered because the in-app browser is signed out and the Playwright Chromium executable is missing.
+
 ## 2026-10-11 — Expose the course competency mapping limit
 
 - **Reviewed:** The mapping API already rejected more than 200 selected IDs, but the course editor let staff select any number and surfaced only the generic API error after saving. Existing course mappings above the cap also had no guidance for reducing them.
