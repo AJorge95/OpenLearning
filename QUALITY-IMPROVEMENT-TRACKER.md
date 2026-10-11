@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Roll back path setup when assignment auditing fails
+
+- **Reviewed:** The assignment-create route writes the enrollment, synchronizes the learner’s unlocked course state, and records the assignment in one immediate transaction. Existing coverage did not verify rollback when audit persistence fails.
+- **Improvement:** Add a route test that forces the audit insert to fail and asserts the enrollment, synchronized course state, and audit row all remain absent.
+- **Why it helps:** Partial assignment data cannot survive a failed required audit write; the learner and staff can safely retry after audit storage recovers.
+- **Interface review:** The existing API error path continues to show the actionable assignment failure, and no success notice is emitted for the rolled-back request.
+- **Checked:** Focused `tests/server/course-analytics.test.js` passed (97/97), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `node --check tests/server/course-analytics.test.js`, and `git diff --check` passed. The API regression verified audit failure rolls back both the enrollment and synchronized course state.
+
 ## 2026-10-11 — Preserve assignments when removal auditing fails
 
 - **Reviewed:** The assignment-removal route deletes enrollment and writes its required audit event inside one immediate transaction. The new API regression covered successful removal and access revocation but not audit-write rollback.
