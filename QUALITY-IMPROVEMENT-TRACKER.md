@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep platform-reset status current across administrators
+
+- **Reviewed:** The settings page loaded reset status once on mount and only refreshed after a conflicting start attempt. If another administrator prepared or finished a reset while this page stayed open, the displayed action could be stale until the local administrator clicked it.
+- **Improvement:** Refresh the read-only reset status every five seconds while the settings page is visible, and immediately when the browser tab becomes visible or focused. Abort status requests while this page is performing a reset action, avoid overlapping requests, and explain when a refresh fails.
+- **Why it helps:** Administrators see another administrator’s preparation, verified backup, or completed reset without relying on an avoidable conflict response.
+- **Backend review:** The existing authenticated status endpoint is excluded from the reset request gate and returns only the caller-appropriate status; no API or persistence change was needed.
+- **Checked:** The focused reset-status tests (6/6), full test suite, TypeScript and Vite production build, and `git diff --check` passed. The authenticated local `/admin/settings` page rendered without console warnings or errors; browser network events showed the periodic reset-status request returning HTTP 200.
+
 ## 2026-10-11 — Treat media deletion races as not found
 
 - **Reviewed:** Protected caption, document, and video routes verify each file with `stat` before opening a read stream. If course media is removed between those operations, the stream reports `ENOENT` and the generic handler previously returned an internal-server error.

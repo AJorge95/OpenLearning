@@ -2307,6 +2307,7 @@ export function AdminSettingsPage() {
   const [resetState, setResetState] = useState<PlatformResetStatus>({ pending: false });
   const [resetPhrase, setResetPhrase] = useState('');
   const [resetError, setResetError] = useState('');
+  const [resetStatusError, setResetStatusError] = useState('');
   const [resetSuccess, setResetSuccess] = useState('');
   const [resetBusy, setResetBusy] = useState(false);
   const [resetStatusLoaded, setResetStatusLoaded] = useState(false);
@@ -2328,13 +2329,39 @@ export function AdminSettingsPage() {
     };
   }, [registeredUserCountRetryVersion]);
   useEffect(() => {
+    if (resetBusy) return;
     let active = true;
-    api.get<PlatformResetStatus>('/api/admin/platform-reset')
-      .then((result) => { if (active) setResetState(result); })
-      .catch((cause) => { if (active) setResetError(cause instanceof ApiError ? cause.message : 'Reset status could not be loaded.'); })
-      .finally(() => { if (active) setResetStatusLoaded(true); });
-    return () => { active = false; };
-  }, []);
+    let requestInFlight = false;
+    let controller: AbortController | null = null;
+    async function refreshResetStatus() {
+      if (!active || requestInFlight || document.visibilityState === 'hidden') return;
+      requestInFlight = true;
+      const requestController = new AbortController();
+      controller = requestController;
+      try {
+        const result = await api.get<PlatformResetStatus>('/api/admin/platform-reset', { signal: requestController.signal });
+        if (active) { setResetState(result); setResetStatusError(''); }
+      } catch (cause) {
+        if (active && !requestController.signal.aborted) setResetStatusError(cause instanceof ApiError ? cause.message : 'Reset status could not be refreshed.');
+      } finally {
+        requestInFlight = false;
+        if (controller === requestController) controller = null;
+        if (active) setResetStatusLoaded(true);
+      }
+    }
+    function refreshOnReturn() { void refreshResetStatus(); }
+    refreshOnReturn();
+    const intervalId = window.setInterval(refreshOnReturn, 5_000);
+    window.addEventListener('focus', refreshOnReturn);
+    document.addEventListener('visibilitychange', refreshOnReturn);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshOnReturn);
+      document.removeEventListener('visibilitychange', refreshOnReturn);
+      controller?.abort();
+    };
+  }, [resetBusy]);
   useEffect(() => {
     document.documentElement.dataset.palette = palette;
     return () => { document.documentElement.dataset.palette = themePalette; };
@@ -2443,6 +2470,7 @@ export function AdminSettingsPage() {
       <div className="platform-reset-heading"><span className="platform-reset-icon"><AlertTriangle size={19} aria-hidden="true" /></span><div><h2 id="platform-reset-heading">Reset platform</h2><p>Remove learning content and account data, then restore platform settings to their defaults.</p></div></div>
       <div className="platform-reset-content">
         {resetError && <Notice>{resetError}</Notice>}
+        {resetStatusError && <Notice>{resetStatusError} The displayed reset status may be out of date.</Notice>}
         {resetSuccess && <Notice kind="success">{resetSuccess}</Notice>}
         {!resetState.pending && <>
           <p>This keeps your administrator account and the audit and system logs. Courses, course media, learner accounts, progress, certificates, paths, competencies, and custom registration fields will be removed.</p>
