@@ -6,6 +6,19 @@ export function shouldEnrollBeforeCourseActivity(role: Role | null | undefined):
   return role === 'learner';
 }
 
+export function courseActivityActionLabel({ starting, completed, nextActivity, progress }: {
+  starting: boolean;
+  completed: boolean;
+  nextActivity: CourseActivity | null;
+  progress: number;
+}): string {
+  if (starting) return 'Starting…';
+  // Completed courses remain reviewable; navigation intentionally starts at the first lesson.
+  if (completed) return 'Review course';
+  if (nextActivity?.type === 'quiz') return progress > 0 ? 'Continue to quiz' : 'Start quiz';
+  return progress > 0 ? 'Continue learning' : 'Start learning';
+}
+
 export function nextCourseActivityAfterLesson(modules: CourseModule[] | undefined, lessonId: string): CourseActivity | null {
   let foundCurrentLesson = false;
   for (const module of modules ?? []) {

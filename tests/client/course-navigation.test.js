@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from '../../src/course-navigation.ts';
+import { courseActivityActionLabel, nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from '../../src/course-navigation.ts';
 
 const lesson = (id, completed) => ({ id, completed });
 const quiz = (id, passed) => ({ id, passed });
@@ -36,6 +36,17 @@ test('keeps lesson review available after all course activities are complete', (
   const modules = [{ lessons: [lesson('lesson-1', true)], quiz: quiz('quiz-1', true) }];
 
   assert.deepEqual(nextCourseActivity(modules), { type: 'lesson', id: 'lesson-1' });
+  assert.equal(courseActivityActionLabel({ starting: false, completed: true, nextActivity: nextCourseActivity(modules), progress: 100 }), 'Review course');
+});
+
+test('keeps the continuation label when rounded progress is 100 but an activity remains', () => {
+  const nextActivity = { type: 'quiz', id: 'quiz-1' };
+
+  assert.equal(courseActivityActionLabel({ starting: false, completed: false, nextActivity, progress: 100 }), 'Continue to quiz');
+});
+
+test('shows the pending label before completed-course review', () => {
+  assert.equal(courseActivityActionLabel({ starting: true, completed: true, nextActivity: { type: 'lesson', id: 'lesson-1' }, progress: 100 }), 'Starting…');
 });
 
 test('returns no activity when the course has no modules or lessons', () => {
