@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Verify the role selector against the served component
+
+- **Reviewed:** The repeated right-side click report, the Vite-served account-detail component and CSS, and the current selector label and hit-area regressions.
+- **Result:** No additional source change. The live dev server serves a separate visible label, a 9rem selector, a popup matched to the trigger, and pointer input limited to the trigger. The screenshot target path still identifies an older wrapping `<label>` that is absent from the current served markup.
+- **Why no change:** The reported width and adjacent-click protections are already present in the current page source and dev server response; duplicating them would not change the behavior.
+- **Checked:** `node --test tests/client/app-select-label.test.js tests/client/app-select-position.test.js` passed. The server served the current transformed `pages-manage.tsx` and selector CSS (HTTP 200). The in-app browser is signed out at `/login`, so an authenticated click could not be repeated.
+
 ## 2026-10-11 — Recheck administrator log filtering and pagination
 
 - **Reviewed:** Audit and system-log route access checks, text/severity/action filtering, bounded newest-first paging, and the client’s request cancellation, loading, empty, and retry states.
