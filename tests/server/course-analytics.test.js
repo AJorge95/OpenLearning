@@ -845,6 +845,17 @@ test('course and learning-path detail GETs are read-only while protected actions
     assert.equal(enrollmentResponse.status, 201);
     assert.equal(courseEnrollmentCount(), 1);
     assert.equal(courseStateCount(), 1);
+    database.prepare('DELETE FROM course_learning_state WHERE course_id = ? AND user_id = ?')
+      .run('course-read-only-detail', 'learner-unassigned');
+    assert.equal(courseStateCount(), 0);
+
+    const retryEnrollmentResponse = await fetch(apiUrl('/courses/course-read-only-detail/enroll'), {
+      method: 'POST',
+      headers: userHeaders('learner-unassigned'),
+    });
+    assert.equal(retryEnrollmentResponse.status, 200);
+    assert.equal(courseEnrollmentCount(), 1);
+    assert.equal(courseStateCount(), 1);
   } finally {
     database.prepare('DELETE FROM learning_paths WHERE id = ?').run('path-read-only-detail');
     database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run('course-read-only-detail', 'course-path-sync-target');
@@ -4199,7 +4210,7 @@ test('repeated self-enrollment requests create one enrollment and one audit even
       method: 'POST',
       headers: userHeaders('learner-unassigned'),
     });
-    assert.equal(response.status, 201);
+    assert.equal(response.status, attempt === 0 ? 201 : 200);
     assert.equal((await response.json()).path.enrolled, true);
   }
 

@@ -213,9 +213,11 @@ programsRouter.post('/learning-paths/:pathId/enroll', (req, res) => {
       VALUES (?, ?, ?, 'self')`).run(randomUUID(), path.id, req.currentUser.id);
     syncUnlockedPathStates([path.id], req.currentUser.id);
     if (result.changes) logAudit(req.currentUser, 'path.enrolled', 'learning_path', path.id, `Enrolled in learning path: ${path.title}`);
-    return pathPayload(path, req.currentUser);
+    return { created: result.changes > 0, path: pathPayload(path, req.currentUser) };
   });
-  res.status(201).json({ path: enroll.immediate() });
+  const enrollment = enroll.immediate();
+  // Keep the retry successful without reporting that it created a second enrollment.
+  res.status(enrollment.created ? 201 : 200).json({ path: enrollment.path });
 });
 
 programsRouter.get('/learning-paths/:pathId', (req, res) => {
