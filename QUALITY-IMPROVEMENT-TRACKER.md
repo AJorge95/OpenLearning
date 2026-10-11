@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recover from empty administrator account filters
+
+- **Reviewed:** User search, role and registration filters, their empty-state copy, request lifecycle, and the account-list route contract.
+- **Improvement:** Add a conditional “Clear filters” action for filtered empty account results. It clears draft and applied search text and both filters, resets pagination, reloads the account list, and returns focus to search. Empty messages now describe approved or pending registration state alongside the selected role.
+- **Why it helps:** Administrators can recover from restrictive combinations in one step and can tell which registration state produced an empty result.
+- **Backend review:** The existing validated `/api/admin/users` filters and pagination remain unchanged; no server-side gap was found.
+- **Checked:** Focused filter-reset and empty-copy tests passed, the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. In the authenticated local browser, unmatched search, role-only, and pending-registration empty states all exposed “Clear filters”; each reset restored the account list and focused search. Browser console inspection was unavailable through the connected in-app browser controls; no error overlay appeared.
+
 ## 2026-10-11 — Recheck staff course-list search and pagination
 
 - **Reviewed:** The `/api/manage/courses` query validation, parameterized title/description/category search, status filters, pagination, existing ordering indexes, route tests, and prior course-list tracker entries.

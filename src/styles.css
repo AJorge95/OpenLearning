@@ -899,6 +899,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .access-state { color: var(--muted); font-size: 12px; }
 .access-state-granted { color: var(--green); font-weight: 650; }
 .access-empty { padding: 35px 18px; color: var(--muted); font-size: 13px; text-align: center; }
+.user-list-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.user-list-empty p { margin: 0; }
 .access-footnote { display: flex; gap: 9px; align-items: center; color: #707586; font-size: 12px; margin-top: 18px; }
 .access-footnote svg { color: var(--purple); flex: 0 0 auto; }
 

@@ -34,7 +34,7 @@ test('administrators can filter for and approve pending accounts', () => {
   assert.ok(managementSource.includes('user.registrationStatus === \'pending\' ? \'Pending approval\''));
   assert.ok(managementSource.includes('aria-label={`Approve registration for ${user.username}`}'));
   assert.ok(managementSource.includes('Registration could not be approved.'));
-  assert.ok(managementSource.includes('No registrations are waiting for approval.'));
+  assert.ok(managementSource.includes('userListEmptyMessage(appliedQuery, roleFilter, approvalFilter)'));
 });
 
 test('platform settings expose the approval policy through a labeled checkbox', () => {

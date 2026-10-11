@@ -28,7 +28,7 @@ import { clearPasswordConfirmationError, getPasswordConfirmationError } from './
 import { userListEmptyMessage } from './user-list-empty-state';
 import { readResetStatusAfterConflict, shouldClearResetConfirmationAfterFailure } from './platform-reset-status';
 import type { PlatformResetStatus } from './platform-reset-status';
-import type { UserRoleFilter } from './user-list-empty-state';
+import type { UserApprovalFilter, UserRoleFilter } from './user-list-empty-state';
 import type { Competency, Course, CourseAccessUser, CourseAnalytics, CourseModule, CourseVersion, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
 
 type CourseListResponse = { courses: Course[]; total: number; page: number; pageSize: number };
@@ -1811,11 +1811,10 @@ export function CourseAccessPage() {
   </div>;
 }
 
-type UserApprovalFilter = 'all' | 'pending' | 'approved';
-
 export function AdminUsersPage() {
   const { user: signedInUser, refresh } = useAuth();
   const resetPasswordHintId = useId();
+  const userListSearchInputRef = useRef<HTMLInputElement>(null);
   const loadSequenceRef = useRef(0);
   const loadControllerRef = useRef<AbortController | null>(null);
   const [users, setUsers] = useState<User[]>([]);
@@ -1904,6 +1903,18 @@ export function AdminUsersPage() {
     load(1);
     return () => { loadSequenceRef.current += 1; loadControllerRef.current?.abort(); };
   }, [roleFilter, approvalFilter]);
+
+  const hasAppliedUserFilters = Boolean(appliedQuery || roleFilter !== 'all' || approvalFilter !== 'all');
+  function clearUserListFilters() {
+    const filterSelectionChanged = roleFilter !== 'all' || approvalFilter !== 'all';
+    setQuery('');
+    setAppliedQuery('');
+    setRoleFilter('all');
+    setApprovalFilter('all');
+    setPage(1);
+    if (!filterSelectionChanged) void load(1, '', 'all', 'all');
+    userListSearchInputRef.current?.focus();
+  }
 
   useEffect(() => {
     if (!resetUser) return;
@@ -2028,7 +2039,7 @@ export function AdminUsersPage() {
   }
 
   return <div className="management-page users-page"><PageHeading title="Users" subtitle="Create accounts, review learning activity, and manage roles and access." action={<Link className="button button-primary" to="/admin/users/new"><Plus size={17} />Create account</Link>} />
-    <div className="user-filter-row"><form className="management-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); void load(1, search, roleFilter, approvalFilter); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search username or email" aria-label="Search username or email" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter user-role-filter"><span className="catalog-filter-label">Role</span><AppSelect className="app-select--filter" ariaLabel="Filter by role" leadingIcon={<UsersRound size={16} />} value={roleFilter} onChange={setRoleFilter} options={[{ value: 'all', label: 'All roles' }, { value: 'admin', label: 'Administrators' }, { value: 'moderator', label: 'Moderators' }, { value: 'learner', label: 'Learners' }]} /></div><div className="select-wrap role-filter user-approval-filter"><span className="catalog-filter-label">Registration</span><AppSelect className="app-select--filter" ariaLabel="Filter by registration approval" value={approvalFilter} onChange={setApprovalFilter} options={[{ value: 'all', label: 'All accounts' }, { value: 'pending', label: 'Pending approval' }, { value: 'approved', label: 'Approved' }]} /></div></div>
+    <div className="user-filter-row"><form className="management-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); void load(1, search, roleFilter, approvalFilter); }}><Search size={18} /><input ref={userListSearchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search username or email" aria-label="Search username or email" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter user-role-filter"><span className="catalog-filter-label">Role</span><AppSelect className="app-select--filter" ariaLabel="Filter by role" leadingIcon={<UsersRound size={16} />} value={roleFilter} onChange={setRoleFilter} options={[{ value: 'all', label: 'All roles' }, { value: 'admin', label: 'Administrators' }, { value: 'moderator', label: 'Moderators' }, { value: 'learner', label: 'Learners' }]} /></div><div className="select-wrap role-filter user-approval-filter"><span className="catalog-filter-label">Registration</span><AppSelect className="app-select--filter" ariaLabel="Filter by registration approval" value={approvalFilter} onChange={setApprovalFilter} options={[{ value: 'all', label: 'All accounts' }, { value: 'pending', label: 'Pending approval' }, { value: 'approved', label: 'Approved' }]} /></div></div>
     {error && !resetUser && (failedRequest
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest.query, failedRequest.roleFilter, failedRequest.approvalFilter); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
@@ -2042,7 +2053,7 @@ export function AdminUsersPage() {
         <td>{user.createdAt ? <DateText value={user.createdAt} /> : '—'}</td>
         <td><div className="user-row-actions">{user.registrationStatus === 'pending' && <button type="button" className="text-action" aria-label={`Approve registration for ${user.username}`} disabled={savingIds.has(user.id)} onClick={() => approveRegistration(user)}>{savingIds.has(user.id) ? 'Approving…' : 'Approve'}</button>}<Link className="text-action" to={`/admin/users/${user.id}`} aria-label={`Details for ${user.username}`}>Details</Link><button type="button" className="text-action" aria-label={`Reset password for ${user.username}`} disabled={savingIds.has(user.id)} onClick={(event) => openPasswordReset(user, event.currentTarget)}>Reset password</button><button type="button" className={user.disabled ? 'text-action' : 'text-action danger-text'} aria-label={`${user.disabled ? 'Enable' : 'Disable'} account for ${user.username}`} aria-describedby={user.isLastActiveAdmin ? lastAdminHelpId : undefined} disabled={savingIds.has(user.id) || user.isLastActiveAdmin} onClick={() => updateUser(user, { disabled: !user.disabled })}>{user.disabled ? 'Enable' : 'Disable'}</button></div></td>
       </tr>;
-    })}</tbody></table>{!users.length && <div className="access-empty">{approvalFilter === 'pending' ? appliedQuery ? 'No pending registrations match that search.' : 'No registrations are waiting for approval.' : userListEmptyMessage(appliedQuery, roleFilter)}</div>}</div>}
+    })}</tbody></table>{!users.length && <div className="access-empty user-list-empty"><p>{userListEmptyMessage(appliedQuery, roleFilter, approvalFilter)}</p>{hasAppliedUserFilters && <Button type="button" variant="secondary" onClick={clearUserListFilters}>Clear filters</Button>}</div>}</div>}
     {!loading && !failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
     {pendingDisableUser && <ConfirmationDialog {...accountDisableConfirmation(pendingDisableUser.username)} confirmLabel="Disable account" onCancel={() => setPendingDisableUser(null)} onConfirm={() => { const user = pendingDisableUser; setPendingDisableUser(null); if (user) void updateUser(user, { disabled: true }, true); }} />}
     {resetUser && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePasswordReset(); }}><section ref={resetDialogRef} className="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title" aria-describedby="reset-description" tabIndex={-1}><button className="modal-close" type="button" onClick={() => closePasswordReset()} aria-label="Close" disabled={savingIds.has(resetUser.id)}>×</button><h2 id="reset-title">Reset password</h2><p id="reset-description">Set a temporary password for <strong>{resetUser.username}</strong>. Their active sessions will be signed out.</p><form className="form-stack" onSubmit={resetPassword} aria-busy={savingIds.has(resetUser.id)}><PasswordField label="New password" autoFocus required minLength={12} maxLength={256} autoComplete="new-password" value={newPassword} hint="Use at least 12 characters." hintId={resetPasswordHintId} onChange={(event) => { setNewPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={savingIds.has(resetUser.id)} /><PasswordField label="Confirm password" required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={savingIds.has(resetUser.id)} />{error && <Notice>{error}</Notice>}<Button type="submit" disabled={savingIds.has(resetUser.id)}>{savingIds.has(resetUser.id) ? 'Saving…' : 'Reset password'}</Button></form></section></div>}
