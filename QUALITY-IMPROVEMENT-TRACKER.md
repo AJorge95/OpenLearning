@@ -8,6 +8,13 @@
 - **Interface and backend review:** The selector's visible labels, popup positioning, and server contracts are unchanged; no backend change was needed.
 - **Checked:** Focused AppSelect navigation, label, and positioning tests passed (25/25), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict type checking and Vite bundling, and `git diff --check` passed. Live option-refresh interaction was not rendered in the signed-out browser session.
 
+## 2026-10-11 — Recheck SQLite session persistence and expiry
+
+- **Reviewed:** Session set/get/touch expiry and user ownership, malformed and expired row handling, callback error boundaries, startup/daily cleanup failures, and targeted user-session revocation.
+- **Result:** No code change. The store rejects malformed or expired sessions, reports database and cleanup failures without duplicate callback invocation, and preserves the selected current session when revoking the user's other sessions.
+- **Why no change:** These persistence and recovery paths are already implemented and covered by focused tests; no separate expiry or callback defect appeared in the current source.
+- **Checked:** `node --test tests/server/session-store.test.js` passed (7/7), and `git diff --check` was run.
+
 ## 2026-10-11 — Keep the captioned video controls from overlapping on phones
 
 - **Reviewed:** The learner player's responsive control grid, its child order when captions are available, and the full-screen button placement rules below 600px.
