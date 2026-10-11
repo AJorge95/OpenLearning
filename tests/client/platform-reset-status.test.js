@@ -22,6 +22,20 @@ test('settings distinguish a verified backup from an active platform reset', () 
   assert.match(statusSource, /phase\?: 'preparing' \| 'ready' \| 'resetting'/);
   assert.match(pageSource, /readResetStatusAfterConflict\(cause, \(\) => api\.get<PlatformResetStatus>\('\/api\/admin\/platform-reset'\)\)/);
   assert.match(pageSource, /shouldClearResetConfirmationAfterFailure\(cause\)/);
+  assert.match(pageSource, /window\.setInterval\(refreshOnReturn, 5_000\)/);
+  assert.match(pageSource, /window\.addEventListener\('focus', refreshOnReturn\)/);
+  assert.match(pageSource, /document\.addEventListener\('visibilitychange', refreshOnReturn\)/);
+  assert.match(pageSource, /document\.visibilityState === 'hidden'/);
+  assert.match(pageSource, /controller\?\.abort\(\)/);
+});
+
+test('settings explain when live reset status could not be refreshed', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const settingsPage = sourceFile.statements.find((statement) => ts.isFunctionDeclaration(statement)
+    && statement.name?.text === 'AdminSettingsPage');
+  assert.ok(settingsPage, 'expected to find the admin settings page');
+  assert.match(settingsPage.getText(sourceFile), /resetStatusError && <Notice>\{resetStatusError\} The displayed reset status may be out of date\.<\/Notice>/);
 });
 
 test('failed reset attempts clear confirmations that the server invalidated', () => {
