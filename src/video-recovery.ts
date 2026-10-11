@@ -33,14 +33,16 @@ export function shouldResumeVideoPlayback({
   watchRequired,
   watchProgress,
   startedLessonId,
+  verifiedResume = false,
 }: {
   requested: boolean;
   lessonId: string;
   watchRequired: boolean;
   watchProgress: VideoRecoveryProgress;
   startedLessonId: string | null;
+  verifiedResume?: boolean;
 }) {
-  return requested && (!watchRequired
+  return requested && (verifiedResume || !watchRequired
     || (watchProgress.lessonId === lessonId && watchProgress.ready && watchProgress.started && startedLessonId === lessonId));
 }
 

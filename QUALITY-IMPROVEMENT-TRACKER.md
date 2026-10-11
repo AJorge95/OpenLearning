@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reload tracked video from verified position after visibility resume
+
+- **Reviewed:** A learner can return to a backgrounded tracked video after the browser has suspended its decoder. The visibility-resume flow fetches the server checkpoint, but its React closure can still hold stale watch state while deciding whether to resume playback.
+- **Improvement:** Make server-verified resume eligibility an explicit input to the tested playback decision helper. The visibility path reloads the media from its verified checkpoint after the learner presses Play, while ordinary stale-state retries remain blocked.
+- **Why it helps:** Returning to a backgrounded lesson resumes from the verified position even if the browser discarded buffered media, without allowing unsolicited autoplay or weakening normal retry checks.
+- **Backend review:** Reuses the existing watch-progress and replay-start endpoints; no API or persistence change was needed.
+- **Checked:** Added a regression in `tests/client/video-recovery.test.js` for a server-verified resume with stale React state, plus the explicit Play-request guard. Focused video recovery tests passed (6/6); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Live playback remains untested because it would write watch telemetry to the signed-in learner record.
+
 ## 2026-10-11 — Cover protected lesson-document downloads
 
 - **Reviewed:** The document download route checks sign-in, course visibility, lesson unlock state, and path containment, and sends private no-store attachment responses. No route test covered this delivery path.

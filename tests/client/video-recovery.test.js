@@ -51,6 +51,20 @@ test('watch-tracked retries resume only after the same lesson has started', () =
   }), false);
 });
 
+test('a server-verified visibility resume survives stale watch state but still needs a Play request', () => {
+  const staleWatchState = {
+    requested: true,
+    lessonId: 'lesson-1',
+    watchRequired: true,
+    watchProgress: emptyProgress,
+    startedLessonId: null,
+  };
+
+  assert.equal(shouldResumeVideoPlayback(staleWatchState), false);
+  assert.equal(shouldResumeVideoPlayback({ ...staleWatchState, verifiedResume: true }), true);
+  assert.equal(shouldResumeVideoPlayback({ ...staleWatchState, requested: false, verifiedResume: true }), false);
+});
+
 test('watch-progress resume ignores stale lessons and restores the correct position', () => {
   assert.equal(getVideoResumeTarget({
     lessonId: 'lesson-2', watchRequired: true, watchProgress: emptyProgress,
