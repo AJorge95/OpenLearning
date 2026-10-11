@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Review public course deadlines after path removal
+
+- **Reviewed:** The admin removal route deletes the assigned path enrollment but preserves per-course progress and deadlines. My Learning is assembled from direct enrollments, grants, and published-path membership; Calendar reads saved deadline state and includes public courses that remain accessible after removal.
+- **Result:** No behavior change. Existing route coverage verifies that removing a private path assignment revokes course access and removes the course from My Learning. It does not define whether a public course deadline should remain in Calendar after the path assignment is removed.
+- **Why no change:** Clearing the saved deadline could also discard context for retained progress or another enrollment source, while keeping it can leave an event for a course no longer shown in My Learning. The product needs to define whether public-course deadlines belong to learning state or active assignment membership.
+- **Checked:** Read the assignment removal and Calendar routes, the My Learning membership query, and the existing assignment-removal route regression. No backend behavior changed; no new test or rendered UI check was needed for this contract review.
+
 ## 2026-10-11 — Confirm account disable before revoking sessions
 
 - **Reviewed:** The user list and account detail controls both disable accounts with a direct request. The server invalidates all of the account's active sessions as part of that change, but neither control explained that effect or asked for confirmation.
