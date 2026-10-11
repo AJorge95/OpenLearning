@@ -403,6 +403,7 @@ function QuizEditor({ module, onSaved, onError }: { module: CourseModule; onSave
   const [passMark, setPassMark] = useState(existing?.passMark ?? 70);
   const [questions, setQuestions] = useState<EditableQuizQuestion[]>(existing?.questions || []);
   const [busyAction, setBusyAction] = useState<'save' | 'remove' | null>(null);
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const [focusTarget, setFocusTarget] = useState<{ questionIndex: number; choiceIndex?: number } | null>(null);
   const [showTextValidation, setShowTextValidation] = useState(false);
   const editorKeySequenceRef = useRef(0);
@@ -420,6 +421,7 @@ function QuizEditor({ module, onSaved, onError }: { module: CourseModule; onSave
     setTitle(existing?.title || `${module.title} quiz`);
     setPassMark(existing?.passMark ?? 70);
     setQuestions(existing?.questions || []);
+    setConfirmingRemoval(false);
   }, [module.id, module.title, existing?.id]);
 
   const normalizedQuestions = (items: EditableQuizQuestion[]) => JSON.stringify(items.map((question) => ({
@@ -507,8 +509,9 @@ function QuizEditor({ module, onSaved, onError }: { module: CourseModule; onSave
     } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Quiz could not be saved.'); }
     finally { setBusyAction(null); }
   }
-  async function remove() {
-    if (!existing || busyAction || !window.confirm('Remove this quiz from the module? Saved attempts will also be removed.')) return;
+  async function remove(confirmed = false) {
+    if (!existing || busyAction) return;
+    if (!confirmed) { setConfirmingRemoval(true); return; }
     setBusyAction('remove');
     try { await api.delete(`/api/manage/modules/${module.id}/quiz`); await onSaved(); }
     catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Quiz could not be removed.'); }
@@ -516,7 +519,7 @@ function QuizEditor({ module, onSaved, onError }: { module: CourseModule; onSave
   }
 
   return <div className="quiz-editor" aria-busy={busyAction !== null}>
-    <div className="quiz-editor-head"><div><span className="editor-type"><CircleHelp size={15} />Module quiz</span><h4>{existing ? 'Edit quiz' : 'Add a quiz'}</h4></div>{existing && <button type="button" className="icon-button danger-icon" aria-label={busyAction === 'remove' ? `Removing ${quizContext}` : `Remove ${quizContext}`} disabled={busyAction !== null} onClick={remove}><Trash2 size={16} /></button>}</div>
+    <div className="quiz-editor-head"><div><span className="editor-type"><CircleHelp size={15} />Module quiz</span><h4>{existing ? 'Edit quiz' : 'Add a quiz'}</h4></div>{existing && <button type="button" className="icon-button danger-icon" aria-label={busyAction === 'remove' ? `Removing ${quizContext}` : `Remove ${quizContext}`} disabled={busyAction !== null} onClick={() => void remove()}><Trash2 size={16} /></button>}</div>
     {textValidationIssue && <Notice>Enter text for every quiz question and answer choice before saving.</Notice>}
     <fieldset className="quiz-editor-fields" aria-label={`Fields for ${quizContext}`} disabled={busyAction !== null}>
     <div className="quiz-settings-row"><label>Quiz title<input aria-label={`Quiz title for ${quizContext}`} value={title} maxLength={quizTitleLimit} onChange={(event) => setTitle(event.target.value)} /></label><div className="app-select-field"><span>Pass mark</span><AppSelect<number> ariaLabel={`Pass mark for ${quizContext}`} value={passMark} onChange={setPassMark} options={[50, 60, 70, 80, 90, 100].map((value) => ({ value, label: `${value}%` }))} /></div></div>
@@ -537,6 +540,7 @@ function QuizEditor({ module, onSaved, onError }: { module: CourseModule; onSave
       <Button variant="secondary" type="button" aria-label={busyAction === 'save' ? `Saving quiz ${quizContext}` : hasChanges ? `Save quiz ${quizContext}` : `No changes to ${quizContext}`} disabled={busyAction !== null || !hasChanges} onClick={save}>{busyAction === 'save' ? 'Saving quiz…' : hasChanges ? 'Save quiz' : 'No changes'}</Button>
     </div>
     </fieldset>
+    {confirmingRemoval && existing && <ConfirmationDialog title="Remove this quiz?" description={`All saved learner attempts for ${quizContext} will also be removed. This action cannot be undone.`} confirmLabel="Remove quiz" onCancel={() => setConfirmingRemoval(false)} onConfirm={() => { setConfirmingRemoval(false); void remove(true); }} />}
   </div>;
 }
 

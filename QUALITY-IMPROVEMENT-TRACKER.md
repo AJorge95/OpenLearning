@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Warn before quiz removal deletes learner attempts
+
+- **Reviewed:** Removing a module quiz also deletes all saved attempts, but the confirmation used a blocking browser prompt and named the consequence only in its text.
+- **Improvement:** Replace the prompt with the shared accessible dialog. Keep quiz deletion deferred until confirmation, state that saved learner attempts are removed, and clear pending confirmation when the quiz or module changes.
+- **Why it helps:** The important data-loss consequence is easier to review, and the modal offers the same keyboard, focus, and cancellation behavior as other admin confirmations.
+- **Backend review:** The existing endpoint already removes the quiz and writes its audit entry atomically; the existing rollback regression remains unchanged.
+- **Checked:** Four focused client tests passed; the quiz-deletion audit-rollback server test passed; and `npm run build` passed TypeScript checking and Vite bundling. Chrome showed the quiz-specific consequence and focused Cancel; cancelling closed the dialog and left the quiz in place. No deletion was submitted. `git diff --check` passed.
+
 ## 2026-10-11 — Use the shared dialog for permanent course deletion
 
 - **Reviewed:** The course list and archived-course editor used blocking browser prompts before permanently deleting a course and its uploaded media.
