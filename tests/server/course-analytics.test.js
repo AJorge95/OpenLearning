@@ -620,6 +620,48 @@ test('learner catalog can filter a real category named All courses', async () =>
   }
 });
 
+test('later learner catalog pages skip the category query while preserving the default response', async () => {
+  const prefix = 'course-catalog-category-pages-';
+  const category = 'Page request category';
+  const addCourse = database.prepare(`INSERT INTO courses (id, title, category, visibility, status, created_by, updated_by)
+    VALUES (?, ?, ?, 'public', 'published', 'admin-1', 'admin-1')`);
+  const courseIds = Array.from({ length: 25 }, (_, index) => `${prefix}${index + 1}`);
+  for (const [index, id] of courseIds.entries()) addCourse.run(id, `${prefix} title ${index + 1}`, category);
+
+  const originalPrepare = database.prepare;
+  let categoryQueryCount = 0;
+  try {
+    database.prepare = (sql) => {
+      if (sql.includes('SELECT DISTINCT c.category')) categoryQueryCount += 1;
+      return originalPrepare.call(database, sql);
+    };
+
+    const firstParams = new URLSearchParams({ q: prefix });
+    const firstResponse = await fetch(apiUrl(`/courses?${firstParams}`), { headers: userHeaders('learner-active') });
+    assert.equal(firstResponse.status, 200);
+    const firstPage = await firstResponse.json();
+    assert.ok(firstPage.categories.includes(category));
+    assert.equal(firstPage.page, 1);
+    assert.equal(categoryQueryCount, 1);
+
+    const nextParams = new URLSearchParams({ q: prefix, page: '2', includeCategories: '0' });
+    const nextResponse = await fetch(apiUrl(`/courses?${nextParams}`), { headers: userHeaders('learner-active') });
+    assert.equal(nextResponse.status, 200);
+    const nextPage = await nextResponse.json();
+    assert.equal(nextPage.page, 2);
+    assert.equal(Object.hasOwn(nextPage, 'categories'), false);
+    assert.equal(categoryQueryCount, 1);
+
+    const invalidParams = new URLSearchParams({ q: prefix, includeCategories: 'false' });
+    const invalidResponse = await fetch(apiUrl(`/courses?${invalidParams}`), { headers: userHeaders('learner-active') });
+    assert.equal(invalidResponse.status, 400);
+    assert.equal(categoryQueryCount, 1);
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM courses WHERE id LIKE ?').run(`${prefix}%`);
+  }
+});
+
 test('course analytics eligibility reads course memberships before learner accounts', () => {
   const plan = database.prepare(`EXPLAIN QUERY PLAN SELECT u.id, u.username, u.disabled FROM (
     SELECT user_id AS id FROM enrollments WHERE course_id = ?

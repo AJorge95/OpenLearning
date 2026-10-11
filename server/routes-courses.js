@@ -219,14 +219,18 @@ courseRouter.get('/courses', (req, res) => {
   const query = textField(req.query.q, 'Search', 120);
   const category = textField(req.query.category, 'Category', 100);
   const sort = enumQuery(req.query.sort, 'sort order', ['recent', 'title'], 'recent');
+  const includeCategories = enumQuery(req.query.includeCategories, 'category option', ['0', '1'], '1') === '1';
   const { courses, total, page, pageSize } = accessiblePublishedCourses(req.currentUser, { query, category, sort, page: req.query.page });
-  const categories = db.prepare(`
-    SELECT DISTINCT c.category FROM courses c WHERE c.status = 'published' AND c.logical_course_id IS NULL AND (
-      c.visibility = 'public' OR ? IN ('admin', 'moderator') OR
-      EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?)
-    ) ORDER BY c.category COLLATE NOCASE
-  `).all(req.currentUser.role, req.currentUser.id).map((row) => row.category);
-  res.json({ courses: courseSummaries(courses, req.currentUser), categories, total, page, pageSize, hasMore: page * pageSize < total });
+  const response = { courses: courseSummaries(courses, req.currentUser), total, page, pageSize, hasMore: page * pageSize < total };
+  if (includeCategories) {
+    response.categories = db.prepare(`
+      SELECT DISTINCT c.category FROM courses c WHERE c.status = 'published' AND c.logical_course_id IS NULL AND (
+        c.visibility = 'public' OR ? IN ('admin', 'moderator') OR
+        EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?)
+      ) ORDER BY c.category COLLATE NOCASE
+    `).all(req.currentUser.role, req.currentUser.id).map((row) => row.category);
+  }
+  res.json(response);
 });
 
 courseRouter.get('/my-learning', (req, res) => {

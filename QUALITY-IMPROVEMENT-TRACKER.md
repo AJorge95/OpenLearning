@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Avoid repeating category scans while loading courses
+
+- **Reviewed:** Each `/api/courses` page returned the full accessible category list. The learner page uses it for the filter after the first response, while each later “Load more” request caused another distinct scan over published root courses.
+- **Improvement:** Add an opt-out query flag for category metadata, defaulting to the existing response for compatibility, and have later client pages request course rows without recalculating that metadata.
+- **Why it helps:** Loading additional course pages avoids redundant whole-catalog category work and payload while preserving the category options loaded with page one.
+- **Interface review:** The filter state remains populated from the first response; later-page appending and retry behavior are unchanged.
+- **Checked:** Client catalog parameter tests passed (3/3). An isolated route regression with 25 matching courses confirmed page one returns categories, page two omits them without running another category query, and an invalid flag returns 400. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, changed-file syntax checks, and `git diff --check` passed.
+
 ## 2026-10-11 — Keep course action menus within viewport edges
 
 - **Reviewed:** The course-row menu estimated height as `itemCount * 38 + 16`, while its 38px rows, 3px gaps, 6px padding, and 1px border produce 134px for three actions. Near a viewport edge this underestimation reduced the intended trigger gap; short viewports also had no menu scrolling cap.

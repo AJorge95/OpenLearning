@@ -17,6 +17,7 @@ export function courseCatalogParams(filters: CourseCatalogFilters, page: number)
   if (filters.category) params.set('category', filters.category);
   if (filters.sort === 'title') params.set('sort', filters.sort);
   params.set('page', String(page));
+  if (page > 1) params.set('includeCategories', '0');
   return params;
 }
 
