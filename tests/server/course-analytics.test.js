@@ -3687,6 +3687,32 @@ test('path assignments reject draft paths before creating an enrollment', async 
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM learning_path_enrollments WHERE path_id = 'path-draft-assignment'").get().count, 0);
 });
 
+test('admin assignment remains accurate when a learner self-enrolls after the directory loads', async () => {
+  database.exec(`
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('path-assignment-self-enrollment-race', 'Assignment race', 'published', 1, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+      VALUES ('path-assignment-race-course', 'path-assignment-self-enrollment-race', 'course-analytics', 0, 0);
+  `);
+
+  const selfEnrollment = await fetch(apiUrl('/learning-paths/path-assignment-self-enrollment-race/enroll'), {
+    method: 'POST',
+    headers: userHeaders('learner-unassigned'),
+  });
+  assert.equal(selfEnrollment.status, 201);
+
+  const assignment = await fetch(apiUrl('/manage/learning-paths/path-assignment-self-enrollment-race/assignments'), {
+    method: 'POST',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ userId: 'learner-unassigned' }),
+  });
+  assert.equal(assignment.status, 204);
+  assert.equal(database.prepare(`SELECT enrollment_source FROM learning_path_enrollments
+    WHERE path_id = 'path-assignment-self-enrollment-race' AND user_id = 'learner-unassigned'`).get().enrollment_source, 'self');
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'path.assigned' AND entity_id = 'path-assignment-self-enrollment-race'`).get().count, 0);
+});
+
 test('repeated self-enrollment requests create one enrollment and one audit event', async () => {
   database.exec(`
     INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
