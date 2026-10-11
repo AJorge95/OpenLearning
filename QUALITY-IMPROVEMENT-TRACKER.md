@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Align quiz-result regression with saved-score fallback
+
+- **Reviewed:** The full test suite found an older quiz-flow source assertion that required the complete question breakdown unconditionally, although the current result can also be the learner-scoped score preview when detail loading fails.
+- **Improvement:** Update the existing quiz-choice-order/result-flow regression to accept the explicit “Question breakdown unavailable” state while continuing to enforce aggregate-only feedback and retry behavior.
+- **Why it helps:** The main suite now checks the intended recovery contract instead of rejecting it as a regression.
+- **Checked:** The full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. Rendered failure-state verification remains unavailable because Playwright is not installed.
+
 ## 2026-10-11 — Recheck for follow-up interface and backend defects
 
 - **Reviewed:** The current account-details role selector markup, its 9rem desktop sizing and mobile full-width rule, the trigger-width popup positioning, and the hit-area regression; also checked decorative-image labels, empty native-dialog/TODO markers, SQLite session expiry/error handling, bounded and redacted log persistence, orphaned-media cleanup reporting, HTTP error mapping, and recent tracker entries.
