@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { addLessonCommentToPage, getNewLessonComments } from '../../src/lesson-comments.ts';
 
-function comment(id) {
-  return { id, body: `Comment ${id}`, username: 'learner', createdAt: '2026-10-10T12:00:00Z' };
+function comment(id, createdAt = '2026-10-10 12:00:00') {
+  return { id, body: `Comment ${id}`, username: 'learner', createdAt };
 }
 
 test('lesson comment pagination appends only unseen IDs in server order', () => {
@@ -42,16 +42,34 @@ test('loading another comment page announces progress to assistive technology', 
   assert.match(source, /<p className="sr-only" role="status" aria-live="polite" aria-atomic="true">\{commentsLoading \? 'Loading more comments\.' : ''\}<\/p>/);
 });
 
-test('a newly posted comment is prepended without growing the loaded page', () => {
-  const existing = Array.from({ length: 40 }, (_, index) => comment(`comment-${index + 1}`));
+test('a newly posted comment follows server order without growing the loaded page', () => {
+  const existing = Array.from({ length: 40 }, (_, index) => comment(`comment-${String(40 - index).padStart(3, '0')}`));
   const posted = comment('comment-new');
 
   const updated = addLessonCommentToPage(existing, posted, 20);
 
   assert.equal(updated.length, 40);
   assert.equal(updated[0].id, 'comment-new');
-  assert.equal(updated.at(-1).id, 'comment-39');
-  assert.equal(existing[0].id, 'comment-1');
+  assert.equal(updated.at(-1).id, 'comment-002');
+  assert.equal(existing[0].id, 'comment-040');
+});
+
+test('a posted comment sharing a timestamp is inserted by descending ID', () => {
+  const existing = [comment('f000'), comment('c000')];
+  const posted = comment('b000');
+
+  const updated = addLessonCommentToPage(existing, posted, 20);
+
+  assert.deepEqual(updated.map(({ id }) => id), ['f000', 'c000', 'b000']);
+});
+
+test('a comment with an older timestamp is inserted after newer comments', () => {
+  const existing = [comment('a000', '2026-10-10 12:00:01')];
+  const posted = comment('z000', '2026-10-10 12:00:00');
+
+  const updated = addLessonCommentToPage(existing, posted, 20);
+
+  assert.deepEqual(updated.map(({ id }) => id), ['a000', 'z000']);
 });
 
 test('adding an already visible comment does not duplicate it', () => {
