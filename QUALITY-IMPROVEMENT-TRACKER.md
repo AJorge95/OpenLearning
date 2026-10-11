@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Retain quiz submission locks per route
+
+- **Reviewed:** The learner quiz page's single in-flight route-key ref, route-change state resets, and the attempt endpoint's transactional insert. A pending submission on one quiz could be overwritten by a submission on another route, allowing a second attempt if the learner returned before the first finished; the route sequence also hid a successful response after returning to its quiz.
+- **Improvement:** Use a set of pending quiz route keys, derive the current form's busy state from its key, and accept the completed response whenever that quiz route is current again. Share the keyed-request helper with lesson reactions.
+- **Why it helps:** Navigation no longer permits duplicate overlapping attempts for the same quiz, and a result is not discarded just because the learner briefly visited another route.
+- **Backend review:** Attempt submission intentionally stores every valid retry in its existing immediate transaction; no server change was needed because the defect was loss of the client-side per-quiz in-flight lock.
+- **Checked:** Focused keyed-request tests passed (4/4), full `npm test -- --test-reporter=dot`, `npm run build` (strict TypeScript checking and Vite), and `git diff --check` passed.
+
 ## 2026-10-12 — Keep lesson reaction saves scoped to each lesson
 
 - **Reviewed:** The lesson player's reaction busy state during route changes and the reaction endpoint's transactional upsert and returned counts. The route effect cleared one page-wide busy flag even though the prior lesson's write continued in the background.

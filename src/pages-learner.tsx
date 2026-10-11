@@ -11,7 +11,7 @@ import { summarizeCourseProgress } from './course-progress';
 import { shuffleQuizChoices } from './quiz-choice-order';
 import { quizPriorPassNotice } from './quiz-prior-pass';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
-import { updatePendingReactionIds } from './lesson-reaction-state';
+import { updatePendingRequestKeys } from './pending-request-keys';
 import { lessonCommentRemovalConfirmation } from './lesson-comment-confirmation';
 import { tryToggleFullscreen } from './video-fullscreen';
 import { selectVideoCaptionTrack } from './video-captions';
@@ -843,7 +843,7 @@ export function CoursePlayerPage() {
 
   function markReactionSaving(requestedLessonId: string, saving: boolean) {
     const current = pendingReactionLessonIdsRef.current;
-    const next = updatePendingReactionIds(current, requestedLessonId, saving);
+    const next = updatePendingRequestKeys(current, requestedLessonId, saving);
     if (next === current) return;
     pendingReactionLessonIdsRef.current = next;
     setPendingReactionLessonIds(next);
@@ -1538,8 +1538,9 @@ export function QuizPage() {
   const routeKey = `${courseId}:${quizId}`;
   const routeKeyRef = useRef(routeKey);
   routeKeyRef.current = routeKey;
-  const submitSequenceRef = useRef(0);
-  const submitInFlightRouteKeyRef = useRef<string | null>(null);
+  // Keep each quiz attempt locked through route changes until its request settles.
+  const [pendingQuizRouteKeys, setPendingQuizRouteKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const pendingQuizRouteKeysRef = useRef<ReadonlySet<string>>(new Set());
   const firstAnswerRef = useRef<HTMLInputElement | null>(null);
   const resultHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const focusFirstAnswerRef = useRef(false);
@@ -1554,7 +1555,6 @@ export function QuizPage() {
   const [loading, setLoading] = useState(true);
   const [attemptDetailsLoadFailed, setAttemptDetailsLoadFailed] = useState(false);
   const [courseLoadRetryVersion, setCourseLoadRetryVersion] = useState(0);
-  const [saving, setSaving] = useState(false);
   useEffect(() => {
     const requestSequence = ++loadSequenceRef.current;
     const requestedRouteKey = `${courseId}:${quizId}`;
@@ -1564,7 +1564,7 @@ export function QuizPage() {
     const isCurrentRequest = () => requestSequence === loadSequenceRef.current
       && routeCourseIdRef.current === courseId
       && routeKeyRef.current === requestedRouteKey;
-    setCourse(null); setLoading(true); setError(''); setAttemptDetailsLoadFailed(false); setSaving(false);
+    setCourse(null); setLoading(true); setError(''); setAttemptDetailsLoadFailed(false);
     void (async () => {
       try {
         const { course: data } = await fetchCourse(courseId, false, { signal: requestController.signal });
@@ -1599,17 +1599,17 @@ export function QuizPage() {
       }
     })();
     return () => {
-      loadSequenceRef.current += 1; submitSequenceRef.current += 1;
+      loadSequenceRef.current += 1;
       requestController.abort();
       if (courseRequestControllerRef.current === requestController) courseRequestControllerRef.current = null;
     };
   }, [courseId, quizId, courseLoadRetryVersion]);
   useEffect(() => {
-    submitSequenceRef.current += 1;
     focusFirstAnswerRef.current = false; focusResultRef.current = false;
-    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setAttemptDetailsLoadFailed(false); setSaving(false);
+    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setAttemptDetailsLoadFailed(false);
   }, [courseId, quizId]);
   const quiz = course?.modules?.find((module) => module.quiz?.id === quizId)?.quiz;
+  const saving = pendingQuizRouteKeys.has(routeKey);
   const currentResult = resultRouteKey === routeKey ? result : null;
   const choiceOrders = useMemo(() => new Map((quiz?.questions ?? []).map((question, index) => [
     question.id || String(index),
@@ -1626,14 +1626,21 @@ export function QuizPage() {
     }
   }, [currentResult]);
 
+  function markQuizRoutePending(requestedRouteKey: string, pending: boolean) {
+    const current = pendingQuizRouteKeysRef.current;
+    const next = updatePendingRequestKeys(current, requestedRouteKey, pending);
+    if (next === current) return;
+    pendingQuizRouteKeysRef.current = next;
+    setPendingQuizRouteKeys(next);
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const requestedRouteKey = routeKey;
-    if (!quiz || submitInFlightRouteKeyRef.current === requestedRouteKey) return;
-    submitInFlightRouteKeyRef.current = requestedRouteKey;
-    const requestSequence = ++submitSequenceRef.current;
-    const isCurrentSubmission = () => requestSequence === submitSequenceRef.current && routeKeyRef.current === requestedRouteKey;
-    setError(''); setSaving(true);
+    if (!quiz || pendingQuizRouteKeysRef.current.has(requestedRouteKey)) return;
+    markQuizRoutePending(requestedRouteKey, true);
+    const isCurrentSubmission = () => routeKeyRef.current === requestedRouteKey;
+    setError('');
     try {
       const response = await api.post<{ attempt: QuizAttempt; certificate: CourseCertificate | null }>(`/api/quizzes/${quiz.id}/attempts`, { answers });
       if (isCurrentSubmission()) {
@@ -1662,8 +1669,7 @@ export function QuizPage() {
     } catch (cause) {
       if (isCurrentSubmission()) setError(cause instanceof ApiError ? cause.message : 'Your quiz could not be submitted.');
     } finally {
-      if (submitInFlightRouteKeyRef.current === requestedRouteKey) submitInFlightRouteKeyRef.current = null;
-      if (isCurrentSubmission()) setSaving(false);
+      markQuizRoutePending(requestedRouteKey, false);
     }
   }
 
