@@ -423,6 +423,34 @@ test('platform setting changes roll back when their required audit entry cannot 
     WHERE action = 'platform.settings_updated'`).get().count, originalAuditCount + 1);
 });
 
+test('platform settings roll back when their response count cannot be read', async () => {
+  const currentSetting = (key) => database.prepare('SELECT value FROM app_settings WHERE key = ?').get(key)?.value ?? null;
+  setSetting('platform_name', 'Before count failure');
+  setSetting('theme_palette', 'violet');
+  const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'platform.settings_updated'`).get().count;
+  const originalPrepare = database.prepare;
+  database.prepare = function prepareWithUnavailableUserCount(sql, ...args) {
+    if (sql === 'SELECT COUNT(*) AS count FROM users') throw new Error('registered account count unavailable');
+    return originalPrepare.call(this, sql, ...args);
+  };
+
+  try {
+    const response = await fetch(apiUrl('/admin/settings'), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ platformName: 'Updated before count failure', themePalette: 'ocean' }),
+    });
+    assert.equal(response.status, 500);
+    assert.equal(currentSetting('platform_name'), 'Before count failure');
+    assert.equal(currentSetting('theme_palette'), 'violet');
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+      WHERE action = 'platform.settings_updated'`).get().count, originalAuditCount);
+  } finally {
+    database.prepare = originalPrepare;
+  }
+});
+
 test('platform settings reject malformed and oversized icons without changing branding or audit history', async () => {
   const settingValue = (key) => database.prepare('SELECT value FROM app_settings WHERE key = ?').get(key)?.value ?? null;
   const originalName = settingValue('platform_name');
