@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Refresh account details after last-admin conflicts
+
+- **Reviewed:** The Users list refreshes after a `last_admin` response, but the account-details page only displayed the conflict and left its controls based on the previously loaded account state.
+- **Improvement:** On that conflict, reload the current account and course page. Keep the server’s explanation when the refresh succeeds; if refresh fails, clear the stale details and offer the existing retry flow for temporary errors.
+- **Why it helps:** A detail page open in another administrator session catches up after concurrent account changes and does not keep presenting out-of-date role or status controls.
+- **Interface review:** The in-flight action keeps controls disabled while refreshing. The refreshed restriction flag drives both control states and accessible descriptions.
+- **Checked:** Focused account-detail, Users UI, and account-route tests passed (34/34), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/account-details-structure.test.js`, and `git diff --check` passed. The in-app browser is signed out at `/login`, so the conflict refresh was not replayed in the authenticated UI.
+
 ## 2026-10-11 — Refresh stale controls after last-admin conflicts
 
 - **Reviewed:** Server-side protection correctly rejects demoting or disabling the last active administrator, but the Users page only displayed the conflict. A different admin session may have changed the account count since this list was loaded, leaving its role/status controls stale.
