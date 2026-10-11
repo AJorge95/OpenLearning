@@ -2700,12 +2700,28 @@ test('course management keeps draft edits and published versions under one visib
     result = await fetchManagedCourses('draft');
     assert.equal(result.total, 0);
 
-    const restoreResponse = await fetch(apiUrl(`/manage/courses/${courseId}/versions/${firstVersion.id}/restore`), {
-      method: 'POST',
-      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
-      body: JSON.stringify({}),
-    });
+    const originalPrepare = database.prepare;
+    let fullHistoryQueryCount = 0;
+    let scopedVersionQueryCount = 0;
+    database.prepare = (sql) => {
+      const normalizedSql = sql.replace(/\s+/g, ' ').trim();
+      if (normalizedSql.startsWith('SELECT v.*, u.username AS publisher')) fullHistoryQueryCount += 1;
+      if (normalizedSql === 'SELECT id, version_number FROM course_versions WHERE id = ? AND course_id = ?') scopedVersionQueryCount += 1;
+      return originalPrepare.call(database, sql);
+    };
+    let restoreResponse;
+    try {
+      restoreResponse = await fetch(apiUrl(`/manage/courses/${courseId}/versions/${firstVersion.id}/restore`), {
+        method: 'POST',
+        headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+    } finally {
+      database.prepare = originalPrepare;
+    }
     assert.equal(restoreResponse.status, 200);
+    assert.equal(fullHistoryQueryCount, 0, 'restoring one version should not load the complete history');
+    assert.equal(scopedVersionQueryCount, 1, 'expected one course-scoped version existence and audit lookup');
     const versions = database.prepare('SELECT version_number, course_id FROM course_versions WHERE course_id = ? ORDER BY version_number').all(courseId);
     assert.deepEqual(versions, [
       { version_number: 1, course_id: courseId },

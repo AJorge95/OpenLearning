@@ -8,6 +8,14 @@
 - **Backend review:** The learner-facing map keeps its complete response because it summarizes achievements across all active competencies; this change bounds only the administrative list whose UI supports page navigation.
 - **Checked:** Route coverage verifies page boundaries, the 25-row limit, out-of-range clamping, create/toggle placement, and an indexed query plan without a temporary B-tree. The migration regression passes from schema version 15 through 33. The focused client contract/accessibility tests passed (2/2), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed. The browser is signed out, so the protected admin page could not be rendered or interacted with live.
 
+## 2026-10-11 — Look up restored course versions directly
+
+- **Reviewed:** The staff restore route loaded every historical version for a course to find one version ID, then the restore service loaded that selected version again. Version history has no fixed maximum. The existing restore confirmation already names the selected version and asks before publishing it.
+- **Improvement:** Validate the requested version with one `id` plus `course_id` lookup and use its version number for the audit event. Keep the existing restore service responsible for loading the source content.
+- **Why it helps:** Restoring an older course version avoids allocating and scanning the complete history in memory, while the course-scoped lookup continues to reject IDs from other courses.
+- **Interface review:** The restore control continues to confirm the version number before publishing, and history rows retain publisher, title, date, and restore action. No UI change was indicated.
+- **Checked:** The course-management regression passed and asserts that the restore request prepares one course-scoped version lookup and never queries the complete history. Also checked `node --check` for the route and regression file and `git diff --check`.
+
 ## 2026-10-11 — Recheck database migration and session startup reliability
 
 - **Reviewed:** SQLite initialization and schema migrations through version 32, session ownership and expiry handling, indexed startup/daily cleanup, cleanup-error reporting, and readiness checks during migration failure and shutdown.
