@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Cover structured URL-encoded parser errors
+
+- **Reviewed:** The shared HTTP error handler maps excess URL-encoded parameters to 413 and unsupported request charsets to 415, but the existing parser route regression only exercised JSON parse failures.
+- **Improvement:** Extend the parser regression to send too many form fields and an unsupported `shift_jis` charset, asserting each status and structured error code.
+- **Why it helps:** Clients receive predictable structured errors for URL-encoded requests, and both parser mappings are protected from regressions.
+- **Checked:** Focused parser route tests passed (12/12); full `npm test` passed. `npx tsc --noEmit`, `npm run build`, `node --check tests/server/last-login.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Recheck remaining request defaults and reviewed controls
 
 - **Reviewed:** Server-side `|| []` and `|| {}` fallbacks after the learning-path validation fixes, the current watch-tracked player caption selector and responsive toolbar rules, and the administrator role selector's accessible markup and pointer bounds.
