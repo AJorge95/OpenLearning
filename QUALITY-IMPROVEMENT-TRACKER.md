@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Stream learner course memberships into My learning pages
+
+- **Reviewed:** My learning's course membership query, visibility checks, course activity ordering, page clamping, and the existing learner-side 24-course load-more flow.
+- **Improvement:** Start from the learner's indexed enrollments, grants, and published-path memberships instead of scanning every published course. Stream eligible rows, retain only the requested page and a bounded tail for exact totals and out-of-range clamping, and avoid caching streamed canonical course rows. Preserve direct-enrollment, grant, then path activity precedence and existing access checks.
+- **Why it helps:** The query work follows each learner's relationships as the catalog grows, and application memory no longer holds all matching course rows just to return one page. Learners keep stable ordering and exact pagination metadata.
+- **Checked:** Added regression coverage for 53 memberships, page boundaries, a partial final-page clamp, mixed membership precedence, incremental iteration, and indexed query-plan paths. The focused pager check passed; the full project test suite, TypeScript check, production build, syntax checks, and `git diff --check` all passed.
+
 ## 2026-10-11 — Recheck course media uploads and delivery
 
 - **Reviewed:** The MP4, cover, document, and caption upload paths; file signature and dimension validation; cancellation and uncertain-network feedback; transaction/audit rollback and temporary-file cleanup; protected lesson downloads; and byte-range streaming for video seeking.

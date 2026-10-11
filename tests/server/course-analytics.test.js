@@ -960,6 +960,108 @@ test('private path course access follows the current step prerequisite setting',
   assert.ok(!(await afterRemoval.json()).courses.some((course) => course.id === 'path-course-target'));
 });
 
+test('My learning streams indexed user memberships into bounded stable pages', async () => {
+  const userId = 'learner-my-learning-pager';
+  const coursePrefix = 'my-learning-pager-course-';
+  const pageSize = 24;
+  const count = 53;
+  const addFixtures = database.transaction(() => {
+    database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
+      VALUES (?, 'my_learning_pager', 'my-learning-pager@example.invalid', 'not-used', 'learner', 0)`).run(userId);
+    const addCourse = database.prepare(`INSERT INTO courses (id, title, status, visibility, created_by, updated_by)
+      VALUES (?, ?, 'published', 'public', 'admin-1', 'admin-1')`);
+    const addEnrollment = database.prepare(`INSERT INTO enrollments (id, course_id, user_id, enrolled_at)
+      VALUES (?, ?, ?, ?)`);
+    const addGrant = database.prepare(`INSERT INTO course_grants (id, course_id, user_id, granted_by, granted_at)
+      VALUES (?, ?, ?, 'admin-1', ?)`);
+    for (let position = 1; position <= count; position += 1) {
+      const courseId = `${coursePrefix}${String(position).padStart(2, '0')}`;
+      addCourse.run(courseId, `My learning page course ${position}`);
+      addEnrollment.run(`my-learning-pager-enrollment-${position}`, courseId, userId,
+        `2026-10-11 00:${String(position).padStart(2, '0')}:00`);
+    }
+    addGrant.run('my-learning-pager-newer-grant', `${coursePrefix}01`, userId, '2026-10-14 00:00:00');
+    database.prepare(`INSERT INTO learning_paths (id, title, status, created_by, updated_by)
+      VALUES ('my-learning-pager-path', 'My learning pager path', 'published', 'admin-1', 'admin-1')`).run();
+    database.prepare(`INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by, enrolled_at)
+      VALUES ('my-learning-pager-path-enrollment', 'my-learning-pager-path', ?, 'assigned', 'admin-1', '2026-10-15 00:00:00')`).run(userId);
+    database.prepare(`INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+      VALUES ('my-learning-pager-path-step', 'my-learning-pager-path', ?, 0, 0)`).run(`${coursePrefix}02`);
+  });
+
+  try {
+    addFixtures();
+    const originalPrepare = database.prepare;
+    let candidateSql = '';
+    let candidateIterateCount = 0;
+    let candidateAllCount = 0;
+    database.prepare = (sql) => {
+      const statement = originalPrepare.call(database, sql);
+      if (!sql.trimStart().startsWith('WITH course_activity(course_id, activity_at, precedence) AS (')) return statement;
+      candidateSql = sql;
+      return new Proxy(statement, {
+        get(target, property) {
+          const value = Reflect.get(target, property, target);
+          if (property === 'iterate') return (...args) => { candidateIterateCount += 1; return value.apply(target, args); };
+          if (property === 'all') return (...args) => { candidateAllCount += 1; return value.apply(target, args); };
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    };
+
+    let firstPage;
+    try {
+      const response = await fetch(apiUrl('/my-learning?page=1&includeCertificates=0'), {
+        headers: userHeaders(userId),
+      });
+      assert.equal(response.status, 200);
+      firstPage = await response.json();
+    } finally {
+      delete database.prepare;
+    }
+
+    assert.equal(firstPage.total, count);
+    assert.equal(firstPage.page, 1);
+    assert.equal(firstPage.pageSize, pageSize);
+    assert.equal(firstPage.hasMore, true);
+    assert.deepEqual(firstPage.courses.map((course) => course.id),
+      Array.from({ length: pageSize }, (_, index) => `${coursePrefix}${String(count - index).padStart(2, '0')}`));
+    assert.equal(candidateIterateCount, 1, 'the membership query should be consumed incrementally');
+    assert.equal(candidateAllCount, 0, 'the membership query should not materialize every candidate row');
+
+    const plan = database.prepare(`EXPLAIN QUERY PLAN ${candidateSql}`).all(userId, userId, userId);
+    const planDetails = plan.map((entry) => entry.detail).join('\n');
+    assert.match(planDetails, /enrollments_user/);
+    assert.match(planDetails, /grants_user/);
+    assert.match(planDetails, /learning_path_enrollments_user/);
+    assert.doesNotMatch(planDetails, /SCAN c\b/, planDetails);
+
+    const secondResponse = await fetch(apiUrl('/my-learning?page=2&includeCertificates=0'), {
+      headers: userHeaders(userId),
+    });
+    assert.equal(secondResponse.status, 200);
+    const secondPage = await secondResponse.json();
+    assert.equal(secondPage.page, 2);
+    assert.equal(secondPage.hasMore, true);
+    assert.deepEqual(secondPage.courses.map((course) => course.id),
+      Array.from({ length: pageSize }, (_, index) => `${coursePrefix}${String(count - pageSize - index).padStart(2, '0')}`));
+
+    const lastResponse = await fetch(apiUrl('/my-learning?page=99&includeCertificates=0'), {
+      headers: userHeaders(userId),
+    });
+    assert.equal(lastResponse.status, 200);
+    const lastPage = await lastResponse.json();
+    assert.equal(lastPage.page, 3);
+    assert.equal(lastPage.hasMore, false);
+    assert.deepEqual(lastPage.courses.map((course) => course.id),
+      Array.from({ length: count - pageSize * 2 }, (_, index) => `${coursePrefix}${String(count - pageSize * 2 - index).padStart(2, '0')}`));
+  } finally {
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run('my-learning-pager-path');
+    database.prepare('DELETE FROM courses WHERE id LIKE ?').run(`${coursePrefix}%`);
+    database.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  }
+});
+
 test('My learning caches prerequisite completion checks as enrolled paths grow', async () => {
   const pathId = 'my-learning-prerequisite-cache';
   database.prepare(`INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)

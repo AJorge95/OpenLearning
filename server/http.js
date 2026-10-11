@@ -21,7 +21,7 @@ const requestBodyErrors = new Map([
 const currentUserStatement = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?');
 const courseGrantStatement = db.prepare('SELECT 1 FROM course_grants WHERE course_id = ? AND user_id = ?');
 const courseByIdStatement = db.prepare('SELECT * FROM courses WHERE id = ?');
-const canonicalCourseStatement = db.prepare('SELECT * FROM courses WHERE id = ? AND logical_course_id IS NULL');
+const canonicalCourseStatement = db.prepare('SELECT id, logical_course_id, status, visibility FROM courses WHERE id = ? AND logical_course_id IS NULL');
 const activeCourseVersionStatement = db.prepare('SELECT storage_course_id FROM course_versions WHERE course_id = ? ORDER BY version_number DESC LIMIT 1');
 const courseByModuleIdStatement = db.prepare('SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id WHERE m.id = ?');
 const courseByLessonIdStatement = db.prepare('SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN lessons l ON l.module_id = m.id WHERE l.id = ?');
@@ -148,10 +148,9 @@ function canViewCourseWithCache(course, user, cache) {
   const hasLoadedCanonicalAccessFields = course.logical_course_id === null
     && typeof course.status === 'string'
     && typeof course.visibility === 'string';
-  const canonical = cachedValue(cache?.canonical, courseId,
-    () => hasLoadedCanonicalAccessFields
-      ? course
-      : canonicalCourseStatement.get(courseId));
+  const canonical = hasLoadedCanonicalAccessFields
+    ? course
+    : cachedValue(cache?.canonical, courseId, () => canonicalCourseStatement.get(courseId));
   if (!canonical || canonical.status !== 'published') return false;
   if (course.logical_course_id) {
     const active = cachedValue(cache?.activeVersions, courseId,
