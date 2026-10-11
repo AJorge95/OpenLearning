@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Explain last-administrator account restrictions
+
+- **Reviewed:** The account PATCH route already prevents demoting or disabling the last active administrator, but the account-details page left both controls enabled until the server returned a conflict.
+- **Improvement:** Include a derived `isLastActiveAdmin` flag in account-detail and account-update responses. Disable the role and account-status controls for that account and show a visible explanation associated with both controls.
+- **Why it helps:** Administrators can see the restriction and the step required to change it before attempting an update that the server will reject.
+- **Interface review:** The explanation is visible below the controls and exposed through each control’s accessible description. Other profile and password controls remain available.
+- **Checked:** Focused account-role checks passed (7/7); registration/account-route tests passed (23/23), including the state changing when another active administrator is disabled. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, JavaScript syntax checks, and `git diff --check` passed. The in-app browser redirected the requested account-details route to `/login`, so rendered admin interaction remains unverified.
+
 ## 2026-10-11 — Load My Learning courses independently of certificates
 
 - **Reviewed:** The initial My Learning API response included both course and certificate data in one request. A certificate-history query failure therefore rejected the combined request and hid courses that were otherwise available. Certificate pagination and API support for omitting certificate data already existed.
