@@ -181,6 +181,7 @@ export function LearningPathsPage() {
   const [selectedLearner, setSelectedLearner] = useState('');
   const [assignmentSearch, setAssignmentSearch] = useState('');
   const [assignmentAppliedSearch, setAssignmentAppliedSearch] = useState('');
+  const assignmentSearchInputRef = useRef<HTMLInputElement>(null);
   const [assignmentPage, setAssignmentPage] = useState(1);
   const [assignmentPageSize, setAssignmentPageSize] = useState(50);
   const [assignmentTotal, setAssignmentTotal] = useState(0);
@@ -398,6 +399,14 @@ export function LearningPathsPage() {
     void loadPathLearners(pathId, query, 1);
   }
 
+  function clearPathLearnerSearch(pathId: string) {
+    if (assignmentBusy || assignmentPathRef.current !== pathId) return;
+    setAssignmentSearch(''); setAssignmentAppliedSearch(''); setAssignmentPage(1); setSelectedLearner('');
+    // Keep keyboard focus in the persistent search field when this empty-state action disappears.
+    assignmentSearchInputRef.current?.focus();
+    void loadPathLearners(pathId, '', 1);
+  }
+
   function changeAssignmentPage(pathId: string, page: number) {
     if (assignmentBusy || assignmentLoading || assignmentPathRef.current !== pathId) return;
     setAssignmentPage(page); setSelectedLearner('');
@@ -490,11 +499,13 @@ export function LearningPathsPage() {
             : !path.enrolled && path.selfEnrollment ? <Button aria-label={joiningPathId === path.id ? `Joining ${path.title}` : `Join path: ${path.title}`} disabled={joiningPathId !== null} aria-busy={joiningPathId === path.id} onClick={() => void selfEnroll(path)}>{joiningPathId === path.id ? 'Joining…' : 'Join path'}</Button> : path.enrolled ? <span className="program-enrolled"><Check size={15} />Enrolled</span> : null}
         </div>
         {staff && canAssignLearningPathLearners(path.status) && assignmentPath === path.id && <div id={`path-assignments-${path.id}`} className="path-assignment-panel" aria-busy={assignmentLoading || assignmentBusy}><h3>Assign a learner</h3>
-          <form className="management-search path-assignment-search" onSubmit={(event) => searchPathLearners(event, path.id)}><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search learners by name or email" maxLength={100} placeholder="Search learners by name or email" value={assignmentSearch} disabled={assignmentBusy} onChange={(event) => setAssignmentSearch(event.target.value)} /><Button type="submit" variant="quiet" disabled={assignmentBusy}>Search</Button></form>
+          <form className="management-search path-assignment-search" onSubmit={(event) => searchPathLearners(event, path.id)}><Search size={16} aria-hidden="true" /><input ref={assignmentSearchInputRef} type="search" aria-label="Search learners by name or email" maxLength={100} placeholder="Search learners by name or email" value={assignmentSearch} disabled={assignmentBusy} onChange={(event) => setAssignmentSearch(event.target.value)} /><Button type="submit" variant="quiet" disabled={assignmentBusy}>Search</Button></form>
           <div className="path-assignment-controls"><AppSelect ariaLabel="Select a learner" value={selectedLearner} disabled={assignmentLoading || assignmentBusy || assignmentLoadError || assignableLearners.length === 0} onChange={setSelectedLearner} options={[{ value: '', label: assignmentTotal === 0 ? 'No learners found' : assignableLearners.length ? 'Choose a learner' : 'No unassigned learners on this page', disabled: true }, ...assignableLearners.map((learner) => ({ value: learner.id, label: learner.email ? `${learner.username} · ${learner.email}` : learner.username }))]} /><Button disabled={!selectedLearner || assignmentLoading || assignmentBusy || assignmentLoadError} onClick={() => void assignLearner(path.id)}>{assignmentAction === 'assign' ? 'Assigning…' : 'Assign'}</Button></div>
           {assignmentLoading && <p className="path-assignment-status" role="status">Loading learners…</p>}
           {assignmentLoadError && <Button type="button" variant="secondary" onClick={() => void loadPathLearners(path.id, assignmentAppliedSearch, assignmentPage)}>Try loading learners again</Button>}
-          {!assignmentLoading && !assignmentLoadError && assignmentTotal === 0 && <p className="path-assignment-status" role="status">{assignmentAppliedSearch ? 'No active learners match this search.' : 'There are no active learner accounts yet.'}</p>}
+          {!assignmentLoading && !assignmentLoadError && assignmentTotal === 0 && (assignmentAppliedSearch
+            ? <div className="path-assignment-empty"><p className="path-assignment-status" role="status">No active learners match this search.</p><Button type="button" variant="quiet" disabled={assignmentBusy} onClick={() => clearPathLearnerSearch(path.id)}>Clear search</Button></div>
+            : <p className="path-assignment-status" role="status">There are no active learner accounts yet.</p>)}
           {!assignmentLoading && !assignmentLoadError && assignmentTotal > 0 && assignableLearners.length === 0 && <p className="path-assignment-status" role="status">All learners on this page are already enrolled. Search or move to another page to find someone else.</p>}
           {!assignmentLoading && !assignmentLoadError && assignmentTotal > 0 && <div className="log-pagination path-learner-pagination"><p role="status" aria-live="polite" aria-atomic="true">Showing {(assignmentPage - 1) * assignmentPageSize + 1}–{Math.min(assignmentPage * assignmentPageSize, assignmentTotal)} of {assignmentTotal} learners</p><div><Button variant="secondary" disabled={assignmentPage <= 1 || assignmentBusy} onClick={() => changeAssignmentPage(path.id, assignmentPage - 1)}>Previous</Button><span>Page {assignmentPage} of {Math.max(1, Math.ceil(assignmentTotal / assignmentPageSize))}</span><Button variant="secondary" disabled={!assignmentHasMore || assignmentBusy} onClick={() => changeAssignmentPage(path.id, assignmentPage + 1)}>Next</Button></div></div>}
           {enrolledLearners.length > 0 && <><h4 className="path-assigned-heading">Enrollments on this page</h4><ul className="path-assigned-learners">{enrolledLearners.map((learner) => <li key={learner.id}><span>{learner.username}{learner.email && <small>{learner.email}</small>}<small>{learner.source === 'self' ? 'Self-enrolled' : 'Assigned'}</small></span>{learner.source === 'assigned' && <button type="button" className="text-action" aria-label={`${removingLearnerId === learner.id ? 'Removing assignment for' : 'Remove assignment for'} ${learner.username} from ${path.title}`} disabled={assignmentBusy || assignmentLoading} aria-busy={removingLearnerId === learner.id} onClick={() => requestAssignmentRemoval(path, learner)}>{removingLearnerId === learner.id ? 'Removing…' : 'Remove assignment'}</button>}</li>)}</ul></>}
