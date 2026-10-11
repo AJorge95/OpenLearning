@@ -237,6 +237,7 @@ export function CourseManagementPage() {
     setAppliedQuery(nextQuery);
     void load(1, { query: nextQuery, status });
   }
+  // The empty-state action disappears after clearing, so return keyboard focus to the persistent input.
   function clearCourseSearch() {
     setQuery('');
     setAppliedQuery('');
@@ -1905,6 +1906,8 @@ export function AdminUsersPage() {
   }, [roleFilter, approvalFilter]);
 
   const hasAppliedUserFilters = Boolean(appliedQuery || roleFilter !== 'all' || approvalFilter !== 'all');
+  // Role and approval changes reload through the effect; search-only resets need their own request.
+  // The empty-state action disappears on reset, so keep keyboard focus in the persistent search field.
   function clearUserListFilters() {
     const filterSelectionChanged = roleFilter !== 'all' || approvalFilter !== 'all';
     setQuery('');
