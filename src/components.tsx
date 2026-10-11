@@ -137,6 +137,30 @@ export function Header() {
   }, [pathname]);
 
   useEffect(() => {
+    const closeWhenOutside = (event: Event) => {
+      const menu = userMenuRef.current;
+      if (!menu?.open || !(event.target instanceof Node) || menu.contains(event.target)) return;
+      menu.open = false;
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      const menu = userMenuRef.current;
+      if (event.key !== 'Escape' || !menu?.open) return;
+      event.preventDefault();
+      menu.open = false;
+      menu.querySelector('summary')?.focus();
+    };
+
+    document.addEventListener('pointerdown', closeWhenOutside);
+    document.addEventListener('focusin', closeWhenOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeWhenOutside);
+      document.removeEventListener('focusin', closeWhenOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
+
+  useEffect(() => {
     const revealActiveLink = () => {
       const navigation = mainNavigationRef.current;
       const activeLink = navigation?.querySelector<HTMLAnchorElement>('a[aria-current="page"]');

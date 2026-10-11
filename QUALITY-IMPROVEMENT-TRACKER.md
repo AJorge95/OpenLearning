@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Dismiss the account menu when interaction leaves it
+
+- **Reviewed:** The shared learner header's native account menu closed on route changes but stayed open when users clicked or tabbed elsewhere; it also lacked an Escape handler.
+- **Improvement:** Close the menu on outside pointer or focus events, and let Escape close it while restoring focus to the summary. Keep interactions inside the menu untouched and remove listeners when the header unmounts.
+- **Why it helps:** Pointer and keyboard users can dismiss the popover consistently without needing to navigate or reopen the trigger.
+- **Backend review:** Account navigation and sign-out behavior are unchanged; no backend or API change was indicated.
+- **Checked:** Focused account-menu tests passed (2/2); the full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. A local browser preview verified trigger opening, outside-pointer dismissal, focus remaining inside, dismissal when focus leaves, Escape dismissal, and focus restoration; browser warnings and errors were absent. The protected account-details route remains unavailable in the signed-out browser.
+
 ## 2026-10-11 — Avoid repeating category scans while loading courses
 
 - **Reviewed:** Each `/api/courses` page returned the full accessible category list. The learner page uses it for the filter after the first response, while each later “Load more” request caused another distinct scan over published root courses.
