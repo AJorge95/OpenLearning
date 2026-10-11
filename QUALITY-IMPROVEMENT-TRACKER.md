@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep keyboard focus visible in course action menus
+
+- **Reviewed:** Course-row menu items receive focus during keyboard navigation, but the combined hover/focus rule removed their outline and left only the subtle hover background as a focus cue.
+- **Improvement:** Separate hover styling from `:focus-visible` styling and give focused menu items a solid, inset accent outline that follows the active platform palette.
+- **Why it helps:** Keyboard users can identify the active menu action reliably against the white popover, including when moving among course assignment, publication, and archive actions.
+- **Backend review:** The row menu already supports arrow-key movement, Home/End, Escape, and focus restoration; no API or server behavior change was indicated.
+- **Checked:** The new focused regression passed (1/1). A local preview using the app stylesheet and row-menu markup showed the first Tab target with a 2px solid accent outline (`outline-offset: -2px`) and no console warnings or errors. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, test syntax, and `git diff --check` passed. The authenticated course-management route was not available in the signed-out browser.
+
 ## 2026-10-11 — Refresh comment paging after partial overlap
 
 - **Reviewed:** Lesson feedback reloads when the server's total changes or a whole requested page is already loaded. If a comment is added while another is removed, the total can remain unchanged while the next offset page partially overlaps the current list.
