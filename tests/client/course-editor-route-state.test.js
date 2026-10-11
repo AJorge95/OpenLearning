@@ -92,23 +92,46 @@ test('review actions keep successful decisions visible when editor refreshes fai
   assert.match(decideReview, /setError\(reviewDecisionSaved[\s\S]*?Review decision was saved, but the course editor could not be refreshed\./);
 });
 
-test('course-version restores prevent duplicate writes and keep feedback scoped to the source course', () => {
+test('course-version restore confirmation validates its route and keeps feedback scoped to the source course', () => {
   const source = fs.readFileSync(sourcePath, 'utf8');
   const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const restoreHandlers = [];
+  const restoreHandlers = new Map();
   function visit(node) {
-    if (ts.isFunctionDeclaration(node) && node.name?.text === 'restoreVersion') restoreHandlers.push(node.getText(sourceFile));
+    if (ts.isFunctionDeclaration(node) && ['requestRestoreVersion', 'confirmPendingVersionRestore', 'restoreVersion'].includes(node.name?.text || '')) {
+      restoreHandlers.set(node.name.text, node.getText(sourceFile));
+    }
     ts.forEachChild(node, visit);
   }
   visit(sourceFile);
 
-  assert.equal(restoreHandlers.length, 1, 'expected one version restore handler');
-  const restoreVersion = restoreHandlers[0];
-  assert.match(restoreVersion, /const requestedCourseId = courseId;/);
+  assert.equal(restoreHandlers.size, 3, 'expected a request, confirmation, and restore handler');
+  const requestRestoreVersion = restoreHandlers.get('requestRestoreVersion');
+  const confirmPendingVersionRestore = restoreHandlers.get('confirmPendingVersionRestore');
+  const restoreVersion = restoreHandlers.get('restoreVersion');
+  assert.match(requestRestoreVersion, /const requestedCourseId = courseId;/);
+  assert.match(requestRestoreVersion, /restoreVersionRequestsRef\.current\.has\(requestKey\)/);
+  assert.match(requestRestoreVersion, /setPendingRestoreVersion\(\{ courseId: requestedCourseId, versionId: version\.id, versionNumber: version\.version_number \}\)/);
+  assert.doesNotMatch(requestRestoreVersion, /api\.post|window\.confirm/);
+  assert.match(confirmPendingVersionRestore, /pending\.courseId !== courseId \|\| pending\.courseId !== routeCourseIdRef\.current/);
+  assert.match(confirmPendingVersionRestore, /versions\.find\(\(current\) => current\.id === pending\.versionId\)/);
+  assert.match(confirmPendingVersionRestore, /restoreVersion\(version, pending\.courseId\)/);
+  assert.match(restoreVersion, /requestedCourseId: string/);
   assert.match(restoreVersion, /const requestKey = `\$\{requestedCourseId\}:\$\{version\.id\}`;/);
   assert.match(restoreVersion, /restoreVersionRequestsRef\.current\.has\(requestKey\)/);
   assert.match(restoreVersion, /api\.post\(`\/api\/manage\/courses\/\$\{requestedCourseId\}\/versions\/\$\{version\.id\}\/restore`/);
   assert.match(restoreVersion, /if \(routeCourseIdRef\.current !== requestedCourseId\) return;/);
   assert.match(restoreVersion, /versionRestored = true;[\s\S]*?setNotice\(`Version \$\{version\.version_number\} was restored[\s\S]*?await load\(requestedCourseId\)/);
   assert.match(restoreVersion, /setError\(versionRestored[\s\S]*?was restored, but the course editor could not be refreshed\./);
+});
+
+test('course-version restore warns about draft replacement and the selected completion policy', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+
+  assert.doesNotMatch(source, /window\.confirm\(`Publish version \$\{version\.version_number\}/);
+  assert.match(source, /setPendingRestoreVersion\(null\);[\s\S]*?if \(route\.courseId\)/);
+  assert.match(source, /title=\{`Restore version \$\{pendingRestoreVersion\.versionNumber\}\?`\}/);
+  assert.match(source, /Any current unpublished revision will be discarded\./);
+  assert.match(source, /requiresRecompletion[\s\S]*?Learners will need to complete the new version again\. Previous completions, quiz attempts, and certificates stay in history\./);
+  assert.match(source, /Existing completions remain valid\. Previous quiz attempts and certificates stay in history\./);
+  assert.match(source, /onConfirm=\{confirmPendingVersionRestore\}/);
 });

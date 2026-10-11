@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Confirm course-version restores and their effects
+
+- **Reviewed:** The restore route publishes the selected historical content as a new version and removes any existing draft revision. Its `requiresRecompletion` option determines whether learners must target the newly published version; previous completion and certificate records remain in history. The editor used a generic native confirmation.
+- **Improvement:** Replace the browser prompt with the shared accessible confirmation dialog. Name the source version, explain that an unpublished revision will be discarded, and describe the selected learner completion policy. Defer the restore request until confirmation, recheck that the version is still in the current course history, and clear pending confirmation when the course route changes.
+- **Why it helps:** Course managers can see the draft and learner impact before restoring, and a stale confirmation cannot target a different course or a version no longer in the loaded history.
+- **Backend review:** The existing restore route already applies version creation, learning-state updates, and its audit entry in one transaction; no API behavior changed.
+- **Checked:** The focused course-editor/version-history checks passed (6/6); the existing course-version restore route regression passed (1/1); `npm run build` passed strict TypeScript checking and Vite bundling; and `git diff --check` passed. Chrome showed the version-specific dialog with both the default completion policy and the require-recompletion variant. Cancel closed the dialog, restored the temporary checkbox state, and left version 10 current; no restore request was submitted.
+
 ## 2026-10-11 — Replace the module-title browser prompt with inline editing
 
 - **Reviewed:** Module renaming used a native browser prompt. The existing module PATCH endpoint validates titles up to 160 characters and writes its audit record in the same transaction.
