@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Align the API default with the local development proxy
+
+- **Reviewed:** Express's default listen port, the Vite `/api` and `/media` proxy targets, the environment example, README startup instructions, and config validation.
+- **Improvement:** Set the backend default to port 6173 consistently in configuration, `.env.example`, the Vite proxies, and the README; update the default-port regression assertion.
+- **Why it helps:** Starting the local app with the documented defaults now routes browser API and media requests to the same port the server listens on, avoiding a silent client/server mismatch.
+- **Checked:** The focused config suite passed (6/6); the full suite passed (522/522); `npm run build` passed strict TypeScript checking and Vite bundling; `git diff --check` passed. Local `http://127.0.0.1:6173/healthz` returned HTTP 200, and `http://127.0.0.1:5173/api/setup/status` returned HTTP 200 through the Vite proxy.
+
 ## 2026-10-11 — Require administrator approval before learner sign-in
 
 - **Reviewed:** Public learner registration and login, session loading, admin user filtering and account details, registration settings, migration history, and the existing role-selector hit-area fix.

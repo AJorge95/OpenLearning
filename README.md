@@ -51,7 +51,7 @@ npm run build
 npm start
 ```
 
-Open `http://localhost:3000`. On the first launch, the two-step setup wizard asks for the bootstrap token, platform name, optional icon and color palette, initial administrator credentials, public connection protocol, and registration policy. Setup can only be completed once. When registration is enabled, new accounts receive the learner role. Administrators can update branding, protocol, registration access, and the account cap from **Settings**. A limit of `0` means unlimited accounts; a positive limit counts all accounts, including administrators and moderators.
+Open `http://localhost:6173`. On the first launch, the two-step setup wizard asks for the bootstrap token, platform name, optional icon and color palette, initial administrator credentials, public connection protocol, and registration policy. Setup can only be completed once. When registration is enabled, new accounts receive the learner role. Administrators can update branding, protocol, registration access, and the account cap from **Settings**. A limit of `0` means unlimited accounts; a positive limit counts all accounts, including administrators and moderators.
 
 Service monitors can use `/healthz` to check that the HTTP process is responding. `/readyz` reports ready only when SQLite has a schema-migration version, setup is complete (`setup_complete = '1'`), and at least one enabled administrator account exists. It returns HTTP 503 when any readiness check fails or while the server is draining during shutdown.
 
@@ -61,7 +61,7 @@ For local development, run the Vite client and API together:
 npm run dev
 ```
 
-The development client is available at `http://127.0.0.1:5173` and proxies API and media requests to the Express server on port 3000.
+The development client is available at `http://127.0.0.1:5173` and proxies API and media requests to the Express server on port 6173.
 
 ## Checks
 
@@ -97,7 +97,7 @@ Environment variables can be set in `.env` or in the process environment:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `NODE_ENV` | `development` | Accepted values are `development`, `test`, and `production`. Set to `production` for deployment cookies and production security headers. |
-| `PORT` | `3000` | HTTP TCP port from 1 to 65535. Invalid values stop startup. |
+| `PORT` | `6173` | HTTP TCP port from 1 to 65535. Invalid values stop startup. |
 | `DATA_DIR` | `./data` | Parent directory used to derive database and media paths when their overrides are unset. |
 | `DB_PATH` | `./data/openlearning.sqlite` | SQLite database file path. If unset, defaults to `openlearning.sqlite` inside `DATA_DIR`. |
 | `MEDIA_ROOT` | `./data/course-media` | Root directory for course media; if unset, defaults to `course-media` inside `DATA_DIR`. Each course gets its own subdirectory. |

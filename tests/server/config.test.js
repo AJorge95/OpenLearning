@@ -54,7 +54,7 @@ test('config defaults are stable and derived paths follow DATA_DIR', () => {
     trustProxy: config.trustProxy,
   }, {
     nodeEnv: 'development',
-    port: 3000,
+    port: 6173,
     dataDir: path.join(workingDirectory, 'custom-data'),
     dbPath: path.join(workingDirectory, 'custom-data', 'openlearning.sqlite'),
     mediaRoot: path.join(workingDirectory, 'custom-data', 'course-media'),
