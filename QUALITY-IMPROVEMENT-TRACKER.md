@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve account-update confirmation when list refresh fails
+
+- **Reviewed:** The administrator role and admin-status update flow, the server-confirmed PATCH response, and the follow-up reload of the current user-list page and filters.
+- **Improvement:** Show the account-update success notice as soon as the PATCH succeeds, before attempting the follow-up list refresh.
+- **Why it helps:** A failed list read no longer hides a role or account-status change that the server already committed, reducing the chance that administrators repeat a successful change or misread its outcome.
+- **Backend review:** The account update is committed by the existing endpoint before the client reload; no backend change was needed.
+- **Checked:** Focused admin regressions passed (5/5); the full suite passed (527/527); `npm run build` passed strict TypeScript checking and Vite bundling; `git diff --check` passed. The follow-up read failure was not injected in the signed-in browser, so notice ordering is covered by source regression rather than a rendered failure state.
+
 ## 2026-10-11 — Preserve approval confirmation when list refresh fails
 
 - **Reviewed:** The admin approval mutation, its follow-up user-list request, the failed-list retry state, and the success/error notices rendered by the Users page.

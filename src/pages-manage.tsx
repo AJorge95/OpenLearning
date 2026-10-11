@@ -1777,7 +1777,10 @@ export function AdminUsersPage() {
         }
       } else if (changes.role !== undefined || (changes.disabled !== undefined && user.role === 'admin')) {
         const currentListState = userListStateRef.current;
-        if (!(await load(currentListState.page, currentListState.query, currentListState.roleFilter, currentListState.approvalFilter))) return;
+        // Preserve the committed change if only the follow-up list read fails.
+        setSuccess(`${user.username}'s account was updated.`);
+        await load(currentListState.page, currentListState.query, currentListState.roleFilter, currentListState.approvalFilter);
+        return;
       } else {
         setUsers((current) => current.map((row) => row.id === user.id ? { ...row, ...response.user } : row));
       }

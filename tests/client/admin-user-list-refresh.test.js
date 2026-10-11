@@ -23,5 +23,10 @@ test('account updates refresh the latest user-list filters and page', () => {
 
   assert.match(component.getText(sourceFile), /userListStateRef\.current = \{ query: appliedQuery, roleFilter, approvalFilter, page \};/);
   assert.match(functions.get('load'), /userListStateRef\.current = \{ query: requestedQuery, roleFilter: requestedRoleFilter, approvalFilter: requestedApprovalFilter, page: requestedPage \};/);
-  assert.match(functions.get('updateUser'), /const currentListState = userListStateRef\.current;\s*if \(!\(await load\(currentListState\.page, currentListState\.query, currentListState\.roleFilter, currentListState\.approvalFilter\)\)\) return;/);
+  const updateUser = functions.get('updateUser');
+  const refreshBranchStart = updateUser.indexOf('} else if (changes.role !== undefined');
+  const refreshBranchEnd = updateUser.indexOf('\n      } else {', refreshBranchStart);
+  const refreshBranch = updateUser.slice(refreshBranchStart, refreshBranchEnd);
+  assert.ok(refreshBranchStart >= 0 && refreshBranchEnd > refreshBranchStart);
+  assert.match(refreshBranch, /setSuccess\(`\$\{user\.username\}'s account was updated\.`\);\s*await load\(currentListState\.page, currentListState\.query, currentListState\.roleFilter, currentListState\.approvalFilter\);\s*return;/);
 });
