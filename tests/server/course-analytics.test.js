@@ -2106,6 +2106,40 @@ test('learning-path creation rejects falsey non-array course lists', async () =>
   assert.equal((await omittedResponse.json()).path.courseCount, 0);
 });
 
+test('learning-path creation rechecks course availability in its write transaction', async () => {
+  const courseId = 'path-create-availability-race';
+  const title = 'Course archived before path creation';
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, ?, 'published', 'admin-1', 'admin-1')`).run(courseId, title);
+
+  const originalTransaction = database.transaction;
+  let archivedBeforeTransaction = false;
+  database.transaction = function interceptPathCreation(callback, ...options) {
+    if (!archivedBeforeTransaction) {
+      archivedBeforeTransaction = true;
+      database.prepare("UPDATE courses SET status = 'archived' WHERE id = ?").run(courseId);
+    }
+    return originalTransaction.call(this, callback, ...options);
+  };
+
+  try {
+    const response = await fetch(apiUrl('/manage/learning-paths'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title, courses: [{ courseId }] }),
+    });
+
+    assert.equal(archivedBeforeTransaction, true);
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'invalid_path_course');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_paths WHERE title = ?').get(title).count, 0);
+    assert.equal(database.prepare('SELECT status FROM courses WHERE id = ?').get(courseId).status, 'archived');
+  } finally {
+    database.transaction = originalTransaction;
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('program boolean request fields reject strings without changing access settings', async () => {
   const invalidCreate = await fetch(apiUrl('/manage/learning-paths'), {
     method: 'POST',
