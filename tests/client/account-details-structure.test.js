@@ -53,3 +53,23 @@ test('account course activity renders the explicit assignment source', () => {
   assert.match(source, /type AdminAccountCourse = Course & \{[^}]*learningPathEnrolled: boolean/s);
   assert.match(source, /accountCourseAssignmentLabel\(course\)/);
 });
+
+test('last-admin conflicts refresh account details before showing the server explanation', () => {
+  const source = fs.readFileSync(pagePath, 'utf8');
+  const sourceFile = ts.createSourceFile(pagePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const component = sourceFile.statements.find((statement) => ts.isFunctionDeclaration(statement)
+    && statement.name?.text === 'AdminUserDetailsPage');
+  assert.ok(component, 'expected to find the admin user details page');
+  let updateAccount;
+
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === 'updateAccount') updateAccount = node.getText(sourceFile);
+    ts.forEachChild(node, visit);
+  }
+  visit(component);
+
+  assert.match(updateAccount, /cause instanceof ApiError && cause\.code === 'last_admin'/);
+  assert.match(updateAccount, /api\.get<AdminAccountDetails>\(`\/api\/admin\/users\/\$\{requestedUserId\}\?page=\$\{page\}`\)/);
+  assert.match(updateAccount, /setAccount\(refreshedAccount\);[\s\S]*?setError\(cause\.message\)/);
+  assert.match(updateAccount, /setCanRetryLoad\(!\(refreshCause instanceof ApiError\)[\s\S]*?refreshCause\.status >= 500\)/);
+});

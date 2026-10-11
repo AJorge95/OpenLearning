@@ -1912,7 +1912,25 @@ export function AdminUserDetailsPage() {
         }
       }
       if (isCurrentAction()) setSuccess(successMessage);
-    } catch (cause) { if (isCurrentAction()) setError(cause instanceof ApiError ? cause.message : 'Account settings could not be updated.'); }
+    } catch (cause) {
+      if (!isCurrentAction()) return;
+      if (cause instanceof ApiError && cause.code === 'last_admin') {
+        try {
+          const refreshedAccount = await api.get<AdminAccountDetails>(`/api/admin/users/${requestedUserId}?page=${page}`);
+          if (!isCurrentAction()) return;
+          setAccount(refreshedAccount);
+          setPage(refreshedAccount.page);
+          setError(cause.message);
+        } catch (refreshCause) {
+          if (!isCurrentAction()) return;
+          setAccount(null);
+          setError(refreshCause instanceof ApiError ? refreshCause.message : 'Account details could not be refreshed.');
+          setCanRetryLoad(!(refreshCause instanceof ApiError) || [0, 408, 429].includes(refreshCause.status) || refreshCause.status >= 500);
+        }
+      } else {
+        setError(cause instanceof ApiError ? cause.message : 'Account settings could not be updated.');
+      }
+    }
     finally { if (isCurrentAction()) setSavingAction(null); }
   }
 
