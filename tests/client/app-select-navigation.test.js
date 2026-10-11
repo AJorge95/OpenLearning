@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel } from '../../src/app-select-navigation.ts';
+import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel, isAppSelectUnavailable } from '../../src/app-select-navigation.ts';
 
 const options = [{}, { disabled: true }, {}];
 
@@ -24,6 +24,13 @@ test('custom-select End navigation finds the last enabled option', () => {
 test('custom-select navigation keeps its empty and all-disabled fallbacks', () => {
   assert.equal(findEnabledAppSelectIndex([], 0), 0);
   assert.equal(findEnabledAppSelectIndex([{ disabled: true }, { disabled: true }], 1, -1), 0);
+});
+
+test('custom-select is unavailable when it has no enabled choices', () => {
+  assert.equal(isAppSelectUnavailable([]), true);
+  assert.equal(isAppSelectUnavailable([{ disabled: true }, { disabled: true }]), true);
+  assert.equal(isAppSelectUnavailable([{}, { disabled: true }]), false);
+  assert.equal(isAppSelectUnavailable([{}], true), true);
 });
 
 test('custom-select typeahead matches case-insensitively, wraps, and skips disabled options', () => {

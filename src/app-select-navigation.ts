@@ -2,6 +2,13 @@ export type AppSelectNavigationOption = { disabled?: boolean };
 export type AppSelectTypeaheadOption = AppSelectNavigationOption & { label: string };
 export type AppSelectDisplayOption<T extends string | number> = { value: T; label: string };
 
+export function isAppSelectUnavailable(
+  options: readonly AppSelectNavigationOption[],
+  disabled = false,
+) {
+  return disabled || !options.some((option) => !option.disabled);
+}
+
 export function getAppSelectDisplayLabel<T extends string | number>(
   options: readonly AppSelectDisplayOption<T>[],
   value: T,

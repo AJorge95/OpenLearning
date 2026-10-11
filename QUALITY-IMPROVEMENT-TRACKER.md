@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Disable custom selects without enabled choices
+
+- **Reviewed:** The shared `AppSelect` navigation helper falls back to option index 0 when every option is disabled, while the trigger could still open that listbox.
+- **Improvement:** Treat an empty or all-disabled option set as unavailable. Disable the trigger, refuse open/choose actions, and hide the popup immediately if options become unavailable while it is open. Add helper and component-wiring regressions in `tests/client`.
+- **Why it helps:** Keyboard and assistive-technology users no longer reach a custom list that contains no actionable choice or announces a disabled option as active.
+- **Checked:** Focused AppSelect tests passed (16/16); full `npm test` passed; `npx tsc --noEmit`, `npm run build`, `node --check` for both changed tests, and `git diff --check` passed. Rendered all-disabled interaction was not replayed because the Browser plugin is unavailable, Playwright is not installed, and the in-app browser is signed out at `/login`.
+
 ## 2026-10-11 — Cover structured URL-encoded parser errors
 
 - **Reviewed:** The shared HTTP error handler maps excess URL-encoded parameters to 413 and unsupported request charsets to 415, but the existing parser route regression only exercised JSON parse failures.

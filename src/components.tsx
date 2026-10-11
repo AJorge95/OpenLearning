@@ -6,7 +6,7 @@ import { ApiError } from './api';
 import { useAuth } from './auth-context';
 import { BRAND_PALETTES, MAX_BRAND_ICON_BYTES } from './branding';
 import type { BrandingPalette } from './branding';
-import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel } from './app-select-navigation';
+import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel, isAppSelectUnavailable } from './app-select-navigation';
 import { getAppSelectHorizontalPosition, getAppSelectVerticalPosition } from './app-select-position';
 import { formatCountLabel } from './count-label';
 import { getHorizontalRevealScrollLeft } from './navigation-scroll';
@@ -279,6 +279,8 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   const id = useId().replaceAll(':', '');
   const menuId = `${id}-listbox`;
   const [open, setOpen] = useState(false);
+  const unavailable = isAppSelectUnavailable(options, disabled);
+  const menuOpen = open && !unavailable;
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 220, maxHeight: 280 });
@@ -290,7 +292,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   }
 
   function openMenu(startIndex = selectedIndex) {
-    if (disabled || !options.length) return;
+    if (unavailable) return;
     const trigger = triggerRef.current;
     if (trigger) {
       const rect = trigger.getBoundingClientRect();
@@ -304,7 +306,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
 
   function choose(index: number) {
     const option = options[index];
-    if (disabled || !option || option.disabled) return;
+    if (unavailable || !option || option.disabled) return;
     onChange(option.value);
     setOpen(false);
     triggerRef.current?.focus();
@@ -353,11 +355,11 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   }
 
   useEffect(() => {
-    if (disabled) setOpen(false);
-  }, [disabled]);
+    if (unavailable) setOpen(false);
+  }, [unavailable]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!menuOpen) return;
     function closeFromOutside(event: PointerEvent) {
       const target = event.target as Node;
       if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
@@ -374,17 +376,17 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
       window.removeEventListener('scroll', closeForLayoutChange, true);
       window.removeEventListener('resize', closeForLayoutChange);
     };
-  }, [open]);
+  }, [menuOpen]);
 
   useEffect(() => () => {
     if (typeaheadTimerRef.current !== null) window.clearTimeout(typeaheadTimerRef.current);
   }, []);
 
   return <div ref={rootRef} className={`app-select ${className}`.trim()}>
-    <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-labelledby={ariaLabelledBy} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-required={required || undefined} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined} aria-activedescendant={open ? `${menuId}-option-${activeIndex}` : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
+    <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-labelledby={ariaLabelledBy} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-required={required || undefined} aria-haspopup="listbox" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined} aria-activedescendant={menuOpen ? `${menuId}-option-${activeIndex}` : undefined} disabled={unavailable} onClick={() => menuOpen ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
       {leadingIcon && <span className="app-select-leading" aria-hidden="true">{leadingIcon}</span>}<span className="app-select-value">{getAppSelectDisplayLabel(options, value)}</span><ChevronDown className="app-select-chevron" size={16} aria-hidden="true" />
     </button>
-    {open && createPortal(<div ref={menuRef} id={menuId} className={`app-select-menu${matchTriggerWidth ? ' app-select-menu--match-trigger' : ''}`} role="listbox" aria-label={`${ariaLabel} options`} style={position}>
+    {menuOpen && createPortal(<div ref={menuRef} id={menuId} className={`app-select-menu${matchTriggerWidth ? ' app-select-menu--match-trigger' : ''}`} role="listbox" aria-label={`${ariaLabel} options`} style={position}>
       {options.map((option, index) => <div key={String(option.value)} id={`${menuId}-option-${index}`} className={`app-select-option${option.value === value ? ' selected' : ''}${index === activeIndex ? ' active' : ''}`} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined} onPointerDown={(event) => event.preventDefault()} onPointerEnter={() => !option.disabled && setActiveIndex(index)} onClick={() => choose(index)}>
         <span className="app-select-option-indicator" aria-hidden="true">{option.value === value && <Check size={14} />}</span><span className="app-select-option-label">{option.label}</span>
       </div>)}
