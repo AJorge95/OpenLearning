@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck the account role selector's right-side click area
+
+- **Reviewed:** The supplied screenshot identifies a wide wrapping label around the role selector. Current account-detail markup uses a separate visible label and custom combobox; the wrapper ignores pointer input outside the trigger, and the popup is measured to the trigger width.
+- **Result:** No additional code change; this interaction fix is already present in the current branch and covered by existing selector regressions.
+- **Why no change:** Repeating the same markup or sizing change would not improve the current implementation.
+- **Checked:** `node --test tests/client/app-select-label.test.js tests/client/app-select-position.test.js` passed (10/10). The connected browser redirects the admin route to `/login`, so the authenticated click interaction could not be replayed live.
+
 ## 2026-10-11 — Let learners filter a category named “All courses”
 
 - **Reviewed:** The catalog selector and query builder, server category filtering, category values accepted by course editing, empty-state logic, and narrow-screen filter layout. The catch-all selector value reused the text `All courses`, which is also a valid category, and both client and server treated that category as “no filter.”
