@@ -7,6 +7,7 @@ import { createServer } from 'node:http';
 import express from 'express';
 import { after, before, test } from 'node:test';
 import { MAX_LEARNING_PATH_COURSES } from '../../shared/learning-path-limits.js';
+import { COMPETENCY_PROGRESS_PAGE_SIZE } from '../../shared/competency-progress.js';
 
 const isolatedConfig = {
   NODE_ENV: 'test',
@@ -1734,6 +1735,68 @@ test('competency catalog batches mapped-course completion summaries', async () =
   assert.equal(threeCompetencies.queryCount, oneCompetency.queryCount);
   assert.deepEqual(threeCompetencies.competencies.map((item) => item.achieved), [true, false, false]);
   assert.deepEqual(threeCompetencies.competencies.map((item) => item.courseCount), [1, 1, 1]);
+});
+
+test('competency progress pages course details while retaining an overall achieved count', async () => {
+  const baseResponse = await fetch(apiUrl('/competencies?page=1'), { headers: userHeaders('learner-active') });
+  assert.equal(baseResponse.status, 200);
+  const baseline = await baseResponse.json();
+  const ids = Array.from({ length: COMPETENCY_PROGRESS_PAGE_SIZE + 1 }, (_, index) => `competency-page-${String(index).padStart(2, '0')}`);
+  const insertCompetency = database.prepare(`INSERT INTO competencies (id, title, description, active, created_by)
+    VALUES (?, ?, '', 1, 'admin-1')`);
+  ids.forEach((id, index) => insertCompetency.run(id, `Progress page competency ${String(index).padStart(2, '0')}`));
+  database.prepare('INSERT INTO course_competencies (course_id, competency_id, created_by) VALUES (?, ?, ?)')
+    .run('course-analytics', ids[COMPETENCY_PROGRESS_PAGE_SIZE], 'admin-1');
+
+  try {
+    const firstResponse = await fetch(apiUrl('/competencies?page=1'), { headers: userHeaders('learner-active') });
+    assert.equal(firstResponse.status, 200);
+    const firstPage = await firstResponse.json();
+    assert.equal(firstPage.pageSize, COMPETENCY_PROGRESS_PAGE_SIZE);
+    assert.equal(firstPage.total, baseline.total + ids.length);
+    assert.equal(firstPage.achievedTotal, baseline.achievedTotal + 1);
+    assert.equal(firstPage.competencies.length, COMPETENCY_PROGRESS_PAGE_SIZE);
+    assert.equal(firstPage.hasMore, true);
+
+    const collected = [...firstPage.competencies];
+    let nextPage = 2;
+    let secondMappingQuery = '';
+    while (firstPage.hasMore && nextPage <= Math.ceil(firstPage.total / firstPage.pageSize)) {
+      const originalPrepare = database.prepare;
+      if (nextPage === 2) {
+        database.prepare = (sql) => {
+          if (sql.includes('FROM course_competencies cc')) secondMappingQuery = sql;
+          return originalPrepare.call(database, sql);
+        };
+      }
+      let pageResponse;
+      try {
+        pageResponse = await fetch(apiUrl(`/competencies?page=${nextPage}`), { headers: userHeaders('learner-active') });
+      } finally {
+        if (nextPage === 2) database.prepare = originalPrepare;
+      }
+      assert.equal(pageResponse.status, 200);
+      const pageResult = await pageResponse.json();
+      assert.equal(pageResult.page, nextPage);
+      assert.equal(pageResult.total, firstPage.total);
+      assert.equal(pageResult.hasMore, nextPage * pageResult.pageSize < firstPage.total);
+      assert.equal('achievedTotal' in pageResult, false);
+      assert.ok(pageResult.competencies.length <= firstPage.pageSize);
+      collected.push(...pageResult.competencies);
+      if (nextPage === 2) assert.match(secondMappingQuery, /cc\.competency_id IN \(/);
+      nextPage += 1;
+    }
+
+    assert.equal(collected.length, firstPage.total);
+    assert.equal(new Set(collected.map((item) => item.id)).size, firstPage.total);
+    assert.deepEqual(collected.filter((item) => ids.includes(item.id)).map((item) => item.id), ids);
+    const completed = collected.find((item) => item.id === ids[COMPETENCY_PROGRESS_PAGE_SIZE]);
+    assert.equal(completed.achieved, true);
+    assert.deepEqual(completed.courses, [{ id: 'course-analytics', title: 'Analytics course', completed: true }]);
+  } finally {
+    database.prepare('DELETE FROM course_competencies WHERE competency_id IN (' + ids.map(() => '?').join(', ') + ')').run(...ids);
+    database.prepare('DELETE FROM competencies WHERE id IN (' + ids.map(() => '?').join(', ') + ')').run(...ids);
+  }
 });
 
 test('competency course lists order duplicate course titles by course ID', async () => {

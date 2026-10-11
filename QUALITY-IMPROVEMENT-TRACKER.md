@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Load competency progress pages on demand
+
+- **Reviewed:** The learner competency page rendered only 12 cards initially, but its API request still returned every active competency and mapped course. Later “Show more” clicks only revealed data already transferred and rendered summaries for the full catalog at startup.
+- **Improvement:** Add a shared 12-item page size and stable page ordering to the competency API. Page one retains the overall achieved count; later pages return mapped-course details only for their competencies. The learner page now requests pages on demand, appends results, announces loading and count changes, preserves loaded cards on later-page failures, and offers retry.
+- **Why it helps:** The initial response contains only the first card batch, and learners do not fetch mapped-course details for later pages unless they ask to view them. Page-scoped requests also avoid repeating summary work for competencies on other pages.
+- **Interface review:** Keep the overall achievement summary accurate from page one, retain live progress announcements, move focus to the updated count after the final page, and group retry feedback within the responsive pagination footer. The authenticated browser remains signed out at `/login`; Playwright is not installed, so rendered learner-page interaction was not replayed.
+- **Checked:** Focused competency client tests passed (4/4), focused server competency routes passed (9/9), and full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, both changed test syntax checks, and `git diff --check` passed.
+
 ## 2026-10-11 — Protect certificate route ownership and completion rules
 
 - **Reviewed:** Certificate-service tests covered version-specific issuance and persistence, but the learner HTTP route had no integration coverage for saved-certificate ownership, access roles, or its completion and profile-name responses.
