@@ -7514,7 +7514,7 @@
 - **Reviewed:** The browser comment’s target path and screenshot against the current account-details markup, the exact account route, and the role selector on an account where it is enabled.
 - **Result:** No source change was needed. The screenshot target identifies the old wrapping `<label>`; current markup uses a separate control container with pointer input disabled outside the trigger. The reported account is the only active administrator, so its role selector is disabled in the current data.
 - **Why no change:** On an enabled account, the wrapper and trigger measured the same 144px at a 1718×1270 viewport. Clicking 6px to the right left the menu closed; clicking the trigger opened it, and Escape closed it without changing the role.
-- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js` passed (10/10), and `git diff --check` passed. The connected Chrome page rendered the current account markup; the CUA surface did not expose a screenshot method (`tab.playwright.screenshot` is unavailable).
+- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js` passed (10/10), and `git diff --check` passed. On an enabled learner account in an isolated Chrome tab, the wrapper and trigger both measured 144px at 1718×1270; a click 194px to the right left the closed menu closed, a trigger click opened it, and the same far-right blank-area click closed it without changing the role. The exact reported account rendered its role selector disabled under the last-active-administrator safeguard. The page rendered normally with no console warnings or errors.
 
 ## 2026-10-11 — Read extended-size MP4 movie headers
 
