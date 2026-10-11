@@ -61,7 +61,7 @@
 - **Reviewed:** The supplied account-page screenshot, the current role selector markup and hit-area CSS, and the reported account route.
 - **Result:** No runtime change. On the exact reported route, the role selector is disabled because this is the only active administrator. On an enabled account page, clicking the visible 9rem trigger opened the menu; clicking 6px beyond its right edge closed it, and repeating that outside click left it closed. The screenshot's wrapping-label target is absent from the current markup.
 - **Why no change:** The current build already constrains pointer input to the visible trigger, and the enabled-control interaction matched that behavior. A source change would duplicate the existing fix without a current-build reproduction.
-- **Checked:** Focused account-role hitbox, select-label, and shared select interaction tests; exact account route and enabled-control pointer behavior in the local browser. No account role or other data was changed.
+- **Checked:** Focused account-role hitbox and select-label tests passed (10/10). On a fresh 1265 × 712 local browser view, the enabled control opened from its visible trigger; x=495 on the same row dismissed the open menu and left it closed on a repeated outside click. The adjacent x=492 point still hit the trigger, while x=493 and x=494 did not open it. The exact reported account remains disabled as the only active administrator. No account role or other data was changed; `git diff --check` passed.
 - **Needed to continue:** A current-build enabled account where clicking outside the trigger opens the menu, including the clicked location and viewport.
 
 ## 2026-10-11 — Preserve keyboard focus after course-row actions
