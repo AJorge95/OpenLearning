@@ -313,7 +313,7 @@ export function RegisterPage() {
 
   return <AuthPanel><h1>Create your account</h1><p className="auth-description">Join your learning space and explore available courses.</p>
     <form onSubmit={submit} className="form-stack" aria-busy={saving}>
-      <label>Email<input required type="email" maxLength={254} autoComplete="email" autoFocus value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} /></label>
+      <label>Email<input required type="email" maxLength={254} autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} /></label>
       <div className="account-name-fields"><label>First name <small>Required · used on certificates</small><input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} disabled={saving} /></label><label>Last name <small>Required · used on certificates</small><input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} disabled={saving} /></label></div>
       <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>Letters, numbers, dots, underscores, and hyphens.</small></label>
       {registrationFieldsLoading ? <p className="registration-fields-loading" role="status">Loading registration details…</p> : registrationFieldsError

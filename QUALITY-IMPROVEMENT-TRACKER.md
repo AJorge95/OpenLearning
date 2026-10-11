@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep signup focus at the page context
+
+- **Reviewed:** Registration-page autofocus, route-change focus management, the multi-field public signup form, and the sign-in page's username shortcut.
+- **Improvement:** Remove `autoFocus` from the registration email field while preserving its label and email autocomplete. Keep the existing login autofocus.
+- **Why it helps:** Visitors arriving at the longer signup form are no longer moved directly into its first field before they choose where to begin. In-app navigation continues to focus the main content and announce the new page.
+- **Interface and backend review:** Required-field, password, registration-field, and API behavior are unchanged.
+- **Checked:** Focused registration/post-login tests passed (8/8); `npm run build` passed with strict type checking; `git diff --check` passed. In the local browser at 1999×1244, direct `/register` load left Email unfocused, login still focused Username, and following Create an account from login focused the main content landmark. Mobile keyboard behavior was not checked.
+
 ## 2026-10-11 — Run strict type checking before production builds
 
 - **Reviewed:** The app's strict TypeScript configuration, installed compiler, Vite production build script, and README validation instructions.
