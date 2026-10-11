@@ -2,6 +2,8 @@
 
 OpenLearning is a lightweight, self-hosted learning platform for a single organization. It provides a searchable course catalog, video lessons, module quizzes, learning paths, competencies, learner progress, course access grants, and role-based course management.
 
+If OpenLearning is useful for your team, please [star the repository](https://github.com/AJorge95/OpenLearning) to help others discover it.
+
 ## Features
 
 - Username-and-password sign-in, email addresses for new accounts, configurable learner registration fields and account limits, and a one-time setup wizard for the initial administrator.
