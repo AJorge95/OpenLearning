@@ -15,6 +15,14 @@
 - **Interface review:** The textarea remains labeled, limited to 2,000 characters, and paired with a live character count; no UI change was indicated.
 - **Checked:** Focused comment client/server tests passed (19/19), including the five invalid-body responses and no-write assertions. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/server/lesson-comment-moderation.test.js`, and `git diff --check` passed.
 
+## 2026-10-11 — Clarify whether quiz order is a learning rule
+
+- **Reviewed:** The course-player curriculum links each module quiz directly, the “Continue” flow places an unpassed quiz after that module’s lessons, and the attempt API requires course access and publication but does not enforce lesson completion.
+- **Result:** No code change. The learner interface and API currently agree that quizzes are available by direct navigation, while guided navigation recommends the course order.
+- **Why no change:** README describes prior-lesson locks but does not say whether they also gate quizzes. Changing the attempt rule or showing quizzes as locked needs a product decision about self-assessment and staff review access.
+- **Interface review:** Quiz links remain standard keyboard-accessible links, and the quiz page explains course completion; there is no disabled/locked quiz state to contradict the current API behavior.
+- **Checked:** Read the course curriculum component, learner quiz page and navigation helpers, course payload, attempt route, existing quiz tests, README, and earlier quiz-review entries. No code changed; `git diff --check` passed.
+
 ## 2026-10-11 — Recheck administrator log filtering and pagination
 
 - **Reviewed:** Audit and system-log route access checks, text/severity/action filtering, bounded newest-first paging, and the client’s request cancellation, loading, empty, and retry states.
