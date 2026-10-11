@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
-import { readResetStatusAfterConflict } from '../../src/platform-reset-status.ts';
+import { readResetStatusAfterConflict, shouldClearResetConfirmationAfterFailure } from '../../src/platform-reset-status.ts';
 
 const sourcePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/pages-manage.tsx');
 
@@ -21,6 +21,15 @@ test('settings distinguish a verified backup from an active platform reset', () 
   assert.match(pageSource, /resetState\.pending && resetState\.phase === 'resetting' && <div className="platform-reset-pending" role="status" aria-live="polite"><strong>Platform reset in progress…<\/strong><span>Platform requests remain paused until the reset completes\.<\/span>/);
   assert.match(statusSource, /phase\?: 'preparing' \| 'ready' \| 'resetting'/);
   assert.match(pageSource, /readResetStatusAfterConflict\(cause, \(\) => api\.get<PlatformResetStatus>\('\/api\/admin\/platform-reset'\)\)/);
+  assert.match(pageSource, /shouldClearResetConfirmationAfterFailure\(cause\)/);
+});
+
+test('failed reset attempts clear confirmations that the server invalidated', () => {
+  assert.equal(shouldClearResetConfirmationAfterFailure({ code: 'platform_reset_confirmation_invalid' }), true);
+  assert.equal(shouldClearResetConfirmationAfterFailure({ status: 500, code: 'audit_unavailable' }), true);
+  assert.equal(shouldClearResetConfirmationAfterFailure({ code: 'platform_reset_recovery_required' }), true);
+  assert.equal(shouldClearResetConfirmationAfterFailure({ status: 0, code: 'network_error' }), false);
+  assert.equal(shouldClearResetConfirmationAfterFailure({ status: 400, code: 'platform_reset_confirmation_phrase' }), false);
 });
 
 test('a reset conflict reloads another administrator’s pending status', async () => {

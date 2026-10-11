@@ -24,7 +24,7 @@ import { firstQuizTextIssue } from './quiz-validation';
 import { lessonResourceUrlError } from './resource-validation';
 import { clearPasswordConfirmationError, getPasswordConfirmationError } from './password-confirmation';
 import { userListEmptyMessage } from './user-list-empty-state';
-import { readResetStatusAfterConflict } from './platform-reset-status';
+import { readResetStatusAfterConflict, shouldClearResetConfirmationAfterFailure } from './platform-reset-status';
 import type { PlatformResetStatus } from './platform-reset-status';
 import type { UserRoleFilter } from './user-list-empty-state';
 import type { Competency, Course, CourseAccessUser, CourseAnalytics, CourseModule, CourseVersion, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
@@ -2180,7 +2180,7 @@ export function AdminSettingsPage() {
       setResetSuccess('The platform has been reset. Redirecting you to sign in…');
       window.setTimeout(() => window.location.assign('/login'), 900);
     } catch (cause) {
-      if (cause instanceof ApiError && cause.code === 'platform_reset_confirmation_invalid') { setResetState({ pending: false }); setResetPhrase(''); }
+      if (shouldClearResetConfirmationAfterFailure(cause)) { setResetState({ pending: false }); setResetPhrase(''); }
       setResetError(cause instanceof ApiError ? cause.message : 'The platform could not be reset. Your backup remains available.'); setResetBusy(false);
     }
   }
