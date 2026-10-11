@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve unsaved completion-window edits on refresh
+
+- **Reviewed:** Same-course refreshes preserve unsaved title, description, category, and visibility edits, but an unconditional completion-window reset ran before its preservation check and discarded that field's draft.
+- **Improvement:** Initialize the completion-window input only for a newly loaded course; same-course refreshes now use the existing unchanged-versus-edited comparison.
+- **Why it helps:** A background or post-action course refresh no longer silently loses an unsaved deadline value, while server changes still refresh an untouched field.
+- **Backend review:** The course update endpoint already validates the completion-window range and persists the field with the rest of the course transaction; no server change was needed.
+- **Checked:** Course-editor route and completion-window tests passed (13/13), the full `npm test` suite passed (597/597), `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. Rendered refresh behavior was not run; Playwright is not installed in this checkout.
+
 ## 2026-10-11 — Keep course-detail drafts scoped to their route
 
 - **Reviewed:** The editor preserves fields that differ from the prior server response on same-course refreshes. After a route change, the loader closure could still treat the old course as that prior response and carry its unsaved title or description into the newly selected course.

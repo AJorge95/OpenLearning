@@ -1011,11 +1011,11 @@ export function CourseEditorPage() {
       const response = await fetchCourse(id, true, { signal: controller.signal });
       if (!isCurrentRequest()) return;
       setCourse(response.course);
-      setCompletionWindowDays(response.course.completionWindowDays ? String(response.course.completionWindowDays) : '');
       void loadGovernance(id, isCurrentRequest).catch((cause) => {
         if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'Course settings could not be loaded.');
       });
       if (!previousCourse) {
+        setCompletionWindowDays(response.course.completionWindowDays ? String(response.course.completionWindowDays) : '');
         setTitle(response.course.title); setDescription(response.course.description); setCategory(response.course.category); setVisibility(response.course.visibility);
       } else {
         setCompletionWindowDays((current) => current === String(previousCourse.completionWindowDays ?? '') ? String(response.course.completionWindowDays ?? '') : current);
