@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep registration limits accurate under concurrent sign-up
+
+- **Reviewed:** Public sign-up checked account availability before password hashing and again inside an immediate SQLite transaction, but no endpoint regression covered the limit boundary or concurrent requests that both pass the first check.
+- **Improvement:** Add isolated route tests that start two learner registrations with one account slot remaining, verify exactly one account and audit event are created, and confirm the setup-status response reports registration unavailable at the cap. Also cover disabled registration with no account or audit side effects.
+- **Why it helps:** The account cap stays enforced under concurrent sign-up, and the public availability state remains consistent with the server's rejection behavior. The fixtures run against a temporary database and do not use the configured application data directory.
+- **Interface review:** Rechecked the reported account-role selector in the open admin page: its menu matches the trigger width, clicks just beyond the right edge leave it closed, and an outside click closes an opened menu. No selector change was needed.
+- **Checked:** `node --test tests/server/registration-limits.test.js` passed (2/2); `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/server/registration-limits.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Preserve startup configuration validation
 
 - **Reviewed:** `server/config.js` validates environment values that control the listener, upload ceiling, request timeout, setup bootstrap credential, proxy trust, and production session security. README documents those contracts, but they had only one-off validation records and no dedicated committed config test.
