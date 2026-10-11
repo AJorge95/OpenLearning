@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck learner video controls at desktop size
+
+- **Reviewed:** The rendered learner video controls, accessibility labels, watch-progress announcement, and existing 600px and 400px responsive layouts.
+- **Result:** No source change; the authenticated lesson rendered its video and labeled playback controls, and the progress indicator exposed its accessible value. The existing mobile rules move caption, volume, and fullscreen controls into a second row.
+- **Why no change:** No desktop layout or interaction defect was reproduced. This lesson has no caption track, and the connected in-app browser cannot set a mobile viewport, so a narrow caption-selector issue cannot be verified from this sample.
+- **Checked:** Read the player JSX and responsive CSS, then inspected the live lesson in the local browser; the video loaded with an 8:29 duration and the accessibility tree exposed the named controls. No user data was changed.
+- **Next evidence needed:** A captioned lesson rendered at a 320–600px viewport to assess the compact control row.
+
 ## 2026-10-11 — Index pending account-list ordering
 
 - **Reviewed:** The administrator user-list query orders pending registrations by creation time and case-insensitive username; migration 34 indexed registration status, creation time, and ID.
