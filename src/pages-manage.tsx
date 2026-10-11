@@ -8,7 +8,7 @@ import { AppSelect, Button, CourseStatus, EmptyState, ImageWithFallback, PageHea
 import { formatCountLabel } from './count-label';
 import { courseRowActionStatus } from './course-row-action-status';
 import { getAppSelectVerticalPosition } from './app-select-position';
-import { updateCourseCompetencySelection } from './course-competency-selection';
+import { filterCourseCompetencies, updateCourseCompetencySelection } from './course-competency-selection';
 import type { CourseRowAction } from './course-row-action-status';
 import { validateRegistrationFieldEditor } from './registration-fields';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
@@ -820,6 +820,7 @@ export function CourseEditorPage() {
   const requestChangesButtonRef = useRef<HTMLButtonElement>(null);
   const [competencies, setCompetencies] = useState<Competency[]>([]);
   const [selectedCompetencies, setSelectedCompetencies] = useState<string[]>([]);
+  const [competencySearch, setCompetencySearch] = useState('');
   const [competencySelectionLimit, setCompetencySelectionLimit] = useState(200);
   const [competencyMappingError, setCompetencyMappingError] = useState('');
   const [competencyMappingNotice, setCompetencyMappingNotice] = useState('');
@@ -857,6 +858,7 @@ export function CourseEditorPage() {
   const uploadControllersRef = useRef(new Map<string, { controller: AbortController; input: HTMLInputElement; cancelledByUser: boolean }>());
   const governanceReady = Boolean(route.courseId && governanceCourseId === route.courseId);
   const selectedCompetencyIds = new Set(selectedCompetencies);
+  const visibleCompetencies = filterCourseCompetencies(competencies, competencySearch);
   const competencyMappingOverLimit = selectedCompetencies.length > competencySelectionLimit;
   const courseDetailsChanged = Boolean(course && (
     title.trim() !== course.title
@@ -930,6 +932,7 @@ export function CourseEditorPage() {
     let active = true;
     setRequiresRecompletion(false);
     setChangeNote('');
+    setCompetencySearch('');
     if (route.courseId) {
       uploadingLessonIdsRef.current = new Set(); setUploading({});
       coverUploadRef.current = false; setCoverProgress(null);
@@ -1339,11 +1342,11 @@ export function CourseEditorPage() {
           </form>}
         </>}
       </div>}
-      {governanceReady && competencies.length > 0 && <fieldset className="course-competency-picker" disabled={savingCompetencyMapping} aria-busy={savingCompetencyMapping}><legend>Mapped competencies</legend><p>Any completed mapped course marks an active competency achieved for that learner.</p><div>{competencies.map((competency) => {
+      {governanceReady && competencies.length > 0 && <fieldset className="course-competency-picker" disabled={savingCompetencyMapping} aria-busy={savingCompetencyMapping}><legend>Mapped competencies</legend><p>Any completed mapped course marks an active competency achieved for that learner.</p><label className="course-competency-filter">Search competencies<input type="search" maxLength={160} placeholder="Search by competency name" value={competencySearch} onChange={(event) => setCompetencySearch(event.target.value)} /></label><div>{visibleCompetencies.map((competency) => {
         const selected = selectedCompetencyIds.has(competency.id);
         const addBlocked = !selected && selectedCompetencies.length >= competencySelectionLimit;
         return <label key={competency.id} className={addBlocked ? 'competency-selection-disabled' : undefined}><input type="checkbox" checked={selected} disabled={addBlocked} onChange={(event) => { setCompetencyMappingError(''); setCompetencyMappingNotice(''); setSelectedCompetencies((current) => updateCourseCompetencySelection(current, competency.id, event.target.checked, competencySelectionLimit)); }} /><span>{competency.title}{!competency.active && <small>Inactive · hidden from learners</small>}</span></label>;
-      })}</div>{competencyMappingError && <div className="inline-notice" role="alert">{competencyMappingError}</div>}{competencyMappingNotice && <div className="inline-notice inline-notice-success" role="status">{competencyMappingNotice}</div>}<p className="course-competency-selection-status" role="status" aria-live="polite">{selectedCompetencies.length} of {competencySelectionLimit} competencies selected.{competencyMappingOverLimit ? ` Remove at least ${selectedCompetencies.length - competencySelectionLimit} before saving.` : selectedCompetencies.length === competencySelectionLimit ? ' Remove one before adding another.' : ''}</p><Button type="button" variant="secondary" onClick={() => void saveCompetencyMapping()} disabled={savingCompetencyMapping || competencyMappingOverLimit}>{savingCompetencyMapping ? 'Saving mapping…' : 'Save competency mapping'}</Button></fieldset>}
+      })}</div>{visibleCompetencies.length === 0 && <p className="course-competency-no-results" role="status">No competencies match your search.</p>}{competencyMappingError && <div className="inline-notice" role="alert">{competencyMappingError}</div>}{competencyMappingNotice && <div className="inline-notice inline-notice-success" role="status">{competencyMappingNotice}</div>}<p className="course-competency-selection-status" role="status" aria-live="polite">{selectedCompetencies.length} of {competencySelectionLimit} competencies selected.{competencyMappingOverLimit ? ` Remove at least ${selectedCompetencies.length - competencySelectionLimit} before saving.` : selectedCompetencies.length === competencySelectionLimit ? ' Remove one before adding another.' : ''}</p><Button type="button" variant="secondary" onClick={() => void saveCompetencyMapping()} disabled={savingCompetencyMapping || competencyMappingOverLimit}>{savingCompetencyMapping ? 'Saving mapping…' : 'Save competency mapping'}</Button></fieldset>}
       {governanceReady && versionTotal > 0 && <div className="course-version-history"><h3>Published version history</h3>
         {versionHistoryError && <div className="error-notice-actionable" role="alert"><span>{versionHistoryError}</span><Button variant="secondary" disabled={versionHistoryLoading} onClick={() => void loadVersionHistory(versionPage)}>Retry version history</Button></div>}
         {versionHistoryLoading && <p role="status">Loading course versions…</p>}
