@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Measure learner competency catalog response scaling
+
+- **Reviewed:** The learner endpoint returns competency cards with their accessible mapped courses, and the page now renders those cards in batches while keeping an accurate full-map achievement summary.
+- **Measurement:** In a temporary SQLite fixture, 1,000 active competencies each mapped to one completed public course distributed across five courses (200 mappings per course, within the editor limit) produced a 266,018-byte response. Catalogs of 50 and 250 produced 13,318 and 66,518 bytes. Each request prepared 10 SQL statements; median duration over five warmed loopback requests was 2.27 ms, 3.02 ms, and 6.88 ms respectively.
+- **Result:** No API change. Response size scales linearly, but the tested 1,000-item case did not justify introducing a paged contract that would repeat the global progress calculation or require separate summary semantics. The client already bounds initial card rendering to 12 items.
+- **Why no further change:** This synthetic single-process loopback fixture is not production latency or network evidence. Revisit backend payload paging if representative deployments show materially larger maps or slower transfer/processing.
+- **Checked:** All benchmark data lived in a guarded temporary directory that was removed after the run; no repository or user database was used. The endpoint returned HTTP 200 for each size.
+
 ## 2026-10-11 — Reveal learner competencies in bounded batches
 
 - **Reviewed:** The learner competency page renders every active competency card and each mapped course at once. Administrators can add competencies without a catalog cap, and each card can contain a list of mapped courses.
