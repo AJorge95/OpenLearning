@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Associate password mismatch feedback with confirmation fields
+
+- **Reviewed:** The setup, learner registration, self-service password change, administrator account creation, user-list reset dialog, and account-details reset form.
+- **Improvement:** When the shared password-confirmation warning is active, mark each confirmation input `aria-invalid` and point `aria-describedby` to its existing alert. A shared helper keeps unrelated API errors from marking the field invalid.
+- **Why it helps:** Screen-reader users can identify the specific confirmation field that needs correction and hear its mismatch message when returning to that input; the live alert remains available when the error first appears.
+- **Backend review:** Server-side confirmation checks and API behavior are unchanged.
+- **Checked:** Focused password, auth, registration, and administrator-reset tests passed (30/30); `npm run build` passed TypeScript checking and Vite bundling; `git diff --check` passed. In the local `/admin/users/new` browser flow, submitting mismatched values displayed the alert and kept the form open; the client validation returned before the account-create request. The browser accessibility snapshot did not expose the `aria-invalid` or description relation, so that relationship is covered by the shared-helper and six-form source regressions.
+
 ## 2026-10-11 — Recheck startup readiness and bounded storage paths
 
 - **Reviewed:** Startup readiness and shutdown behavior, environment-variable bounds, orphaned-media cleanup boundaries, audit/system-log redaction and retention, and the shared HTTP error mapping.
