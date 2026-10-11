@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck administrator user-list API filters
+
+- **Reviewed:** `/api/admin/users` search length validation, role and registration-status enums, parameterized SQL filters, ordering, paging, matching indexes, and existing route coverage.
+- **Result:** No backend change; the route bounds search input, validates both filter enums, binds user-supplied search and filter values, clamps page numbers to available results, and applies the 50-row limit.
+- **Why no change:** The inspected contract matches the UI filters and the existing route tests cover result paging and pending/approved registration behavior. No reproducible API failure or query-plan problem was found.
+- **Checked:** The complete `tests/server/last-login.test.js` file passed (16/16), including the page-clamping and approval-filter cases; `git diff --check` passed. The approval test was run with its file setup sequence because it is not independent when invoked alone.
+
 ## 2026-10-11 — Recover from empty administrator account filters
 
 - **Reviewed:** User search, role and registration filters, their empty-state copy, request lifecycle, and the account-list route contract.
