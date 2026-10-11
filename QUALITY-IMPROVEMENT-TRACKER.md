@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Protect the last active administrator
+
+- **Reviewed:** Account role changes and deactivation already reject changes that would remove the final active administrator, but the route guard had no regression coverage.
+- **Improvement:** Add isolated route tests for rejected demotion/deactivation and for allowing the same change when another active administrator remains.
+- **Why it helps:** The account lockout safeguard remains verified as the user-management route evolves.
+- **Checked:** Focused admin account tests passed (21/21); full `npm test` passed (387/387), `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Announce sign-in guidance with the username field
 
 - **Reviewed:** The login screen autofocuses Username, while its standard or return-specific explanation was not associated with that field.

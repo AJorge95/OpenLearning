@@ -397,6 +397,50 @@ test('platform settings reject truncated and oversized icons without changing br
     WHERE action = 'platform.settings_updated'`).get().count, originalAuditCount);
 });
 
+test('the last active administrator cannot be disabled or demoted', async () => {
+  const adminId = 'registration-fields-admin';
+  const originalUser = database.prepare('SELECT role, disabled FROM users WHERE id = ?').get(adminId);
+  const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'account.updated' AND entity_id = ?`).get(adminId).count;
+
+  for (const change of [{ disabled: true }, { role: 'moderator' }]) {
+    const response = await fetch(apiUrl(`/admin/users/${adminId}`), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify(change),
+    });
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), {
+      error: 'The last active administrator cannot be disabled or demoted.',
+      code: 'last_admin',
+    });
+    assert.deepEqual(database.prepare('SELECT role, disabled FROM users WHERE id = ?').get(adminId), originalUser);
+  }
+
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'account.updated' AND entity_id = ?`).get(adminId).count, originalAuditCount);
+});
+
+test('an administrator can be disabled while another active administrator remains', async () => {
+  const targetId = 'registration-fields-second-admin';
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role)
+    VALUES (?, ?, ?, ?, 'admin')`).run(targetId, 'second_admin', 'second.admin@example.invalid', 'not-used-by-this-fixture');
+
+  try {
+    const response = await fetch(apiUrl(`/admin/users/${targetId}`), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ disabled: true }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).user.disabled, true);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0").get().count, 1);
+  } finally {
+    database.prepare("DELETE FROM audit_logs WHERE action = 'account.updated' AND entity_id = ?").run(targetId);
+    database.prepare('DELETE FROM users WHERE id = ?').run(targetId);
+  }
+});
+
 test('account changes and session revocations roll back when their required audit entry cannot be written', async () => {
   database.prepare(`INSERT INTO sessions (sid, session_data, expires_at, user_id) VALUES (?, ?, ?, ?)`)
     .run('account-update-session', JSON.stringify({ userId: 'registration-fields-role-target' }), Date.now() + 60_000, 'registration-fields-role-target');
