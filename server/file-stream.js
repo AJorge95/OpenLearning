@@ -7,12 +7,16 @@ export function streamFileToResponse(filePath, response, next, options) {
     if (!response.writableFinished) stream.destroy();
   };
 
-  response.once('close', handleResponseClose);
   stream.once('close', removeCloseListener);
   stream.once('error', (error) => {
     removeCloseListener();
     next(error);
   });
+  if (response.destroyed || response.writableEnded) {
+    stream.destroy();
+    return stream;
+  }
+  response.once('close', handleResponseClose);
   stream.pipe(response);
   return stream;
 }

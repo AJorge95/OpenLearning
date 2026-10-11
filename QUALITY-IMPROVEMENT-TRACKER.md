@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Stop media reads for already-closed responses
+
+- **Reviewed:** Video and document routes check media with asynchronous `fs.stat` before creating a read stream. If a client disconnects while that check is pending, the response's `close` event has already fired when the stream helper installs its listener. A 16 MiB reproduction left the stream alive after reading 128 KiB.
+- **Improvement:** Detect destroyed or already-ended responses before piping and destroy the new read stream immediately. Add a stream regression that verifies a pre-closed response causes zero file bytes to be read and no forwarded error.
+- **Why it helps:** Learner navigation and disconnections during media lookup no longer leave a stalled file read or waste disk I/O for a response that cannot receive data.
+- **Checked:** Focused stream tests passed (3/3); the pre-closed response reproduction now closes immediately with zero bytes read, no forwarded error, and no leftover close listener. The full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, syntax checks for both changed JavaScript files, and `git diff --check` passed.
+
 ## 2026-10-11 — Clear stale learning-path results on status changes
 
 - **Reviewed:** Staff status filters select the new tab before requesting its results. The previous status's cards and pagination totals remained visible during the request and after a failed request. The server already applies and validates the requested status filter.
