@@ -59,6 +59,19 @@ const compoundOfficeExtensions = new Set(['.doc', '.ppt', '.xls']);
 const zipOfficeExtensions = new Set(['.docx', '.pptx', '.xlsx', '.odt', '.odp', '.ods']);
 const encryptedOpenXmlExtensions = new Set(['.docx', '.pptx', '.xlsx']);
 
+function streamProtectedMediaFile(filePath, response, next, notFoundMessage, options) {
+  return streamFileToResponse(filePath, response, (error) => {
+    // The preceding stat and the stream open are separate operations; media may disappear between them.
+    if (error?.code === 'ENOENT' && !response.headersSent) {
+      for (const header of ['Accept-Ranges', 'Content-Disposition', 'Content-Length', 'Content-Range', 'Content-Type']) {
+        response.removeHeader(header);
+      }
+      return next(new ApiError(404, notFoundMessage, 'not_found'));
+    }
+    next(error);
+  }, options);
+}
+
 function fileMatchesKind(file, kind) {
   const ext = originalExtension(file.originalname);
   if (kind === 'video') return ext === '.mp4' && file.mimetype === 'video/mp4';
@@ -669,7 +682,7 @@ protectedMediaRouter.get('/captions/:captionId', requireAuth, (req, res, next) =
     res.setHeader('Content-Disposition', 'inline');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (req.method === 'HEAD') return res.end();
-    streamFileToResponse(filePath, res, next);
+    streamProtectedMediaFile(filePath, res, next, 'Caption track not found.');
   });
 });
 
@@ -698,7 +711,7 @@ protectedMediaRouter.get('/resources/:resourceId', requireAuth, (req, res, next)
     res.setHeader('Content-Length', stats.size);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (req.method === 'HEAD') return res.end();
-    streamFileToResponse(filePath, res, next);
+    streamProtectedMediaFile(filePath, res, next, 'Document not found.');
   });
 });
 
@@ -740,7 +753,7 @@ protectedMediaRouter.get('/:mediaId', requireAuth, (req, res, next) => {
       res.status(200);
       res.setHeader('Content-Length', stats.size);
       if (req.method === 'HEAD') return res.end();
-      return streamFileToResponse(filePath, res, next);
+      return streamProtectedMediaFile(filePath, res, next, 'Media not found.');
     }
     let start = match[1] ? Number(match[1]) : null;
     let end = match[2] ? Number(match[2]) : null;
@@ -759,6 +772,6 @@ protectedMediaRouter.get('/:mediaId', requireAuth, (req, res, next) => {
     res.setHeader('Content-Range', `bytes ${start}-${end}/${stats.size}`);
     res.setHeader('Content-Length', end - start + 1);
     if (req.method === 'HEAD') return res.end();
-    return streamFileToResponse(filePath, res, next, { start, end });
+    return streamProtectedMediaFile(filePath, res, next, 'Media not found.', { start, end });
   });
 });

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Treat media deletion races as not found
+
+- **Reviewed:** Protected caption, document, and video routes verify each file with `stat` before opening a read stream. If course media is removed between those operations, the stream reports `ENOENT` and the generic handler previously returned an internal-server error.
+- **Improvement:** Map a missing-file stream error to the resource’s existing 404 response while headers are still unsent. Clear file and range headers before producing the JSON error; leave other stream errors and failures after response headers unchanged.
+- **Why it helps:** Concurrent course or resource cleanup no longer turns an expected missing-media race into a generic server error or an incorrectly typed response.
+- **Interface review:** The course catalog search and filters rendered with clear labels; no separate interface change was supported by this review.
+- **Checked:** A route regression simulates `ENOENT` after `stat` and confirms a JSON 404 without stale range headers. The focused media-route and file-stream tests, full test suite, production build, and `git diff --check` passed.
+
 ## 2026-10-11 — Show the next action for every My Learning course
 
 - **Reviewed:** The My Learning heading invites learners to start, continue, or review courses, but only completed course cards had a visible action cue; other cards showed progress without naming what opening them would do.
