@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Scope unsaved course-detail navigation
+
+- **Reviewed:** Course-detail draft fields and their save/publish actions, the course editor's pathname-keyed remount, and the app's `BrowserRouter`/`Routes` navigation structure.
+- **Result:** No runtime change. Course details expose save and publish actions, but there is no app-wide route blocker for unsaved detail edits.
+- **Why no change:** A warning attached only to the editor breadcrumb would leave staff navigation and browser-history transitions uncovered. A complete guard needs one route-level approach that covers every internal exit and has navigation regression coverage.
+- **Next evidence needed:** Define and test the app-wide route-blocking behavior for edits tracked by `courseDetailsChanged` before introducing navigation interception.
+- **Checked:** Read the editor state, save controls, and app route setup; searched for existing route-blocking hooks; `git diff --check` passed.
+
 ## 2026-10-12 — Retain quiz submission locks per route
 
 - **Reviewed:** The learner quiz page's single in-flight route-key ref, route-change state resets, and the attempt endpoint's transactional insert. A pending submission on one quiz could be overwritten by a submission on another route, allowing a second attempt if the learner returned before the first finished; the route sequence also hid a successful response after returning to its quiz.
