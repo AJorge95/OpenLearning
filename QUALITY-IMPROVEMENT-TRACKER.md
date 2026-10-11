@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reset watch checkpoints when replacing lesson video
+
+- **Reviewed:** Video uploads replace `lessons.media_id`, while watch progress is keyed by lesson ID. A learner's saved checkpoint could therefore survive a different video, either resuming at the wrong position or failing the duration consistency check on every playback start.
+- **Improvement:** Delete the lesson's watch-progress rows inside the media replacement transaction and include the number reset in the upload audit details. The telemetry rows cascade with watch progress; audit failure rolls the deletion back with the media update.
+- **Why it helps:** The replacement starts from a clean watch checkpoint, and a failed upload audit preserves both the previous media and learner progress.
+- **Interface review:** The current account-role selector source has a separate accessible label and a trigger-bounded hit area; its existing targeted regressions pass. The open browser is currently at sign-in, so the admin page shown in the supplied screenshot could not be rechecked live.
+- **Checked:** The focused media-route suite passed (14/14), including a regression proving failed-audit rollback preserves saved watch progress and a successful replacement removes progress and telemetry. The account-role/AppSelect regressions passed (10/10); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, both changed-file syntax checks, and `git diff --check` passed.
+
 ## 2026-10-11 — Preserve media range fallback behavior in route tests
 
 - **Reviewed:** The protected-media handler returns a full response when it cannot honor a range, including multi-range, unknown-unit, malformed, and `HEAD` requests. Committed route coverage only exercised single and suffix ranges, an unsatisfiable range, and `If-Range` fallback; the other cases existed only in a prior one-off check.
