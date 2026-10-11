@@ -1063,6 +1063,46 @@ test('administrator account creation rolls back when its required audit entry ca
   assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.created'`).get().count, originalAuditCount + 1);
 });
 
+test('administrator account creation rejects case-insensitive duplicates before writes', async () => {
+  const originalPrepare = database.prepare;
+  let caseInsensitivePreflightRan = false;
+  let insertAttemptedBeforePreflight = false;
+  database.prepare = function prepareWithDuplicateGuard(sql, ...args) {
+    if (sql === 'SELECT 1 FROM users WHERE username = ? COLLATE NOCASE') caseInsensitivePreflightRan = true;
+    if (sql.startsWith('INSERT INTO users') && !caseInsensitivePreflightRan) {
+      insertAttemptedBeforePreflight = true;
+      throw new Error('Duplicate username reached the write before the case-insensitive preflight.');
+    }
+    return originalPrepare.call(this, sql, ...args);
+  };
+
+  try {
+    const response = await fetch(apiUrl('/admin/users'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        username: 'REGISTRATION_FIELDS_ADMIN',
+        email: 'duplicate-username@example.invalid',
+        firstName: 'Duplicate',
+        lastName: 'Account',
+        password: 'DuplicateUsernamePassphrase-2026',
+        confirmPassword: 'DuplicateUsernamePassphrase-2026',
+        role: 'learner',
+      }),
+    });
+
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), {
+      error: 'That username is already in use.',
+      code: 'username_taken',
+    });
+    assert.equal(caseInsensitivePreflightRan, true);
+    assert.equal(insertAttemptedBeforePreflight, false);
+  } finally {
+    database.prepare = originalPrepare;
+  }
+});
+
 test('account profiles require valid first and last names and return the saved profile', async () => {
   const invalidResponse = await fetch(apiUrl('/auth/profile'), {
     method: 'PUT',
