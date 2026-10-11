@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Return to the current calendar month quickly
+
+- **Reviewed:** The learner calendar's previous/next controls, local-month range calculation, request cancellation, and existing deadline query. Month navigation had no direct way to return after browsing other months.
+- **Improvement:** Add a clearly labeled “This month” button that resets the calendar to the first day of the learner's current local month and reuses the existing request flow.
+- **Why it helps:** Learners can get back to current deadlines in one action without repeatedly paging through months; the accessible text label remains clear alongside the icon-only navigation buttons.
+- **Backend review:** Calendar range validation, timezone buffer, 62-day limit, and indexed deadline lookup already support the reset request. No server change was needed.
+- **Checked:** Calendar date/navigation tests, full `npm test`, `npm run build`, and `git diff --check` passed. Rendered browser validation confirmed that moving to another month and selecting “This month” restores the current local month.
+
 ## 2026-10-11 — Announce course-access changes
 
 - **Reviewed:** The staff course-access toggle, its source-course request guard, the “Assigned” state row, and the existing grant/revoke routes. Successful changes refreshed the row but did not announce completion.

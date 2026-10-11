@@ -641,6 +641,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .path-assigned-learners .text-action { min-height: 34px; padding: 0 8px; color: var(--danger); font-size: 11px; }
 .calendar-month-controls { display: flex; align-items: center; gap: 9px; }
 .calendar-month-controls .button { width: 40px; min-height: 40px; padding: 0; border-radius: 6px; }
+.calendar-month-controls > .calendar-current-month { width: auto; padding: 0 10px; white-space: nowrap; }
 .calendar-month-label { min-width: 145px; color: var(--ink); font-size: 13px; font-weight: 700; text-align: center; }
 .calendar-panel { padding: 15px; overflow-x: auto; }
 .calendar-panel:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
