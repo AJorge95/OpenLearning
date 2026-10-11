@@ -803,7 +803,10 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
     <form className="lesson-details-form" onSubmit={saveDetails}>
       <div className="lesson-details-grid">
         <label>Lesson title<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} required disabled={busy} /></label>
-        <label>Lesson description<textarea value={description} maxLength={2000} rows={3} onChange={(event) => setDescription(event.target.value)} placeholder="Add context, learning goals, or notes for this lesson." disabled={busy} /></label>
+        <label>Lesson description
+          <textarea id={`lesson-description-${lesson.id}`} aria-describedby={`lesson-description-count-${lesson.id}`} value={description} maxLength={2000} rows={3} onChange={(event) => setDescription(event.target.value)} placeholder="Add context, learning goals, or notes for this lesson." disabled={busy} />
+          <small id={`lesson-description-count-${lesson.id}`} className="field-character-count">{description.length} / 2,000 characters</small>
+        </label>
         <label className="lesson-transcript-field">Lesson transcript<textarea value={transcript} maxLength={50000} rows={7} aria-describedby={`lesson-transcript-help-${lesson.id}`} onChange={(event) => setTranscript(event.target.value)} placeholder="Paste the spoken words and meaningful audio cues from this lesson." disabled={busy} /><small id={`lesson-transcript-help-${lesson.id}`}>Optional plain text that learners can expand in the lesson player. {transcript.length}/50,000 characters.</small></label>
       </div>
       <div className="lesson-details-save"><Button type="submit" variant="secondary" disabled={busy}>{busy ? 'Saving…' : 'Save lesson details'}</Button></div>

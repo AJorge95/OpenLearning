@@ -777,6 +777,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .lesson-details-grid textarea { min-height: 76px; line-height: 1.5; resize: vertical; }
 .lesson-transcript-field { grid-column: 1 / -1; }
 .lesson-transcript-field small { color: var(--muted); font-size: 11px; font-weight: 450; line-height: 1.5; }
+.lesson-details-grid .field-character-count { align-self: flex-end; color: var(--muted); font-size: 11px; font-weight: 450; line-height: 1.4; }
 .lesson-details-grid input:focus, .lesson-details-grid textarea:focus, .lesson-link-form input:focus { outline: 2px solid var(--purple); border-color: var(--purple); }
 .lesson-details-save { display: flex; justify-content: flex-end; margin-top: 10px; }
 .lesson-resource-editor { display: grid; gap: 13px; padding-top: 15px; border-top: 1px solid var(--line); }
