@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Close the matching editor after path archiving
+
+- **Reviewed:** The path archive action and an open editor for the same path. The archive endpoint changes the path status, while the editor retains its prior draft or published value and can submit it later.
+- **Improvement:** Include a clear unsaved-edits warning in the archive confirmation when that editor is dirty. After the server confirms archiving, close the matching editor; keep the editor and its draft intact if the request fails.
+- **Why it helps:** A stale editor cannot silently change an archived path back to draft or published, and staff know what will happen to their unsaved edits before confirming.
+- **Backend review:** The existing route validates and persists archived status transactionally. The client now retires its incompatible draft/published editor state after success; no API change was needed.
+- **Checked:** Path archive, editor dirty-state, and focus tests passed (12/12); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. Browser replay was not performed because it would require archiving a saved path; the source regression verifies success ordering and failure retention.
+
 ## 2026-10-11 — Distinguish quiz removal from quiz save
 
 - **Reviewed:** Quiz save and delete both called the same completion callback, whose parent always displayed “Quiz saved.” The callback could also report after navigation to another course.
