@@ -7,6 +7,13 @@
 - **Why no change:** The selector-width and hit-area fix is already present in the current checkout and served module. A fresh load of the protected account URL redirected to sign-in, so the authenticated right-side click could not be replayed in this browser.
 - **Checked:** AppSelect label and positioning tests passed (13/13), the Vite-transformed account component and CSS were checked, and `git diff --check` passed. The screenshot's old label target does not match the current JSX.
 
+## 2026-10-11 — Recheck certificate issuance and backfill
+
+- **Reviewed:** Learner-only certificate issuance, profile-name backfill, published-version selection, completion summaries, per-user ownership at the route, and batching of historical completion scans.
+- **Result:** No code change. Issuance reuses saved certificates, requires a completed published course and a usable name, maps version-storage activity to the logical course, and bounds per-batch SQLite parameters. The inspected flow has no additional actionable defect.
+- **Why no change:** The existing route and service already cover the ownership, version snapshot, completion, profile-name, and large-catalog cases. No new performance or correctness failure appeared in the reviewed query path.
+- **Checked:** Certificate service and route tests passed (10/10); the relevant SQLite query plans and batch-boundary regression were reviewed.
+
 ## 2026-10-11 — Keep signup focus at the page context
 
 - **Reviewed:** Registration-page autofocus, route-change focus management, the multi-field public signup form, and the sign-in page's username shortcut.
