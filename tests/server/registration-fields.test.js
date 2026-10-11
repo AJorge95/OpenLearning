@@ -36,6 +36,7 @@ const fieldDefinitions = [
   { id: 'start-date', label: 'Start date', type: 'date', required: false, options: [] },
   { id: 'about', label: 'About you', type: 'text', required: false, options: [] },
 ];
+const onePixelJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD58ooor9bPyo//2Q==', 'base64');
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -421,7 +422,16 @@ test('platform settings reject malformed and oversized icons without changing br
     pngChunk('IDAT', deflateSync(Buffer.from([5, 10, 20, 30, 40]))),
     pngChunk('IEND', Buffer.alloc(0)),
   ]);
-  const oversizedJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 4, 1, 1, 0x11, 0, 0xff, 0xd9]);
+  const jpegFrameOffset = onePixelJpeg.indexOf(Buffer.from([0xff, 0xc0]));
+  const jpegScanOffset = onePixelJpeg.indexOf(Buffer.from([0xff, 0xda]));
+  assert.notEqual(jpegFrameOffset, -1, 'expected the JPEG fixture to contain a frame header');
+  assert.notEqual(jpegScanOffset, -1, 'expected the JPEG fixture to contain a scan header');
+  const jpegScanDataOffset = jpegScanOffset + 2 + onePixelJpeg.readUInt16BE(jpegScanOffset + 2);
+  const jpegWithoutScan = Buffer.concat([onePixelJpeg.subarray(0, jpegScanOffset), Buffer.from([0xff, 0xd9])]);
+  const jpegWithoutScanData = Buffer.concat([onePixelJpeg.subarray(0, jpegScanDataOffset), Buffer.from([0xff, 0xd9])]);
+  const jpegWithTrailingBytes = Buffer.concat([onePixelJpeg, Buffer.from([0])]);
+  const oversizedJpeg = Buffer.from(onePixelJpeg);
+  oversizedJpeg.writeUInt16BE(1025, jpegFrameOffset + 7);
   const oversizedWebp = Buffer.alloc(30);
   oversizedWebp.write('RIFF', 0, 'ascii');
   oversizedWebp.writeUInt32LE(22, 4);
@@ -437,6 +447,9 @@ test('platform settings reject malformed and oversized icons without changing br
     ['png', excessivePngImageData],
     ['png', invalidPngFilter],
     ['jpeg', Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
+    ['jpeg', jpegWithoutScan],
+    ['jpeg', jpegWithoutScanData],
+    ['jpeg', jpegWithTrailingBytes],
     ['webp', truncatedWebp],
     ['png', oversizedPng],
     ['jpeg', oversizedJpeg],
@@ -458,6 +471,37 @@ test('platform settings reject malformed and oversized icons without changing br
   assert.equal(settingValue('platform_icon_version'), originalVersion);
   assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
     WHERE action = 'platform.settings_updated'`).get().count, originalAuditCount);
+});
+
+test('platform settings accept a complete JPEG icon and serve its original bytes', async () => {
+  const settingValue = (key) => database.prepare('SELECT value FROM app_settings WHERE key = ?').get(key)?.value ?? null;
+  const originalName = settingValue('platform_name');
+  const originalIcon = settingValue('platform_icon');
+  const originalVersion = settingValue('platform_icon_version');
+
+  try {
+    const response = await fetch(apiUrl('/admin/settings'), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        platformName: 'JPEG acceptance test',
+        platformIcon: `data:image/jpeg;base64,${onePixelJpeg.toString('base64')}`,
+      }),
+    });
+    assert.equal(response.status, 200, await response.clone().text());
+    const branding = await response.json();
+    const iconResponse = await fetch(new URL(branding.platformIcon, apiUrl('/')));
+    assert.equal(iconResponse.status, 200);
+    assert.equal(iconResponse.headers.get('content-type'), 'image/jpeg');
+    assert.deepEqual(Buffer.from(await iconResponse.arrayBuffer()), onePixelJpeg);
+  } finally {
+    if (originalName === null) database.prepare("DELETE FROM app_settings WHERE key = 'platform_name'").run();
+    else setSetting('platform_name', originalName);
+    if (originalIcon === null) database.prepare("DELETE FROM app_settings WHERE key = 'platform_icon'").run();
+    else setSetting('platform_icon', originalIcon);
+    if (originalVersion === null) database.prepare("DELETE FROM app_settings WHERE key = 'platform_icon_version'").run();
+    else setSetting('platform_icon_version', originalVersion);
+  }
 });
 
 test('platform icon URLs remain stable across unrelated changes and change when the icon is replaced', async () => {
