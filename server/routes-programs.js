@@ -430,42 +430,63 @@ programsRouter.get('/calendar', (req, res) => {
 });
 
 programsRouter.get('/competencies', (req, res) => {
-  const allRows = db.prepare('SELECT * FROM competencies WHERE active = 1 ORDER BY title COLLATE NOCASE, id ASC').all();
-  const total = allRows.length;
+  const total = db.prepare('SELECT COUNT(*) AS count FROM competencies WHERE active = 1').get().count;
   const requestedPage = pageQuery(req.query.page);
   const pageSize = COMPETENCY_PROGRESS_PAGE_SIZE;
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
   const offset = (page - 1) * pageSize;
-  const pageRows = allRows.slice(offset, offset + pageSize);
-  const summaryRows = page === 1 ? allRows : pageRows;
-  const summaryIds = summaryRows.map((item) => item.id);
-  const competencyFilter = page === 1 ? '' : `AND cc.competency_id IN (${summaryIds.map(() => '?').join(', ')})`;
-  const courses = summaryIds.length ? db.prepare(`SELECT cc.competency_id, c.* FROM course_competencies cc
+  const pageRows = db.prepare(`SELECT * FROM competencies WHERE active = 1
+    ORDER BY title COLLATE NOCASE, id ASC LIMIT ? OFFSET ?`).all(pageSize, offset);
+  const summaryIds = pageRows.map((item) => item.id);
+  const pageCourses = summaryIds.length ? db.prepare(`SELECT cc.competency_id, c.* FROM course_competencies cc
     JOIN competencies competency ON competency.id = cc.competency_id
     JOIN courses c ON c.id = cc.course_id
-    WHERE competency.active = 1 AND c.status = 'published' ${competencyFilter}
-    ORDER BY cc.competency_id, c.title COLLATE NOCASE, c.id ASC`).all(...(page === 1 ? [] : summaryIds)) : [];
+    WHERE competency.active = 1 AND c.status = 'published'
+      AND cc.competency_id IN (${summaryIds.map(() => '?').join(', ')})
+    ORDER BY cc.competency_id, c.title COLLATE NOCASE, c.id ASC`).all(...summaryIds) : [];
+  const achievementCandidates = page === 1 ? db.prepare(`SELECT DISTINCT cc.competency_id, c.* FROM course_competencies cc
+    JOIN competencies competency ON competency.id = cc.competency_id
+    JOIN courses c ON c.id = cc.course_id
+    WHERE competency.active = 1 AND c.status = 'published' AND (
+      EXISTS (SELECT 1 FROM lesson_progress p
+        JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id
+        JOIN courses progress_course ON progress_course.id = m.course_id
+        WHERE p.user_id = ? AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
+          OR progress_course.logical_course_id = COALESCE(c.logical_course_id, c.id)))
+      OR EXISTS (SELECT 1 FROM quiz_attempts a
+        JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id
+        JOIN courses progress_course ON progress_course.id = m.course_id
+        WHERE a.user_id = ? AND a.passed = 1 AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
+          OR progress_course.logical_course_id = COALESCE(c.logical_course_id, c.id)))
+    )`).all(req.currentUser.id, req.currentUser.id) : [];
   const canView = createCourseAccessChecker(req.currentUser);
-  const visibleCourses = courses.filter((course) => course.visibility === 'public' || canView(course));
-  const summaries = courseSummaries(visibleCourses, req.currentUser);
-  const coursesByCompetency = new Map(summaryRows.map((item) => [item.id, []]));
-  visibleCourses.forEach((course, index) => {
+  const visiblePageCourses = pageCourses.filter((course) => course.visibility === 'public' || canView(course));
+  const visibleAchievementCandidates = achievementCandidates.filter((course) => course.visibility === 'public' || canView(course));
+  const summaryCourses = [...new Map([...visiblePageCourses, ...visibleAchievementCandidates]
+    .map((course) => [course.id, course])).values()];
+  const summaries = courseSummaries(summaryCourses, req.currentUser);
+  const summariesByCourseId = new Map(summaryCourses.map((course, index) => [course.id, summaries[index]]));
+  const coursesByCompetency = new Map(pageRows.map((item) => [item.id, []]));
+  visiblePageCourses.forEach((course) => {
     coursesByCompetency.get(course.competency_id)?.push({
       id: course.id,
       title: course.title,
-      completed: summaries[index].completed,
+      completed: summariesByCourseId.get(course.id)?.completed ?? false,
     });
   });
-  const mappedCompetencies = summaryRows.map((item) => {
+  const mappedCompetencies = pageRows.map((item) => {
     const mapped = coursesByCompetency.get(item.id);
     const completedCourses = mapped.filter((course) => course.completed).length;
     return { id: item.id, title: item.title, description: item.description, achieved: mapped.some((course) => course.completed),
       completedCourses, courseCount: mapped.length, courses: mapped };
   });
+  const achievedCompetencyIds = new Set(visibleAchievementCandidates
+    .filter((course) => summariesByCourseId.get(course.id)?.completed)
+    .map((course) => course.competency_id));
   res.json({
-    competencies: page === 1 ? mappedCompetencies.slice(offset, offset + pageSize) : mappedCompetencies,
+    competencies: mappedCompetencies,
     total,
-    ...(page === 1 ? { achievedTotal: mappedCompetencies.filter((item) => item.achieved).length } : {}),
+    ...(page === 1 ? { achievedTotal: achievedCompetencyIds.size } : {}),
     page,
     pageSize,
     hasMore: page * pageSize < total,
