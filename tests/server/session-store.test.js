@@ -43,6 +43,64 @@ test('session set, get, and touch preserve expiry and user ownership', async () 
   }
 });
 
+test('session store callbacks that throw are invoked only once', () => {
+  const database = createDatabase();
+  const store = new SQLiteSessionStore(database);
+  const operations = [
+    ['get', (callback) => store.get('missing', callback)],
+    ['set', (callback) => store.set('session-callback', { cookie: {} }, callback)],
+    ['touch', (callback) => store.touch('session-callback', { cookie: {} }, callback)],
+    ['destroy', (callback) => store.destroy('session-callback', callback)],
+    ['clear', (callback) => store.clear(callback)],
+  ];
+
+  try {
+    for (const [name, operation] of operations) {
+      const callbackError = new Error(`${name} callback failed`);
+      let callbackCalls = 0;
+
+      assert.throws(() => operation(() => {
+        callbackCalls += 1;
+        throw callbackError;
+      }), (error) => error === callbackError);
+      assert.equal(callbackCalls, 1, `${name} must not report a callback exception as a store error`);
+    }
+  } finally {
+    clearInterval(store.cleanupTimer);
+    database.close();
+  }
+});
+
+test('session store reports database errors through each callback only once', () => {
+  const database = createDatabase();
+  const store = new SQLiteSessionStore(database);
+  const operations = [
+    ['get', (callback) => store.get('session-db-error', callback)],
+    ['set', (callback) => store.set('session-db-error', { cookie: {} }, callback)],
+    ['touch', (callback) => store.touch('session-db-error', { cookie: {} }, callback)],
+    ['destroy', (callback) => store.destroy('session-db-error', callback)],
+    ['clear', (callback) => store.clear(callback)],
+  ];
+  database.exec('DROP TABLE sessions');
+
+  try {
+    for (const [name, operation] of operations) {
+      let callbackCalls = 0;
+      let receivedError;
+
+      operation((error) => {
+        callbackCalls += 1;
+        receivedError = error;
+      });
+      assert.equal(callbackCalls, 1, `${name} must report the database failure exactly once`);
+      assert.ok(receivedError instanceof Error, `${name} must expose the database failure`);
+    }
+  } finally {
+    clearInterval(store.cleanupTimer);
+    database.close();
+  }
+});
+
 test('startup and reads discard expired or malformed sessions', async () => {
   const database = createDatabase();
   try {

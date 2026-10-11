@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Invoke SQLite session callbacks exactly once
+
+- **Reviewed:** The SQLite session store's `get`, `set`, `touch`, `destroy`, and `clear` methods and their success/error callback boundaries.
+- **Improvement:** Invoke successful callbacks after database-operation `try` blocks so a callback exception propagates to its caller instead of being mistaken for a database failure and invoking the callback a second time. Keep database errors delivered through the callback once.
+- **Why it helps:** Session middleware and application callbacks receive the store result at most once, avoiding duplicate completion or error handling when downstream code throws.
+- **Interface review:** Authentication forms and account navigation are unaffected; no visual or interaction changes were indicated.
+- **Checked:** Focused session-store tests passed (7/7), including callback exceptions and database failures across all five store methods. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check` for the store and test, and `git diff --check` passed.
+
 ## 2026-10-11 — Dismiss the account menu when interaction leaves it
 
 - **Reviewed:** The shared learner header's native account menu closed on route changes but stayed open when users clicked or tabbed elsewhere; it also lacked an Escape handler.

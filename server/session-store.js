@@ -36,28 +36,30 @@ export class SQLiteSessionStore extends session.Store {
   }
 
   get(sid, callback) {
+    let sessionData = null;
     try {
       const row = this.getStmt.get(sid);
-      if (!row) return callback(null, null);
-      if (row.expires_at <= Date.now()) {
-        this.deleteStmt.run(sid);
-        return callback(null, null);
+      if (row) {
+        if (row.expires_at <= Date.now()) {
+          this.deleteStmt.run(sid);
+        } else {
+          let parsed;
+          let invalidJson = false;
+          try {
+            parsed = JSON.parse(row.session_data);
+          } catch {
+            invalidJson = true;
+          }
+          if (invalidJson || !parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            this.deleteStmt.run(sid);
+          } else sessionData = parsed;
+        }
       }
-      let sessionData;
-      try {
-        sessionData = JSON.parse(row.session_data);
-      } catch {
-        this.deleteStmt.run(sid);
-        return callback(null, null);
-      }
-      if (!sessionData || typeof sessionData !== 'object' || Array.isArray(sessionData)) {
-        this.deleteStmt.run(sid);
-        return callback(null, null);
-      }
-      return callback(null, sessionData);
     } catch (error) {
-      return callback(error);
+      callback(error);
+      return;
     }
+    callback(null, sessionData);
   }
 
   set(sid, sessionData, callback = () => {}) {
@@ -66,10 +68,11 @@ export class SQLiteSessionStore extends session.Store {
         ? new Date(sessionData.cookie.expires).getTime()
         : Date.now() + ONE_DAY;
       this.setStmt.run(sid, JSON.stringify(sessionData), expiresAt, sessionUserId(sessionData));
-      callback(null);
     } catch (error) {
       callback(error);
+      return;
     }
+    callback(null);
   }
 
   touch(sid, sessionData, callback = () => {}) {
@@ -78,28 +81,31 @@ export class SQLiteSessionStore extends session.Store {
         ? new Date(sessionData.cookie.expires).getTime()
         : Date.now() + ONE_DAY;
       this.touchStmt.run(expiresAt, sessionUserId(sessionData), sid);
-      callback(null);
     } catch (error) {
       callback(error);
+      return;
     }
+    callback(null);
   }
 
   destroy(sid, callback = () => {}) {
     try {
       this.deleteStmt.run(sid);
-      callback(null);
     } catch (error) {
       callback(error);
+      return;
     }
+    callback(null);
   }
 
   clear(callback = () => {}) {
     try {
       this.db.prepare('DELETE FROM sessions').run();
-      callback(null);
     } catch (error) {
       callback(error);
+      return;
     }
+    callback(null);
   }
 }
 
