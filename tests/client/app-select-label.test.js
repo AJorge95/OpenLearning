@@ -249,7 +249,8 @@ test('AppSelect disables its trigger and popup when no enabled options remain', 
 test('AppSelect resolves dynamic active options before announcing or choosing them', () => {
   const componentSource = fs.readFileSync(path.join(sourceDirectory, 'components.tsx'), 'utf8');
 
-  assert.match(componentSource, /resolveAppSelectActiveIndex\(options, activeIndex, selectedIndex\)/);
+  assert.match(componentSource, /resolveAppSelectActiveIndex\(options, activeValue, selectedIndex\)/);
+  assert.match(componentSource, /setActiveValue\(option\.value\)/);
   assert.match(componentSource, /choose\(activeOptionIndex\)/);
   assert.match(componentSource, /aria-activedescendant=\{menuOpen \? `\$\{menuId\}-option-\$\{activeOptionIndex\}` : undefined\}/);
 });

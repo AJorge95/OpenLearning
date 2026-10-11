@@ -29,15 +29,13 @@ export function findEnabledAppSelectIndex(
   return 0;
 }
 
-export function resolveAppSelectActiveIndex(
-  options: readonly AppSelectNavigationOption[],
-  activeIndex: number,
+export function resolveAppSelectActiveIndex<T extends string | number>(
+  options: readonly (AppSelectNavigationOption & { value: T })[],
+  activeValue: T,
   selectedIndex: number,
 ) {
-  const activeOption = options[activeIndex];
-  return activeOption && !activeOption.disabled
-    ? activeIndex
-    : findEnabledAppSelectIndex(options, selectedIndex);
+  const activeIndex = options.findIndex((option) => option.value === activeValue && !option.disabled);
+  return activeIndex >= 0 ? activeIndex : findEnabledAppSelectIndex(options, selectedIndex);
 }
 
 export function findAppSelectTypeaheadIndex(
