@@ -1,6 +1,6 @@
-export const pendingRegistrationCountChangedEvent = 'openlearning:pending-registration-count-changed';
+export const pendingRegistrationCountRefreshRequestedEvent = 'openlearning:pending-registration-count-refresh-requested';
 
-// Keep the persistent staff navigation in sync after either approval workflow succeeds.
-export function notifyPendingRegistrationCountChanged() {
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event(pendingRegistrationCountChangedEvent));
+// Ask the persistent staff navigation to refresh after approval or an explicit retry.
+export function requestPendingRegistrationCountRefresh() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(pendingRegistrationCountRefreshRequestedEvent));
 }
