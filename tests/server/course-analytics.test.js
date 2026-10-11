@@ -1031,8 +1031,13 @@ test('private path course access follows the current step prerequisite setting',
   const learningResponse = await fetch(apiUrl('/my-learning'), { headers: userHeaders('learner-active') });
   assert.equal(learningResponse.status, 200);
   assert.ok((await learningResponse.json()).courses.some((course) => course.id === 'path-course-target'));
-  database.prepare('DELETE FROM learning_path_enrollments WHERE path_id = ? AND user_id = ?')
-    .run('path-prerequisite-check', 'learner-active');
+  const removalResponse = await fetch(apiUrl('/manage/learning-paths/path-prerequisite-check/assignments/learner-active'), {
+    method: 'DELETE',
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(removalResponse.status, 204);
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'path.assignment_removed' AND entity_id = 'path-prerequisite-check'`).get().count, 1);
   const revokedCourse = await fetch(apiUrl('/courses/path-course-target'), { headers: userHeaders('learner-active') });
   assert.equal(revokedCourse.status, 403);
   const afterRemoval = await fetch(apiUrl('/my-learning'), { headers: userHeaders('learner-active') });

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Exercise assignment removal through the admin route
+
+- **Reviewed:** The private-course access regression verified that deleting an enrollment revokes access, but removed the row directly in SQLite instead of exercising the admin assignment-removal endpoint.
+- **Improvement:** Drive removal through the authenticated DELETE route and assert the audit entry before checking that the private course and My Learning result are no longer available.
+- **Why it helps:** The test now covers the actual action behind the admin control, its audit record, and the access revocation that matters to learners.
+- **Interface review:** The learner still sees the path course while enrolled and loses it after the admin removes the assignment; no UI behavior changed.
+- **Checked:** Focused `tests/server/course-analytics.test.js` passed (96/96), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `node --check tests/server/course-analytics.test.js`, and `git diff --check` passed. No UI was changed; the route test verified the private-course revocation and audit event through the admin API.
+
 ## 2026-10-11 — Confirm the resulting learning-path enrollment
 
 - **Reviewed:** Admin assignment uses `INSERT OR IGNORE` to remain safe when a learner enrolls concurrently. The UI displayed “Learner assigned” even when the existing enrollment remained self-enrolled.
