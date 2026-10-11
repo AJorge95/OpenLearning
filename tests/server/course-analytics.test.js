@@ -1949,6 +1949,7 @@ test('course competency mappings can remove legacy inactive competencies', async
   assert.ok(mapping.competencies.some((item) => item.id === 'competency-mapping-active' && item.active));
   assert.ok(mapping.competencies.some((item) => item.id === 'competency-mapping-inactive' && !item.active));
   assert.deepEqual(mapping.selected, ['competency-mapping-inactive']);
+  assert.equal(mapping.selectionLimit, 200);
 
   function mappingAuditCount() {
     return database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
@@ -1978,6 +1979,15 @@ test('course competency mappings can remove legacy inactive competencies', async
     body: JSON.stringify({ competencyIds: ['competency-mapping-inactive'] }),
   });
   assert.equal(readdResponse.status, 400);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_competencies WHERE course_id = ?').get('course-competency-mapping').count, 0);
+
+  const overLimitResponse = await fetch(apiUrl('/manage/courses/course-competency-mapping/competencies'), {
+    method: 'PUT',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({ competencyIds: Array.from({ length: 201 }, (_, index) => `nonexistent-competency-${index}`) }),
+  });
+  assert.equal(overLimitResponse.status, 400);
+  assert.equal((await overLimitResponse.json()).code, 'validation_error');
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_competencies WHERE course_id = ?').get('course-competency-mapping').count, 0);
 });
 

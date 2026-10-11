@@ -12,6 +12,7 @@ programsRouter.use(requireAuth);
 const LEARNING_PATH_PAGE_SIZE = 20;
 const COURSE_VERSION_PAGE_SIZE = 20;
 const COMPETENCY_ADMIN_PAGE_SIZE = 25;
+const COURSE_COMPETENCY_SELECTION_LIMIT = 200;
 const MAX_CALENDAR_RANGE_DAYS = 62;
 const SELF_ENROLLMENT_PATH_COURSE_FILTER = `p.self_enrollment = 1
   AND EXISTS (SELECT 1 FROM learning_path_courses pc WHERE pc.path_id = p.id)
@@ -518,7 +519,7 @@ programsRouter.get('/manage/courses/:courseId/competencies', requireStaff, (req,
   const available = db.prepare(`SELECT * FROM competencies c WHERE c.active = 1
     OR EXISTS (SELECT 1 FROM course_competencies cc WHERE cc.course_id = ? AND cc.competency_id = c.id)
     ORDER BY c.active DESC, c.title COLLATE NOCASE`).all(courseId);
-  res.json({ competencies: available, selected: competencies });
+  res.json({ competencies: available, selected: competencies, selectionLimit: COURSE_COMPETENCY_SELECTION_LIMIT });
 });
 
 programsRouter.put('/manage/courses/:courseId/competencies', requireStaff, (req, res) => {
@@ -526,7 +527,7 @@ programsRouter.put('/manage/courses/:courseId/competencies', requireStaff, (req,
     requireCourseManager(req.params.courseId, req.currentUser);
     const courseId = logicalCourseId(req.params.courseId) || req.params.courseId;
     const ids = req.body?.competencyIds;
-    if (!Array.isArray(ids) || ids.length > 200 || ids.some((id) => typeof id !== 'string')) fail(400, 'Choose a valid competency list.', 'validation_error');
+    if (!Array.isArray(ids) || ids.length > COURSE_COMPETENCY_SELECTION_LIMIT || ids.some((id) => typeof id !== 'string')) fail(400, 'Choose a valid competency list.', 'validation_error');
     const unique = [...new Set(ids)];
     const existing = new Set(db.prepare('SELECT competency_id FROM course_competencies WHERE course_id = ?').all(courseId).map((row) => row.competency_id));
     const available = new Set(db.prepare(`SELECT id FROM competencies WHERE active = 1

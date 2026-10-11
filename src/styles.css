@@ -1416,6 +1416,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .course-competency-picker > div > label { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: #fff; color: #303443; font-size: 12px; cursor: pointer; }
 .course-competency-picker > div > label > span { display: grid; gap: 4px; min-width: 0; }
 .course-competency-picker > div > label small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.course-competency-picker > div > label.competency-selection-disabled { color: var(--muted); background: var(--subtle); cursor: not-allowed; }
+.course-competency-picker > .inline-notice { margin: 0; padding: 10px 12px; font-size: 12px; }
+.course-competency-picker > .course-competency-selection-status { margin: 0; color: #414657; font-size: 11px; font-weight: 600; line-height: 1.45; }
 .course-competency-picker input { width: 16px; height: 16px; flex: 0 0 auto; margin: 0; accent-color: var(--purple); }
 .course-competency-picker > .button { justify-self: end; }
 .course-version-history { display: grid; gap: 10px; }
