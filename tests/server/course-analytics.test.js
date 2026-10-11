@@ -2293,6 +2293,40 @@ test('learning-path creation rechecks course availability in its write transacti
   }
 });
 
+test('learning-path creation rolls back when the response cannot be read', async () => {
+  const title = 'Path response read transaction rollback';
+  const auditSummary = `Created learning path: ${title}`;
+  const originalPrepare = database.prepare;
+  let payloadReadFailed = false;
+
+  database.prepare = (sql) => {
+    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT pc.id AS path_course_id, pc.path_id, pc.course_id, pc.position, pc.requires_previous, c.* FROM learning_path_courses pc JOIN courses c ON c.id = pc.course_id WHERE pc.path_id IN (?) ORDER BY pc.path_id, pc.position') {
+      payloadReadFailed = true;
+      throw new Error('Injected learning-path creation payload read failure');
+    }
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    // Fail after the path and its audit entry are written to verify both roll back together.
+    const response = await fetch(apiUrl('/manage/learning-paths'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title, courses: [] }),
+    });
+
+    assert.equal(payloadReadFailed, true);
+    assert.equal(response.status, 500);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_paths WHERE title = ?').get(title).count, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_logs WHERE action = ? AND summary = ?')
+      .get('path.created', auditSummary).count, 0);
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM audit_logs WHERE action = ? AND summary = ?').run('path.created', auditSummary);
+    database.prepare('DELETE FROM learning_paths WHERE title = ?').run(title);
+  }
+});
+
 test('program boolean request fields reject strings without changing access settings', async () => {
   const invalidCreate = await fetch(apiUrl('/manage/learning-paths'), {
     method: 'POST',
@@ -2364,6 +2398,44 @@ test('learning-path patches reject arrays and skip no-op writes and audit events
     assert.equal(auditCount(), 1);
   } finally {
     database.prepare('DELETE FROM learning_paths WHERE id = ?').run('path-patch-noop-regression');
+  }
+});
+
+test('learning-path updates roll back when the response cannot be read', async () => {
+  const pathId = 'path-update-payload-read';
+  const originalDescription = 'Before response failure';
+  database.prepare(`INSERT INTO learning_paths (id, title, description, status, self_enrollment, created_by, updated_by)
+    VALUES (?, 'Path response read fixture', ?, 'draft', 0, 'admin-1', 'admin-1')`).run(pathId, originalDescription);
+  const initialAuditCount = database.prepare('SELECT COUNT(*) AS count FROM audit_logs WHERE action = ? AND entity_id = ?')
+    .get('path.updated', pathId).count;
+  const originalPrepare = database.prepare;
+  let payloadReadFailed = false;
+
+  database.prepare = (sql) => {
+    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT pc.id AS path_course_id, pc.path_id, pc.course_id, pc.position, pc.requires_previous, c.* FROM learning_path_courses pc JOIN courses c ON c.id = pc.course_id WHERE pc.path_id IN (?) ORDER BY pc.path_id, pc.position') {
+      payloadReadFailed = true;
+      throw new Error('Injected learning-path update payload read failure');
+    }
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    // The course summary read follows the path update and audit write, so its failure must roll both back.
+    const response = await fetch(apiUrl(`/manage/learning-paths/${pathId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ description: 'Updated despite payload failure' }),
+    });
+
+    assert.equal(payloadReadFailed, true);
+    assert.equal(response.status, 500);
+    assert.equal(database.prepare('SELECT description FROM learning_paths WHERE id = ?').get(pathId).description, originalDescription);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_logs WHERE action = ? AND entity_id = ?')
+      .get('path.updated', pathId).count, initialAuditCount);
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM audit_logs WHERE action = ? AND entity_id = ?').run('path.updated', pathId);
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run(pathId);
   }
 });
 
