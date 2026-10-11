@@ -12,7 +12,8 @@
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "node --watch server/index.js",
     "dev:client": "vite --host 127.0.0.1",
-    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && vite build",
     "test": "node --test",
     "start": "node server/index.js",
     "db:migrate": "node server/migrate.js"

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Run strict type checking before production builds
+
+- **Reviewed:** The app's strict TypeScript configuration, installed compiler, Vite production build script, and README validation instructions.
+- **Improvement:** Add `npm run typecheck` and make `npm run build` run `tsc --noEmit` before Vite bundles the client. Document both checks alongside the server test suite.
+- **Why it helps:** Type errors in the React client now stop the production build instead of passing through Vite's transpilation without a compiler check.
+- **Interface and backend review:** The check covers typed React/client source; existing server tests remain the Node API validation. Runtime behavior is unchanged.
+- **Checked:** `npm run build` passed with the strict type check and Vite production bundle; the full `npm test -- --test-reporter=dot` suite passed; `git diff --check` passed.
+
 ## 2026-10-11 — Recheck sign-in access and session refresh
 
 - **Reviewed:** The rendered sign-in page, username/password labels and autocomplete, requested-destination guidance, post-login routing, and auth-provider sequencing for concurrent session refreshes.
