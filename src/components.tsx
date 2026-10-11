@@ -282,13 +282,14 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   const unavailable = isAppSelectUnavailable(options, disabled);
   const menuOpen = open && !unavailable;
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
-  const [activeIndex, setActiveIndex] = useState(selectedIndex);
-  const activeOptionIndex = resolveAppSelectActiveIndex(options, activeIndex, selectedIndex);
+  const [activeValue, setActiveValue] = useState(value);
+  const activeOptionIndex = resolveAppSelectActiveIndex(options, activeValue, selectedIndex);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 220, maxHeight: 280 });
 
   function focusIndex(index: number, direction: 1 | -1 = 1) {
     const nextIndex = findEnabledAppSelectIndex(options, index, direction);
-    setActiveIndex(nextIndex);
+    const nextOption = options[nextIndex];
+    if (nextOption && !nextOption.disabled) setActiveValue(nextOption.value);
     menuRef.current?.querySelector<HTMLElement>(`#${menuId}-option-${nextIndex}`)?.scrollIntoView({ block: 'nearest' });
   }
 
@@ -301,7 +302,8 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
       const { top, maxHeight } = getAppSelectVerticalPosition(rect, window.innerHeight, options.length);
       setPosition({ top, left, width, maxHeight });
     }
-    setActiveIndex(findEnabledAppSelectIndex(options, startIndex));
+    const nextOption = options[findEnabledAppSelectIndex(options, startIndex)];
+    if (nextOption && !nextOption.disabled) setActiveValue(nextOption.value);
     setOpen(true);
   }
 
@@ -329,7 +331,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
     if (typeaheadTimerRef.current !== null) window.clearTimeout(typeaheadTimerRef.current);
     typeaheadTimerRef.current = window.setTimeout(() => { typeaheadRef.current = ''; }, 650);
     if (match >= 0) {
-      setActiveIndex(match);
+      setActiveValue(options[match].value);
       if (!open) openMenu(match);
     }
   }
@@ -360,6 +362,13 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   }, [unavailable]);
 
   useEffect(() => {
+    const activeOption = options.find((option) => option.value === activeValue && !option.disabled);
+    if (activeOption || unavailable) return;
+    const fallbackOption = options[activeOptionIndex];
+    if (fallbackOption && !fallbackOption.disabled) setActiveValue(fallbackOption.value);
+  }, [activeOptionIndex, activeValue, options, unavailable]);
+
+  useEffect(() => {
     if (!menuOpen) return;
     function closeFromOutside(event: PointerEvent) {
       const target = event.target as Node;
@@ -388,7 +397,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
       {leadingIcon && <span className="app-select-leading" aria-hidden="true">{leadingIcon}</span>}<span className="app-select-value">{getAppSelectDisplayLabel(options, value)}</span><ChevronDown className="app-select-chevron" size={16} aria-hidden="true" />
     </button>
     {menuOpen && createPortal(<div ref={menuRef} id={menuId} className={`app-select-menu${matchTriggerWidth ? ' app-select-menu--match-trigger' : ''}`} role="listbox" aria-label={`${ariaLabel} options`} style={position}>
-      {options.map((option, index) => <div key={String(option.value)} id={`${menuId}-option-${index}`} className={`app-select-option${option.value === value ? ' selected' : ''}${index === activeIndex ? ' active' : ''}`} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined} onPointerDown={(event) => event.preventDefault()} onPointerEnter={() => !option.disabled && setActiveIndex(index)} onClick={() => choose(index)}>
+      {options.map((option, index) => <div key={String(option.value)} id={`${menuId}-option-${index}`} className={`app-select-option${option.value === value ? ' selected' : ''}${index === activeOptionIndex ? ' active' : ''}`} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined} onPointerDown={(event) => event.preventDefault()} onPointerEnter={() => !option.disabled && setActiveValue(option.value)} onClick={() => choose(index)}>
         <span className="app-select-option-indicator" aria-hidden="true">{option.value === value && <Check size={14} />}</span><span className="app-select-option-label">{option.label}</span>
       </div>)}
     </div>, document.body)}

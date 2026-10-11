@@ -26,12 +26,14 @@ test('custom-select navigation keeps its empty and all-disabled fallbacks', () =
   assert.equal(findEnabledAppSelectIndex([{ disabled: true }, { disabled: true }], 1, -1), 0);
 });
 
-test('custom-select active option falls back when live options shrink or disable the active choice', () => {
-  const currentOptions = [{}, { disabled: true }, {}];
+test('custom-select active option follows its value when choices reorder and falls back when removed', () => {
+  const currentOptions = [{ value: 'one' }, { value: 'two', disabled: true }, { value: 'three' }];
+  const reorderedOptions = [{ value: 'three' }, { value: 'one' }, { value: 'two', disabled: true }];
 
-  assert.equal(resolveAppSelectActiveIndex(currentOptions, 2, 0), 2);
-  assert.equal(resolveAppSelectActiveIndex([{}, { disabled: true }], 4, 0), 0);
-  assert.equal(resolveAppSelectActiveIndex(currentOptions, 1, 1), 2);
+  assert.equal(resolveAppSelectActiveIndex(currentOptions, 'three', 0), 2);
+  assert.equal(resolveAppSelectActiveIndex(reorderedOptions, 'one', 0), 1);
+  assert.equal(resolveAppSelectActiveIndex([{ value: 'one' }, { value: 'two', disabled: true }], 'removed', 0), 0);
+  assert.equal(resolveAppSelectActiveIndex(currentOptions, 'two', 1), 2);
 });
 
 test('custom-select is unavailable when it has no enabled choices', () => {

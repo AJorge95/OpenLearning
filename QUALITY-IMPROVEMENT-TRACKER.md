@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve AppSelect focus when live choices reorder
+
+- **Reviewed:** The active-choice fallback added for dynamic lists and the remaining case where a refresh reorders options while preserving the old numeric index.
+- **Improvement:** Track the active option by its value, derive its current index for keyboard and ARIA use, and normalize to the selected enabled option when the active value is removed or disabled.
+- **Why it helps:** A live category or log-filter refresh no longer changes the highlighted choice underneath keyboard users, and Enter continues to select the option they were navigating.
+- **Interface and backend review:** Visible selection and server query contracts are unchanged; no backend change was needed.
+- **Checked:** Focused AppSelect navigation, label, and positioning tests passed (25/25), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict type checking and Vite bundling, and `git diff --check` passed. Live list reordering was validated through the helper/component regressions, not a signed-in rendered page.
+
 ## 2026-10-11 — Keep AppSelect keyboard focus valid as options change
 
 - **Reviewed:** Shared custom-select typeahead, keyboard selection, active-descendant announcements, and call sites whose option lists can change as page data refreshes.
