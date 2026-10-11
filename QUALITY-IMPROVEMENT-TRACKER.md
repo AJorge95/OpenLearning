@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Scope curriculum action feedback to its course
+
+- **Reviewed:** Lesson creation, module and lesson deletion, and curriculum reordering all set editor errors from their async handlers without checking whether staff had navigated to another course.
+- **Improvement:** Capture the source course ID, stop before issuing a follow-up write if navigation happened during the prerequisite save, and scope refreshes and failure messages to the source course. Writes already sent remain subject to their existing backend transaction.
+- **Why it helps:** A late curriculum failure no longer appears as an error in an unrelated course editor, and stale actions do not start after navigation during the preliminary save.
+- **Backend review:** These endpoints recheck course-manager access and use transactional writes with audit records; deletion media cleanup retains its existing best-effort handling. No server change was indicated.
+- **Checked:** Course-editor route and removal tests passed (13/13), the full `npm test` suite passed (598/598), `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. Rendered navigation races were not run; Playwright is not installed in this checkout.
+
 ## 2026-10-11 — Keep course deletion feedback on its source route
 
 - **Reviewed:** Archived-course deletion is confirmed and route-checked before it starts, but a request already in progress always redirected to the course list or displayed its failure after navigation.
