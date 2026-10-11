@@ -650,6 +650,14 @@ courseRouter.post('/manage/courses', requireStaff, (req, res) => {
 
 courseRouter.patch('/manage/courses/:courseId', requireStaff, (req, res) => {
   const body = requireObjectBody(req.body, 'Course changes');
+  // Build the editor payload before commit so a read failure rolls back the save and audit entry.
+  function buildEditorPayload(course, storageCourseId) {
+    return getCoursePayload(course, req.currentUser, {
+      includeAnswers: true,
+      ...(storageCourseId ? { storageCourseId } : {}),
+    });
+  }
+
   const saveCourse = db.transaction(() => {
     const current = requireCourseManager(req.params.courseId, req.currentUser);
     const title = body.title === undefined ? current.title : textField(body.title, 'Course title', 160, { required: true });
@@ -691,7 +699,8 @@ courseRouter.patch('/manage/courses/:courseId', requireStaff, (req, res) => {
         summary: `Published ${title} as version ${version.version_number}`, details: { versionId: version.id, version: version.version_number, requiresRecompletion } });
       if (!auditId) fail(500, 'Course could not be published because the audit log is unavailable.', 'audit_unavailable');
       const updated = db.prepare('SELECT * FROM courses WHERE id = ?').get(logicalId);
-      return { updated, contentCourse: db.prepare('SELECT * FROM courses WHERE id = ?').get(version.storage_course_id) };
+      const contentCourse = db.prepare('SELECT * FROM courses WHERE id = ?').get(version.storage_course_id);
+      return { course: buildEditorPayload(updated, contentCourse.id) };
     }
     if (status === 'archived' && db.prepare("SELECT 1 FROM learning_path_courses pc JOIN learning_paths p ON p.id = pc.path_id WHERE pc.course_id = ? AND p.status = 'published' LIMIT 1").get(logicalId)) {
       fail(409, 'Remove this course from published learning paths before archiving it.', 'course_in_published_path');
@@ -716,13 +725,10 @@ courseRouter.patch('/manage/courses/:courseId', requireStaff, (req, res) => {
         entityType: 'course', entityId: logicalId, summary: `${status === 'archived' ? 'Archived' : 'Unpublished'} ${canonical.title}` });
       if (!auditId) fail(500, 'Course status could not be changed because the audit log is unavailable.', 'audit_unavailable');
     }
-    return { current, title, category, visibility, status, changedFields, updated };
+    return { course: buildEditorPayload(updated) };
   });
-  const result = saveCourse.immediate();
-  res.json({ course: getCoursePayload(result.updated, req.currentUser, {
-    includeAnswers: true,
-    ...(result.contentCourse ? { storageCourseId: result.contentCourse.id } : {}),
-  }) });
+  const { course } = saveCourse.immediate();
+  res.json({ course });
 });
 
 courseRouter.delete('/manage/courses/:courseId', requireStaff, async (req, res) => {

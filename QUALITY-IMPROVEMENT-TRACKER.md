@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep course-save response reads transactional
+
+- **Reviewed:** The course PATCH route committed course changes and their audit event before building the editor response. A later read failure returned HTTP 500 even though the save had succeeded.
+- **Improvement:** Build the editor payload inside the immediate transaction for both draft saves and publication. A short route comment explains that the payload read belongs before commit.
+- **Why it helps:** A failed response read now rolls back the course, version, and audit changes together, so staff are not told a save failed after it took effect.
+- **Checked:** The injected module-query failure reproduced the old draft-save behavior before the fix: HTTP 500 with the changed title and audit event committed. After the fix, draft and publication response-read failures roll back the course update, version, and audit event together. The full test suite and production build passed, including strict TypeScript checking; changed JavaScript files passed syntax checks, and `git diff --check` passed.
+
 ## 2026-10-11 — Keep platform settings response reads inside the write transaction
 
 - **Reviewed:** The platform-settings PUT route committed setting changes and its audit entry before counting registered accounts and reading the response configuration. A failure in those follow-up reads returned an error after the change had already succeeded.
