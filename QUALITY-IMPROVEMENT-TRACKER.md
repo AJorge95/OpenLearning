@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep course action menus within viewport edges
+
+- **Reviewed:** The course-row menu estimated height as `itemCount * 38 + 16`, while its 38px rows, 3px gaps, 6px padding, and 1px border produce 134px for three actions. Near a viewport edge this underestimation reduced the intended trigger gap; short viewports also had no menu scrolling cap.
+- **Improvement:** Reuse the existing tested vertical menu-position helper, pass its computed `maxHeight` to the popover, and enable contained vertical scrolling when the available space is shorter than the menu.
+- **Why it helps:** Course actions stay aligned above or below their trigger and remain reachable when an administrator uses a short viewport.
+- **Backend review:** The course action menu is client-only; its existing status, assignment, and deletion routes do not need a contract change.
+- **Checked:** Focused positioning and integration regressions passed (7/7). At 1280×720, a local preview using the real stylesheet and positioning helper rendered a 134px menu ending 6px above the bottom-edge trigger; browser console warnings/errors were absent. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, test syntax, and `git diff --check` passed. The authenticated management route was not available in the signed-out browser.
+
 ## 2026-10-11 — Keep keyboard focus visible in course action menus
 
 - **Reviewed:** Course-row menu items receive focus during keyboard navigation, but the combined hover/focus rule removed their outline and left only the subtle hover background as a focus cue.
