@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Validate decoded PNG branding data
+
+- **Reviewed:** After structural checks, a PNG with valid CRCs could still contain an invalid compressed image stream.
+- **Improvement:** Inflate IDAT data with an output cap derived from the declared dimensions, validate row lengths and filter bytes, and support Adam7 scanlines. Add regressions for corrupt streams, excessive decompressed output, invalid filters, and a valid interlaced image.
+- **Why it helps:** Administrators receive a validation error for unreadable pixel data instead of saving branding that browsers cannot render; decompression remains bounded by the existing dimension limit.
+- **Backend:** Uses Node's built-in zlib and preserves supported color types, bit depths, interlacing, and file-size limits.
+- **Checked:** The focused registration and platform-settings suite passed (24/24); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict type checking and Vite bundling; `git diff --check` passed.
+
 ## 2026-10-11 — Reject malformed PNG branding icons
 
 - **Reviewed:** The PNG upload parser checked the signature and dimensions but did not validate chunk bounds, checksums, image data, or header encoding values.
