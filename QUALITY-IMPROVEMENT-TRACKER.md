@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Announce pending course-list actions in the row
+
+- **Reviewed:** Course status and deletion menus close as soon as an administrator chooses an action. The existing busy state only changed text inside the now-closed menu, leaving no visible or announced progress while the server request was pending.
+- **Improvement:** Show a concise row-level live status for publishing, unpublishing, archiving, and deleting. Keep the action wording in a typed helper so the visible and announced messages stay consistent.
+- **Why it helps:** Administrators can see which course is being changed and assistive technology announces the pending action after the menu closes.
+- **Backend review:** Course status changes remain validated and audited transactionally; deletion remains archive-gated and audited before media cleanup. No endpoint behavior change was needed.
+- **Checked:** `node --test tests/client/course-row-action-status.test.js` passed (2/2); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/course-row-action-status.test.js`, and `git diff --check` passed. The admin page redirected to sign-in in the current browser session, so the authenticated course table was not available for live interaction review.
+
 ## 2026-10-11 — Resolve storage links before platform reset path checks
 
 - **Reviewed:** Reset preparation compared configured paths lexically. A media-root or database path reached through a symlink/junction could therefore bypass overlap checks. Reset confirmation also renamed the configured media path itself, which would move a symlink rather than its target.
