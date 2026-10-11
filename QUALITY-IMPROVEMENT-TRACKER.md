@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep course creation and its response transactional
+
+- **Reviewed:** The course-creation route committed its new row and audit entry before building the editor response. A failed payload read returned HTTP 500 while leaving the course created.
+- **Improvement:** Build and return the complete editor payload inside the immediate creation transaction. The route comment explains why response reads are part of the transaction.
+- **Why it helps:** Creation either returns the editor data for a saved course or rolls the course and audit entry back together, avoiding duplicate retries after a misleading failure.
+- **Checked:** An injected module-query failure reproduced the old behavior before the fix: HTTP 500 with both the new course and audit entry persisted. After the fix, the same failure leaves neither behind. Focused creation tests passed (2/2); the full suite passed (497/497); `npm run build` passed strict TypeScript checking and Vite bundling; syntax checks and `git diff --check` passed.
+
 ## 2026-10-11 — Keep course-save response reads transactional
 
 - **Reviewed:** The course PATCH route committed course changes and their audit event before building the editor response. A later read failure returned HTTP 500 even though the save had succeeded.
