@@ -23,6 +23,7 @@ let fixtureDirectory;
 let database;
 let server;
 let captionPath;
+const captionDownloadContents = Buffer.from('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nWelcome to the lesson.\n');
 const rangeMediaContents = Buffer.from('0123456789');
 const documentDownloadContents = Buffer.from('Course handout content');
 
@@ -86,11 +87,18 @@ before(async () => {
   await fs.mkdir(documentMediaDirectory, { recursive: true });
   await fs.writeFile(path.join(documentMediaDirectory, 'handout.txt'), documentDownloadContents);
   await fs.writeFile(path.join(documentMediaDirectory, 'locked-handout.txt'), documentDownloadContents);
+  await fs.writeFile(path.join(documentMediaDirectory, 'open-captions.vtt'), captionDownloadContents);
+  await fs.writeFile(path.join(documentMediaDirectory, 'locked-captions.vtt'), captionDownloadContents);
   const insertResource = database.prepare(`INSERT INTO lesson_resources
     (id, lesson_id, resource_type, title, file_name, original_name, mime_type, byte_size, position)
     VALUES (?, ?, 'document', ?, ?, ?, 'text/plain', ?, 0)`);
   insertResource.run('resource-download-open', 'lesson-document-download-open', 'Course handout', 'handout.txt', 'course-handout.txt', documentDownloadContents.length);
   insertResource.run('resource-download-locked', 'lesson-document-download-locked', 'Locked handout', 'locked-handout.txt', 'locked-handout.txt', documentDownloadContents.length);
+  const insertCaption = database.prepare(`INSERT INTO lesson_captions
+    (id, lesson_id, language, label, file_name, original_name, byte_size)
+    VALUES (?, ?, 'en', 'English', ?, 'captions.vtt', ?)`);
+  insertCaption.run('caption-download-open', 'lesson-document-download-open', 'open-captions.vtt', captionDownloadContents.length);
+  insertCaption.run('caption-download-locked', 'lesson-document-download-locked', 'locked-captions.vtt', captionDownloadContents.length);
 
   const app = express();
   app.use(express.json());
@@ -331,6 +339,38 @@ test('blocks protected document downloads when the lesson is still locked', asyn
 
   assert.equal(response.status, 423);
   assert.equal((await response.json()).code, 'lesson_locked');
+});
+
+test('serves caption tracks only to viewers with access to the unlocked lesson', async () => {
+  const captionUrl = mediaUrl('/captions/caption-download-open');
+  const anonymousResponse = await fetch(captionUrl, { headers: { connection: 'close' } });
+  assert.equal(anonymousResponse.status, 401);
+  assert.equal((await anonymousResponse.json()).code, 'unauthorized');
+
+  const response = await fetch(captionUrl, {
+    headers: { 'x-test-user': 'learner-media', connection: 'close' },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.equal(response.headers.get('content-type'), 'text/vtt; charset=utf-8');
+  assert.equal(response.headers.get('content-disposition'), 'inline');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(Number(response.headers.get('content-length')), captionDownloadContents.length);
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), captionDownloadContents);
+
+  const headResponse = await fetch(captionUrl, {
+    method: 'HEAD',
+    headers: { 'x-test-user': 'learner-media', connection: 'close' },
+  });
+  assert.equal(headResponse.status, 200);
+  assert.equal(Number(headResponse.headers.get('content-length')), captionDownloadContents.length);
+  assert.equal(await headResponse.text(), '');
+
+  const lockedResponse = await fetch(mediaUrl('/captions/caption-download-locked'), {
+    headers: { 'x-test-user': 'learner-media', connection: 'close' },
+  });
+  assert.equal(lockedResponse.status, 423);
+  assert.equal((await lockedResponse.json()).code, 'lesson_locked');
 });
 
 test('rejects truncated WebP RIFF headers and image chunks without saving media', async () => {
