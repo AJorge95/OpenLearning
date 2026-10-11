@@ -218,8 +218,21 @@ test('account details explain and disable controls for the last active administr
 
   assert.match(pageSource, /isLastActiveAdmin: boolean/);
   assert.equal((pageSource.match(/disabled=\{saving \|\| user\.isLastActiveAdmin\}/g) || []).length, 2);
-  assert.equal((pageSource.match(/user\.isLastActiveAdmin \? lastAdminHelpId : undefined/g) || []).length, 2);
+  assert.match(pageSource, /ariaLabelledBy="account-platform-role-label" describedBy=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\} matchTriggerWidth/);
+  assert.match(pageSource, /disabled=\{saving \|\| user\.isLastActiveAdmin\} aria-describedby=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\}/);
   assert.match(pageSource, /user\.isLastActiveAdmin && <p className="account-admin-protection" id=\{lastAdminHelpId\}>This is the only active administrator\./);
+});
+
+test('user list explains and disables inline changes for the last active administrator', () => {
+  const pageSource = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
+  const typeSource = fs.readFileSync(path.join(sourceDirectory, 'types.ts'), 'utf8');
+  const styles = fs.readFileSync(path.join(sourceDirectory, 'styles.css'), 'utf8');
+
+  assert.match(typeSource, /isLastActiveAdmin\?: boolean/);
+  assert.match(pageSource, /describedBy=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\} value=\{user\.role\} disabled=\{savingIds\.has\(user\.id\) \|\| user\.isLastActiveAdmin\}/);
+  assert.match(pageSource, /aria-describedby=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\} disabled=\{savingIds\.has\(user\.id\) \|\| user\.isLastActiveAdmin\} onClick=\{\(\) => updateUser\(user, \{ disabled: !user\.disabled \}\)\}/);
+  assert.match(pageSource, /className="last-active-admin-note" id=\{lastAdminHelpId\}>This is the only active administrator\./);
+  assert.match(styles, /\.last-active-admin-note\s*\{[^}]*white-space:\s*normal;/);
 });
 
 test('AppSelect disables its trigger and popup when no enabled options remain', () => {

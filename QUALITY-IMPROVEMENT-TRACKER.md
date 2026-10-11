@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Explain last-administrator restrictions in the Users table
+
+- **Reviewed:** The Users list exposed inline role and account-status changes while the detail page already explained and disabled both actions for the only active administrator. The list API did not return the derived restriction flag.
+- **Improvement:** Return `isLastActiveAdmin` with each listed account, calculating the active administrator count once per request. Disable the row’s role selector and account-status action when they would remove the final active administrator, and show a visible explanation linked to both controls.
+- **Why it helps:** Staff see the same safeguard before attempting a change from either account-management surface, and the table avoids one count query per listed account.
+- **Interface review:** Password reset and account details remain available. The explanation wraps within the status column and is exposed as each disabled control’s accessible description.
+- **Checked:** Focused account/UI tests passed (31/31), full `npm test -- --test-reporter=dot` passed, `npx tsc --noEmit`, `npm run build`, JavaScript syntax checks, and `git diff --check` passed. The in-app browser is signed out at `/login`, so the authenticated Users table was not re-rendered in this cycle.
+
 ## 2026-10-11 — Explain last-administrator account restrictions
 
 - **Reviewed:** The account PATCH route already prevents demoting or disabling the last active administrator, but the account-details page left both controls enabled until the server returned a conflict.

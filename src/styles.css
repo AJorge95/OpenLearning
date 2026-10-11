@@ -897,6 +897,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .user-table .app-select-trigger { min-height: 40px; padding: 7px 9px; border-color: var(--line); color: #383d4c; font-size: 12px; }
 .account-state { display: inline-flex; align-items: center; gap: 7px; color: #656b7b; font-size: 12px; }
 .account-state > span { width: 7px; height: 7px; border-radius: 50%; background: #28a45d; }
+.last-active-admin-note { display: block; max-width: 230px; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.4; white-space: normal; }
 .account-disabled > span { background: #9ea3ae; }
 .user-row-actions { display: flex; align-items: center; gap: 13px; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 22px; background: rgba(19, 21, 31, .48); }
