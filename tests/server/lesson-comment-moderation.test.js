@@ -207,6 +207,28 @@ test('learners cannot remove comments, and staff cannot post learner comments', 
   assert.equal(post.status, 403);
 });
 
+test('invalid learner comments are rejected without writing rows', async () => {
+  const initialCount = database.prepare('SELECT COUNT(*) AS count FROM lesson_comments').get().count;
+  const cases = [
+    { name: 'missing body', payload: {}, message: 'Enter a comment before posting.' },
+    { name: 'non-text body', payload: { body: 42 }, message: 'Enter a comment before posting.' },
+    { name: 'empty body', payload: { body: '' }, message: 'Comments must be between 1 and 2,000 characters.' },
+    { name: 'whitespace-only body', payload: { body: '   ' }, message: 'Comments must be between 1 and 2,000 characters.' },
+    { name: 'overlong body', payload: { body: 'x'.repeat(2001) }, message: 'Comments must be between 1 and 2,000 characters.' },
+  ];
+
+  for (const { name, payload, message } of cases) {
+    const response = await fetch(apiUrl('/lessons/lesson-public/comments'), {
+      method: 'POST',
+      headers: { ...userHeaders('learner-1'), 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    assert.equal(response.status, 400, name);
+    assert.deepEqual(await response.json(), { error: message, code: 'invalid_comment' }, name);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM lesson_comments').get().count, initialCount, name);
+  }
+});
+
 test('moderators can remove a comment and the audit entry excludes its body', async () => {
   const response = await fetch(apiUrl('/lessons/lesson-private/comments/comment-private'), {
     method: 'DELETE',

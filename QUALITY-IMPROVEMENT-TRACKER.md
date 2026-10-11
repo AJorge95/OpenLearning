@@ -7,6 +7,14 @@
 - **Why no change:** The reported width and adjacent-click protections are already present in the current page source and dev server response; duplicating them would not change the behavior.
 - **Checked:** `node --test tests/client/app-select-label.test.js tests/client/app-select-position.test.js` passed. The server served the current transformed `pages-manage.tsx` and selector CSS (HTTP 200). The in-app browser is signed out at `/login`, so an authenticated click could not be repeated.
 
+## 2026-10-11 — Cover learner comment validation through the route
+
+- **Reviewed:** The learner comment form’s required text and 2,000-character limit, plus the API’s body-type, trimmed-content, and maximum-length checks. These rejection paths had no route-level regression coverage.
+- **Improvement:** Exercise missing, non-text, empty, whitespace-only, and overlong comment bodies through the learner API route, and assert every rejection leaves the stored comment count unchanged.
+- **Why it helps:** The API continues to enforce the same input boundary as the form, even when callers bypass client validation, without accidentally persisting invalid content.
+- **Interface review:** The textarea remains labeled, limited to 2,000 characters, and paired with a live character count; no UI change was indicated.
+- **Checked:** Focused comment client/server tests passed (19/19), including the five invalid-body responses and no-write assertions. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/server/lesson-comment-moderation.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Recheck administrator log filtering and pagination
 
 - **Reviewed:** Audit and system-log route access checks, text/severity/action filtering, bounded newest-first paging, and the client’s request cancellation, loading, empty, and retry states.
