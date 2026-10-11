@@ -7427,3 +7427,10 @@
 - **Result:** No source change was needed. The screenshot target identifies the old wrapping `<label>`; current markup uses a separate control container with pointer input disabled outside the trigger. The reported account is the only active administrator, so its role selector is disabled in the current data.
 - **Why no change:** On an enabled account, the wrapper and trigger measured the same 144px at a 1718×1270 viewport. Clicking 6px to the right left the menu closed; clicking the trigger opened it, and Escape closed it without changing the role.
 - **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js` passed (10/10), and `git diff --check` passed. The connected Chrome page rendered the current account markup; the CUA surface did not expose a screenshot method (`tab.playwright.screenshot` is unavailable).
+
+## 2026-10-11 — Read extended-size MP4 movie headers
+
+- **Reviewed:** MP4 duration extraction for the `mvhd` movie-header box and the shared parser's support for 64-bit extended-size boxes.
+- **Improvement:** Locate `mvhd` through the bounds-checked box reader and validate duration-field offsets against the parsed box end. This supports both ordinary and extended-size movie headers without scanning arbitrary metadata bytes for a raw marker.
+- **Why it helps:** Valid uploaded videos using an extended-size `mvhd` can have their duration verified, so learner watch tracking and lesson completion are not blocked with a false “duration unavailable” response.
+- **Checked:** A new version-one extended-size `mvhd` fixture first reproduced the bug (`null` instead of 90.25 seconds), then passed after the fix. Focused MP4 and duration-cache tests passed (14/14), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict TypeScript checking and Vite bundling, and JavaScript syntax and `git diff --check` validations passed.
