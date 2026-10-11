@@ -238,6 +238,19 @@ export function CourseManagementPage() {
     setAppliedQuery(nextQuery);
     void load(1, { query: nextQuery, status });
   }
+  function changeCourseStatusFilter(nextStatus: string) {
+    const nextQuery = query.trim();
+    const searchChanged = nextQuery !== appliedQuery;
+    setQuery(nextQuery);
+    setAppliedQuery(nextQuery);
+    setPage(1);
+    if (status === nextStatus) {
+      if (searchChanged) void load(1, { query: nextQuery, status: nextStatus });
+      return;
+    }
+    // The status effect reloads changed tabs with the normalized search state.
+    setStatus(nextStatus);
+  }
   // The empty-state action disappears after clearing, so return keyboard focus to the persistent input.
   function clearCourseSearch() {
     setQuery('');
@@ -305,7 +318,7 @@ export function CourseManagementPage() {
   return <div className="management-page">
     <PageHeading title="Courses" action={<Link className="button button-primary" to="/manage/courses/new"><Plus size={18} />Create course</Link>} />
     <div className="management-tabs" role="group" aria-label="Filter courses by status">
-      {tabs.map((tab) => <button type="button" key={tab.value} aria-pressed={status === tab.value} className={status === tab.value ? 'active' : ''} onClick={() => setStatus(tab.value)}>{tab.label}</button>)}
+      {tabs.map((tab) => <button type="button" key={tab.value} aria-pressed={status === tab.value} className={status === tab.value ? 'active' : ''} onClick={() => changeCourseStatusFilter(tab.value)}>{tab.label}</button>)}
     </div>
     <form role="search" aria-label="Search courses" className="management-search" onSubmit={submitSearch}><Search size={19} /><input ref={courseSearchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses" aria-label="Search courses" maxLength={120} /><button type="submit">Search</button></form>
     {error && (failedRequest

@@ -26,6 +26,13 @@ test('filtered empty course searches can be cleared and reload the selected stat
   assert.match(page, /<EmptyState title=\{emptyCourseState\.title\} detail=\{emptyCourseState\.detail\} action=\{emptyCourseAction\} \/>/);
 });
 
+test('changing course status applies the visible search draft', () => {
+  const page = courseManagementPage();
+
+  assert.match(page, /function changeCourseStatusFilter\(nextStatus: string\) \{[\s\S]*?const nextQuery = query\.trim\(\);[\s\S]*?const searchChanged = nextQuery !== appliedQuery;[\s\S]*?setQuery\(nextQuery\);[\s\S]*?setAppliedQuery\(nextQuery\);[\s\S]*?setPage\(1\);[\s\S]*?if \(status === nextStatus\) \{[\s\S]*?if \(searchChanged\) void load\(1, \{ query: nextQuery, status: nextStatus \}\);[\s\S]*?return;[\s\S]*?setStatus\(nextStatus\);/);
+  assert.match(page, /onClick=\{\(\) => changeCourseStatusFilter\(tab\.value\)\}/);
+});
+
 test('the empty catalog action identifies the first course while the page action stays general', () => {
   const page = courseManagementPage();
 
