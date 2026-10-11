@@ -8,6 +8,13 @@
 - **Interface review:** Existing URL input guidance, inline error announcement, and focus behavior are unchanged; no layout change was needed.
 - **Checked:** Client URL cases passed (3/3), including HTTP/HTTPS, malformed URLs, disallowed schemes, credentials, and trimming. API regression cases passed (1/1), with no resource or audit writes for invalid URLs. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
 
+## 2026-10-11 — Recheck saved quiz-result recovery
+
+- **Reviewed:** Quiz submission validation and snapshot creation, the learner-scoped attempt-detail route, restoration after returning to a quiz, error announcement, retry behavior, and the result/retry actions.
+- **Result:** No code change; submissions validate every answer against the current question choices before saving a serialized answer snapshot. Result reads remain scoped to the signed-in user, and a failed snapshot request leaves the submission form unavailable while announcing the error and offering a retry.
+- **Why no change:** The result ownership boundary and recovery flow match the intended behavior; no reproducible failure or unsafe fallback was found.
+- **Checked:** `node --test tests/server/quiz-attempt-results.test.js tests/client/quiz-result-accessibility.test.js` passed (2/2). Source review confirmed the server authorization, retry state, and accessible error/result markup; the in-app browser remains signed out, so the protected quiz route could not be replayed live.
+
 ## 2026-10-11 — Enforce the learning-path course limit in the editor
 
 - **Reviewed:** Path editing allows staff to select courses from paginated results, while the API already rejects more than 200 ordered courses. The checkbox list had no count or guard, so an oversized selection failed only after submission.
