@@ -305,7 +305,7 @@ export function PasswordField({ label, hint, hintId, id, disabled, 'aria-describ
 
 export type AppSelectOption<T extends string | number> = { value: T; label: string; disabled?: boolean };
 
-export function AppSelect<T extends string | number>({ value, options, onChange, ariaLabel, ariaLabelledBy, describedBy, controlId, invalid = false, className = '', disabled = false, required = false, leadingIcon, matchTriggerWidth = false }: {
+export function AppSelect<T extends string | number>({ value, options, onChange, ariaLabel, ariaLabelledBy, describedBy, controlId, invalid = false, className = '', disabled = false, required = false, leadingIcon, matchTriggerWidth = false, portalContainer }: {
   value: T;
   options: AppSelectOption<T>[];
   onChange: (value: T) => void;
@@ -319,6 +319,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   required?: boolean;
   leadingIcon?: React.ReactNode;
   matchTriggerWidth?: boolean;
+  portalContainer?: HTMLElement | null;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -441,6 +442,9 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
     if (typeaheadTimerRef.current !== null) window.clearTimeout(typeaheadTimerRef.current);
   }, []);
 
+  // A supplied container keeps fullscreen-owned menus in the browser's top layer.
+  const menuPortalContainer = portalContainer ?? document.body;
+
   return <div ref={rootRef} className={`app-select ${className}`.trim()}>
     <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-labelledby={ariaLabelledBy} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-required={required || undefined} aria-haspopup="listbox" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined} aria-activedescendant={menuOpen ? `${menuId}-option-${activeOptionIndex}` : undefined} disabled={unavailable} onClick={() => menuOpen ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
       {leadingIcon && <span className="app-select-leading" aria-hidden="true">{leadingIcon}</span>}<span className="app-select-value">{getAppSelectDisplayLabel(options, value)}</span><ChevronDown className="app-select-chevron" size={16} aria-hidden="true" />
@@ -449,7 +453,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
       {options.map((option, index) => <div key={String(option.value)} id={`${menuId}-option-${index}`} className={`app-select-option${option.value === value ? ' selected' : ''}${index === activeOptionIndex ? ' active' : ''}`} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined} onPointerDown={(event) => event.preventDefault()} onPointerEnter={() => !option.disabled && setActiveValue(option.value)} onClick={() => choose(index)}>
         <span className="app-select-option-indicator" aria-hidden="true">{option.value === value && <Check size={14} />}</span><span className="app-select-option-label">{option.label}</span>
       </div>)}
-    </div>, document.body)}
+    </div>, menuPortalContainer)}
   </div>;
 }
 

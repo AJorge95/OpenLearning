@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownUp, ArrowLeft, ArrowRight, Award, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, LockKeyhole, Maximize, MessageSquare, Pause, Play, Printer, RotateCcw, Search, Send, ThumbsDown, ThumbsUp, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { ArrowDownUp, ArrowLeft, ArrowRight, Award, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, LockKeyhole, Maximize, MessageSquare, Minimize, Pause, Play, Printer, RotateCcw, Search, Send, ThumbsDown, ThumbsUp, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
 import { AppSelect, Button, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
@@ -10,7 +10,7 @@ import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCo
 import { summarizeCourseProgress } from './course-progress';
 import { shuffleQuizChoices } from './quiz-choice-order';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
-import { tryEnterFullscreen } from './video-fullscreen';
+import { tryToggleFullscreen } from './video-fullscreen';
 import { selectVideoCaptionTrack } from './video-captions';
 import { getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
 import type { PendingVideoResume } from './video-recovery';
@@ -538,6 +538,7 @@ export function CoursePlayerPage() {
   const [railOpen, setRailOpen] = useState(true);
   const [videoError, setVideoError] = useState(false);
   const [fullscreenError, setFullscreenError] = useState('');
+  const [videoFullscreen, setVideoFullscreen] = useState(false);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [videoMuted, setVideoMuted] = useState(false);
   const [videoVolume, setVideoVolume] = useState(1);
@@ -565,6 +566,7 @@ export function CoursePlayerPage() {
   const commentSavingLessonIdsRef = useRef(new Set<string>());
   const [commentsLoading, setCommentsLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoPlayerFrameRef = useRef<HTMLDivElement | null>(null);
   const playbackPositionRef = useRef(0);
   const videoReloadingRef = useRef(false);
   const pendingVideoResumeRef = useRef<PendingVideoResume | null>(null);
@@ -583,6 +585,14 @@ export function CoursePlayerPage() {
   const focusRailAfterOpenRef = useRef(false);
   const lessonHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const commentSectionTitleRef = useRef<HTMLHeadingElement | null>(null);
+
+  useEffect(() => {
+    function syncVideoFullscreenState() {
+      setVideoFullscreen(document.fullscreenElement === videoPlayerFrameRef.current);
+    }
+    document.addEventListener('fullscreenchange', syncVideoFullscreenState);
+    return () => document.removeEventListener('fullscreenchange', syncVideoFullscreenState);
+  }, []);
 
   useEffect(() => {
     if (!railOpen) {
@@ -1281,14 +1291,15 @@ export function CoursePlayerPage() {
     setVideoVolume(volume);
   }
 
-  async function enterVideoFullscreen() {
+  async function toggleVideoFullscreen() {
     const requestedCourseId = courseId;
     const requestedLessonId = lessonId;
     setFullscreenError('');
-    const result = await tryEnterFullscreen(videoRef.current);
+    // Fullscreen the player frame so learner controls remain available with the video.
+    const result = await tryToggleFullscreen(videoPlayerFrameRef.current, document);
     if (routeCourseIdRef.current !== requestedCourseId || routeLessonIdRef.current !== requestedLessonId) return;
-    if (result === 'unsupported') setFullscreenError('Full-screen video is not supported by this browser.');
-    else if (result === 'failed') setFullscreenError('The browser could not open full screen. Try again.');
+    if (result === 'unsupported') setFullscreenError('Full-screen mode is not supported by this browser.');
+    else if (result === 'failed') setFullscreenError('The browser could not change full-screen mode. Try again.');
   }
 
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading lesson…</div>;
@@ -1303,6 +1314,8 @@ export function CoursePlayerPage() {
       <div className="player-breadcrumb"><Link to={`/courses/${course.id}`}>{course.title}</Link><span>/</span><span>{current.moduleTitle}</span></div>
       {error && <ErrorNotice message={error} />}
       <div className="player-heading"><div><p>{current.moduleTitle}</p><h1 ref={lessonHeadingRef} tabIndex={-1}>{current.title}</h1></div><button ref={railToggleRef} className="rail-toggle" type="button" onClick={toggleCourseRail} aria-label={railOpen ? 'Hide course content' : 'Show course content'} aria-expanded={railOpen} aria-controls="course-content-rail"><ChevronDown size={18} /></button></div>
+      {/* Keep the restricted watch controls inside the fullscreen subtree. */}
+      <div ref={videoPlayerFrameRef} className="video-player-frame">
       <section className="video-stage">
         {current.hasVideo && current.mediaUrl ? <video ref={videoRef} controls={!watchRequired} controlsList="nodownload noplaybackrate noremoteplayback" disablePictureInPicture disableRemotePlayback playsInline tabIndex={watchRequired ? -1 : undefined} preload="metadata" src={current.mediaUrl} poster={course.coverUrl || undefined} aria-label={current.title}
           onLoadedMetadata={(event) => {
@@ -1384,15 +1397,16 @@ export function CoursePlayerPage() {
         <div className="video-watch-progress" role="progressbar" aria-label="Video watch progress; seeking is disabled" aria-valuemin={0} aria-valuemax={videoWatchProgressDisplay.ariaMax} aria-valuenow={videoWatchProgressDisplay.ariaValue} aria-valuetext={videoWatchProgressDisplay.ariaValueText}><span style={{ width: `${videoWatchProgressDisplay.percentage}%` }} /></div>
         <button className="video-control-button" type="button" aria-label={videoMuted ? 'Unmute video' : 'Mute video'} aria-pressed={videoMuted} onClick={() => updateVolume(videoMuted ? videoVolume || 1 : 0)}>{videoMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
         <input className="video-volume-control" type="range" min="0" max="1" step="0.05" value={videoMuted ? 0 : videoVolume} aria-label="Video volume" onChange={(event) => updateVolume(Number(event.target.value))} />
-        <button className="video-control-button video-fullscreen-button" type="button" aria-label="Enter full screen" onClick={() => { void enterVideoFullscreen(); }}><Maximize size={17} /></button>
-        {current.captions.length > 0 && <AppSelect className="video-caption-select" ariaLabel="Captions" value={activeCaptionId} onChange={(captionId) => { setSelectedCaptionId(captionId); selectVideoCaptionTrack(videoRef.current, captionId); }} options={[{ value: '', label: 'Captions off' }, ...current.captions.map((caption) => ({ value: caption.id, label: `${caption.label} (${caption.language})` }))]} />}
+        <button className="video-control-button video-fullscreen-button" type="button" aria-label={videoFullscreen ? 'Exit full screen' : 'Enter full screen'} onClick={() => { void toggleVideoFullscreen(); }}>{videoFullscreen ? <Minimize size={17} /> : <Maximize size={17} />}</button>
+        {current.captions.length > 0 && <AppSelect className="video-caption-select" ariaLabel="Captions" portalContainer={videoPlayerFrameRef.current} value={activeCaptionId} onChange={(captionId) => { setSelectedCaptionId(captionId); selectVideoCaptionTrack(videoRef.current, captionId); }} options={[{ value: '', label: 'Captions off' }, ...current.captions.map((caption) => ({ value: caption.id, label: `${caption.label} (${caption.language})` }))]} />}
       </div>}
+      {fullscreenError && <div className="player-video-error" role="alert">{fullscreenError}</div>}
+      </div>
       {watchRequired && current.hasVideo && <p className={`video-watch-guidance ${watchedForCurrent ? 'is-watched' : ''}`} role="status" aria-live="polite">{!watchReadyForCurrent ? 'Preparing lesson playback…' : watchedForCurrent ? 'Full video watched. Mark this lesson complete to continue.' : 'Watch the full video to unlock lesson completion. Forward seeking and speed changes are disabled.'}</p>}
       {videoBuffering && <p className="video-watch-guidance" role="status" aria-live="polite">{getVideoRecoveryStatusMessage('buffering', watchRequired)}</p>}
       {videoRecovering && <p className="video-watch-guidance" role="status" aria-live="polite">{getVideoRecoveryStatusMessage('reconnecting', watchRequired)}</p>}
       {videoStalled && !videoRecovering && !videoError && <div className="player-video-error" role="alert"><p>Playback is still waiting for video data. Retry from your saved position.</p><Button type="button" variant="secondary" onClick={() => retryVideo(true)}>Retry playback</Button></div>}
       {videoError && <div className="player-video-error" role="alert"><p>The video could not be loaded. Retry, or contact your course administrator if it still will not play.</p><Button type="button" variant="secondary" onClick={() => retryVideo(true)}>Retry video</Button></div>}
-      {fullscreenError && <div className="player-video-error" role="alert">{fullscreenError}</div>}
       {watchError && <div className="player-video-error" role="alert">{watchError}</div>}
       <div className="player-controls-row">
         <button className="button button-secondary" type="button" disabled={!previous} onClick={() => previous && navigate(`/courses/${course.id}/learn/${previous.id}`)}><ArrowLeft size={17} />Previous lesson</button>

@@ -63,7 +63,7 @@ test('keeps the full-screen control in its own mobile grid cell when captions ar
   const source = fs.readFileSync(sourcePath, 'utf8');
   const styles = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/styles.css'), 'utf8');
 
-  assert.match(source, /className="video-control-button video-fullscreen-button" type="button" aria-label="Enter full screen"/);
+  assert.match(source, /className="video-control-button video-fullscreen-button" type="button" aria-label=\{videoFullscreen \? 'Exit full screen' : 'Enter full screen'\}/);
   assert.match(styles, /\.lesson-video-controls > \.video-fullscreen-button \{ grid-column: 5; grid-row: 2; \}/);
   assert.match(styles, /\.lesson-video-controls\.has-caption-tracks > \.video-fullscreen-button \{ grid-column: 5; grid-row: 2; \}/);
   assert.doesNotMatch(styles, /\.lesson-video-controls(?:\.has-caption-tracks)? > \.video-control-button:last-child/);

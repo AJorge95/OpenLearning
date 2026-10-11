@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep learner playback controls available in fullscreen
+
+- **Reviewed:** The watched-lesson player fullscreen target, custom playback controls, caption selector portal, fullscreen state changes, responsive control layout, and existing watch-progress APIs.
+- **Improvement:** Fullscreen the shared player frame containing both the video and learner controls; track browser enter/exit events and update the control's accessible name and icon. Allow `AppSelect` menus to portal into that frame so caption options remain in the fullscreen top layer, and keep fullscreen errors visible within it. Comments document why the player frame and optional portal container are used.
+- **Why it helps:** Learners can pause, rewind, change volume or captions, and exit fullscreen without leaving the video. Browser-initiated exit with Escape also restores the correct control label.
+- **Backend review:** Watch-progress endpoints and server-side playback restrictions already enforce the learning workflow; no API or persistence change was needed.
+- **Checked:** Focused fullscreen and caption tests passed (12/12); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict TypeScript checking and Vite bundling; and `git diff --check` passed. The connected local browser has only an administrator session, and Playwright is not installed, so learner fullscreen rendering and the caption popup in fullscreen were not exercised in-browser.
+
 ## 2026-10-11 — Reconfirm the account-role selector click boundary
 
 - **Reviewed:** The repeated report against the current account-details page, the role selector's trigger and popup widths, the user-supplied target path, and the administrator-update guard.
