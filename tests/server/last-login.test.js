@@ -155,7 +155,7 @@ test('JSON parser failures return structured client errors', async () => {
   }
 });
 
-test('migrations 16 to 32 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
+test('migrations 16 to 33 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
   const migrationDb = new Database(':memory:');
   try {
     migrationDb.pragma('foreign_keys = ON');
@@ -244,7 +244,8 @@ test('migrations 16 to 32 preserve account history, course versions, captions, c
     `);
 
     migrateDatabase(migrationDb);
-    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 32);
+    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 33);
+    assert.ok(migrationDb.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'competencies_admin_order'`).get());
     assert.deepEqual(migrationDb.prepare('SELECT id, last_login_at FROM users ORDER BY id').all(), [
       { id: 'user-history', last_login_at: '2026-10-02 09:00:00' },
       { id: 'user-never-signed-in', last_login_at: null },
@@ -324,6 +325,7 @@ test('migration 31 backfills watch telemetry and can be rerun safely', () => {
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       INSERT INTO schema_migrations (version) VALUES (30);
       CREATE TABLE learning_path_courses (path_id TEXT NOT NULL, course_id TEXT NOT NULL);
+      CREATE TABLE competencies (id TEXT PRIMARY KEY, title TEXT NOT NULL COLLATE NOCASE, active INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE lesson_watch_progress (
         user_id TEXT NOT NULL,
         lesson_id TEXT NOT NULL,
@@ -361,6 +363,7 @@ test('migration 31 preserves telemetry already present in a version-30 database'
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       INSERT INTO schema_migrations (version) VALUES (30);
       CREATE TABLE learning_path_courses (path_id TEXT NOT NULL, course_id TEXT NOT NULL);
+      CREATE TABLE competencies (id TEXT PRIMARY KEY, title TEXT NOT NULL COLLATE NOCASE, active INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE lesson_watch_progress (
         user_id TEXT NOT NULL,
         lesson_id TEXT NOT NULL,

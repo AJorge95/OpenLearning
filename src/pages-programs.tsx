@@ -14,6 +14,7 @@ function requestMessage(error: unknown, fallback: string) {
 type PathLearner = { id: string; username: string; email: string | null; enrolled: boolean; source: 'assigned' | 'self' | null };
 type PathLearnerPage = { learners: PathLearner[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type LearningPathListPage = { paths: LearningPath[]; total: number; page: number; pageSize: number; hasMore: boolean };
+type CompetencyAdminPage = { competencies: Competency[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type LearningPathStatusFilter = 'all' | LearningPath['status'];
 const learningPathStatusFilters: Array<{ label: string; value: LearningPathStatusFilter }> = [
   { label: 'All paths', value: 'all' }, { label: 'Published', value: 'published' },
@@ -517,6 +518,9 @@ export function CompetenciesPage() {
 
 export function AdminCompetenciesPage() {
   const [items, setItems] = useState<Competency[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [total, setTotal] = useState(0);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(true);
@@ -526,14 +530,19 @@ export function AdminCompetenciesPage() {
   const [notice, setNotice] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
   const loadControllerRef = useRef<AbortController | null>(null);
-  async function load() {
+  async function load(requestedPage = page) {
     loadControllerRef.current?.abort();
     const controller = new AbortController();
     loadControllerRef.current = controller;
     setLoading(true); setLoadError('');
     try {
-      const result = await api.get<{ competencies: Competency[] }>('/api/admin/competencies', { signal: controller.signal });
-      if (!controller.signal.aborted) setItems(result.competencies);
+      const result = await api.get<CompetencyAdminPage>(`/api/admin/competencies?page=${requestedPage}`, { signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setItems(result.competencies);
+        setPage(result.page);
+        setPageSize(result.pageSize);
+        setTotal(result.total);
+      }
     } catch (cause) {
       if (!controller.signal.aborted) setLoadError(requestMessage(cause, 'Competencies could not be loaded.'));
     } finally {
@@ -554,14 +563,22 @@ export function AdminCompetenciesPage() {
   async function create(event: React.FormEvent) {
     event.preventDefault(); if (loading || saving || savingId !== null || !title.trim()) return;
     setSaving(true); setError(''); setNotice('');
-    try { await api.post('/api/admin/competencies', { title: title.trim(), description: description.trim() }); setTitle(''); setDescription(''); setNotice('Competency added.'); await load(); }
+    try {
+      const result = await api.post<{ page: number }>('/api/admin/competencies', { title: title.trim(), description: description.trim() });
+      setTitle(''); setDescription(''); setNotice('Competency added.'); setPage(result.page);
+      await load(result.page);
+    }
     catch (cause) { setError(requestMessage(cause, 'Competency could not be added.')); }
     finally { setSaving(false); }
   }
   async function toggle(item: Competency) {
     if (loading || saving || savingId) return;
     setSavingId(item.id); setError(''); setNotice('');
-    try { await api.patch(`/api/admin/competencies/${item.id}`, { active: !item.active }); await load(); }
+    try {
+      const result = await api.patch<{ page: number }>(`/api/admin/competencies/${item.id}`, { active: !item.active });
+      setPage(result.page);
+      await load(result.page);
+    }
     catch (cause) { setError(requestMessage(cause, 'Competency could not be updated.')); }
     finally { setSavingId(null); }
   }
@@ -571,7 +588,27 @@ export function AdminCompetenciesPage() {
     {loadError && <div className="error-notice-actionable" role="alert"><span>{loadError}</span><Button variant="secondary" disabled={loading || saving || savingId !== null} onClick={() => void load()}>Try again</Button></div>}
     {!loading && !loadError && !error && items.length === 0 && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">No competencies yet. Add competencies before mapping courses to them.</p>}
     <form className="program-editor-card competency-create-form" onSubmit={create} aria-busy={loading || saving || savingId !== null}><div className="program-card-heading"><div><span className="program-icon"><CircleHelp size={18} /></span><div><h2>Add a competency</h2><p>Course completions can demonstrate this competency.</p></div></div></div><div className="program-form-grid"><label>Name<input required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} disabled={loading || saving || savingId !== null} /></label><label className="program-full-field">Description<textarea rows={2} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={loading || saving || savingId !== null} /></label></div><div className="program-form-actions"><Button type="submit" disabled={loading || saving || savingId !== null || !title.trim()}><Plus size={16} />{saving ? 'Adding…' : 'Add competency'}</Button></div></form>
-    {loading ? <div className="page-loading" role="status">Loading competencies…</div> : loadError ? null : items.length ? <div className="competency-admin-list">{items.map((item) => <article key={item.id} className="competency-admin-row"><div><h2>{item.title}</h2><p>{item.description || 'No description'}</p></div><span className={`program-status ${item.active ? 'published' : 'archived'}`}>{item.active ? 'Active' : 'Inactive'}</span><Button variant="secondary" disabled={saving || savingId !== null} aria-busy={savingId === item.id} aria-label={savingId === item.id ? `Saving ${item.title}` : `${item.active ? 'Deactivate' : 'Reactivate'} ${item.title}`} onClick={() => void toggle(item)}>{savingId === item.id ? 'Saving…' : item.active ? 'Deactivate' : 'Reactivate'}</Button></article>)}</div> : <EmptyState title="No competencies yet" detail="Add competencies before mapping courses to them." />}
+    {loading ? <div className="page-loading" role="status">Loading competencies…</div> : loadError ? null : items.length ? <>
+      <div className="competency-admin-list">{items.map((item) => <article key={item.id} className="competency-admin-row"><div><h2>{item.title}</h2><p>{item.description || 'No description'}</p></div><span className={`program-status ${item.active ? 'published' : 'archived'}`}>{item.active ? 'Active' : 'Inactive'}</span><Button variant="secondary" disabled={saving || savingId !== null} aria-busy={savingId === item.id} aria-label={savingId === item.id ? `Saving ${item.title}` : `${item.active ? 'Deactivate' : 'Reactivate'} ${item.title}`} onClick={() => void toggle(item)}>{savingId === item.id ? 'Saving…' : item.active ? 'Deactivate' : 'Reactivate'}</Button></article>)}</div>
+      <CompetencyAdminPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => void load(nextPage)} />
+    </> : <EmptyState title="No competencies yet" detail="Add competencies before mapping courses to them." />}
   </div>;
+}
+
+function CompetencyAdminPagination({ page, pageSize, total, loading, onChange }: {
+  page: number; pageSize: number; total: number; loading: boolean; onChange: (page: number) => void;
+}) {
+  if (total <= pageSize) return null;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const firstItem = (page - 1) * pageSize + 1;
+  const lastItem = Math.min(page * pageSize, total);
+  return <nav className="competency-admin-pagination" aria-label="Competency pages">
+    <span role="status" aria-live="polite">Showing {firstItem}–{lastItem} of {total} competencies</span>
+    <div>
+      <Button variant="secondary" disabled={loading || page <= 1} onClick={() => onChange(page - 1)}>Previous</Button>
+      <span>Page {page} of {pageCount}</span>
+      <Button variant="secondary" disabled={loading || page >= pageCount} onClick={() => onChange(page + 1)}>Next</Button>
+    </div>
+  </nav>;
 }
 
