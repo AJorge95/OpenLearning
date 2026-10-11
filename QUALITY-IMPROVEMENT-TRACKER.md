@@ -23,6 +23,14 @@
 - **Interface review:** Quiz links remain standard keyboard-accessible links, and the quiz page explains course completion; there is no disabled/locked quiz state to contradict the current API behavior.
 - **Checked:** Read the course curriculum component, learner quiz page and navigation helpers, course payload, attempt route, existing quiz tests, README, and earlier quiz-review entries. No code changed; `git diff --check` passed.
 
+## 2026-10-11 — Recheck learner catalog search and paging
+
+- **Reviewed:** Submitted search versus draft text, category and sort changes, visible category options, first-page category data, later-page requests, stale-page recovery, and the server’s visibility-aware search and ordering.
+- **Result:** No code change. The catalog retains its applied filters for retries and pagination, keeps categories available when fetching later pages, and reloads page one when a subsequent page has drifted.
+- **Why no change:** The current client and server contracts cover the inspected behavior, including literal category filtering and visible-course results; no separate layout or query defect appeared.
+- **Interface review:** Search is submitted explicitly, category and sort controls remain named, empty states follow applied values, and pagination announces the loaded count. A signed-in browser is unavailable for rendered catalog review.
+- **Checked:** Focused catalog client/server tests passed (4/4), covering the real `All courses` category, visible categories, version-snapshot exclusion, and later-page category-query omission. `git diff --check` passed.
+
 ## 2026-10-11 — Recheck administrator log filtering and pagination
 
 - **Reviewed:** Audit and system-log route access checks, text/severity/action filtering, bounded newest-first paging, and the client’s request cancellation, loading, empty, and retry states.
