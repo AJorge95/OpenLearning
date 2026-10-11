@@ -36,6 +36,12 @@ test('lesson feedback reloads when any requested page overlaps loaded comments',
   assert.match(source, /newComments\.length !== response\.comments\.length/);
 });
 
+test('loading another comment page announces progress to assistive technology', () => {
+  const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /<p className="sr-only" role="status" aria-live="polite" aria-atomic="true">\{commentsLoading \? 'Loading more comments\.' : ''\}<\/p>/);
+});
+
 test('a newly posted comment is prepended without growing the loaded page', () => {
   const existing = Array.from({ length: 40 }, (_, index) => comment(`comment-${index + 1}`));
   const posted = comment('comment-new');
