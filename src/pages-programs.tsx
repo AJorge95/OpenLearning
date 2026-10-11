@@ -438,8 +438,10 @@ export function LearningPathsPage() {
       <div className="program-list" aria-busy={loading}>
       {paths.map((path) => <article className="program-card learning-path-card" key={path.id}>
         <div className="program-card-heading"><div><span className="program-icon"><BookOpen size={18} /></span><div><h2>{path.title}</h2><p>{path.description || `${path.courseCount} courses in this path`}</p></div></div><span className={`program-status ${path.status}`}>{path.status}</span></div>
-        <div className="program-progress-line"><span>{path.completedCourses} of {path.courseCount} courses complete</span><strong>{path.courseCount ? Math.round(path.completedCourses / path.courseCount * 100) : 0}%</strong></div>
-        <ProgressBar value={path.courseCount ? Math.round(path.completedCourses / path.courseCount * 100) : 0} label={`Progress in ${path.title}`} />
+        {path.courseCount > 0 && <>
+          <div className="program-progress-line"><span>{staff ? 'Your progress: ' : ''}{path.completedCourses} of {path.courseCount} courses complete</span><strong>{Math.round(path.completedCourses / path.courseCount * 100)}%</strong></div>
+          <ProgressBar value={Math.round(path.completedCourses / path.courseCount * 100)} label={`${staff ? 'Your progress in' : 'Progress in'} ${path.title}`} />
+        </>}
         <ol className="path-course-list">{path.courses.map((course) => <li key={course.id} className={!course.unlocked && !staff ? 'locked' : ''}>
           <span className="path-course-number">{course.completed ? <Check size={14} /> : course.position + 1}</span>
           <div><strong>{course.title}</strong><small>{course.category}{course.deadlineAt ? ` · Due ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(course.deadlineAt))}` : ''}</small></div>

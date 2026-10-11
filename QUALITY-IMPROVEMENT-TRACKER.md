@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Identify staff learning-path progress
+
+- **Reviewed:** The shared learning-path list returns progress for the signed-in account. The staff management view displayed the same completion line and progress bar as the learner view without identifying whose activity it represented; empty draft paths also showed a zero-of-zero bar.
+- **Improvement:** Label staff-card completion as “Your progress” in both visible text and the progress bar’s accessible name. Hide progress when a path has no courses; keep learner progress wording unchanged.
+- **Why it helps:** Staff can distinguish their own activity from cohort progress while managing paths, and empty drafts no longer show a meaningless completion percentage.
+- **Interface review:** Existing path status, course order, assignment controls, and learner progress presentation stay intact. Rendered admin-page QA was unavailable because the in-app browser is signed out and Playwright is not installed.
+- **Checked:** `node --test tests/client/path-assignment-accessibility.test.js` passed (5/5). The full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/path-assignment-accessibility.test.js`, and `git diff --check` passed. Rendered admin-page QA remains unverified: the in-app browser is at `/login` and Playwright is not installed.
+
 ## 2026-10-11 — Limit first-page competency summary work
 
 - **Reviewed:** The learner competency endpoint returned 12 cards, but it loaded every active competency and summarized every mapped course on page one to keep the overall achieved count accurate.
