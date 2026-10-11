@@ -7413,3 +7413,10 @@
 - **Why it helps:** A competency removed while a learner is paging can clamp the requested page back to page one. The learner now sees a refreshed list instead of duplicate cards or a count larger than the active catalog. Overlapping results and changed totals also trigger a refresh.
 - **Backend review:** The API already returns the actual clamped page and total with stable title/ID ordering, so no route or schema change was needed.
 - **Checked:** `node --test tests/client/competency-progress-list.test.js` passed (7/7), including clamped-page, changed-total, overlap, and normal-append cases. Focused competency route tests passed (2/2). The full `npm test -- --test-reporter=dot`, `npm run build` (strict TypeScript checking and Vite), and `git diff --check` passed.
+
+## 2026-10-11 — Review learning-path options during catalog changes
+
+- **Reviewed:** Certificate-history page drift recovery, the learning-path editor's paginated published-course options, overlap deduplication, and transactional validation when the path is saved.
+- **Result:** No code change. Certificate history refreshes after a clamped page or changed total. The course picker merges duplicate IDs from successive pages, while the save route rechecks that every selected course is currently published inside its write transaction.
+- **Why no change:** A first-page-only refresh could hide selected courses loaded from later pages. A safe picker refresh needs to reconcile all pages already loaded and preserve selected course details and removability when the catalog changes concurrently.
+- **Checked:** `node --test tests/client/path-course-options.test.js` passed (3/3), and the published-course option API regression passed (1/1). Read the picker, pagination endpoint, and path-save transaction; `git diff --check` passed.
