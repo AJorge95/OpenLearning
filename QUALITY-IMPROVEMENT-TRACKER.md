@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep visible catalog search text in sync with category and sort
+
+- **Reviewed:** Catalog search draft and applied state, category/sort-triggered reloads, retry snapshots, pagination, and the visibility-aware `/api/courses` filters. Changing category or sort reloaded with the old applied query while leaving newer draft text visible in the search field.
+- **Improvement:** Apply and normalize the visible search draft when a category or sort choice changes; if the chosen control value is unchanged, reload only when the draft query itself changed.
+- **Why it helps:** The results and visible search text no longer disagree after a filter interaction, and retries/load-more continue using the same applied query.
+- **Backend review:** The existing catalog endpoint already combines query, category, visibility, sorting, and pagination correctly. No server change was needed.
+- **Checked:** Catalog filter tests, full `npm test`, `npm run build`, and `git diff --check` passed. In the rendered catalog, changing the category while a draft query was visible now applied that query and showed the matching empty state.
+
 ## 2026-10-11 — Return to the current calendar month quickly
 
 - **Reviewed:** The learner calendar's previous/next controls, local-month range calculation, request cancellation, and existing deadline query. Month navigation had no direct way to return after browsing other months.
