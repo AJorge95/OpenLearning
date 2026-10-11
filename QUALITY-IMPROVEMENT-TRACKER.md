@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Cover reaction and quiz-attempt throttling
+
+- **Reviewed:** The learner route authentication order, per-user rate-limit configuration, retryable limit responses, and existing coverage for the comment, password-change, and admin-reset limiters.
+- **Improvement:** Add route-middleware regressions for reaction updates and quiz attempts, asserting the configured request threshold, `429` response body, and independent limits for another user.
+- **Why it helps:** These existing protections now have regression coverage against accidental threshold, message, or keying changes that could either block unrelated learners or weaken abuse controls.
+- **Interface and backend review:** No user-facing behavior or limiter configuration changed; this closes a verification gap in the existing backend controls.
+- **Checked:** Focused rate-limit tests passed (5/5), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict type checking and Vite bundling, and `git diff --check` passed.
+
 ## 2026-10-11 — Preserve AppSelect focus when live choices reorder
 
 - **Reviewed:** The active-choice fallback added for dynamic lists and the remaining case where a refresh reorders options while preserving the old numeric index.
