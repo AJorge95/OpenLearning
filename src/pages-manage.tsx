@@ -1419,12 +1419,19 @@ export function CourseEditorPage() {
   }
 
   async function addLesson(moduleId: string) {
-    if (addingLessonModuleIdsRef.current.has(moduleId)) return;
+    const requestedCourseId = courseId;
+    if (!requestedCourseId || addingLessonModuleIdsRef.current.has(moduleId)) return;
     const pending = new Set(addingLessonModuleIdsRef.current);
     pending.add(moduleId); addingLessonModuleIdsRef.current = pending; setAddingLessonModuleIds(pending);
     setError('');
-    try { await saveCourseDetailsIfChanged(); await api.post(`/api/manage/modules/${moduleId}/lessons`, { title: 'New lesson' }); await load(); }
-    catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Lesson could not be added.'); }
+    try {
+      await saveCourseDetailsIfChanged();
+      if (routeCourseIdRef.current !== requestedCourseId) return;
+      await api.post(`/api/manage/modules/${moduleId}/lessons`, { title: 'New lesson' });
+      if (routeCourseIdRef.current === requestedCourseId) await load(requestedCourseId);
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Lesson could not be added.');
+    }
     finally {
       const nextPending = new Set(addingLessonModuleIdsRef.current);
       nextPending.delete(moduleId); addingLessonModuleIdsRef.current = nextPending; setAddingLessonModuleIds(nextPending);
@@ -1506,10 +1513,17 @@ export function CourseEditorPage() {
   async function deleteModule(module: CourseModule, confirmed = false) {
     if (deleteCurriculumItemRef.current || deleteCourseRequestRef.current || saving || !course) return;
     if (!confirmed) { setPendingDeleteModule({ courseId: course.id, module }); return; }
+    const requestedCourseId = course.id;
     const target = `module:${module.id}`;
     deleteCurriculumItemRef.current = target; setDeletingCurriculumItem(target); setError('');
-    try { await saveCourseDetailsIfChanged(); await api.delete(`/api/manage/modules/${module.id}`); await load(); }
-    catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Module could not be removed.'); }
+    try {
+      await saveCourseDetailsIfChanged();
+      if (routeCourseIdRef.current !== requestedCourseId) return;
+      await api.delete(`/api/manage/modules/${module.id}`);
+      if (routeCourseIdRef.current === requestedCourseId) await load(requestedCourseId);
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Module could not be removed.');
+    }
     finally { deleteCurriculumItemRef.current = ''; setDeletingCurriculumItem(''); }
   }
 
@@ -1528,10 +1542,18 @@ export function CourseEditorPage() {
       if (module) setPendingDeleteLesson({ courseId: course.id, moduleId: module.id, lessonId, title: currentTitle });
       return;
     }
+    const requestedCourseId = course.id;
     const target = `lesson:${lessonId}`;
     deleteCurriculumItemRef.current = target; setDeletingCurriculumItem(target); setError('');
-    try { await saveCourseDetailsIfChanged(); await api.delete(`/api/manage/lessons/${lessonId}`); setEditingLessonId(''); await load(); }
-    catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Lesson could not be removed.'); }
+    try {
+      await saveCourseDetailsIfChanged();
+      if (routeCourseIdRef.current !== requestedCourseId) return;
+      await api.delete(`/api/manage/lessons/${lessonId}`);
+      if (routeCourseIdRef.current !== requestedCourseId) return;
+      setEditingLessonId(''); await load(requestedCourseId);
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Lesson could not be removed.');
+    }
     finally { deleteCurriculumItemRef.current = ''; setDeletingCurriculumItem(''); }
   }
 
@@ -1552,11 +1574,18 @@ export function CourseEditorPage() {
   }
 
   async function moveItem(path: string, direction: 'up' | 'down', itemKey: string) {
-    if (movingCurriculumItemsRef.current.size > 0) return;
+    const requestedCourseId = courseId;
+    if (!requestedCourseId || movingCurriculumItemsRef.current.size > 0) return;
     markCurriculumItemMoving(itemKey, true);
     setError('');
-    try { await saveCourseDetailsIfChanged(); await api.post(path, { direction }); await load(); }
-    catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Order could not be updated.'); }
+    try {
+      await saveCourseDetailsIfChanged();
+      if (routeCourseIdRef.current !== requestedCourseId) return;
+      await api.post(path, { direction });
+      if (routeCourseIdRef.current === requestedCourseId) await load(requestedCourseId);
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Order could not be updated.');
+    }
     finally { markCurriculumItemMoving(itemKey, false); }
   }
 

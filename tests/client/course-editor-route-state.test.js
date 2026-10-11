@@ -94,6 +94,27 @@ test('same-course refreshes preserve an unsaved completion-window value', () => 
     'initialize once for a new course and preserve or refresh once for same-course loads');
 });
 
+test('lesson and curriculum actions keep late refreshes and errors on their source course', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const handlers = [
+    ['async function addLesson', '\n\n  async function addModuleQuiz'],
+    ['async function deleteModule', '\n\n  function confirmPendingModuleDeletion'],
+    ['async function deleteLesson', '\n\n  function confirmPendingLessonDeletion'],
+    ['async function moveItem', '\n\n  async function uploadVideo'],
+  ];
+
+  for (const [startMarker, endMarker] of handlers) {
+    const start = source.indexOf(startMarker);
+    const end = source.indexOf(endMarker, start);
+    const handler = source.slice(start, end);
+    assert.ok(start >= 0 && end > start, `expected handler ${startMarker}`);
+    assert.match(handler, /const requestedCourseId = (?:courseId|course\.id)/);
+    assert.match(handler, /if \(routeCourseIdRef\.current !== requestedCourseId\) return;[\s\S]*?await api\.(?:post|delete)/);
+    assert.match(handler, /if \(routeCourseIdRef\.current === requestedCourseId\) await load\(requestedCourseId\)|if \(routeCourseIdRef\.current !== requestedCourseId\) return;[\s\S]*?await load\(requestedCourseId\)/);
+    assert.match(handler, /catch \(cause\) \{\s*if \(routeCourseIdRef\.current === requestedCourseId\) setError\(/);
+  }
+});
+
 test('course navigation clears the inline add-module draft and scopes late responses', () => {
   const source = fs.readFileSync(sourcePath, 'utf8');
   assert.match(source, /useEffect\(\(\) => \{\s*let active = true;\s*setModuleTitle\(''\); setAddingModule\(false\); addModuleInvokerRef\.current = null;/);
