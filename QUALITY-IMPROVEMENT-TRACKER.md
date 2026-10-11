@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Paginate published course options in learning paths
+
+- **Reviewed:** The reported account role selector issue is already addressed in the current source: its desktop trigger is 9rem wide, its surrounding control does not receive pointer input, and the combobox is not nested in a clickable label. The supplied browser selector still identifies the old label wrapper; the current in-app browser session is signed out, so that account page could not be replayed live. The learning-path editor requested only the first page of the already-paginated published-course endpoint.
+- **Improvement:** Load the first 50 published courses when the editor opens, then add a load-more action for later pages. Keep earlier options and selections while appending new rows once, show loaded/total progress, retry failed pages, and abort the request when the editor unmounts. Decouple course-option loading from the learning-path list request.
+- **Why it helps:** Staff can add courses beyond the first 50 without changing the existing API or rendering every available checkbox immediately. A course-option outage no longer blocks learning-path list navigation, and failed pages can be retried without losing earlier choices.
+- **Backend review:** Reused the existing `/api/manage/courses` status, page, total, and page-size contract; no route or schema change was indicated. Added an integration regression with 51 matching courses to verify distinct first and second pages.
+- **Checked:** The course-option helper and editor contract checks passed, as did the 51-course API regression and the administrator role-selector regressions. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, both changed test-file syntax checks, and `git diff --check` passed. The protected account and learning-path pages could not be replayed because the available browser is signed out.
+
 ## 2026-10-11 — Test calendar grouping across local month boundaries
 
 - **Reviewed:** The calendar's UTC request buffer, local-month filtering and day buckets, loading states, navigation announcements, mobile layout, and the server's validated date range and deadline index.
