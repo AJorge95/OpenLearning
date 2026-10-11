@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Limit first-page competency summary work
+
+- **Reviewed:** The learner competency endpoint returned 12 cards, but it loaded every active competency and summarized every mapped course on page one to keep the overall achieved count accurate.
+- **Improvement:** Read competency rows and mapped-course details for the requested page only. For the global achieved count, consider mapped courses with saved lesson progress or a passed quiz, then use the existing version-aware course summary and access checks to count completed competencies.
+- **Why it helps:** Opening the competency page avoids loading course summaries for unstarted courses and competencies outside the first page, while preserving the existing overall progress summary and access rules.
+- **Interface review:** The response still includes the first page, total, page size, and global achieved count; no markup or interaction changes were needed.
+- **Checked:** The focused competency route tests passed, including page-scoped mapping queries, a completed competency outside page one, and a partially completed course that must not count as achieved. `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check server/routes-programs.js`, `node --check tests/server/course-analytics.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Protect path access when learners undo completion
 
 - **Reviewed:** The learner lesson page lets a learner undo a saved completion, and private courses in an assigned learning path are gated by prerequisite completion. The delete route had no integration regression proving that this reverse transition immediately revokes access to later courses.

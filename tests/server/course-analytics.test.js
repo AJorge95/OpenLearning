@@ -1741,16 +1741,44 @@ test('competency progress pages course details while retaining an overall achiev
   const baseResponse = await fetch(apiUrl('/competencies?page=1'), { headers: userHeaders('learner-active') });
   assert.equal(baseResponse.status, 200);
   const baseline = await baseResponse.json();
-  const ids = Array.from({ length: COMPETENCY_PROGRESS_PAGE_SIZE + 1 }, (_, index) => `competency-page-${String(index).padStart(2, '0')}`);
+  const ids = Array.from({ length: COMPETENCY_PROGRESS_PAGE_SIZE + 2 }, (_, index) => `competency-page-${String(index).padStart(2, '0')}`);
   const insertCompetency = database.prepare(`INSERT INTO competencies (id, title, description, active, created_by)
     VALUES (?, ?, '', 1, 'admin-1')`);
   ids.forEach((id, index) => insertCompetency.run(id, `Progress page competency ${String(index).padStart(2, '0')}`));
-  database.prepare('INSERT INTO course_competencies (course_id, competency_id, created_by) VALUES (?, ?, ?)')
-    .run('course-analytics', ids[COMPETENCY_PROGRESS_PAGE_SIZE], 'admin-1');
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('competency-partial-course', 'Partial competency course', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('competency-partial-module', 'competency-partial-course', 'Module', 0);
+    INSERT INTO lessons (id, module_id, title, position) VALUES
+      ('competency-partial-lesson-one', 'competency-partial-module', 'Lesson one', 0),
+      ('competency-partial-lesson-two', 'competency-partial-module', 'Lesson two', 1);
+    INSERT INTO lesson_progress (user_id, lesson_id) VALUES ('learner-active', 'competency-partial-lesson-one');
+  `);
+  const insertMapping = database.prepare('INSERT INTO course_competencies (course_id, competency_id, created_by) VALUES (?, ?, ?)');
+  insertMapping.run('course-analytics', ids[COMPETENCY_PROGRESS_PAGE_SIZE], 'admin-1');
+  insertMapping.run('competency-partial-course', ids[COMPETENCY_PROGRESS_PAGE_SIZE + 1], 'admin-1');
 
   try {
-    const firstResponse = await fetch(apiUrl('/competencies?page=1'), { headers: userHeaders('learner-active') });
+    let firstPageMappingQuery = '';
+    let achievementCandidateQuery = '';
+    const originalPrepare = database.prepare;
+    database.prepare = (sql) => {
+      if (sql.includes('FROM course_competencies cc')) {
+        if (sql.includes('cc.competency_id IN')) firstPageMappingQuery = sql;
+        if (sql.includes('lesson_progress') && sql.includes('quiz_attempts')) achievementCandidateQuery = sql;
+      }
+      return originalPrepare.call(database, sql);
+    };
+    let firstResponse;
+    try {
+      firstResponse = await fetch(apiUrl('/competencies?page=1'), { headers: userHeaders('learner-active') });
+    } finally {
+      database.prepare = originalPrepare;
+    }
     assert.equal(firstResponse.status, 200);
+    assert.match(firstPageMappingQuery, /cc\.competency_id IN \(/);
+    assert.match(achievementCandidateQuery, /EXISTS[\s\S]*lesson_progress[\s\S]*quiz_attempts/);
     const firstPage = await firstResponse.json();
     assert.equal(firstPage.pageSize, COMPETENCY_PROGRESS_PAGE_SIZE);
     assert.equal(firstPage.total, baseline.total + ids.length);
@@ -1793,9 +1821,13 @@ test('competency progress pages course details while retaining an overall achiev
     const completed = collected.find((item) => item.id === ids[COMPETENCY_PROGRESS_PAGE_SIZE]);
     assert.equal(completed.achieved, true);
     assert.deepEqual(completed.courses, [{ id: 'course-analytics', title: 'Analytics course', completed: true }]);
+    const partial = collected.find((item) => item.id === ids[COMPETENCY_PROGRESS_PAGE_SIZE + 1]);
+    assert.equal(partial.achieved, false);
+    assert.deepEqual(partial.courses.map((course) => course.completed), [false]);
   } finally {
     database.prepare('DELETE FROM course_competencies WHERE competency_id IN (' + ids.map(() => '?').join(', ') + ')').run(...ids);
     database.prepare('DELETE FROM competencies WHERE id IN (' + ids.map(() => '?').join(', ') + ')').run(...ids);
+    database.prepare("DELETE FROM courses WHERE id = 'competency-partial-course'").run();
   }
 });
 
