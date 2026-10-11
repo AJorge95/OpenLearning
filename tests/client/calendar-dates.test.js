@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
-import { calendarMonthRequestRange, groupCalendarDeadlines } from '../../src/calendar-dates.ts';
+import { calendarMonthRequestRange, groupCalendarDeadlines, shouldShowCalendarEmptyState } from '../../src/calendar-dates.ts';
 
 test('calendar ranges include UTC dates whose deadlines belong to an adjacent local month', () => {
   const previousTimezone = process.env.TZ;
@@ -32,4 +33,17 @@ test('calendar ranges include UTC dates whose deadlines belong to an adjacent lo
     if (previousTimezone === undefined) delete process.env.TZ;
     else process.env.TZ = previousTimezone;
   }
+});
+
+test('calendar empty state appears only after a successful empty response', () => {
+  assert.equal(shouldShowCalendarEmptyState(true, '', 0), false);
+  assert.equal(shouldShowCalendarEmptyState(false, 'Calendar could not be loaded.', 0), false);
+  assert.equal(shouldShowCalendarEmptyState(false, '', 0), true);
+  assert.equal(shouldShowCalendarEmptyState(false, '', 1), false);
+});
+
+test('calendar page uses the successful-empty-state guard', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
+
+  assert.match(pageSource, /shouldShowCalendarEmptyState\(loading, error, monthItems\.length\)/);
 });

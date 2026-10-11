@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArrowDown, ArrowUp, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Plus, RotateCcw, Search, UsersRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from './api';
-import { calendarMonthRequestRange, groupCalendarDeadlines, localDateKey } from './calendar-dates';
+import { calendarMonthRequestRange, groupCalendarDeadlines, localDateKey, shouldShowCalendarEmptyState } from './calendar-dates';
 import { COMPETENCY_PROGRESS_BATCH_SIZE, nextVisibleCompetencyCount } from './competency-progress-list';
 import { AppSelect, Button, EmptyState, PageHeading, ProgressBar } from './components';
 import type { Competency, Course, CourseDeadline, LearningPath } from './types';
@@ -525,7 +525,7 @@ export function CalendarPage() {
           })}
         </tr>)}</tbody>
       </table>
-      {loading ? <p className="calendar-empty-note" role="status">Loading deadlines…</p> : !monthItems.length && <p className="calendar-empty-note" role="status"><CalendarDays size={18} />No course deadlines this month.</p>}
+      {loading ? <p className="calendar-empty-note" role="status">Loading deadlines…</p> : shouldShowCalendarEmptyState(loading, error, monthItems.length) && <p className="calendar-empty-note" role="status"><CalendarDays size={18} />No course deadlines this month.</p>}
     </section>
     {monthItems.length > 0 && <section className="calendar-deadline-list"><h2>Deadlines this month</h2><ul>{[...monthItems].sort((a, b) => a.dueAt.localeCompare(b.dueAt)).map((item) => <li key={item.courseId}><span className={`deadline-status ${item.status}`}>{item.status}</span><Link to={item.url}><strong>{item.title}</strong><small>{calendarDateTimeFormatter.format(new Date(item.dueAt))}</small></Link></li>)}</ul></section>}
   </div>;
