@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck authentication limit recovery
+
+- **Reviewed:** The sign-in, registration, and setup POST limiter mounts, the 12-attempt/15-minute response, successful-login counter behavior, and how the sign-in form presents API errors.
+- **Result:** No code change; limited requests receive a structured 429 response, and the sign-in form renders its message in an announced alert. Registration and setup share the intended account-creation quota while status and other non-POST routes remain outside it.
+- **Why no change:** The route boundaries, generic retry guidance, and accessible error presentation match the current implementation; no reproducible recovery or quota defect was found.
+- **Checked:** `node --test tests/server/rate-limits.test.js tests/server/auth-rate-limit-mount.test.js` and `git diff --check` passed. The open browser tab is signed out at `/login`, so no authenticated route was available for rendered verification.
+
 ## 2026-10-11 — Invoke SQLite session callbacks exactly once
 
 - **Reviewed:** The SQLite session store's `get`, `set`, `touch`, `destroy`, and `clear` methods and their success/error callback boundaries.
