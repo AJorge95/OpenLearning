@@ -29,3 +29,9 @@ test('course editor describes invalid completion-window values and validates bef
   assert.match(source, /completionWindowInputRef\.current\?\.focus\(\);\s*throw new ApiError\(400, completionWindow\.error, 'validation_error'\)/);
   assert.match(source, /completionWindowDays: completionWindow\.value/);
 });
+
+test('course description exposes its current length and limit to authors', () => {
+  const source = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
+  assert.match(source, /<label className="field-wide">Description\s*<textarea id="course-description" aria-describedby="course-description-count" rows=\{3\} maxLength=\{6000\} value=\{description\}/);
+  assert.match(source, /<small id="course-description-count" className="field-character-count">\{description\.length\} \/ 6,000 characters<\/small>/);
+});

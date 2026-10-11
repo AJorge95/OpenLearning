@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Show course description character usage
+
+- **Reviewed:** Course-editor long-text fields and the create/update route. The course description already has a 6,000-character browser and server limit, but authors could not see how much text they had used; similar transcript and review-note fields show counts.
+- **Improvement:** Add a right-aligned `current / 6,000 characters` count below the description and associate it with the textarea for assistive technology. Keep the existing input limit and server validation unchanged.
+- **Why it helps:** Course authors can plan or trim descriptions before reaching the enforced limit, without a failed save or silent input truncation.
+- **Backend review:** `POST` and `PUT` course routes retain the canonical 6,000-character validation; no API or database change was needed.
+- **Checked:** The focused course-editor test passed (4/4); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. In a temporary local editor tab, the rendered count changed from 0 to 27 and back to 0; reload confirmed the saved draft remained unchanged.
+- **Needed to continue:** Review other long-form authoring limits only where a visible count would solve a demonstrated editing need.
+
 ## 2026-10-12 — Recheck role hit area in the current local build
 
 - **Reviewed:** The account page from the supplied route, the role-control markup and CSS, an enabled local account, and upload/stream authorization, validation, and cleanup boundaries.
