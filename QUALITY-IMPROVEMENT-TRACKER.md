@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep course deletion feedback on its source route
+
+- **Reviewed:** Archived-course deletion is confirmed and route-checked before it starts, but a request already in progress always redirected to the course list or displayed its failure after navigation.
+- **Improvement:** Scope the post-delete navigation and error to the course ID that was confirmed.
+- **Why it helps:** A delayed deletion response cannot pull staff away from a different course or show a stale error in its editor.
+- **Backend review:** The endpoint requires an archived course, commits the record and audit deletion transactionally, then logs media cleanup failures without misreporting the committed delete; no server change was indicated.
+- **Checked:** Course deletion UI tests passed (3/3), the backend media-cleanup test passed (1/1), the full `npm test` suite passed (597/597), `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. Rendered deletion was not run because it permanently removes course data; Playwright is not installed in this checkout.
+
 ## 2026-10-11 — Preserve unsaved completion-window edits on refresh
 
 - **Reviewed:** Same-course refreshes preserve unsaved title, description, category, and visibility edits, but an unconditional completion-window reset ran before its preservation check and discarded that field's draft.
