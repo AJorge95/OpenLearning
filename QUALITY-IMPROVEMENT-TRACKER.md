@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Confirm learning-path archiving with clear recovery details
+
+- **Reviewed:** Archiving removes a path from active lists but keeps learner enrollments and progress; the existing restore action returns it as a draft. The page used a blocking browser prompt.
+- **Improvement:** Use the shared accessible dialog, name the path, explain the list and progress effects, and note that staff can restore it later as a draft. Revalidate the path before applying the status change and clear pending confirmation when switching path pages or status filters.
+- **Why it helps:** Staff can make the reversible status change with its consequences and recovery path clear, without relying on a browser-native prompt.
+- **Backend review:** The existing archive and restore API behavior is unchanged; its regression confirms enrollment preservation even when a path course becomes private.
+- **Checked:** Both focused client checks passed; the archive/enrollment regression passed; `npm run build` passed type-checking and Vite bundling; and `git diff --check` passed. The local admin account has no learning paths, so the dialog could not be opened in-browser without creating test records. No data was created.
+
 ## 2026-10-11 — Confirm permanent learner-comment removal accessibly
 
 - **Reviewed:** Moderators removed comments through a native browser confirmation. The API deletes a comment and writes its body-free audit record transactionally, with authorization, cross-lesson, and audit-failure rollback coverage.
