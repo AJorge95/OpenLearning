@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Cover protected lesson-document downloads
+
+- **Reviewed:** The document download route checks sign-in, course visibility, lesson unlock state, and path containment, and sends private no-store attachment responses. No route test covered this delivery path.
+- **Improvement:** Add server regressions for an unauthenticated request, a course-authorized learner downloading an unlocked lesson document (including its attachment and security headers), a HEAD request, and a learner requesting a document from a locked lesson.
+- **Why it helps:** Future changes to file delivery or lesson access cannot silently expose a protected document or break the download response contract.
+- **Interface review:** The reported account-role click-area issue is already addressed in the current source: the label is separate from the bounded combobox, and only the trigger receives pointer input. Existing tracker entries record the rendered behavior.
+- **Checked:** `node --test tests/server/media-routes.test.js` passed (13/13); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The signed-in local account page also rendered the separated role label and control; a click just beyond its right edge left the selector closed.
+
 ## 2026-10-11 — Label quiz-answer correctness in the review text
 
 - **Reviewed:** Quiz review colored selected answers green or red, but did not say whether each answer was correct in text. The correct answer was named only for incorrect responses.
