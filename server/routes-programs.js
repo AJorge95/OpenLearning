@@ -434,7 +434,7 @@ programsRouter.get('/competencies', (req, res) => {
     JOIN competencies competency ON competency.id = cc.competency_id
     JOIN courses c ON c.id = cc.course_id
     WHERE competency.active = 1 AND c.status = 'published'
-    ORDER BY cc.competency_id, c.title COLLATE NOCASE`).all();
+    ORDER BY cc.competency_id, c.title COLLATE NOCASE, c.id ASC`).all();
   const canView = createCourseAccessChecker(req.currentUser);
   const visibleCourses = courses.filter((course) => course.visibility === 'public' || canView(course));
   const summaries = courseSummaries(visibleCourses, req.currentUser);
