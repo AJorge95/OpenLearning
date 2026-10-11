@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck shared select pointer and keyboard behavior
+
+- **Reviewed:** Shared `AppSelect` trigger and listbox semantics, pointer focus retention, option selection, keyboard navigation, typeahead, menu positioning, scroll/resize dismissal, and the reported account-role hit boundary.
+- **Result:** No runtime change. In the rendered catalog, pointer selection changed the category to Gaming and ArrowDown plus Enter changed the sort to Course title. The enabled account-role menu also dismissed after a click 7px beyond its trigger and retained Learner.
+- **Why no change:** The visible trigger owns the click area, options prevent premature blur, and the live interaction matched the component's existing keyboard and pointer behavior. No current-build defect supported an additional patch.
+- **Checked:** Focused AppSelect and role hit-area tests passed (30/30); rendered pointer and keyboard changes were visible in the accessibility tree. The catalog filters were local-only, and the original lesson page was restored without changing account or course data.
+- **Needed to continue:** A reproducible current-build pointer or keyboard failure, including the exact trigger edge and viewport where it occurs.
+
 ## 2026-10-11 — Recheck learner resource-link safety and context
 
 - **Reviewed:** Learner lesson-resource anchor semantics, new-tab announcement, `noopener noreferrer`, request text validation, shared HTTP(S)-only URL validation, and existing client/server coverage.
