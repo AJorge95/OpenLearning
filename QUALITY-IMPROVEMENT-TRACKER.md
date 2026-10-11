@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Use an accessible in-app confirmation for account disabling
+
+- **Reviewed:** The admin user list and account-details page used blocking native confirmation prompts with different behavior from the rest of the application.
+- **Improvement:** Add a shared modal alert dialog with a named account-specific title, clear sign-out and re-enable consequences, Cancel and Disable account actions, Escape/backdrop cancellation, and Cancel as the initial focus. Use it in both admin flows and keep updates deferred until confirmation.
+- **Why it helps:** Administrators get a consistent, accessible confirmation that works within the app UI and makes the effect of disabling an account clear before the request is sent.
+- **Interface review:** The dialog stays within narrow viewports and stacks its actions on small screens. Existing server-side last-active-administrator safeguards and session revocation behavior remain the authority for the update.
+- **Checked:** Six focused client tests passed; two last-active-administrator route regressions passed; `npm run build` passed strict TypeScript checking and Vite bundling; and Chrome rendered the dialog with focus on Cancel, then closed it without changing the account. The destructive confirmation was not submitted. `git diff --check` passed.
+
 ## 2026-10-11 — Remove setup-order dependencies from account regressions
 
 - **Reviewed:** The account-course activity, sign-in rollback, and self-service password rollback tests read `admin_last_login` created only by an earlier setup test.
@@ -29,7 +37,7 @@
 - **Reviewed:** The repeated right-edge click report against the current account-details markup, pointer-event boundary, trigger and popup sizing, and the Vite process serving `127.0.0.1:5173`.
 - **Result:** No source change was needed. The exact account route now renders the current selector disabled because that user is the only active administrator. On an editable account using the same selector, the trigger opened normally; clicking 5 px to its right closed the menu, and clicking the same adjacent area again left it closed. The supplied screenshot still identifies the older wrapping `<label>` structure.
 - **Why no code change:** The committed selector already limits pointer events to the visible 9rem trigger and matches the popup to its width. The screenshot’s wider label is absent from the current markup, so additional width rules would duplicate the existing fix. Reloading the page should bring the displayed interface up to date.
-- **Checked:** The page loaded at `http://127.0.0.1:5173/admin/users/baf4c6ba-14ec-43b5-aa03-35fa279ef970`; the adjacent right-edge interaction was exercised in Chrome on an editable account; focused account-role/select tests passed (19/19); and `git diff --check` passed. Console logs were not exposed by the connected CUA surface.
+- **Checked:** The page loaded at `http://127.0.0.1:5173/admin/users/baf4c6ba-14ec-43b5-aa03-35fa279ef970`; on the editable account page, the role menu opened from its visible trigger and closed when clicked 4 px beyond its right edge. Clicking the blank far-right row while closed did not reopen it. The screenshot’s wider target still identifies the older wrapping `<label>` structure. The focused account-role/select files passed (10/10); `git diff --check` passed. Console logs were not exposed by the connected CUA surface.
 
 ## 2026-10-11 — Report unknown quiz question IDs accurately
 
