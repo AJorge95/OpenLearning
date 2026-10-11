@@ -626,10 +626,11 @@ courseRouter.post('/courses/:courseId/enroll', (req, res) => {
   const enroll = db.transaction(() => {
     const course = requireCourseViewer(req.params.courseId, req.currentUser);
     if (!canLearnerAccess(course, req.currentUser) || course.status !== 'published') fail(403, 'You do not have access to this course.', 'course_access_denied');
-    enrollLearner(course.id, req.currentUser.id);
+    return enrollLearner(course.id, req.currentUser.id);
   });
-  enroll.immediate();
-  res.status(201).json({ ok: true });
+  const created = enroll.immediate();
+  // A successful retry is not a newly created enrollment resource.
+  res.status(created ? 201 : 200).json({ ok: true });
 });
 
 courseRouter.post('/manage/courses', requireStaff, (req, res) => {

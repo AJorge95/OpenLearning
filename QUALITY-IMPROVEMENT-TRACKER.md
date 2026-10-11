@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Report idempotent enrollment retries accurately
+
+- **Reviewed:** Course and learning-path enrollment transactions, their `INSERT OR IGNORE` behavior, audit event boundaries, and learner API response handling.
+- **Improvement:** Return `201 Created` only when course or path enrollment inserts a new record; return `200 OK` for an already-enrolled learner. Keep learning-state repair and one-time path audit behavior intact. Comments explain the retry status contract.
+- **Why it helps:** Clients can distinguish a newly created enrollment from a successful retry without treating the retry as a second resource creation. This makes timeout recovery and API monitoring more truthful.
+- **Backend review:** Eligibility checks, transaction boundaries, access-state synchronization, and audit writes remain unchanged.
+- **Checked:** The full course-analytics server test file passed (107/107), including a repeated course request that repairs missing learning state and reports 200, plus the path retry reporting 200. The full `npm test -- --test-reporter=dot` suite, server syntax checks, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Verify the latest account-role selector report
 
 - **Reviewed:** The supplied account-page screenshot, the current role selector markup and hit-area CSS, and the reported account route.

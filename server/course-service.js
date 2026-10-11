@@ -373,9 +373,11 @@ export function canLearnerAccess(course, user) {
 
 export function enrollLearner(courseId, userId) {
   const logicalId = db.prepare('SELECT logical_course_id FROM courses WHERE id = ?').get(courseId)?.logical_course_id || courseId;
-  db.prepare('INSERT OR IGNORE INTO enrollments (id, course_id, user_id) VALUES (?, ?, ?)')
+  const insertion = db.prepare('INSERT OR IGNORE INTO enrollments (id, course_id, user_id) VALUES (?, ?, ?)')
     .run(randomUUID(), logicalId, userId);
   ensureCourseLearningState(logicalId, userId);
+  // Callers can distinguish creation from a retry without a separate enrollment lookup.
+  return insertion.changes > 0;
 }
 
 export function ensureCourseLearningStateWithStatus(courseId, userId, now = new Date()) {
