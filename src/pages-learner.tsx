@@ -6,7 +6,7 @@ import { AppSelect, Button, ConfirmationDialog, CourseCard, CourseCover, Curricu
 import { formatCountLabel } from './count-label';
 import { courseCatalogCategoryOptions, courseCatalogParams, hasCourseCatalogFilters } from './course-catalog-filters';
 import { formatLearningDeadlineDate, getLearningDeadlineStatus } from './learning-deadline';
-import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from './course-navigation';
+import { courseActivityActionLabel, nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from './course-navigation';
 import { summarizeCourseProgress } from './course-progress';
 import { shuffleQuizChoices } from './quiz-choice-order';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
@@ -480,11 +480,14 @@ export function CourseOverviewPage() {
 
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading course…</div>;
   if (!course) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to="/courses"><ArrowLeft size={17} />Back to courses</Link></div>;
+  const courseActivitiesComplete = summarizeCourseProgress(course.modules ?? []).completed;
   const nextActivity = nextCourseActivity(course.modules);
-  const startButtonLabel = starting ? 'Starting…'
-    : nextActivity?.type === 'quiz'
-      ? course.progress > 0 ? 'Continue to quiz' : 'Start quiz'
-      : course.progress > 0 ? 'Continue learning' : 'Start learning';
+  const startButtonLabel = courseActivityActionLabel({
+    starting,
+    completed: courseActivitiesComplete,
+    nextActivity,
+    progress: course.progress,
+  });
   return <div className="course-overview">
     <div className="breadcrumbs"><Link to="/courses">Browse courses</Link><span>/</span><span>{course.title}</span></div>
     {error && <ErrorNotice message={error} />}

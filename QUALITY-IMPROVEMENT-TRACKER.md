@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Name completed-course navigation as review
+
+- **Reviewed:** The live course overview showed 100% completion, while both primary actions said “Continue learning.” The existing navigation intentionally returns the first lesson when every activity is complete so the material stays reviewable; exact completion is available from lesson and quiz state through `summarizeCourseProgress`.
+- **Improvement:** Label the action “Review course” only when all course activities are complete. Keep the existing first-lesson review destination and all start/continue labels for unfinished courses. Use exact completion state rather than the rounded percentage.
+- **Why it helps:** Learners can tell that the course is finished and that the button reopens material for review, while near-complete courses do not get mislabeled if their rounded percentage reaches 100% early.
+- **Backend review:** The current course payload already includes lesson completion and quiz-pass state; no API or persistence change was needed.
+- **Checked:** Navigation and progress tests passed (16/16); the full `npm test -- --test-reporter=dot` suite and `npm run build` passed; `git diff --check` passed. At `http://127.0.0.1:5173/courses/d74757e0-f149-4286-90b1-570faad73ff8`, the 100%-complete course showed “Review course” for both actions in the accessibility tree and screenshot. Activating the primary action opened the first completed lesson; the page showed it already complete and no course data changed. The CUA surface did not expose console logs.
+
 ## 2026-10-11 — Align quiz-result regression with saved-score fallback
 
 - **Reviewed:** The full test suite found an older quiz-flow source assertion that required the complete question breakdown unconditionally, although the current result can also be the learner-scoped score preview when detail loading fails.
