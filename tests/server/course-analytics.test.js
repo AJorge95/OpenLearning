@@ -1031,6 +1031,24 @@ test('private path course access follows the current step prerequisite setting',
   const learningResponse = await fetch(apiUrl('/my-learning'), { headers: userHeaders('learner-active') });
   assert.equal(learningResponse.status, 200);
   assert.ok((await learningResponse.json()).courses.some((course) => course.id === 'path-course-target'));
+  database.exec(`CREATE TRIGGER fail_path_assignment_removal_audit
+    BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'path.assignment_removed' AND NEW.entity_id = 'path-prerequisite-check'
+    BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`);
+  try {
+    const failedRemoval = await fetch(apiUrl('/manage/learning-paths/path-prerequisite-check/assignments/learner-active'), {
+      method: 'DELETE',
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(failedRemoval.status, 500);
+    assert.equal((await failedRemoval.json()).code, 'audit_unavailable');
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM learning_path_enrollments
+      WHERE path_id = 'path-prerequisite-check' AND user_id = 'learner-active'`).get().count, 1);
+    const stillAllowedCourse = await fetch(apiUrl('/courses/path-course-target'), { headers: userHeaders('learner-active') });
+    assert.equal(stillAllowedCourse.status, 200);
+  } finally {
+    database.exec('DROP TRIGGER fail_path_assignment_removal_audit');
+  }
   const removalResponse = await fetch(apiUrl('/manage/learning-paths/path-prerequisite-check/assignments/learner-active'), {
     method: 'DELETE',
     headers: userHeaders('admin-1'),

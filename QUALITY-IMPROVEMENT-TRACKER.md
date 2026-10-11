@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve assignments when removal auditing fails
+
+- **Reviewed:** The assignment-removal route deletes enrollment and writes its required audit event inside one immediate transaction. The new API regression covered successful removal and access revocation but not audit-write rollback.
+- **Improvement:** Extend the route test to force the audit insert to fail, assert the enrollment remains, and confirm the learner retains private-course access before retrying a successful removal.
+- **Why it helps:** A database or audit-storage failure cannot silently remove a learner’s path while leaving no record of the administrative action.
+- **Interface review:** Failed removal leaves the learner enrolled, so the existing assignment row and course access remain valid for retry.
+- **Checked:** Focused `tests/server/course-analytics.test.js` passed (96/96), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `node --check tests/server/course-analytics.test.js`, and `git diff --check` passed. The test verified audit failure rolls back the route’s delete and preserves learner access; no UI changed.
+
 ## 2026-10-11 — Exercise assignment removal through the admin route
 
 - **Reviewed:** The private-course access regression verified that deleting an enrollment revokes access, but removed the row directly in SQLite instead of exercising the admin assignment-removal endpoint.
