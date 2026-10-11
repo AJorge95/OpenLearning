@@ -1414,8 +1414,11 @@ courseRouter.post('/quizzes/:quizId/attempts', quizAttemptLimiter, (req, res) =>
     const answers = req.body?.answers;
     if (!answers || typeof answers !== 'object' || Array.isArray(answers)) fail(400, 'Choose an answer for every question.', 'answers_required');
     const answerIds = Object.keys(answers);
-    if (answerIds.length !== questions.length) fail(400, 'Choose an answer for every question.', 'answers_required');
     const questionIds = questions.map((question) => question.id);
+    const questionIdSet = new Set(questionIds);
+    // Reject unknown question keys separately from genuinely missing answers.
+    if (answerIds.some((id) => !questionIdSet.has(id))) fail(400, 'One of the selected answers is invalid.', 'invalid_answer');
+    if (answerIds.length !== questions.length) fail(400, 'Choose an answer for every question.', 'answers_required');
     const placeholders = questionIds.map(() => '?').join(', ');
     const choicesByQuestion = new Map();
     for (const choice of db.prepare(`
@@ -1443,7 +1446,6 @@ courseRouter.post('/quizzes/:quizId/attempts', quizAttemptLimiter, (req, res) =>
         selectedChoiceId: selected.id,
       });
     }
-    if (answerIds.some((id) => !questions.some((question) => question.id === id))) fail(400, 'One of the selected answers is invalid.', 'invalid_answer');
     const score = Math.round((correct / questions.length) * 100);
     const passMark = db.prepare('SELECT pass_mark FROM quizzes WHERE id = ?').get(quiz.quiz_id).pass_mark;
     const passed = score >= passMark;

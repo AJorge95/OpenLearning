@@ -168,6 +168,22 @@ test('quiz submission returns aggregate results only and requires an answer for 
     body: JSON.stringify({ answers: {} }),
   });
   assert.equal(incompleteResponse.status, 400);
+  assert.deepEqual(await incompleteResponse.json(), {
+    error: 'Choose an answer for every question.',
+    code: 'answers_required',
+  });
+
+  const unknownQuestionResponse = await fetch(`${baseUrl}/quizzes/quiz-1/attempts`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ answers: { 'question-1': 'choice-2', 'unknown-question': 'choice-1' } }),
+  });
+  assert.equal(unknownQuestionResponse.status, 400);
+  assert.deepEqual(await unknownQuestionResponse.json(), {
+    error: 'One of the selected answers is invalid.',
+    code: 'invalid_answer',
+  });
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM quiz_attempts WHERE user_id = ?').get('learner-2').count, 0);
 
   const submitResponse = await fetch(`${baseUrl}/quizzes/quiz-1/attempts`, {
     method: 'POST',
