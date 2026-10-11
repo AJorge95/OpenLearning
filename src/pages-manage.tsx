@@ -13,6 +13,7 @@ import type { BrandingPalette, ConnectionProtocol } from './branding';
 import { useAuth } from './auth-context';
 import { canonicalCaptionLanguageTag, captionFileSizeError, captionLanguageErrorMessage } from './caption-validation';
 import { courseEditingNote } from './course-editing-note';
+import { COMPLETION_WINDOW_ERROR, validateCompletionWindowDays } from './course-editor-validation';
 import { firstQuizTextIssue } from './quiz-validation';
 import { lessonResourceUrlError } from './resource-validation';
 import { clearPasswordConfirmationError, getPasswordConfirmationError } from './password-confirmation';
@@ -765,6 +766,7 @@ export function CourseEditorPage() {
   const navigate = useNavigate();
   const { user: editorUser } = useAuth();
   const coverHelpId = useId();
+  const completionWindowInputRef = useRef<HTMLInputElement>(null);
   const createCourseRequestRef = useRef<Promise<{ course: Course }> | null>(null);
   const courseLoadSequenceRef = useRef(0);
   const governanceLoadSequenceRef = useRef(0);
@@ -779,6 +781,7 @@ export function CourseEditorPage() {
   const [category, setCategory] = useState('General');
   const [visibility, setVisibility] = useState<Course['visibility']>('public');
   const [completionWindowDays, setCompletionWindowDays] = useState('');
+  const completionWindow = validateCompletionWindowDays(completionWindowDays);
   const [requiresRecompletion, setRequiresRecompletion] = useState(false);
   const [changeNote, setChangeNote] = useState('');
   const [versions, setVersions] = useState<CourseVersion[]>([]);
@@ -937,9 +940,13 @@ export function CourseEditorPage() {
     courseLoadControllerRef.current?.abort();
     setSavingStatus(status); setError(''); setNotice('');
     try {
+      if (completionWindow.error) {
+        completionWindowInputRef.current?.focus();
+        throw new ApiError(400, completionWindow.error, 'validation_error');
+      }
       const response = await api.patch<{ course: Course }>(`/api/manage/courses/${requestedCourseId}`, {
         title, description, category, visibility,
-        completionWindowDays: completionWindowDays ? Number(completionWindowDays) : null,
+        completionWindowDays: completionWindow.value,
         ...(status ? { status } : {}),
       ...(status === 'published' ? { requiresRecompletion, changeNote } : {}),
       });
@@ -955,11 +962,15 @@ export function CourseEditorPage() {
 
   async function saveCourseDetailsIfChanged() {
     if (!courseId || !course) return;
+    if (completionWindow.error) {
+      completionWindowInputRef.current?.focus();
+      throw new ApiError(400, completionWindow.error, 'validation_error');
+    }
     if (title === course.title && description === course.description && category === course.category && visibility === course.visibility
       && (completionWindowDays ? Number(completionWindowDays) : null) === (course.completionWindowDays ?? null)) return;
     const response = await api.patch<{ course: Course }>(`/api/manage/courses/${courseId}`, {
       title, description, category, visibility,
-      completionWindowDays: completionWindowDays ? Number(completionWindowDays) : null,
+      completionWindowDays: completionWindow.value,
     });
     setCourse(response.course);
   }
@@ -1227,14 +1238,14 @@ export function CourseEditorPage() {
 
   return <div className="editor-page">
     <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>Edit course</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving || (review?.status === 'in_review' && review.submittedBy === editorUser?.id)} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
-    {error && <Notice>{error}</Notice>}{notice && <Notice kind="success">{notice}</Notice>}
+    {error && error !== COMPLETION_WINDOW_ERROR && <Notice>{error}</Notice>}{notice && <Notice kind="success">{notice}</Notice>}
     <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{movingCurriculumItems.size ? 'Updating course content order…' : ''}</p>
     <p className="course-editing-note">{courseEditingNote(course.status, course.visibility)}</p>
     <section className="editor-section course-details-form" aria-label="Course details">
       <div className="editor-field-grid"><label className="field-wide">Course title<input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} placeholder="Give your course a clear title" disabled={saving} /></label>
         <label>Category<input value={category} maxLength={100} onChange={(event) => setCategory(event.target.value)} placeholder="e.g. Professional development" disabled={saving} /></label>
         <fieldset className="visibility-field" disabled={saving}><legend>Visibility</legend><label><input type="radio" name="visibility" checked={visibility === 'public'} onChange={() => setVisibility('public')} />Public</label><label><input type="radio" name="visibility" checked={visibility === 'private'} onChange={() => setVisibility('private')} />Private</label></fieldset>
-        <label className="completion-window-field">Completion window (optional)<input type="number" min="1" max="3650" inputMode="numeric" value={completionWindowDays} onChange={(event) => setCompletionWindowDays(event.target.value)} placeholder="No deadline" disabled={saving} /><small>Days are 24-hour periods. Deadlines do not block course access.</small></label>
+        <label className="completion-window-field">Completion window (optional)<input ref={completionWindowInputRef} type="number" min="1" max="3650" step="1" inputMode="numeric" value={completionWindowDays} aria-invalid={completionWindow.error ? true : undefined} aria-describedby={completionWindow.error ? 'completion-window-help completion-window-error' : 'completion-window-help'} onChange={(event) => { setCompletionWindowDays(event.target.value); setError((currentError) => currentError === COMPLETION_WINDOW_ERROR ? '' : currentError); }} placeholder="No deadline" disabled={saving} /><small id="completion-window-help">Days are 24-hour periods. Deadlines do not block course access.</small>{completionWindow.error && <small id="completion-window-error" className="completion-window-error">{completionWindow.error}</small>}</label>
         <label className="field-wide">Description<textarea rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What will learners understand or be able to do after this course?" disabled={saving} /></label>
       </div>
       <div className="cover-upload-row"><div><ImageWithFallback src={course.coverUrl} className="course-cover-image" alt="Course cover preview" fallback={<span className="cover-preview-empty"><BookOpen size={22} /></span>} /><div><strong>Course cover</strong><small id={coverHelpId}>JPG, PNG, or WebP · max 4096 × 4096 px</small></div></div><label className={`button button-secondary file-button ${coverProgress !== null || saving ? 'file-button-busy' : ''}`} aria-disabled={coverProgress !== null || saving}><Upload size={16} />{coverProgress === null ? course.coverUrl ? 'Replace cover' : 'Upload cover' : coverProgress >= 100 ? 'Saving cover…' : 'Uploading cover…'}<input type="file" accept="image/jpeg,image/png,image/webp" aria-describedby={coverHelpId} disabled={coverProgress !== null || saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCover(file, event.currentTarget); event.currentTarget.value = ''; }} /></label>{coverProgress !== null && (coverProgress >= 100 ? <span className="upload-percent upload-progress-saving-compact" role="status">Saving cover…</span> : <span className="upload-percent" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverProgress} aria-label="Course cover upload progress">{coverProgress}%</span>)}{coverProgress !== null && coverProgress < 100 && <button type="button" className="text-action upload-cancel-action" aria-label="Cancel cover upload" onClick={() => cancelUpload('cover')}>Cancel upload</button>}</div>
