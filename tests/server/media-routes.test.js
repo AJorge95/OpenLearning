@@ -24,6 +24,7 @@ let database;
 let server;
 let captionPath;
 const rangeMediaContents = Buffer.from('0123456789');
+const documentDownloadContents = Buffer.from('Course handout content');
 
 before(async () => {
   const tempBase = path.resolve(os.tmpdir());
@@ -65,6 +66,13 @@ before(async () => {
       VALUES ('media-range-tests', 'course-range-tests', 'range-test.mp4', 'range-test.mp4', 'video/mp4', 10, 'video');
     INSERT INTO lessons (id, module_id, title, position, media_id)
       VALUES ('lesson-range-tests', 'module-range-tests', 'Media range lesson', 0, 'media-range-tests');
+    INSERT INTO courses (id, title, status, visibility, created_by, updated_by)
+      VALUES ('course-document-download', 'Document download test course', 'published', 'public', 'admin-media', 'admin-media');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('module-document-download', 'course-document-download', 'Document module', 0);
+    INSERT INTO lessons (id, module_id, title, position) VALUES
+      ('lesson-document-download-open', 'module-document-download', 'Open document lesson', 0),
+      ('lesson-document-download-locked', 'module-document-download', 'Locked document lesson', 1);
   `);
   const courseMediaDirectory = path.join(fixtureDirectory, 'course-media', 'course-caption-audit');
   captionPath = path.join(courseMediaDirectory, 'caption-audit.vtt');
@@ -74,6 +82,15 @@ before(async () => {
   const rangeMediaPath = path.join(rangeMediaDirectory, 'range-test.mp4');
   await fs.mkdir(rangeMediaDirectory, { recursive: true });
   await fs.writeFile(rangeMediaPath, rangeMediaContents);
+  const documentMediaDirectory = path.join(fixtureDirectory, 'course-media', 'course-document-download');
+  await fs.mkdir(documentMediaDirectory, { recursive: true });
+  await fs.writeFile(path.join(documentMediaDirectory, 'handout.txt'), documentDownloadContents);
+  await fs.writeFile(path.join(documentMediaDirectory, 'locked-handout.txt'), documentDownloadContents);
+  const insertResource = database.prepare(`INSERT INTO lesson_resources
+    (id, lesson_id, resource_type, title, file_name, original_name, mime_type, byte_size, position)
+    VALUES (?, ?, 'document', ?, ?, ?, 'text/plain', ?, 0)`);
+  insertResource.run('resource-download-open', 'lesson-document-download-open', 'Course handout', 'handout.txt', 'course-handout.txt', documentDownloadContents.length);
+  insertResource.run('resource-download-locked', 'lesson-document-download-locked', 'Locked handout', 'locked-handout.txt', 'locked-handout.txt', documentDownloadContents.length);
 
   const app = express();
   app.use(express.json());
@@ -257,6 +274,41 @@ test('checks video access before serving a byte range', async () => {
   });
   assert.equal(learnerResponse.status, 403);
   assert.equal((await learnerResponse.json()).code, 'course_access_denied');
+});
+
+test('serves lesson documents to authorized learners with private download headers', async () => {
+  const resourceUrl = mediaUrl('/resources/resource-download-open');
+  const anonymousResponse = await fetch(resourceUrl, { headers: { connection: 'close' } });
+  assert.equal(anonymousResponse.status, 401);
+  assert.equal((await anonymousResponse.json()).code, 'unauthorized');
+
+  const response = await fetch(resourceUrl, {
+    headers: { 'x-test-user': 'learner-media', connection: 'close' },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.equal(response.headers.get('content-type'), 'application/octet-stream');
+  assert.match(response.headers.get('content-disposition') || '', /attachment;.*filename="course-handout\.txt"/);
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(Number(response.headers.get('content-length')), documentDownloadContents.length);
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), documentDownloadContents);
+
+  const headResponse = await fetch(resourceUrl, {
+    method: 'HEAD',
+    headers: { 'x-test-user': 'learner-media', connection: 'close' },
+  });
+  assert.equal(headResponse.status, 200);
+  assert.equal(Number(headResponse.headers.get('content-length')), documentDownloadContents.length);
+  assert.equal(await headResponse.text(), '');
+});
+
+test('blocks protected document downloads when the lesson is still locked', async () => {
+  const response = await fetch(mediaUrl('/resources/resource-download-locked'), {
+    headers: { 'x-test-user': 'learner-media', connection: 'close' },
+  });
+
+  assert.equal(response.status, 423);
+  assert.equal((await response.json()).code, 'lesson_locked');
 });
 
 test('rejects truncated WebP RIFF headers and image chunks without saving media', async () => {
