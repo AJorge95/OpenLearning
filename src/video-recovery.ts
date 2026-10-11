@@ -37,10 +37,13 @@ export function getVideoWatchProgressDisplay({
   const duration = Number.isFinite(durationSeconds) ? Math.max(0, durationSeconds) : 0;
   const watched = Number.isFinite(watchedUntilSeconds) ? Math.max(0, watchedUntilSeconds) : 0;
   const value = Math.min(watched, duration);
+  const max = Math.max(1, Math.round(duration));
+  const percentage = duration > 0 ? Math.min(100, value / duration * 100) : 0;
   return {
-    value,
-    max: Math.max(1, duration),
-    percentage: duration > 0 ? Math.min(100, value / duration * 100) : 0,
+    ariaValue: Math.min(max, Math.round(value)),
+    ariaMax: max,
+    ariaValueText: `${Math.round(percentage)}% of video watched`,
+    percentage,
   };
 }
 
