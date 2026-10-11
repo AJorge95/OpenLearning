@@ -274,6 +274,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .account-role-control > .app-select { width: 100%; max-width: 100%; }
 .account-role-control { pointer-events: none; }
 .account-role-control .app-select-trigger { pointer-events: auto; }
+.account-role-select, .account-role-select .app-select-trigger { width: 9rem; max-width: 9rem; }
 .account-password-form { gap: 12px; }
 .account-password-form label { font-size: 11px; }
 .account-password-field { display: grid; gap: 7px; min-width: 0; }
@@ -1353,6 +1354,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .account-control-row { align-items: stretch; flex-direction: column; }
   .account-control-row .account-role-control { flex-basis: auto; width: 100%; max-width: none; }
   .account-control-row .account-role-control > .app-select { width: 100%; max-width: none; }
+  .account-control-row .account-role-select, .account-control-row .account-role-select .app-select-trigger { width: 100%; max-width: none; }
   .account-control-row > .button { width: 100%; }
   .certificate-history-item { flex-wrap: wrap; }
   .certificate-history-item > .button { width: 100%; }
