@@ -18,6 +18,13 @@ test('password fields start concealed and expose an accessible, non-submit visib
   assert.match(componentSource, /\[\.\.\.new Set\(\[describedBy, visibleHintId\]\.filter\(Boolean\)\)\]/);
 });
 
+test('revealed password fields remask when their value is cleared', () => {
+  assert.ok(componentSource.includes("if (inputProps.value === '') setVisible(false);"));
+  assert.ok(componentSource.includes('inputProps.onChange?.(event);'));
+  assert.ok(componentSource.includes('if (isEmpty) setVisible(false);'));
+  assert.match(componentSource, /onChange=\{handlePasswordChange\}/);
+});
+
 test('all password-entry forms use the shared field while the setup token stays concealed', () => {
   assert.equal((authSource.match(/<PasswordField\b/g) || []).length, 8);
   assert.equal((managementSource.match(/<PasswordField\b/g) || []).length, 6);
