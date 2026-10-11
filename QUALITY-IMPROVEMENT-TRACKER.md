@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Expose captions in watch-tracked lesson playback
+
+- **Reviewed:** Watch-tracked lessons render uploaded WebVTT tracks but replace native video controls with a custom playback toolbar that had no way to choose a caption language.
+- **Improvement:** Add an accessible `Captions` selector with an off option and each available track; synchronize the selected `TextTrack` when chosen and after video metadata reloads. Lay the selector into a second toolbar row on narrow screens.
+- **Why it helps:** Learners can use caption tracks on the same player that enforces verified watch progress, including when native controls are unavailable.
+- **Checked:** Focused caption-selection tests passed (3/3); full `npm test` passed (397/397); `npx tsc --noEmit`, `npm run build`, `node --check tests/client/video-captions.test.js`, and `git diff --check` passed. Rendered caption interaction remains unverified because the in-app browser is signed out at `/login`, Playwright is not installed, and the Browser plugin is unavailable.
+
 ## 2026-10-11 — Reconcile the repeated administrator role selector report
 
 - **Reviewed:** The supplied screenshot's DOM path still targets the former wrapping `<label>`. The current account-details page uses a separately named custom combobox, bounds its desktop trigger to 9rem, disables pointer input on the surrounding field, and matches the popup to the trigger width.

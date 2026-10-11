@@ -9,6 +9,7 @@ import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCo
 import { summarizeCourseProgress } from './course-progress';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
 import { tryEnterFullscreen } from './video-fullscreen';
+import { selectVideoCaptionTrack } from './video-captions';
 import { getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
 import type { PendingVideoResume } from './video-recovery';
 import { useAuth } from './auth-context';
@@ -507,6 +508,7 @@ export function CoursePlayerPage() {
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [videoMuted, setVideoMuted] = useState(false);
   const [videoVolume, setVideoVolume] = useState(1);
+  const [selectedCaptionId, setSelectedCaptionId] = useState('');
   const [videoPosition, setVideoPosition] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [videoBuffering, setVideoBuffering] = useState(false);
@@ -658,6 +660,7 @@ export function CoursePlayerPage() {
   const watchRequired = Boolean(current?.hasVideo);
   const watchReadyForCurrent = watchProgress.lessonId === lessonId && watchProgress.ready;
   const watchedForCurrent = watchProgress.lessonId === lessonId && watchProgress.complete;
+  const activeCaptionId = current?.captions.some((caption) => caption.id === selectedCaptionId) ? selectedCaptionId : '';
   const videoWatchProgressDisplay = getVideoWatchProgressDisplay({
     watchedUntilSeconds: watchProgress.lessonId === lessonId ? watchProgress.watchedUntilSeconds : 0,
     durationSeconds: videoDuration,
@@ -667,6 +670,10 @@ export function CoursePlayerPage() {
   const commentSaving = commentSavingLessonIds.has(lessonId);
   const visibleFeedback = feedback?.lessonId === lessonId ? feedback : null;
   const visibleFeedbackError = feedbackError?.lessonId === lessonId ? feedbackError.message : '';
+
+  useEffect(() => {
+    selectVideoCaptionTrack(videoRef.current, activeCaptionId);
+  }, [current?.id, current?.captions, activeCaptionId]);
 
   useEffect(() => {
     const requestedLessonId = lessonId;
@@ -1267,6 +1274,7 @@ export function CoursePlayerPage() {
         {current.hasVideo && current.mediaUrl ? <video ref={videoRef} controls={!watchRequired} controlsList="nodownload noplaybackrate noremoteplayback" disablePictureInPicture disableRemotePlayback playsInline tabIndex={watchRequired ? -1 : undefined} preload="metadata" src={current.mediaUrl} poster={course.coverUrl || undefined} aria-label={current.title}
           onLoadedMetadata={(event) => {
             const video = event.currentTarget;
+            selectVideoCaptionTrack(video, activeCaptionId);
             setVideoDuration(Number.isFinite(video.duration) ? video.duration : 0);
             video.playbackRate = 1;
             const resumeTarget = getVideoResumeTarget({
@@ -1333,10 +1341,10 @@ export function CoursePlayerPage() {
             setVideoRecovering(false);
             setVideoError(true);
           }}>
-          {current.captions.map((caption) => <track key={caption.id} kind="captions" src={caption.url} srcLang={caption.language} label={caption.label} />)}
+          {current.captions.map((caption) => <track key={caption.id} data-caption-id={caption.id} kind="captions" src={caption.url} srcLang={caption.language} label={caption.label} />)}
         </video> : <div className="video-missing"><Play size={36} /><span>Video not available</span></div>}
       </section>
-      {watchRequired && current.hasVideo && <div className="lesson-video-controls" role="group" aria-label="Video playback controls">
+      {watchRequired && current.hasVideo && <div className={`lesson-video-controls${current.captions.length ? ' has-caption-tracks' : ''}`} role="group" aria-label="Video playback controls">
         <button className="video-control-button video-play-button" type="button" aria-label={videoPlaying ? 'Pause video' : 'Play video'} disabled={!watchReadyForCurrent || videoError} onClick={() => void toggleVideoPlayback()}>{videoPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</button>
         <button className="video-control-button video-rewind-button" type="button" aria-label="Rewind 30 seconds" title="Rewind 30 seconds" disabled={!watchReadyForCurrent || !watchProgress.started || rewindSaving || videoPosition <= 0} onClick={rewindVideo30Seconds}><RotateCcw size={16} /><span>30s</span></button>
         <span className="video-clock" aria-label="Current video time">{videoClock(videoPosition)} <span>/</span> {videoClock(videoDuration)}</span>
@@ -1344,6 +1352,7 @@ export function CoursePlayerPage() {
         <button className="video-control-button" type="button" aria-label={videoMuted ? 'Unmute video' : 'Mute video'} aria-pressed={videoMuted} onClick={() => updateVolume(videoMuted ? videoVolume || 1 : 0)}>{videoMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
         <input className="video-volume-control" type="range" min="0" max="1" step="0.05" value={videoMuted ? 0 : videoVolume} aria-label="Video volume" onChange={(event) => updateVolume(Number(event.target.value))} />
         <button className="video-control-button" type="button" aria-label="Enter full screen" onClick={() => { void enterVideoFullscreen(); }}><Maximize size={17} /></button>
+        {current.captions.length > 0 && <AppSelect className="video-caption-select" ariaLabel="Captions" value={activeCaptionId} onChange={(captionId) => { setSelectedCaptionId(captionId); selectVideoCaptionTrack(videoRef.current, captionId); }} options={[{ value: '', label: 'Captions off' }, ...current.captions.map((caption) => ({ value: caption.id, label: `${caption.label} (${caption.language})` }))]} />}
       </div>}
       {watchRequired && current.hasVideo && <p className={`video-watch-guidance ${watchedForCurrent ? 'is-watched' : ''}`} role="status" aria-live="polite">{!watchReadyForCurrent ? 'Preparing lesson playback…' : watchedForCurrent ? 'Full video watched. Mark this lesson complete to continue.' : 'Watch the full video to unlock lesson completion. Forward seeking and speed changes are disabled.'}</p>}
       {videoBuffering && <p className="video-watch-guidance" role="status" aria-live="polite">{getVideoRecoveryStatusMessage('buffering', watchRequired)}</p>}
