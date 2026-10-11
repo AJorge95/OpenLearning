@@ -55,6 +55,18 @@ const updateWatchProgressStatement = db.prepare(`UPDATE lesson_watch_progress SE
   WHERE user_id = ? AND lesson_id = ?`);
 const rewindWatchProgressStatement = db.prepare(`UPDATE lesson_watch_progress SET last_position_seconds = ?,
   last_heartbeat_at = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND lesson_id = ?`);
+const beginWatchTransaction = db.transaction((userId, lessonId, durationSeconds, now, watchedUntilSeconds) => {
+  beginWatchStatement.run(userId, lessonId, durationSeconds, now);
+  upsertWatchedSecondsStatement.run(userId, lessonId, watchedUntilSeconds);
+});
+const recordRejectedPositionTransaction = db.transaction((userId, lessonId, position, now, shouldLogAnomaly) => {
+  rejectWatchPositionStatement.run(userId, lessonId, position, now);
+  if (shouldLogAnomaly) markWatchAnomalyAlertedStatement.run(now, userId, lessonId);
+});
+const recordAcceptedProgressTransaction = db.transaction((watchedUntil, durationSeconds, position, now, userId, lessonId, watchedSeconds) => {
+  updateWatchProgressStatement.run(watchedUntil, durationSeconds, position, now, userId, lessonId);
+  setWatchedSecondsStatement.run(userId, lessonId, watchedSeconds);
+});
 
 function readLessonCompletion(userId, lessonId) {
   return Boolean(readLessonCompletionStatement.get(userId, lessonId));
@@ -90,8 +102,7 @@ export function beginLessonWatch(user, lessonId, durationSeconds) {
     fail(409, 'The video duration changed. Reload the lesson before continuing.', 'watch_duration_changed');
   }
   const now = Date.now();
-  beginWatchStatement.run(user.id, lessonId, durationSeconds, now);
-  upsertWatchedSecondsStatement.run(user.id, lessonId, existing?.watched_until_seconds ?? 0);
+  beginWatchTransaction(user.id, lessonId, durationSeconds, now, existing?.watched_until_seconds ?? 0);
   return responseFor(user, lessonId, undefined, durationSeconds);
 }
 
@@ -113,12 +124,9 @@ export function recordLessonWatchProgress(user, lessonId, position) {
   const movedBackward = position < row.last_position_seconds - progressClockToleranceSeconds;
   const movedTooFarForward = position > maximumPosition + progressClockToleranceSeconds;
   if (movedBackward || movedTooFarForward) {
-    rejectWatchPositionStatement.run(user.id, lessonId, position, now);
     const rejectedSeekCount = row.rejected_seek_count + 1;
     const shouldLogAnomaly = now - row.last_alerted_at >= suspiciousWatchLogIntervalMs;
-    if (shouldLogAnomaly) {
-      markWatchAnomalyAlertedStatement.run(now, user.id, lessonId);
-    }
+    recordRejectedPositionTransaction(user.id, lessonId, position, now, shouldLogAnomaly);
     const attempts = {
       ...row,
       rejected_seek_count: rejectedSeekCount,
@@ -148,8 +156,7 @@ export function recordLessonWatchProgress(user, lessonId, position) {
   // watch credit. Credit resumes only after reaching the previous high-water mark.
   const watchedSeconds = Math.min(row.duration_seconds, row.watched_seconds
     + Math.max(0, acceptedPosition - Math.max(row.last_position_seconds, row.watched_until_seconds)));
-  updateWatchProgressStatement.run(watchedUntil, row.duration_seconds, acceptedPosition, now, user.id, lessonId);
-  setWatchedSecondsStatement.run(user.id, lessonId, watchedSeconds);
+  recordAcceptedProgressTransaction(watchedUntil, row.duration_seconds, acceptedPosition, now, user.id, lessonId, watchedSeconds);
   const updated = {
     ...row,
     watched_until_seconds: watchedUntil,
