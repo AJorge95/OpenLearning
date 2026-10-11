@@ -19,7 +19,7 @@ const requestBodyErrors = new Map([
   ['request.aborted', { status: 400, message: 'Request body was interrupted before it was complete.', code: 'request_aborted' }],
   ['parameters.too.many', { status: 413, message: 'Request body contains too many form fields.', code: 'too_many_parameters' }],
 ]);
-const currentUserStatement = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?');
+const currentUserStatement = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, registration_status FROM users WHERE id = ?');
 const courseGrantStatement = db.prepare('SELECT 1 FROM course_grants WHERE course_id = ? AND user_id = ?');
 const courseByIdStatement = db.prepare('SELECT * FROM courses WHERE id = ?');
 const canonicalCourseStatement = db.prepare('SELECT id, logical_course_id, status, visibility FROM courses WHERE id = ? AND logical_course_id IS NULL');
@@ -121,8 +121,8 @@ export function loadCurrentUser(req, _res, next) {
       return next();
     }
     const user = currentUserStatement.get(req.session.userId);
-    if (!user || user.disabled) {
-      const reason = user ? 'user_disabled' : 'user_missing';
+    if (!user || user.disabled || user.registration_status !== 'approved') {
+      const reason = !user ? 'user_missing' : user.disabled ? 'user_disabled' : 'registration_pending';
       req.session.destroy((error) => {
         if (error) writeSystemLog('warn', 'sessions', 'Invalid session cleanup failed', {
           reason,

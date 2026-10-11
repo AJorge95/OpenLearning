@@ -213,14 +213,16 @@ test('unhandled API errors still return a response when system logging fails', a
   }
 });
 
-test('migrations 16 to 33 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
+test('migrations 16 to 34 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
   const migrationDb = new Database(':memory:');
   try {
     migrationDb.pragma('foreign_keys = ON');
     migrationDb.exec(`
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       INSERT INTO schema_migrations (version) VALUES (15);
-      CREATE TABLE users (id TEXT PRIMARY KEY);
+      CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      INSERT INTO app_settings (key, value) VALUES ('setup_complete', '1'), ('platform_name', 'Learning Space');
+      CREATE TABLE users (id TEXT PRIMARY KEY, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE audit_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -302,8 +304,15 @@ test('migrations 16 to 33 preserve account history, course versions, captions, c
     `);
 
     migrateDatabase(migrationDb);
-    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 33);
+    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 34);
     assert.ok(migrationDb.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'competencies_admin_order'`).get());
+    assert.ok(migrationDb.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'users_registration_status_created'`).get());
+    assert.deepEqual(migrationDb.prepare('SELECT id, registration_status FROM users ORDER BY id').all(), [
+      { id: 'user-history', registration_status: 'approved' },
+      { id: 'user-never-signed-in', registration_status: 'approved' },
+      { id: 'user-registration', registration_status: 'approved' },
+    ]);
+    assert.equal(migrationDb.prepare("SELECT value FROM app_settings WHERE key = 'registration_approval_required'").get().value, '0');
     assert.deepEqual(migrationDb.prepare('SELECT id, last_login_at FROM users ORDER BY id').all(), [
       { id: 'user-history', last_login_at: '2026-10-02 09:00:00' },
       { id: 'user-never-signed-in', last_login_at: null },
@@ -333,6 +342,7 @@ test('migrations 16 to 33 preserve account history, course versions, captions, c
 
     migrateDatabase(migrationDb);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 16').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 34').get().count, 1);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 17').get().count, 1);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 18').get().count, 1);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 19').get().count, 1);
@@ -382,6 +392,8 @@ test('migration 31 backfills watch telemetry and can be rerun safely', () => {
     migrationDb.exec(`
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       INSERT INTO schema_migrations (version) VALUES (30);
+      CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE users (id TEXT PRIMARY KEY, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE learning_path_courses (path_id TEXT NOT NULL, course_id TEXT NOT NULL);
       CREATE TABLE competencies (id TEXT PRIMARY KEY, title TEXT NOT NULL COLLATE NOCASE, active INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE lesson_watch_progress (
@@ -420,6 +432,8 @@ test('migration 31 preserves telemetry already present in a version-30 database'
     migrationDb.exec(`
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       INSERT INTO schema_migrations (version) VALUES (30);
+      CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE users (id TEXT PRIMARY KEY, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE learning_path_courses (path_id TEXT NOT NULL, course_id TEXT NOT NULL);
       CREATE TABLE competencies (id TEXT PRIMARY KEY, title TEXT NOT NULL COLLATE NOCASE, active INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE lesson_watch_progress (
@@ -997,4 +1011,130 @@ test('registration explains how to sign in when the account is saved but session
     body: JSON.stringify({ username: 'session_recovery_learner', password: 'SessionRecoveryPassphrase-2026' }),
   });
   assert.equal(signInResponse.status, 200);
+});
+
+test('registration approval blocks sign-in and rolls back if its audit record fails', async () => {
+  const settingsResponse = await fetch(apiUrl('/admin/settings'), { headers: { connection: 'close' } });
+  assert.equal(settingsResponse.status, 200);
+  const settings = await settingsResponse.json();
+  const invalidSettingResponse = await fetch(apiUrl('/admin/settings'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ platformName: settings.platformName, registrationApprovalRequired: 'yes' }),
+  });
+  assert.equal(invalidSettingResponse.status, 400);
+  assert.equal((await invalidSettingResponse.json()).code, 'invalid_registration_approval_setting');
+
+  const settingResponse = await fetch(apiUrl('/admin/settings'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ platformName: settings.platformName, registrationApprovalRequired: true }),
+  });
+  assert.equal(settingResponse.status, 200);
+  assert.equal((await settingResponse.json()).registrationApprovalRequired, true);
+
+  const initialSessionIds = await storedSessionIds();
+  const registrationResponse = await fetch(apiUrl('/auth/register'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({
+      username: 'approval_gate_learner',
+      email: 'approval.gate@example.invalid',
+      firstName: 'Approval',
+      lastName: 'Gate',
+      password: 'ApprovalGatePassphrase-2026',
+      confirmPassword: 'ApprovalGatePassphrase-2026',
+    }),
+  });
+  assert.equal(registrationResponse.status, 201);
+  const registration = await registrationResponse.json();
+  assert.equal(registration.approvalRequired, true);
+  assert.equal(database.prepare('SELECT registration_status, last_login_at FROM users WHERE id = ?').get(registration.user.id)
+    .registration_status, 'pending');
+  assert.equal(database.prepare('SELECT last_login_at FROM users WHERE id = ?').get(registration.user.id).last_login_at, null);
+  assert.deepEqual(await storedSessionIds(), initialSessionIds, 'pending registration must not create a sign-in session');
+
+  const pendingAccountsResponse = await fetch(apiUrl('/admin/users?registrationStatus=pending&q=approval.gate'), { headers: { connection: 'close' } });
+  assert.equal(pendingAccountsResponse.status, 200);
+  const pendingAccounts = await pendingAccountsResponse.json();
+  assert.equal(pendingAccounts.total, 1);
+  assert.equal(pendingAccounts.users[0].id, registration.user.id);
+  assert.equal(pendingAccounts.users[0].registrationStatus, 'pending');
+
+  const blockedSignInResponse = await fetch(apiUrl('/auth/login'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ username: 'approval_gate_learner', password: 'ApprovalGatePassphrase-2026' }),
+  });
+  assert.equal(blockedSignInResponse.status, 403);
+  assert.equal((await blockedSignInResponse.json()).code, 'registration_pending');
+  assert.deepEqual(await storedSessionIds(), initialSessionIds, 'a blocked sign-in must not create a session');
+
+  const staleSessionId = 'registration-approval-audit-rollback';
+  database.prepare('INSERT INTO sessions (sid, session_data, expires_at, user_id) VALUES (?, ?, ?, ?)')
+    .run(staleSessionId, JSON.stringify({ userId: registration.user.id }), Date.now() + 60_000, registration.user.id);
+  database.exec(`CREATE TRIGGER reject_registration_approval_audit BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'account.registration_approved' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`);
+
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  let failedApprovalResponse;
+  try {
+    failedApprovalResponse = await fetch(apiUrl(`/admin/users/${registration.user.id}/approval`), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({}),
+    });
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS reject_registration_approval_audit');
+    console.error = originalConsoleError;
+  }
+  assert.equal(failedApprovalResponse.status, 500);
+  assert.equal((await failedApprovalResponse.json()).code, 'audit_unavailable');
+  assert.equal(database.prepare('SELECT registration_status FROM users WHERE id = ?').get(registration.user.id).registration_status, 'pending');
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get(staleSessionId).count, 1);
+
+  const approveUrl = apiUrl(`/admin/users/${registration.user.id}/approval`);
+  const approvalResponse = await fetch(approveUrl, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({}),
+  });
+  assert.equal(approvalResponse.status, 200);
+  const approval = await approvalResponse.json();
+  assert.equal(approval.user.registrationStatus, 'approved');
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get(staleSessionId).count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.registration_approved' AND entity_id = ?")
+    .get(registration.user.id).count, 1);
+
+  const repeatedApprovalResponse = await fetch(approveUrl, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({}),
+  });
+  assert.equal(repeatedApprovalResponse.status, 200);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.registration_approved' AND entity_id = ?")
+    .get(registration.user.id).count, 1, 'repeated approval must not add another audit event');
+
+  const approvedAccountsResponse = await fetch(apiUrl('/admin/users?registrationStatus=approved&q=approval.gate'), { headers: { connection: 'close' } });
+  assert.equal(approvedAccountsResponse.status, 200);
+  const approvedAccounts = await approvedAccountsResponse.json();
+  assert.equal(approvedAccounts.total, 1);
+  assert.equal(approvedAccounts.users[0].id, registration.user.id);
+
+  const signInResponse = await fetch(apiUrl('/auth/login'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ username: 'approval_gate_learner', password: 'ApprovalGatePassphrase-2026' }),
+  });
+  assert.equal(signInResponse.status, 200);
+  const signedIn = await signInResponse.json();
+  assert.equal(signedIn.user.id, registration.user.id);
+  assert.equal(signedIn.registrationApprovalRequired, true);
+
+  database.prepare("UPDATE app_settings SET value = '0' WHERE key = 'registration_approval_required'").run();
+  database.prepare("DELETE FROM audit_logs WHERE entity_id = ? AND action IN ('account.registered', 'account.registration_approved', 'auth.signed_in')")
+    .run(registration.user.id);
+  database.prepare('DELETE FROM sessions WHERE user_id = ?').run(registration.user.id);
+  database.prepare('DELETE FROM users WHERE id = ?').run(registration.user.id);
 });

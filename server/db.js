@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 
-const latestSchemaVersion = 33;
+const latestSchemaVersion = 34;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -818,6 +818,19 @@ export function migrateDatabase(database = db) {
         CREATE INDEX IF NOT EXISTS competencies_admin_order
           ON competencies(active DESC, title COLLATE NOCASE, id);
         INSERT INTO schema_migrations (version) VALUES (33);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 34) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        ALTER TABLE users ADD COLUMN registration_status TEXT NOT NULL DEFAULT 'approved'
+          CHECK (registration_status IN ('pending', 'approved'));
+        CREATE INDEX users_registration_status_created ON users(registration_status, created_at, id);
+        INSERT OR IGNORE INTO app_settings (key, value) VALUES ('registration_approval_required', '0');
+        INSERT INTO schema_migrations (version) VALUES (34);
       `);
     });
     migration();

@@ -1,4 +1,5 @@
 export type Role = 'admin' | 'moderator' | 'learner';
+export type RegistrationStatus = 'pending' | 'approved';
 
 export type RegistrationFieldType = 'date' | 'text' | 'select' | 'checkbox';
 
@@ -27,6 +28,7 @@ export interface User {
   lastName?: string;
   role: Role;
   disabled: boolean;
+  registrationStatus?: RegistrationStatus;
   isLastActiveAdmin?: boolean;
   createdAt?: string;
   lastLoginAt?: string | null;

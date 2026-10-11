@@ -901,12 +901,16 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .role-filter .app-select { min-width: 185px; }
 .user-role-filter { width: 228px; flex-direction: column; align-items: stretch; gap: 6px; }
 .user-role-filter .app-select { min-width: 0; }
+.user-approval-filter { width: 205px; flex-direction: column; align-items: stretch; gap: 6px; }
+.user-approval-filter .app-select { min-width: 0; }
 .user-table .app-select { min-width: 145px; }
 .user-table .app-select-trigger { min-height: 40px; padding: 7px 9px; border-color: var(--line); color: #383d4c; font-size: 12px; }
 .account-state { display: inline-flex; align-items: center; gap: 7px; color: #656b7b; font-size: 12px; }
 .account-state > span { width: 7px; height: 7px; border-radius: 50%; background: #28a45d; }
 .last-active-admin-note { display: block; max-width: 230px; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.4; white-space: normal; }
 .account-disabled > span { background: #9ea3ae; }
+.account-pending { color: #8b5700; font-weight: 650; }
+.account-pending > span { background: #d28a12; }
 .user-row-actions { display: flex; align-items: center; gap: 13px; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 22px; background: rgba(19, 21, 31, .48); }
 .modal-card { position: relative; width: min(100%, 470px); max-height: calc(100vh - 44px); max-height: calc(100dvh - 44px); overflow-y: auto; overscroll-behavior: contain; padding: 31px; background: #fff; border-radius: 5px; box-shadow: var(--shadow); }
@@ -1083,6 +1087,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .auth-brand { margin-bottom: 44px; }
 .auth-panel h1 { font-size: 32px; margin: 0 0 8px; }
 .auth-description { color: var(--muted); font-size: 14px; line-height: 1.55; margin: 0 0 26px; }
+.auth-approval-note { margin: 0; padding: 10px 12px; color: #805000; background: #fff8e7; border: 1px solid #f0dba8; border-radius: 6px; font-size: 12px; line-height: 1.5; }
 .auth-eyebrow { display: block; margin-bottom: 7px; color: var(--muted); font-size: 12px; }
 .form-stack { display: grid; gap: 17px; }
 .form-stack input { min-height: 46px; }

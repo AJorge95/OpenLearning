@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Require administrator approval before learner sign-in
+
+- **Reviewed:** Public learner registration and login, session loading, admin user filtering and account details, registration settings, migration history, and the existing role-selector hit-area fix.
+- **Improvement:** Add a registration-approval policy backed by schema migration 34. When enabled, new learner accounts remain pending without a sign-in session or last-login timestamp; login and existing-session middleware deny pending accounts; administrators can filter and approve registrations, with approval, stale-session removal, and audit logging handled atomically. The settings and sign-up screens explain the policy, and account lists/details show approval state and the pending approval action.
+- **Why it helps:** Organizations can review new learner accounts before access is granted, while existing accounts stay approved by default and audit/session state remains consistent if approval fails.
+- **Interface review:** The policy has a labeled settings checkbox and explanatory copy; pending accounts have a dedicated filter, status, and approval action. The account role selector renders at its 9rem desktop width: clicking the blank area to its right left the menu closed, while clicking the visible trigger opened the options. No account or policy setting was changed during browser review.
+- **Checked:** Registration approval tests cover validation, pending registration, blocked login, middleware session cleanup, filtering, approval rollback on audit failure, stale-session removal, audit idempotency, and post-approval sign-in. The full suite passed (522/522); `npm run build` passed strict TypeScript checking and Vite bundling; `git diff --check` passed. In Chrome at the local admin account-details route, the page loaded and the role-selector blank-area/trigger interactions produced the expected states. Browser console logs were unavailable through the connected CUA surface.
+
 ## 2026-10-11 — Search competency definitions in the admin catalog
 
 - **Reviewed:** The administrator competency list's stable 25-row pagination, available title/description fields, existing literal-safe search helper, shared management-search styling, and status-toggle rank recalculation.

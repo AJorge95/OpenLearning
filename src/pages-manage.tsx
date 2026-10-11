@@ -1626,6 +1626,8 @@ export function CourseAccessPage() {
   </div>;
 }
 
+type UserApprovalFilter = 'all' | 'pending' | 'approved';
+
 export function AdminUsersPage() {
   const { user: signedInUser, refresh } = useAuth();
   const resetPasswordHintId = useId();
@@ -1635,14 +1637,15 @@ export function AdminUsersPage() {
   const [query, setQuery] = useState('');
   const [appliedQuery, setAppliedQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<UserRoleFilter>('all');
+  const [approvalFilter, setApprovalFilter] = useState<UserApprovalFilter>('all');
   const [page, setPage] = useState(1);
-  const userListStateRef = useRef({ query: appliedQuery, roleFilter, page });
-  userListStateRef.current = { query: appliedQuery, roleFilter, page };
+  const userListStateRef = useRef({ query: appliedQuery, roleFilter, approvalFilter, page });
+  userListStateRef.current = { query: appliedQuery, roleFilter, approvalFilter, page };
   const [pageSize, setPageSize] = useState(50);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [failedRequest, setFailedRequest] = useState<{ page: number; query: string; roleFilter: UserRoleFilter } | null>(null);
+  const [failedRequest, setFailedRequest] = useState<{ page: number; query: string; roleFilter: UserRoleFilter; approvalFilter: UserApprovalFilter } | null>(null);
   const [savingIds, setSavingIds] = useState<Set<string>>(() => new Set());
   const savingIdsRef = useRef(savingIds);
   const [resetUser, setResetUser] = useState<User | null>(null);
@@ -1681,15 +1684,15 @@ export function AdminUsersPage() {
     setError('');
   }
 
-  async function load(requestedPage = page, requestedQuery = appliedQuery, requestedRoleFilter = roleFilter): Promise<boolean> {
-    userListStateRef.current = { query: requestedQuery, roleFilter: requestedRoleFilter, page: requestedPage };
+  async function load(requestedPage = page, requestedQuery = appliedQuery, requestedRoleFilter = roleFilter, requestedApprovalFilter = approvalFilter): Promise<boolean> {
+    userListStateRef.current = { query: requestedQuery, roleFilter: requestedRoleFilter, approvalFilter: requestedApprovalFilter, page: requestedPage };
     const requestSequence = ++loadSequenceRef.current;
     loadControllerRef.current?.abort();
     const controller = new AbortController();
     loadControllerRef.current = controller;
     setLoading(true); setError(''); setFailedRequest(null);
     try {
-      const params = new URLSearchParams(); if (requestedQuery.trim()) params.set('q', requestedQuery.trim()); if (requestedRoleFilter !== 'all') params.set('role', requestedRoleFilter);
+      const params = new URLSearchParams(); if (requestedQuery.trim()) params.set('q', requestedQuery.trim()); if (requestedRoleFilter !== 'all') params.set('role', requestedRoleFilter); if (requestedApprovalFilter !== 'all') params.set('registrationStatus', requestedApprovalFilter);
       params.set('page', String(requestedPage));
       const response = await api.get<{ users: User[]; total: number; page: number; pageSize: number }>(`/api/admin/users?${params}`, { signal: controller.signal });
       if (requestSequence === loadSequenceRef.current) {
@@ -1701,7 +1704,7 @@ export function AdminUsersPage() {
     } catch (cause) {
       if (requestSequence === loadSequenceRef.current) {
         setError(cause instanceof ApiError ? cause.message : 'Users could not be loaded.');
-        setFailedRequest({ page: requestedPage, query: requestedQuery, roleFilter: requestedRoleFilter });
+        setFailedRequest({ page: requestedPage, query: requestedQuery, roleFilter: requestedRoleFilter, approvalFilter: requestedApprovalFilter });
       }
       return false;
     } finally {
@@ -1714,7 +1717,7 @@ export function AdminUsersPage() {
   useEffect(() => {
     load(1);
     return () => { loadSequenceRef.current += 1; loadControllerRef.current?.abort(); };
-  }, [roleFilter]);
+  }, [roleFilter, approvalFilter]);
 
   useEffect(() => {
     if (!resetUser) return;
@@ -1773,7 +1776,7 @@ export function AdminUsersPage() {
         }
       } else if (changes.role !== undefined || (changes.disabled !== undefined && user.role === 'admin')) {
         const currentListState = userListStateRef.current;
-        if (!(await load(currentListState.page, currentListState.query, currentListState.roleFilter))) return;
+        if (!(await load(currentListState.page, currentListState.query, currentListState.roleFilter, currentListState.approvalFilter))) return;
       } else {
         setUsers((current) => current.map((row) => row.id === user.id ? { ...row, ...response.user } : row));
       }
@@ -1781,7 +1784,7 @@ export function AdminUsersPage() {
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === 'last_admin') {
         const currentListState = userListStateRef.current;
-        if (await load(currentListState.page, currentListState.query, currentListState.roleFilter)) setError(cause.message);
+        if (await load(currentListState.page, currentListState.query, currentListState.roleFilter, currentListState.approvalFilter)) setError(cause.message);
       } else {
         setError(cause instanceof ApiError ? cause.message : 'User could not be updated.');
       }
@@ -1818,10 +1821,25 @@ export function AdminUsersPage() {
     finally { markSaving(user.id, false); }
   }
 
+  async function approveRegistration(user: User) {
+    if (savingIdsRef.current.has(user.id)) return;
+    markSaving(user.id, true); setError(''); setSuccess('');
+    try {
+      const response = await api.patch<{ user: User }>(`/api/admin/users/${user.id}/approval`, {});
+      const currentListState = userListStateRef.current;
+      if (!(await load(currentListState.page, currentListState.query, currentListState.roleFilter, currentListState.approvalFilter))) return;
+      setSuccess(response.user.disabled
+        ? `${user.username}'s registration was approved. The account is disabled, so enable it before they can sign in.`
+        : `${user.username}'s registration was approved. They can now sign in.`);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'Registration could not be approved.');
+    } finally { markSaving(user.id, false); }
+  }
+
   return <div className="management-page users-page"><PageHeading title="Users" subtitle="Create accounts, review learning activity, and manage roles and access." action={<Link className="button button-primary" to="/admin/users/new"><Plus size={17} />Create account</Link>} />
-    <div className="user-filter-row"><form className="management-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); void load(1, search, roleFilter); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search username or email" aria-label="Search username or email" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter user-role-filter"><span className="catalog-filter-label">Role</span><AppSelect className="app-select--filter" ariaLabel="Filter by role" leadingIcon={<UsersRound size={16} />} value={roleFilter} onChange={setRoleFilter} options={[{ value: 'all', label: 'All roles' }, { value: 'admin', label: 'Administrators' }, { value: 'moderator', label: 'Moderators' }, { value: 'learner', label: 'Learners' }]} /></div></div>
+    <div className="user-filter-row"><form className="management-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); void load(1, search, roleFilter, approvalFilter); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search username or email" aria-label="Search username or email" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter user-role-filter"><span className="catalog-filter-label">Role</span><AppSelect className="app-select--filter" ariaLabel="Filter by role" leadingIcon={<UsersRound size={16} />} value={roleFilter} onChange={setRoleFilter} options={[{ value: 'all', label: 'All roles' }, { value: 'admin', label: 'Administrators' }, { value: 'moderator', label: 'Moderators' }, { value: 'learner', label: 'Learners' }]} /></div><div className="select-wrap role-filter user-approval-filter"><span className="catalog-filter-label">Registration</span><AppSelect className="app-select--filter" ariaLabel="Filter by registration approval" value={approvalFilter} onChange={setApprovalFilter} options={[{ value: 'all', label: 'All accounts' }, { value: 'pending', label: 'Pending approval' }, { value: 'approved', label: 'Approved' }]} /></div></div>
     {error && !resetUser && (failedRequest
-      ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest.query, failedRequest.roleFilter); }}>Try again</Button></div>
+      ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest.query, failedRequest.roleFilter, failedRequest.approvalFilter); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
     {success && <Notice kind="success">{success}</Notice>}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading accounts…</div> : failedRequest ? null : <div className="user-table-wrap" role="region" aria-label="Scrollable account list" tabIndex={0}><p className="table-scroll-hint">Scroll horizontally to see all account columns.</p><table className="user-table"><caption className="sr-only">Accounts</caption><thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Account</th><th scope="col">Created</th><th scope="col">Actions</th></tr></thead><tbody>{users.map((user) => {
@@ -1829,11 +1847,11 @@ export function AdminUsersPage() {
       return <tr key={user.id}>
         <td><Link className="owner-cell user-detail-link" to={`/admin/users/${user.id}`}><UserInitial username={user.username} /><span className="user-detail-link-copy"><strong>{user.username}</strong>{user.email && <small>{user.email}</small>}</span></Link></td>
         <td><AppSelect<Role> className="app-select--compact" ariaLabel={`Role for ${user.username}`} describedBy={user.isLastActiveAdmin ? lastAdminHelpId : undefined} value={user.role} disabled={savingIds.has(user.id) || user.isLastActiveAdmin} onChange={(role) => updateUser(user, { role })} options={[{ value: 'admin', label: 'Administrator' }, { value: 'moderator', label: 'Moderator' }, { value: 'learner', label: 'Learner' }]} /></td>
-        <td><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span>{user.isLastActiveAdmin && <small className="last-active-admin-note" id={lastAdminHelpId}>This is the only active administrator. Add another administrator before changing this account’s role or status.</small>}</td>
+        <td><span className={`account-state ${user.registrationStatus === 'pending' ? 'account-pending' : user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.registrationStatus === 'pending' ? 'Pending approval' : user.disabled ? 'Disabled' : 'Active'}</span>{user.isLastActiveAdmin && <small className="last-active-admin-note" id={lastAdminHelpId}>This is the only active administrator. Add another administrator before changing this account’s role or status.</small>}</td>
         <td>{user.createdAt ? <DateText value={user.createdAt} /> : '—'}</td>
-        <td><div className="user-row-actions"><Link className="text-action" to={`/admin/users/${user.id}`} aria-label={`Details for ${user.username}`}>Details</Link><button type="button" className="text-action" aria-label={`Reset password for ${user.username}`} disabled={savingIds.has(user.id)} onClick={(event) => openPasswordReset(user, event.currentTarget)}>Reset password</button><button type="button" className={user.disabled ? 'text-action' : 'text-action danger-text'} aria-label={`${user.disabled ? 'Enable' : 'Disable'} account for ${user.username}`} aria-describedby={user.isLastActiveAdmin ? lastAdminHelpId : undefined} disabled={savingIds.has(user.id) || user.isLastActiveAdmin} onClick={() => updateUser(user, { disabled: !user.disabled })}>{user.disabled ? 'Enable' : 'Disable'}</button></div></td>
+        <td><div className="user-row-actions">{user.registrationStatus === 'pending' && <button type="button" className="text-action" aria-label={`Approve registration for ${user.username}`} disabled={savingIds.has(user.id)} onClick={() => approveRegistration(user)}>{savingIds.has(user.id) ? 'Approving…' : 'Approve'}</button>}<Link className="text-action" to={`/admin/users/${user.id}`} aria-label={`Details for ${user.username}`}>Details</Link><button type="button" className="text-action" aria-label={`Reset password for ${user.username}`} disabled={savingIds.has(user.id)} onClick={(event) => openPasswordReset(user, event.currentTarget)}>Reset password</button><button type="button" className={user.disabled ? 'text-action' : 'text-action danger-text'} aria-label={`${user.disabled ? 'Enable' : 'Disable'} account for ${user.username}`} aria-describedby={user.isLastActiveAdmin ? lastAdminHelpId : undefined} disabled={savingIds.has(user.id) || user.isLastActiveAdmin} onClick={() => updateUser(user, { disabled: !user.disabled })}>{user.disabled ? 'Enable' : 'Disable'}</button></div></td>
       </tr>;
-    })}</tbody></table>{!users.length && <div className="access-empty">{userListEmptyMessage(appliedQuery, roleFilter)}</div>}</div>}
+    })}</tbody></table>{!users.length && <div className="access-empty">{approvalFilter === 'pending' ? appliedQuery ? 'No pending registrations match that search.' : 'No registrations are waiting for approval.' : userListEmptyMessage(appliedQuery, roleFilter)}</div>}</div>}
     {!loading && !failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
     {resetUser && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePasswordReset(); }}><section ref={resetDialogRef} className="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title" aria-describedby="reset-description" tabIndex={-1}><button className="modal-close" type="button" onClick={() => closePasswordReset()} aria-label="Close" disabled={savingIds.has(resetUser.id)}>×</button><h2 id="reset-title">Reset password</h2><p id="reset-description">Set a temporary password for <strong>{resetUser.username}</strong>. Their active sessions will be signed out.</p><form className="form-stack" onSubmit={resetPassword} aria-busy={savingIds.has(resetUser.id)}><PasswordField label="New password" autoFocus required minLength={12} maxLength={256} autoComplete="new-password" value={newPassword} hint="Use at least 12 characters." hintId={resetPasswordHintId} onChange={(event) => { setNewPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={savingIds.has(resetUser.id)} /><PasswordField label="Confirm password" required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={savingIds.has(resetUser.id)} />{error && <Notice>{error}</Notice>}<Button type="submit" disabled={savingIds.has(resetUser.id)}>{savingIds.has(resetUser.id) ? 'Saving…' : 'Reset password'}</Button></form></section></div>}
   </div>;
@@ -1918,7 +1936,7 @@ export function AdminUserDetailsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
-  const [savingAction, setSavingAction] = useState<'account' | 'password' | null>(null);
+  const [savingAction, setSavingAction] = useState<'account' | 'approval' | 'password' | null>(null);
   const saving = savingAction !== null;
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -2010,6 +2028,24 @@ export function AdminUserDetailsPage() {
     await updateAccount({ firstName: profileFirstName, lastName: profileLastName }, 'Certificate name was updated.');
   }
 
+  async function approveRegistration() {
+    if (!account || saving || account.user.registrationStatus !== 'pending') return;
+    const requestedUserId = account.user.id;
+    const actionSequence = ++actionSequenceRef.current;
+    const isCurrentAction = () => actionSequenceRef.current === actionSequence && routeUserIdRef.current === requestedUserId;
+    setSavingAction('approval'); setError(''); setSuccess('');
+    try {
+      const result = await api.patch<{ user: User }>(`/api/admin/users/${requestedUserId}/approval`, {});
+      if (!isCurrentAction()) return;
+      setAccount((current) => current && current.user.id === requestedUserId ? { ...current, user: { ...current.user, ...result.user } } : current);
+      setSuccess(result.user.disabled
+        ? `${result.user.username}'s registration was approved. The account is disabled, so enable it before they can sign in.`
+        : `${result.user.username}'s registration was approved. They can now sign in.`);
+    } catch (cause) {
+      if (isCurrentAction()) setError(cause instanceof ApiError ? cause.message : 'Registration could not be approved.');
+    } finally { if (isCurrentAction()) setSavingAction(null); }
+  }
+
   async function resetPassword(event: React.FormEvent) {
     event.preventDefault();
     if (!account || saving) return;
@@ -2045,14 +2081,15 @@ export function AdminUserDetailsPage() {
     <PageHeading title={user.username} subtitle="Account controls, enrolled courses, and learning activity." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} />Back to users</Link>} />
     {error && <Notice>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
     <section className="account-detail-grid">
-      <article className="account-detail-card account-overview-card" aria-labelledby="account-overview-heading"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><h2 id="account-overview-heading" className="account-overview-title">Account overview</h2></div></div><span className={`account-state ${user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.disabled ? 'Disabled' : 'Active'}</span></div>
-        <dl className="account-meta-list"><div><dt>Email</dt><dd>{user.email || 'Not provided'}</dd></div><div><dt>User ID</dt><dd>{user.id}</dd></div><div><dt>Created</dt><dd><DateText value={user.createdAt} /></dd></div><div><dt>Last login</dt><dd>{user.lastLoginAt ? <DateTimeText value={user.lastLoginAt} /> : 'Not recorded'}</dd></div><div><dt>Last updated</dt><dd><DateText value={user.updatedAt} /></dd></div><div><dt>Courses assigned or enrolled</dt><dd>{account.total}</dd></div></dl>
+      <article className="account-detail-card account-overview-card" aria-labelledby="account-overview-heading"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><h2 id="account-overview-heading" className="account-overview-title">Account overview</h2></div></div><span className={`account-state ${user.registrationStatus === 'pending' ? 'account-pending' : user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.registrationStatus === 'pending' ? 'Pending approval' : user.disabled ? 'Disabled' : 'Active'}</span></div>
+        <dl className="account-meta-list"><div><dt>Email</dt><dd>{user.email || 'Not provided'}</dd></div><div><dt>Registration approval</dt><dd>{user.registrationStatus === 'pending' ? 'Pending' : 'Approved'}</dd></div><div><dt>User ID</dt><dd>{user.id}</dd></div><div><dt>Created</dt><dd><DateText value={user.createdAt} /></dd></div><div><dt>Last login</dt><dd>{user.lastLoginAt ? <DateTimeText value={user.lastLoginAt} /> : 'Not recorded'}</dd></div><div><dt>Last updated</dt><dd><DateText value={user.updatedAt} /></dd></div><div><dt>Courses assigned or enrolled</dt><dd>{account.total}</dd></div></dl>
         <form className="account-profile-form form-stack" onSubmit={saveAccountName} aria-busy={savingAction === 'account'}><div><h3>Certificate name</h3><p>Set the first and last name shown on this user’s certificates.</p></div><div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={profileFirstName} onChange={(event) => setProfileFirstName(event.target.value)} disabled={saving} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={profileLastName} onChange={(event) => setProfileLastName(event.target.value)} disabled={saving} /></label></div><Button type="submit" variant="secondary" disabled={saving || !certificateNameReady || !certificateNameChanged}>{savingAction === 'account' ? 'Saving…' : !certificateNameReady ? 'Loading…' : certificateNameChanged ? 'Save certificate name' : 'No changes'}</Button></form>
         {registrationFields.length > 0 && <section className="account-registration-fields"><h3>Registration details</h3><dl>{registrationFields.map((field) => <div key={field.id}><dt>{field.label}</dt><dd>{typeof field.value === 'boolean' ? field.value ? 'Yes' : 'No' : field.value || 'Not provided'}</dd></div>)}</dl></section>}
         <div className="account-control-row" aria-busy={savingAction === 'account'}>
           <div className="account-role-control"><span id="account-platform-role-label">Platform role</span><AppSelect<Role> className="account-role-select" controlId="account-platform-role" ariaLabel="Platform role" ariaLabelledBy="account-platform-role-label" describedBy={user.isLastActiveAdmin ? lastAdminHelpId : undefined} matchTriggerWidth value={user.role} disabled={saving || user.isLastActiveAdmin} onChange={(role) => updateAccount({ role })} options={[{ value: 'learner', label: 'Learner' }, { value: 'moderator', label: 'Moderator' }, { value: 'admin', label: 'Administrator' }]} /></div>
+          {user.registrationStatus === 'pending' && <Button variant="secondary" onClick={approveRegistration} disabled={saving} aria-busy={savingAction === 'approval'}>{savingAction === 'approval' ? 'Approving registration…' : 'Approve registration'}</Button>}
           <Button variant={user.disabled ? 'secondary' : 'danger'} onClick={() => updateAccount({ disabled: !user.disabled })} disabled={saving || user.isLastActiveAdmin} aria-describedby={user.isLastActiveAdmin ? lastAdminHelpId : undefined} aria-busy={savingAction === 'account'}>{savingAction === 'account' ? 'Saving account…' : user.disabled ? 'Enable account' : 'Disable account'}</Button>
-          {savingAction === 'account' && <span className="sr-only" role="status" aria-live="polite">Saving account settings…</span>}
+          {savingAction && <span className="sr-only" role="status" aria-live="polite">{savingAction === 'approval' ? 'Approving registration…' : savingAction === 'account' ? 'Saving account settings…' : 'Resetting password…'}</span>}
         </div>
         {user.isLastActiveAdmin && <p className="account-admin-protection" id={lastAdminHelpId}>This is the only active administrator. Add another administrator before changing this account’s role or status.</p>}
       </article>
@@ -2066,13 +2103,14 @@ export function AdminUserDetailsPage() {
 }
 
 export function AdminSettingsPage() {
-  const { platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, userLimit, setBranding, setPlatformAccessSettings } = useAuth();
+  const { platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, userLimit, setBranding, setPlatformAccessSettings } = useAuth();
   const [name, setName] = useState(platformName);
   const [icon, setIcon] = useState<string | null>(platformIcon);
   const [iconEdited, setIconEdited] = useState(false);
   const [palette, setPalette] = useState<BrandingPalette>(themePalette);
   const [protocol, setProtocol] = useState<ConnectionProtocol>(connectionProtocol);
   const [allowRegistration, setAllowRegistration] = useState(registrationEnabled);
+  const [requireRegistrationApproval, setRequireRegistrationApproval] = useState(registrationApprovalRequired);
   const [userLimitValue, setUserLimitValue] = useState(String(userLimit));
   const [registeredUserCount, setRegisteredUserCount] = useState<number | null>(null);
   const [registeredUserCountError, setRegisteredUserCountError] = useState('');
@@ -2088,7 +2126,7 @@ export function AdminSettingsPage() {
   const [resetSuccess, setResetSuccess] = useState('');
   const [resetBusy, setResetBusy] = useState(false);
   const [resetStatusLoaded, setResetStatusLoaded] = useState(false);
-  useEffect(() => { setName(platformName); setIcon(platformIcon); setIconEdited(false); setPalette(themePalette); setProtocol(connectionProtocol); setAllowRegistration(registrationEnabled); setUserLimitValue(String(userLimit)); }, [platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, userLimit]);
+  useEffect(() => { setName(platformName); setIcon(platformIcon); setIconEdited(false); setPalette(themePalette); setProtocol(connectionProtocol); setAllowRegistration(registrationEnabled); setRequireRegistrationApproval(registrationApprovalRequired); setUserLimitValue(String(userLimit)); }, [platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, userLimit]);
   useEffect(() => {
     let active = true;
     const revision = registeredUserCountRevisionRef.current;
@@ -2130,18 +2168,19 @@ export function AdminSettingsPage() {
     }
     setError(''); setSuccess(''); setSaving(true);
     try {
-      const result = await api.put<{ platformName: string; platformIcon: string | null; themePalette: BrandingPalette; connectionProtocol: ConnectionProtocol; registrationEnabled: boolean; registrationAvailable: boolean; userLimit: number; registeredUserCount: number }>('/api/admin/settings', {
+      const result = await api.put<{ platformName: string; platformIcon: string | null; themePalette: BrandingPalette; connectionProtocol: ConnectionProtocol; registrationEnabled: boolean; registrationApprovalRequired: boolean; registrationAvailable: boolean; userLimit: number; registeredUserCount: number }>('/api/admin/settings', {
         platformName: normalizedName,
         themePalette: palette,
         connectionProtocol: protocol,
         registrationEnabled: allowRegistration,
+        registrationApprovalRequired: requireRegistrationApproval,
         userLimit: Number(userLimitValue),
         ...(iconEdited ? { platformIcon: icon } : {}),
       });
       registeredUserCountRevisionRef.current += 1;
       registeredUserCountControllerRef.current?.abort();
       registeredUserCountControllerRef.current = null;
-      setError(''); setRegisteredUserCountError(''); setName(result.platformName); setBranding(result.platformName, result.themePalette, result.platformIcon); setPlatformAccessSettings(result.connectionProtocol, result.registrationEnabled, result.registrationAvailable, result.userLimit); setIconEdited(false); setRegisteredUserCount(result.registeredUserCount); setSuccess('Platform settings saved.');
+      setError(''); setRegisteredUserCountError(''); setName(result.platformName); setBranding(result.platformName, result.themePalette, result.platformIcon); setPlatformAccessSettings(result.connectionProtocol, result.registrationEnabled, result.registrationApprovalRequired, result.registrationAvailable, result.userLimit); setIconEdited(false); setRegisteredUserCount(result.registeredUserCount); setSuccess('Platform settings saved.');
     } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Settings could not be saved.'); }
     finally { setSaving(false); }
   }
@@ -2200,6 +2239,7 @@ export function AdminSettingsPage() {
       <div className="app-select-field"><span>Public connection protocol</span><AppSelect<ConnectionProtocol> ariaLabel="Public connection protocol" describedBy="protocol-help" value={protocol} onChange={setProtocol} options={[{ value: 'http', label: 'HTTP' }, { value: 'https', label: 'HTTPS' }]} /></div>
       <p id="protocol-help" className="protocol-help">This controls secure session cookies. HTTPS requires a TLS certificate on this server or a reverse proxy. For TLS behind a proxy, set <code>TRUST_PROXY=true</code>.{connectionProtocol === 'https' && protocol === 'http' && <span className="protocol-session-warning">If you then open the site over HTTP, browsers will not send the existing secure session cookie, so you will need to sign in again.</span>}</p>
       <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={allowRegistration} onChange={(event) => setAllowRegistration(event.target.checked)} /></label>
+      <label className="setup-toggle"><span><strong>Require admin approval for new registrations</strong><small>New learners must be approved by an administrator before they can sign in or use the platform.</small></span><input type="checkbox" checked={requireRegistrationApproval} onChange={(event) => setRequireRegistrationApproval(event.target.checked)} /></label>
       <label>Maximum registered accounts<input className="user-limit-input" type="number" min={0} max={1000000} step={1} required value={userLimitValue} onChange={(event) => setUserLimitValue(event.target.value)} /><small>0 means no limit. The cap includes administrators, moderators, and learners.</small></label>
       {registeredUserCountError
         ? <div className="registered-count-recovery"><Notice>{registeredUserCountError}</Notice><Button type="button" variant="secondary" onClick={() => setRegisteredUserCountRetryVersion((version) => version + 1)}>Retry account count</Button></div>

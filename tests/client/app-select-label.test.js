@@ -233,7 +233,7 @@ test('user list explains and disables inline changes for the last active adminis
   assert.match(pageSource, /aria-describedby=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\} disabled=\{savingIds\.has\(user\.id\) \|\| user\.isLastActiveAdmin\} onClick=\{\(\) => updateUser\(user, \{ disabled: !user\.disabled \}\)\}/);
   assert.match(pageSource, /className="last-active-admin-note" id=\{lastAdminHelpId\}>This is the only active administrator\./);
   assert.match(pageSource, /changes\.role !== undefined \|\| \(changes\.disabled !== undefined && user\.role === 'admin'\)/);
-  assert.match(pageSource, /cause instanceof ApiError && cause\.code === 'last_admin'[\s\S]*?await load\(currentListState\.page, currentListState\.query, currentListState\.roleFilter\)\) setError\(cause\.message\)/);
+  assert.match(pageSource, /cause instanceof ApiError && cause\.code === 'last_admin'[\s\S]*?await load\(currentListState\.page, currentListState\.query, currentListState\.roleFilter, currentListState\.approvalFilter\)\) setError\(cause\.message\)/);
   assert.match(styles, /\.last-active-admin-note\s*\{[^}]*white-space:\s*normal;/);
 });
 
