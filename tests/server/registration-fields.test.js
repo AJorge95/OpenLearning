@@ -38,6 +38,38 @@ const fieldDefinitions = [
 ];
 const onePixelJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD58ooor9bPyo//2Q==', 'base64');
 
+const onePixelWebp = Buffer.from('UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v89WAAAAA==', 'base64');
+
+function createExtendedPlatformWebp() {
+  const imageChunk = onePixelWebp.subarray(12, 42);
+  const bytes = Buffer.alloc(12 + 18 + imageChunk.length);
+  bytes.write('RIFF', 0, 'ascii');
+  bytes.writeUInt32LE(bytes.length - 8, 4);
+  bytes.write('WEBP', 8, 'ascii');
+  bytes.write('VP8X', 12, 'ascii');
+  bytes.writeUInt32LE(10, 16);
+  imageChunk.copy(bytes, 30);
+  return bytes;
+}
+
+function createAnimatedPlatformWebp() {
+  const imageChunk = onePixelWebp.subarray(12, 42);
+  const bytes = Buffer.alloc(12 + 18 + 14 + 8 + 16 + imageChunk.length);
+  bytes.write('RIFF', 0, 'ascii');
+  bytes.writeUInt32LE(bytes.length - 8, 4);
+  bytes.write('WEBP', 8, 'ascii');
+  bytes.write('VP8X', 12, 'ascii');
+  bytes.writeUInt32LE(10, 16);
+  bytes[20] = 0x02;
+  bytes.write('ANIM', 30, 'ascii');
+  bytes.writeUInt32LE(6, 34);
+  bytes.write('ANMF', 44, 'ascii');
+  bytes.writeUInt32LE(16 + imageChunk.length, 48);
+  bytes.writeUIntLE(100, 64, 3);
+  imageChunk.copy(bytes, 68);
+  return bytes;
+}
+
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
   const directory = fs.mkdtempSync(path.join(tempBase, 'openlearning-registration-fields-'));
@@ -432,13 +464,17 @@ test('platform settings reject malformed and oversized icons without changing br
   const jpegWithTrailingBytes = Buffer.concat([onePixelJpeg, Buffer.from([0])]);
   const oversizedJpeg = Buffer.from(onePixelJpeg);
   oversizedJpeg.writeUInt16BE(1025, jpegFrameOffset + 7);
-  const oversizedWebp = Buffer.alloc(30);
-  oversizedWebp.write('RIFF', 0, 'ascii');
-  oversizedWebp.writeUInt32LE(22, 4);
-  oversizedWebp.write('WEBP', 8, 'ascii');
-  oversizedWebp.write('VP8X', 12, 'ascii');
-  oversizedWebp.writeUInt32LE(10, 16);
-  oversizedWebp.writeUIntLE(1024, 24, 3);
+  const oversizedWebp = Buffer.from(onePixelWebp);
+  oversizedWebp.writeUInt16LE(1025, 26);
+  const webpWithoutImageData = Buffer.alloc(30);
+  webpWithoutImageData.write('RIFF', 0, 'ascii');
+  webpWithoutImageData.writeUInt32LE(22, 4);
+  webpWithoutImageData.write('WEBP', 8, 'ascii');
+  webpWithoutImageData.write('VP8X', 12, 'ascii');
+  webpWithoutImageData.writeUInt32LE(10, 16);
+  const webpWithoutBitstream = Buffer.from(onePixelWebp.subarray(0, 30));
+  webpWithoutBitstream.writeUInt32LE(22, 4);
+  webpWithoutBitstream.writeUInt32LE(10, 16);
   const invalidIcons = [
     ['png', Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])],
     ['png', corruptedPngCrc],
@@ -451,6 +487,8 @@ test('platform settings reject malformed and oversized icons without changing br
     ['jpeg', jpegWithoutScanData],
     ['jpeg', jpegWithTrailingBytes],
     ['webp', truncatedWebp],
+    ['webp', webpWithoutImageData],
+    ['webp', webpWithoutBitstream],
     ['png', oversizedPng],
     ['jpeg', oversizedJpeg],
     ['webp', oversizedWebp],
@@ -494,6 +532,69 @@ test('platform settings accept a complete JPEG icon and serve its original bytes
     assert.equal(iconResponse.status, 200);
     assert.equal(iconResponse.headers.get('content-type'), 'image/jpeg');
     assert.deepEqual(Buffer.from(await iconResponse.arrayBuffer()), onePixelJpeg);
+  } finally {
+    if (originalName === null) database.prepare("DELETE FROM app_settings WHERE key = 'platform_name'").run();
+    else setSetting('platform_name', originalName);
+    if (originalIcon === null) database.prepare("DELETE FROM app_settings WHERE key = 'platform_icon'").run();
+    else setSetting('platform_icon', originalIcon);
+    if (originalVersion === null) database.prepare("DELETE FROM app_settings WHERE key = 'platform_icon_version'").run();
+    else setSetting('platform_icon_version', originalVersion);
+  }
+});
+
+test('platform settings accept a complete WebP icon and serve its original bytes', async () => {
+  const settingValue = (key) => database.prepare('SELECT value FROM app_settings WHERE key = ?').get(key)?.value ?? null;
+  const originalName = settingValue('platform_name');
+  const originalIcon = settingValue('platform_icon');
+  const originalVersion = settingValue('platform_icon_version');
+
+  try {
+    const response = await fetch(apiUrl('/admin/settings'), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        platformName: 'WebP acceptance test',
+        platformIcon: `data:image/webp;base64,${onePixelWebp.toString('base64')}`,
+      }),
+    });
+    assert.equal(response.status, 200, await response.clone().text());
+    const branding = await response.json();
+    const iconResponse = await fetch(new URL(branding.platformIcon, apiUrl('/')));
+    assert.equal(iconResponse.status, 200);
+    assert.equal(iconResponse.headers.get('content-type'), 'image/webp');
+    assert.deepEqual(Buffer.from(await iconResponse.arrayBuffer()), onePixelWebp);
+
+    const extendedWebp = createExtendedPlatformWebp();
+    const extendedResponse = await fetch(apiUrl('/admin/settings'), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        platformName: 'Extended WebP acceptance test',
+        platformIcon: `data:image/webp;base64,${extendedWebp.toString('base64')}`,
+      }),
+    });
+    assert.equal(extendedResponse.status, 200, await extendedResponse.clone().text());
+    const extendedBranding = await extendedResponse.json();
+    const extendedIconResponse = await fetch(new URL(extendedBranding.platformIcon, apiUrl('/')));
+    assert.equal(extendedIconResponse.status, 200);
+    assert.equal(extendedIconResponse.headers.get('content-type'), 'image/webp');
+    assert.deepEqual(Buffer.from(await extendedIconResponse.arrayBuffer()), extendedWebp);
+
+    const animatedWebp = createAnimatedPlatformWebp();
+    const animatedResponse = await fetch(apiUrl('/admin/settings'), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        platformName: 'Animated WebP acceptance test',
+        platformIcon: `data:image/webp;base64,${animatedWebp.toString('base64')}`,
+      }),
+    });
+    assert.equal(animatedResponse.status, 200, await animatedResponse.clone().text());
+    const animatedBranding = await animatedResponse.json();
+    const animatedIconResponse = await fetch(new URL(animatedBranding.platformIcon, apiUrl('/')));
+    assert.equal(animatedIconResponse.status, 200);
+    assert.equal(animatedIconResponse.headers.get('content-type'), 'image/webp');
+    assert.deepEqual(Buffer.from(await animatedIconResponse.arrayBuffer()), animatedWebp);
   } finally {
     if (originalName === null) database.prepare("DELETE FROM app_settings WHERE key = 'platform_name'").run();
     else setSetting('platform_name', originalName);

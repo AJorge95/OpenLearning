@@ -172,6 +172,65 @@ function platformIconPngScanlinesMatch(imageData, layout) {
   return offset === imageData.length;
 }
 
+function platformIconWebpImageDimensions(type, bytes, offset, size) {
+  if (type === 'VP8 ') {
+    if (size < 11 || (bytes[offset] & 1) !== 0
+      || bytes[offset + 3] !== 0x9d || bytes[offset + 4] !== 0x01 || bytes[offset + 5] !== 0x2a) return null;
+    const width = bytes.readUInt16LE(offset + 6) & 0x3fff;
+    const height = bytes.readUInt16LE(offset + 8) & 0x3fff;
+    return width > 0 && height > 0 ? { width, height } : null;
+  }
+  if (type === 'VP8L') {
+    if (size < 6 || bytes[offset] !== 0x2f) return null;
+    const width = 1 + (((bytes[offset + 2] & 0x3f) << 8) | bytes[offset + 1]);
+    const height = 1 + (((bytes[offset + 4] & 0x0f) << 10) | (bytes[offset + 3] << 2) | ((bytes[offset + 2] & 0xc0) >> 6));
+    return { width, height };
+  }
+  return null;
+}
+
+function platformIconWebpAnimationFrameHasImageData(bytes, offset, size, canvas) {
+  if (size < 24 || (bytes[offset + 15] & 0xfc) !== 0) return false;
+  const frameLeft = bytes.readUIntLE(offset, 3) * 2;
+  const frameTop = bytes.readUIntLE(offset + 3, 3) * 2;
+  const frameWidth = bytes.readUIntLE(offset + 6, 3) + 1;
+  const frameHeight = bytes.readUIntLE(offset + 9, 3) + 1;
+  if (frameLeft + frameWidth > canvas.width || frameTop + frameHeight > canvas.height) return false;
+
+  const frameEnd = offset + size;
+  let chunkOffset = offset + 16;
+  let hasAlpha = false;
+  let imageChunkCount = 0;
+  while (chunkOffset < frameEnd) {
+    if (chunkOffset + 8 > frameEnd) return false;
+    const chunkType = bytes.toString('ascii', chunkOffset, chunkOffset + 4);
+    const chunkSize = bytes.readUInt32LE(chunkOffset + 4);
+    const chunkDataOffset = chunkOffset + 8;
+    const chunkDataEnd = chunkDataOffset + chunkSize;
+    const paddedChunkEnd = chunkDataEnd + (chunkSize % 2);
+    if (paddedChunkEnd > frameEnd || (chunkSize % 2 && bytes[chunkDataEnd] !== 0)) return false;
+    if (chunkType === 'ALPH') {
+      if (hasAlpha || imageChunkCount > 0 || chunkSize === 0) return false;
+      hasAlpha = true;
+    } else if (chunkType === 'VP8 ') {
+      if (imageChunkCount > 0 || chunkSize < 4) return false;
+      const isKeyFrame = (bytes[chunkDataOffset] & 1) === 0;
+      if (isKeyFrame) {
+        const imageDimensions = platformIconWebpImageDimensions(chunkType, bytes, chunkDataOffset, chunkSize);
+        if (!imageDimensions || imageDimensions.width !== frameWidth || imageDimensions.height !== frameHeight) return false;
+      }
+      imageChunkCount += 1;
+    } else if (chunkType === 'VP8L') {
+      const imageDimensions = platformIconWebpImageDimensions(chunkType, bytes, chunkDataOffset, chunkSize);
+      if (hasAlpha || imageChunkCount > 0 || !imageDimensions
+        || imageDimensions.width !== frameWidth || imageDimensions.height !== frameHeight) return false;
+      imageChunkCount += 1;
+    }
+    chunkOffset = paddedChunkEnd;
+  }
+  return chunkOffset === frameEnd && imageChunkCount === 1;
+}
+
 function platformIconDimensions(type, bytes) {
   if (type === 'png') {
     if (bytes.length < 45
@@ -328,25 +387,69 @@ function platformIconDimensions(type, bytes) {
     const riffEnd = riffSize + 8;
     const firstChunkType = bytes.toString('ascii', 12, 16);
     const firstChunkSize = bytes.readUInt32LE(16);
-    const paddedChunkSize = firstChunkSize + (firstChunkSize % 2);
-    if (!(riffSize >= 12 && riffSize % 2 === 0 && riffEnd <= bytes.length
-      && ['VP8 ', 'VP8L', 'VP8X'].includes(firstChunkType)
-      && firstChunkSize > 0
-      && (firstChunkType !== 'VP8X' || firstChunkSize === 10)
-      && 20 + paddedChunkSize <= riffEnd)) return null;
-    if (firstChunkType === 'VP8X') {
-      return { width: bytes.readUIntLE(24, 3) + 1, height: bytes.readUIntLE(27, 3) + 1 };
+    if (riffSize < 12 || riffSize % 2 !== 0 || riffEnd > bytes.length
+      || firstChunkSize === 0 || 20 + firstChunkSize + (firstChunkSize % 2) > riffEnd
+      || !['VP8 ', 'VP8L', 'VP8X'].includes(firstChunkType)) return null;
+
+    const isExtended = firstChunkType === 'VP8X';
+    let dimensions;
+    let animationEnabled = false;
+    if (isExtended) {
+      if (firstChunkSize !== 10 || (bytes[20] & 0xc1) !== 0
+        || bytes[21] !== 0 || bytes[22] !== 0 || bytes[23] !== 0) return null;
+      animationEnabled = (bytes[20] & 0x02) !== 0;
+      dimensions = { width: bytes.readUIntLE(24, 3) + 1, height: bytes.readUIntLE(27, 3) + 1 };
+    } else {
+      dimensions = platformIconWebpImageDimensions(firstChunkType, bytes, 20, firstChunkSize);
+      if (!dimensions) return null;
     }
-    if (firstChunkType === 'VP8L') {
-      if (firstChunkSize < 5 || bytes[20] !== 0x2f) return null;
-      const width = 1 + (((bytes[22] & 0x3f) << 8) | bytes[21]);
-      const height = 1 + (((bytes[24] & 0x0f) << 10) | (bytes[23] << 2) | ((bytes[22] & 0xc0) >> 6));
-      return { width, height };
+
+    let chunkOffset = 12;
+    let chunkCount = 0;
+    let staticImageCount = 0;
+    let animationControlCount = 0;
+    let animationFrameCount = 0;
+    let alphaSeen = false;
+    while (chunkOffset < riffEnd) {
+      if (chunkOffset + 8 > riffEnd) return null;
+      const chunkType = bytes.toString('ascii', chunkOffset, chunkOffset + 4);
+      const chunkSize = bytes.readUInt32LE(chunkOffset + 4);
+      const chunkDataOffset = chunkOffset + 8;
+      const chunkDataEnd = chunkDataOffset + chunkSize;
+      const paddedChunkEnd = chunkDataEnd + (chunkSize % 2);
+      if (paddedChunkEnd > riffEnd || (chunkSize % 2 && bytes[chunkDataEnd] !== 0)) return null;
+      if ((chunkCount === 0 && chunkType !== firstChunkType) || (chunkCount > 0 && chunkType === 'VP8X')) return null;
+
+      if (chunkType === 'VP8X') {
+        if (chunkCount !== 0 || chunkSize !== 10) return null;
+      } else if (chunkType === 'VP8 ' || chunkType === 'VP8L') {
+        const imageDimensions = platformIconWebpImageDimensions(chunkType, bytes, chunkDataOffset, chunkSize);
+        if (!imageDimensions) return null;
+        if (isExtended) {
+          if (animationEnabled || imageDimensions.width !== dimensions.width || imageDimensions.height !== dimensions.height) return null;
+        } else if (chunkCount !== 0) return null;
+        if (chunkType === 'VP8L' && alphaSeen) return null;
+        staticImageCount += 1;
+      } else if (chunkType === 'ALPH') {
+        if (!isExtended || animationEnabled || alphaSeen || staticImageCount > 0 || chunkSize === 0) return null;
+        alphaSeen = true;
+      } else if (chunkType === 'ANIM') {
+        if (!isExtended || !animationEnabled || animationControlCount > 0 || chunkSize !== 6) return null;
+        animationControlCount += 1;
+      } else if (chunkType === 'ANMF') {
+        if (!isExtended || !animationEnabled || animationControlCount !== 1
+          || !platformIconWebpAnimationFrameHasImageData(bytes, chunkDataOffset, chunkSize, dimensions)) return null;
+        animationFrameCount += 1;
+      } else if (!isExtended) return null;
+
+      chunkOffset = paddedChunkEnd;
+      chunkCount += 1;
     }
-    if (firstChunkSize < 10 || bytes[23] !== 0x9d || bytes[24] !== 0x01 || bytes[25] !== 0x2a) return null;
-    const width = bytes.readUInt16LE(26) & 0x3fff;
-    const height = bytes.readUInt16LE(28) & 0x3fff;
-    return width > 0 && height > 0 ? { width, height } : null;
+    if (chunkOffset !== riffEnd) return null;
+    if (animationEnabled) {
+      return staticImageCount === 0 && animationControlCount === 1 && animationFrameCount > 0 ? dimensions : null;
+    }
+    return staticImageCount === 1 && animationControlCount === 0 && animationFrameCount === 0 ? dimensions : null;
   }
   return null;
 }
