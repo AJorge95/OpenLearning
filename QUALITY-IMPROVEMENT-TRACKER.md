@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Replay the reported account-role selector boundary
+
+- **Reviewed:** The repeated right-side click report, current account-detail markup and width rules, the rendered page, and the existing selector regressions.
+- **Result:** No additional source change. The editable learner account shows a 144px role trigger. Clicking 2px beside it or in the wide area to its right leaves the menu closed; opening the trigger and clicking in that right-side area dismisses it. The selected role remained Learner. Current markup uses a separate visible label and a trigger-bounded combobox; the attached screenshot still identifies the earlier wrapping-label structure.
+- **Why no duplicate fix:** The current rendered interaction matches the intended boundary, and the trigger-width and outside-click fixes are already in source. A new width or pointer rule would not change this reproduced behavior.
+- **Checked:** Signed-in local Chrome at 1718 × 1214, account-details accessibility tree and screenshot, trigger and outside-area interactions, and `node --test tests/client/app-select-label.test.js tests/client/app-select-position.test.js` (14/14). No account setting was changed.
+
 ## 2026-10-11 — Reproduce the account-role selector's right-side boundary
 
 - **Reviewed:** The supplied target path and screenshot against the current JSX, selector root/trigger dimensions, pointer-event rules, and outside-click handling.
