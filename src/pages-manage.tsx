@@ -422,7 +422,7 @@ export function CourseAnalyticsPage() {
   </div>;
 }
 
-function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: CourseModule; onSaved: () => void | Promise<void>; onError: (message: string) => void; titleInputRef?: (node: HTMLInputElement | null) => void }) {
+function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: CourseModule; onSaved: (action: 'saved' | 'removed') => void | Promise<void>; onError: (message: string) => void; titleInputRef?: (node: HTMLInputElement | null) => void }) {
   const existing = module.quiz;
   const [title, setTitle] = useState(existing?.title || `${module.title} quiz`);
   const [passMark, setPassMark] = useState(existing?.passMark ?? 70);
@@ -530,7 +530,7 @@ function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: Cours
         choices: choices.map(({ text, isCorrect }) => ({ text, isCorrect })),
       }));
       await api.put(`/api/manage/modules/${module.id}/quiz`, { title, passMark: Number(passMark), questions: savedQuestions });
-      await onSaved();
+      await onSaved('saved');
     } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Quiz could not be saved.'); }
     finally { setBusyAction(null); }
   }
@@ -538,7 +538,7 @@ function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: Cours
     if (!existing || busyAction) return;
     if (!confirmed) { setConfirmingRemoval(true); return; }
     setBusyAction('remove');
-    try { await api.delete(`/api/manage/modules/${module.id}/quiz`); await onSaved(); }
+    try { await api.delete(`/api/manage/modules/${module.id}/quiz`); await onSaved('removed'); }
     catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Quiz could not be removed.'); }
     finally { setBusyAction(null); }
   }
@@ -1783,10 +1783,21 @@ export function CourseEditorPage() {
               {editingLessonId === lesson.id && <LessonDetailsEditor lesson={lesson} courseId={courseId} beforeChange={saveCourseDetailsIfChanged} onChanged={load} onClose={() => setEditingLessonId('')} onError={setError} onNotice={setNotice} />}
             </div>)}
             <div className="module-add-actions"><button type="button" className="text-action" disabled={addingLessonModuleIds.has(module.id)} onClick={() => addLesson(module.id)}><Plus size={15} />{addingLessonModuleIds.has(module.id) ? 'Adding lesson…' : 'Add lesson'}</button><span className="add-action-divider" /><button ref={(node) => { if (node) quizAddButtonRefs.current.set(module.id, node); else quizAddButtonRefs.current.delete(module.id); }} type="button" className="text-action" onClick={() => void addModuleQuiz(module)} disabled={Boolean(module.quiz) || addingQuizModuleIds.has(module.id)} aria-busy={addingQuizModuleIds.has(module.id)}><CircleHelp size={15} />{module.quiz ? 'Quiz added' : addingQuizModuleIds.has(module.id) ? 'Adding quiz…' : 'Add module quiz'}</button></div>
-            {module.quiz && <QuizEditor module={module} onSaved={async () => {
-              try { await saveCourseDetailsIfChanged(); await load(); setNotice('Quiz saved.'); }
-              catch (cause) { setError(cause instanceof ApiError ? `Quiz saved, but course details could not be saved: ${cause.message}` : 'Quiz saved, but course details could not be saved.'); }
-            }} onError={setError} titleInputRef={(node) => { if (node) quizTitleInputRefs.current.set(module.id, node); else quizTitleInputRefs.current.delete(module.id); }} />}
+            {module.quiz && <QuizEditor module={module} onSaved={async (action) => {
+              const requestedCourseId = course.id;
+              if (routeCourseIdRef.current !== requestedCourseId) return;
+              try {
+                await saveCourseDetailsIfChanged();
+                if (routeCourseIdRef.current !== requestedCourseId) return;
+                await load(requestedCourseId);
+                if (routeCourseIdRef.current === requestedCourseId) setNotice(action === 'removed' ? 'Quiz removed.' : 'Quiz saved.');
+              } catch (cause) {
+                if (routeCourseIdRef.current === requestedCourseId) {
+                  const message = cause instanceof ApiError ? cause.message : 'Course details could not be saved.';
+                  setError(action === 'removed' ? `Quiz removed, but course details could not be saved: ${message}` : `Quiz saved, but course details could not be saved: ${message}`);
+                }
+              }
+            }} onError={(message) => { if (routeCourseIdRef.current === course.id) setError(message); }} titleInputRef={(node) => { if (node) quizTitleInputRefs.current.set(module.id, node); else quizTitleInputRefs.current.delete(module.id); }} />}
           </div>}
         </div>)}
         {!course.modules?.length && <EmptyState headingLevel={3} icon={<BookOpen size={22} />} title="Start with a module" detail="Modules organize the video lessons in your course." action={<Button variant="secondary" onClick={(event) => { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); }}><Plus size={16} />Add first module</Button>} />}

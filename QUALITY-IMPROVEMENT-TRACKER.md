@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Distinguish quiz removal from quiz save
+
+- **Reviewed:** Quiz save and delete both called the same completion callback, whose parent always displayed “Quiz saved.” The callback could also report after navigation to another course.
+- **Improvement:** Pass the completed action to the parent, show “Quiz removed” after deletion and “Quiz saved” after saving, and scope completion feedback and errors to the source course.
+- **Why it helps:** Staff receive accurate confirmation for destructive quiz removal and do not see a delayed result in a different course editor.
+- **Backend review:** The existing quiz-delete route commits deletion and its audit entry transactionally and returns no content; the client contract did not change.
+- **Checked:** Course-editor route and quiz-removal tests passed (13/13), the full `npm test` suite passed (599/599), `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. Rendered removal was not run because it changes saved course data; Playwright is not installed in this checkout.
+
 ## 2026-10-11 — Scope curriculum action feedback to its course
 
 - **Reviewed:** Lesson creation, module and lesson deletion, and curriculum reordering all set editor errors from their async handlers without checking whether staff had navigated to another course.
