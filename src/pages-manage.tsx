@@ -144,10 +144,10 @@ function CourseRowMenu({ course, busyAction, onStatusChange, onDelete }: {
     <button ref={triggerRef} type="button" className="row-menu-trigger" aria-label={`More actions for ${course.title}`} aria-haspopup="menu" aria-expanded={open} aria-controls={`${id}-menu`} onClick={(event) => open ? closeMenu() : openMenu(event.detail === 0)} onKeyDown={(event) => { if (event.key === 'ArrowDown' && !open) { event.preventDefault(); openMenu(true); } }}><MoreVertical size={18} /></button>
     {open && createPortal(<div ref={menuRef} id={`${id}-menu`} className="row-menu-popover" role="menu" aria-label={`Actions for ${course.title}`} style={position} onKeyDown={handleMenuKeyDown}>
       <Link to={`/manage/courses/${course.id}/access`} role="menuitem" onClick={() => closeMenu()}>Assign learners</Link>
-      {course.status === 'draft' && <button type="button" role="menuitem" onClick={() => { closeMenu(); onStatusChange(course, 'published'); }} disabled={isBusy} aria-busy={busyAction === 'publish'}>{busyAction === 'publish' ? 'Publishing…' : 'Publish'}</button>}
-      {course.status === 'published' && <button type="button" role="menuitem" onClick={() => { closeMenu(); onStatusChange(course, 'draft'); }} disabled={isBusy} aria-busy={busyAction === 'unpublish'}>{busyAction === 'unpublish' ? 'Unpublishing…' : 'Unpublish'}</button>}
-      {course.status !== 'archived' && <button type="button" role="menuitem" onClick={() => { closeMenu(); onStatusChange(course, 'archived'); }} disabled={isBusy} aria-busy={busyAction === 'archive'}>{busyAction === 'archive' ? 'Archiving…' : 'Archive'}</button>}
-      {course.status === 'archived' && <button type="button" role="menuitem" className="danger-menu-item" onClick={() => { closeMenu(); onDelete(course); }} disabled={isBusy} aria-busy={busyAction === 'delete'}>{busyAction === 'delete' ? 'Deleting…' : 'Delete permanently'}</button>}
+      {course.status === 'draft' && <button type="button" role="menuitem" onClick={() => { closeMenu(true); onStatusChange(course, 'published'); }} disabled={isBusy} aria-busy={busyAction === 'publish'}>{busyAction === 'publish' ? 'Publishing…' : 'Publish'}</button>}
+      {course.status === 'published' && <button type="button" role="menuitem" onClick={() => { closeMenu(true); onStatusChange(course, 'draft'); }} disabled={isBusy} aria-busy={busyAction === 'unpublish'}>{busyAction === 'unpublish' ? 'Unpublishing…' : 'Unpublish'}</button>}
+      {course.status !== 'archived' && <button type="button" role="menuitem" onClick={() => { closeMenu(true); onStatusChange(course, 'archived'); }} disabled={isBusy} aria-busy={busyAction === 'archive'}>{busyAction === 'archive' ? 'Archiving…' : 'Archive'}</button>}
+      {course.status === 'archived' && <button type="button" role="menuitem" className="danger-menu-item" onClick={() => { closeMenu(true); onDelete(course); }} disabled={isBusy} aria-busy={busyAction === 'delete'}>{busyAction === 'delete' ? 'Deleting…' : 'Delete permanently'}</button>}
     </div>, document.body)}
   </div>;
 }
@@ -259,7 +259,14 @@ export function CourseManagementPage() {
     if (busyActionsRef.current[course.id]) return;
     const action: CourseRowAction = nextStatus === 'published' ? 'publish' : nextStatus === 'draft' ? 'unpublish' : 'archive';
     markCourseAction(course.id, action); setError('');
-    try { await api.patch(`/api/manage/courses/${course.id}`, { status: nextStatus, ...(nextStatus === 'draft' ? { unpublish: true } : {}) }); await load(); }
+    try {
+      await api.patch(`/api/manage/courses/${course.id}`, { status: nextStatus, ...(nextStatus === 'draft' ? { unpublish: true } : {}) });
+      await load();
+      if (filtersRef.current.status !== 'all' && filtersRef.current.status !== nextStatus) {
+        // A changed status can remove its row from the active filter; focus the persistent search instead.
+        courseSearchInputRef.current?.focus();
+      }
+    }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Course status could not be changed.'); }
     finally { markCourseAction(course.id, null); }
   }
@@ -268,7 +275,12 @@ export function CourseManagementPage() {
     if (busyActionsRef.current[course.id]) return;
     if (!confirmed) { setPendingDeleteCourse(course); return; }
     markCourseAction(course.id, 'delete'); setError('');
-    try { await api.delete(`/api/manage/courses/${course.id}`); await load(); }
+    try {
+      await api.delete(`/api/manage/courses/${course.id}`);
+      await load();
+      // The deleted row no longer provides a stable place to return keyboard focus.
+      courseSearchInputRef.current?.focus();
+    }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Course could not be deleted.'); }
     finally { markCourseAction(course.id, null); }
   }
