@@ -14,6 +14,7 @@ import { MAX_LEARNING_PATH_COURSES } from '../shared/learning-path-limits.js';
 import { isPathCourseCheckboxDisabled, togglePathCourseSelection } from './path-course-selection';
 import { useAuth } from './auth-context';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
+import { hasUnsavedPathChanges, type PathEditorValue } from './path-editor-dirty';
 
 function requestMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
@@ -36,11 +37,12 @@ const pathCourseDeadlineFormatter = new Intl.DateTimeFormat(undefined, { dateSty
 const calendarTimeFormatter = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
 const calendarDateTimeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
 
-function PathEditor({ existing, busy, onSave, onCancel }: {
+function PathEditor({ existing, busy, onSave, onCancel, onDirtyChange }: {
   existing: LearningPath | null;
   busy: boolean;
   onSave: (path: { title: string; description: string; status: 'draft' | 'published'; selfEnrollment: boolean; courses: Array<{ courseId: string; requiresPrevious: boolean }> }) => void;
   onCancel: () => void;
+  onDirtyChange: (hasChanges: boolean) => void;
 }) {
   const [title, setTitle] = useState(existing?.title || '');
   const [description, setDescription] = useState(existing?.description || '');
@@ -56,6 +58,13 @@ function PathEditor({ existing, busy, onSave, onCancel }: {
   const [courseLoading, setCourseLoading] = useState(true);
   const [courseLoadError, setCourseLoadError] = useState('');
   const [failedCoursePage, setFailedCoursePage] = useState<number | null>(null);
+  const initialValueRef = useRef<PathEditorValue>({
+    title: existing?.title || '',
+    description: existing?.description || '',
+    status: existing?.status === 'published' ? 'published' : 'draft',
+    selfEnrollment: Boolean(existing?.selfEnrollment),
+    courses: existing?.courses.map((course) => ({ courseId: course.id, requiresPrevious: course.requiresPrevious })) || [],
+  });
   const pathTitleInputRef = useRef<HTMLInputElement>(null);
   const courseRequestSequenceRef = useRef(0);
   const courseRequestControllerRef = useRef<AbortController | null>(null);
@@ -64,6 +73,8 @@ function PathEditor({ existing, busy, onSave, onCancel }: {
     // The editor appears above the selected card, so move keyboard focus into it.
     pathTitleInputRef.current?.focus();
   }, [existing]);
+  const hasUnsavedChanges = hasUnsavedPathChanges({ title, description, status, selfEnrollment, courses: selected }, initialValueRef.current);
+  useEffect(() => onDirtyChange(hasUnsavedChanges), [hasUnsavedChanges, onDirtyChange]);
   const loadCoursePage = useCallback(async (requestedPage: number, replace = false) => {
     if (courseRequestControllerRef.current) return;
     const controller = new AbortController();
@@ -176,7 +187,9 @@ export function LearningPathsPage() {
   const pathStatusFilterButtonsRef = useRef<Partial<Record<LearningPathStatusFilter, HTMLButtonElement>>>({});
   const pendingPathStatusFocusRef = useRef<LearningPathStatusFilter | null>(null);
   const pathEditorReturnFocusRef = useRef<HTMLButtonElement | null>(null);
+  const pathEditorDirtyRef = useRef(false);
   const [editing, setEditing] = useState<LearningPath | null>(null);
+  const [pendingPathEdit, setPendingPathEdit] = useState<LearningPath | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -211,9 +224,33 @@ export function LearningPathsPage() {
   const pathsRequestControllerRef = useRef<AbortController | null>(null);
   const requestedPathPageRef = useRef(1);
 
+  const updatePathEditorDirty = useCallback((hasChanges: boolean) => {
+    pathEditorDirtyRef.current = hasChanges;
+  }, []);
+
+  function requestPathEdit(path: LearningPath, trigger: HTMLButtonElement) {
+    if (editing?.id === path.id) return;
+    pathEditorReturnFocusRef.current = trigger;
+    if (pathEditorDirtyRef.current) {
+      // Switching the keyed editor would discard local form values without saving.
+      setPendingPathEdit(path);
+      return;
+    }
+    setEditing(path);
+  }
+
+  function confirmPathEdit() {
+    const path = pendingPathEdit;
+    setPendingPathEdit(null);
+    if (!path) return;
+    pathEditorDirtyRef.current = false;
+    setEditing(path);
+  }
+
   function cancelPathEdit() {
     const trigger = pathEditorReturnFocusRef.current;
     pathEditorReturnFocusRef.current = null;
+    pathEditorDirtyRef.current = false;
     setEditing(null);
     if (trigger?.isConnected) trigger.focus();
     else pathStatusFilterButtonsRef.current.all?.focus();
@@ -503,7 +540,7 @@ export function LearningPathsPage() {
     <PageHeading title="Learning paths" subtitle={staff ? 'Guide learners through a course sequence and assign paths.' : 'Follow a guided sequence of courses and track your progress.'} />
     {error && (loadFailed ? <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => void load(requestedPathPageRef.current)}>Try again</Button></div> : <div className="inline-notice" role="alert">{error}</div>)}{notice && <div className="inline-notice inline-notice-success" role="status">{notice}</div>}
     {hasEmptyPathResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyPathState.title}. {emptyPathState.detail}</p>}
-    {staff && <PathEditor key={editing?.id || 'new'} existing={editing} busy={saving} onSave={savePath} onCancel={cancelPathEdit} />}
+    {staff && <PathEditor key={editing?.id || 'new'} existing={editing} busy={saving} onSave={savePath} onCancel={cancelPathEdit} onDirtyChange={updatePathEditorDirty} />}
     {staff && <div className="management-tabs" role="group" aria-label="Filter learning paths by status">{learningPathStatusFilters.map((filter) => <button type="button" key={filter.value} ref={(button) => { if (button) pathStatusFilterButtonsRef.current[filter.value] = button; else delete pathStatusFilterButtonsRef.current[filter.value]; }} aria-pressed={pathStatus === filter.value} className={pathStatus === filter.value ? 'active' : ''} disabled={loading || saving || assignmentBusy} onClick={() => changePathStatus(filter.value)}>{filter.label}</button>)}</div>}
     {loading && !paths.length ? <div className="page-loading" role="status">Loading learning paths…</div> : paths.length ? <>
       {loading && <div className="log-loading" role="status">Loading learning paths…</div>}
@@ -520,7 +557,7 @@ export function LearningPathsPage() {
           {!staff && course.unlocked ? <Link className="text-action" to={`/courses/${course.id}`} aria-label={`${course.completed ? 'Review course' : 'Start course'}: ${course.title}`}>{course.completed ? 'Review course' : 'Start course'}</Link> : !staff ? <span className="muted">Complete earlier courses to unlock</span> : <Link className="text-action" to={`/manage/courses/${course.id}/edit`} aria-label={`Edit course: ${course.title}`}>Edit course</Link>}
         </li>)}</ol>
         <div className="program-card-footer">
-          {staff ? path.status === 'archived' ? <Button variant="secondary" aria-label={`Restore ${path.title} as draft`} disabled={saving || assignmentBusy} aria-busy={changingPathStatusId === path.id} onClick={() => void restorePath(path)}><RotateCcw size={15} />{changingPathStatusId === path.id ? 'Restoring…' : 'Restore as draft'}</Button> : <><Button variant="secondary" aria-label={`Edit path: ${path.title}`} onClick={(event) => { pathEditorReturnFocusRef.current = event.currentTarget; setEditing(path); }} disabled={saving || assignmentBusy}>Edit path</Button>
+          {staff ? path.status === 'archived' ? <Button variant="secondary" aria-label={`Restore ${path.title} as draft`} disabled={saving || assignmentBusy} aria-busy={changingPathStatusId === path.id} onClick={() => void restorePath(path)}><RotateCcw size={15} />{changingPathStatusId === path.id ? 'Restoring…' : 'Restore as draft'}</Button> : <><Button variant="secondary" aria-label={`Edit path: ${path.title}`} onClick={(event) => requestPathEdit(path, event.currentTarget)} disabled={saving || assignmentBusy}>Edit path</Button>
             {canAssignLearningPathLearners(path.status)
               ? <Button variant="secondary" aria-label={assignmentPath === path.id ? `Close assignments for ${path.title}` : `Assign learners to ${path.title}`} aria-expanded={assignmentPath === path.id} aria-controls={assignmentPath === path.id ? `path-assignments-${path.id}` : undefined} disabled={saving || assignmentBusy} onClick={() => void toggleAssignments(path)}><UsersRound size={15} />{assignmentPath === path.id ? 'Close assignments' : 'Assign learners'}</Button>
               : <span className="muted">Publish this path to assign learners.</span>}
@@ -550,6 +587,7 @@ export function LearningPathsPage() {
     </> : loadFailed ? null : <EmptyState title={emptyPathState.title} detail={emptyPathState.detail} />}
     {pendingAssignmentRemoval && assignmentPath === pendingAssignmentRemoval.pathId && pendingRemovalPath && pendingRemovalLearner && <ConfirmationDialog {...pathAssignmentRemovalConfirmation(pendingAssignmentRemoval.learnerUsername, pendingAssignmentRemoval.pathTitle)} confirmLabel="Remove assignment" onCancel={() => setPendingAssignmentRemoval(null)} onConfirm={() => void confirmAssignmentRemoval()} />}
     {pendingPathArchive && paths.some((path) => path.id === pendingPathArchive.id && path.title === pendingPathArchive.title && path.status !== 'archived') && <ConfirmationDialog {...pathArchiveConfirmation(pendingPathArchive.title)} confirmLabel="Archive path" onCancel={() => setPendingPathArchive(null)} onConfirm={confirmPathArchive} />}
+    {pendingPathEdit && <ConfirmationDialog title="Discard unsaved path changes?" description={`Your current path changes will be lost if you switch to editing “${pendingPathEdit.title}”.`} confirmLabel="Discard and edit" onCancel={() => setPendingPathEdit(null)} onConfirm={confirmPathEdit} />}
   </div>;
 }
 

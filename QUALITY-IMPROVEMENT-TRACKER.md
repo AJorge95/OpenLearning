@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Protect unsaved learning-path edits when switching editors
+
+- **Reviewed:** The learning-path editor's keyed local state, all editable fields, and every row action that can replace the currently displayed form.
+- **Improvement:** Compare the editor values with the path's initial values, including course order and prerequisites. When staff select another path while the form is dirty, ask before discarding those changes; clean forms and the already-open path switch without an extra prompt.
+- **Why it helps:** Staff can move between paths without silently losing a partially completed new path or unsaved edits to an existing one.
+- **Backend review:** The path save payload and server validation are unchanged; no backend behavior change was indicated.
+- **Checked:** Learning-path editor, dirty-state, assignment, and course-option tests passed (16/16). `npm run build` passed TypeScript checking and Vite bundling; `git diff --check` passed. The confirmation flow was not browser-tested; dirty-value comparisons are unit-tested and the prompt wiring is covered by a source regression.
+
 ## 2026-10-11 — Preserve keyboard context when editing learning paths
 
 - **Reviewed:** The inline learning-path editor, row actions, cancel/save transitions, and the existing status-filter focus recovery; also rechecked the client request-cancellation flow and structured server parser errors.
