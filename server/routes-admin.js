@@ -16,9 +16,9 @@ import { cancelPlatformReset, confirmPlatformReset, finishPlatformReset, getPlat
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
 
-function isLastActiveAdministrator(user) {
+function isLastActiveAdministrator(user, activeAdminCount) {
   if (user.role !== 'admin' || Boolean(user.disabled)) return false;
-  const activeAdmins = db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0").get().count;
+  const activeAdmins = activeAdminCount ?? db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0").get().count;
   return activeAdmins <= 1;
 }
 
@@ -189,6 +189,7 @@ adminRouter.get('/users', (req, res) => {
     ${where}
     ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
     .all(...params, pageSize, (page - 1) * pageSize);
+  const activeAdminCount = db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0").get().count;
   res.json({ users: users.map((user) => ({
     id: user.id,
     username: user.username,
@@ -197,6 +198,7 @@ adminRouter.get('/users', (req, res) => {
     disabled: Boolean(user.disabled),
     createdAt: user.created_at,
     isCurrentUser: user.id === req.currentUser.id,
+    isLastActiveAdmin: isLastActiveAdministrator(user, activeAdminCount),
   })), total, page, pageSize });
 });
 

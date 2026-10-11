@@ -431,6 +431,13 @@ test('an administrator can be disabled while another active administrator remain
     VALUES (?, ?, ?, ?, 'admin')`).run(targetId, 'second_admin', 'second.admin@example.invalid', 'not-used-by-this-fixture');
 
   try {
+    const adminsBeforeUpdate = await fetch(apiUrl('/admin/users?role=admin'));
+    assert.equal(adminsBeforeUpdate.status, 200);
+    assert.deepEqual((await adminsBeforeUpdate.json()).users.map((user) => [user.id, user.isLastActiveAdmin]), [
+      ['registration-fields-admin', false],
+      [targetId, false],
+    ]);
+
     for (const userId of ['registration-fields-admin', targetId]) {
       const details = await fetch(apiUrl(`/admin/users/${userId}`));
       assert.equal(details.status, 200);
@@ -447,6 +454,12 @@ test('an administrator can be disabled while another active administrator remain
     assert.equal(updatedTarget.user.disabled, true);
     assert.equal(updatedTarget.user.isLastActiveAdmin, false);
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0").get().count, 1);
+    const remainingAdmins = await fetch(apiUrl('/admin/users?role=admin'));
+    assert.equal(remainingAdmins.status, 200);
+    assert.deepEqual((await remainingAdmins.json()).users.map((user) => [user.id, user.isLastActiveAdmin]), [
+      ['registration-fields-admin', true],
+      [targetId, false],
+    ]);
     const remainingAdmin = await fetch(apiUrl('/admin/users/registration-fields-admin'));
     assert.equal(remainingAdmin.status, 200);
     assert.equal((await remainingAdmin.json()).user.isLastActiveAdmin, true);

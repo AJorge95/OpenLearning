@@ -27,6 +27,7 @@ export interface User {
   lastName?: string;
   role: Role;
   disabled: boolean;
+  isLastActiveAdmin?: boolean;
   createdAt?: string;
   lastLoginAt?: string | null;
 }
