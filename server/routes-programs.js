@@ -289,10 +289,10 @@ programsRouter.post('/manage/learning-paths', requireStaff, (req, res) => {
   const selfEnrollment = body.selfEnrollment === undefined ? false : booleanValue(body.selfEnrollment, 'Self-enrollment');
   const status = body.status === undefined ? 'draft' : body.status;
   if (!['draft', 'published'].includes(status)) fail(400, 'Choose draft or published for this learning path.', 'validation_error');
-  const courses = normalizePathCourses(body.courses === undefined ? [] : body.courses, selfEnrollment);
-  if (status === 'published' && courses.length === 0) fail(400, 'Add at least one course before publishing a learning path.', 'empty_path');
   const id = randomUUID();
   const create = db.transaction(() => {
+    const courses = normalizePathCourses(body.courses === undefined ? [] : body.courses, selfEnrollment);
+    if (status === 'published' && courses.length === 0) fail(400, 'Add at least one course before publishing a learning path.', 'empty_path');
     db.prepare(`INSERT INTO learning_paths (id, title, description, status, self_enrollment, created_by, updated_by)
       VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, title, description, status, selfEnrollment ? 1 : 0, req.currentUser.id, req.currentUser.id);
     savePathCourses(id, courses);

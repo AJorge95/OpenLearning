@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Validate learning-path courses inside the write transaction
+
+- **Reviewed:** Learning-path updates validate selected course status and visibility inside their immediate transaction, but creation performed the same lookups before acquiring its write transaction.
+- **Improvement:** Move creation's course-list validation and published-path non-empty check into the transaction. Add a route regression that archives a course between request validation and transaction start and confirms the path is rejected without a write.
+- **Why it helps:** A course that becomes archived while a path is being created cannot slip into the saved path using a stale validation result.
+- **Checked:** `node --test tests/server/course-analytics.test.js` passed (93/93); full `npm test` passed (399/399); `npx tsc --noEmit`, `npm run build`, `node --check server/routes-programs.js`, `node --check tests/server/course-analytics.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Reject malformed learning-path course lists
 
 - **Reviewed:** Learning-path creation and update both validate course lists, but creation used `body.courses || []`, which silently converted explicitly supplied `null`, `false`, `0`, and empty-string values into valid empty draft lists.
