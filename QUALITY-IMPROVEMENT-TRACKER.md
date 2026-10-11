@@ -16,6 +16,14 @@
 - **Backend review:** Course-save and delete endpoints keep their current validation and persistence behavior; no API or schema change was needed.
 - **Checked:** Focused editor, confirmation-dialog, route-guard, and role-selector tests passed; the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict TypeScript checking and Vite bundling; `git diff --check` passed. In a temporary local browser tab, editing a title then clicking Courses or using browser Back opened the prompt; Keep editing retained the draft and Discard changes returned to the list without changing the saved title. The browser unload guard was verified in code and regression coverage.
 
+## 2026-10-12 — Recheck API error responses and media delivery
+
+- **Reviewed:** Express middleware and fallback order, the shared HTTP error handler, startup media-cleanup reporting, protected byte-range streaming, caption access checks, and the current account-role selector report.
+- **Result:** No runtime change. Expected parser, upload, domain, and uniqueness errors receive structured client responses; unexpected errors are logged without exposing internal details; errors after response headers are forwarded. Protected media checks access before streaming, and missing files return a not-found response.
+- **Why no change:** The inspected boundaries have matching regression coverage and no new failure or interaction mismatch appeared. The role-selector report remains covered by the adjacent verification entry.
+- **Checked:** `node --test tests/server/last-login.test.js tests/server/media-routes.test.js` passed (35/35). Working tree was clean after the preceding push; the shared error and media paths were read directly.
+- **Needed to continue:** A reproducible API or media failure outside the existing cases, fresh workload measurements for performance work, or new current-build browser evidence contradicting the selector verification.
+
 ## 2026-10-12 — Retain quiz submission locks per route
 
 - **Reviewed:** The learner quiz page's single in-flight route-key ref, route-change state resets, and the attempt endpoint's transactional insert. A pending submission on one quiz could be overwritten by a submission on another route, allowing a second attempt if the learner returned before the first finished; the route sequence also hid a successful response after returning to its quiz.
