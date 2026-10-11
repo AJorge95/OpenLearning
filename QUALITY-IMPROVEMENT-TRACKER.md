@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep the quiz pass threshold visible in results
+
+- **Reviewed:** The new aggregate result panel showed the learner's correct-answer count and percentage but no longer displayed the quiz's pass mark. A learner who failed could not see what score they needed without returning to the quiz.
+- **Improvement:** Show the score and pass threshold together. Failed results state the required percentage; passed results identify the threshold met. The existing quiz data already supplies the pass mark, so the result API stays aggregate-only.
+- **Why it helps:** Learners can understand both their result and the target for a retry without exposing per-question answers or changing quiz scoring.
+- **Checked:** Focused quiz result accessibility tests passed (4/4); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict TypeScript checking and Vite bundling; `git diff --check` passed. Live result rendering was not exercised because it would require creating or changing a learner attempt.
+
 ## 2026-10-11 — Keep the current course version outside older-version pages
 
 - **Reviewed:** The editor now keeps the latest published version visible and collapses older versions, but the API still counted that pinned version in the paginated list. At exactly 21 published versions, the first page therefore held only 19 of the 20 prior versions and exposed an unnecessary second page.
