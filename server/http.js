@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { db } from './db.js';
 import { writeSystemLog } from './log-store.js';
 import { editableCourse, logicalCourseId } from './course-versioning.js';
+import { config } from './config.js';
 
 export class ApiError extends Error {
   constructor(status, message, code = 'request_error') {
@@ -32,6 +33,20 @@ const enrolledCoursePathsStatement = db.prepare(`SELECT lp.id AS path_id, lp.sta
   WHERE e.user_id = ? AND pc.course_id = ? AND lp.status = 'published'`);
 const pathPrerequisiteCoursesStatement = db.prepare(`SELECT prior.course_id
   FROM learning_path_courses prior WHERE prior.path_id = ? AND prior.position < ? ORDER BY prior.position`);
+
+function formatUploadLimit(bytes) {
+  const units = ['bytes', 'KiB', 'MiB', 'GiB', 'TiB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const size = unitIndex === 0
+    ? `${value.toLocaleString('en-US')} ${value === 1 ? 'byte' : 'bytes'}`
+    : `${Number.isInteger(value) ? value : value.toFixed(1)} ${units[unitIndex]}`;
+  return `${size} (${bytes.toLocaleString('en-US')} bytes)`;
+}
 
 export function fail(status, message, code) {
   throw new ApiError(status, message, code);
@@ -302,7 +317,12 @@ export function errorHandler(error, req, res, next) {
   }
   if (error?.name === 'MulterError') {
     const tooLarge = ['LIMIT_FILE_SIZE', 'LIMIT_FIELD_VALUE'].includes(error.code);
-    const message = error.code === 'LIMIT_FILE_SIZE' ? 'This file is larger than the configured upload limit.' : error.message;
+    const uploadLimitBytes = Number.isSafeInteger(req.uploadLimitBytes) && req.uploadLimitBytes > 0
+      ? req.uploadLimitBytes
+      : config.maxUploadBytes;
+    const message = error.code === 'LIMIT_FILE_SIZE'
+      ? `This file exceeds the configured upload limit of ${formatUploadLimit(uploadLimitBytes)}.`
+      : error.message;
     return res.status(tooLarge ? 413 : 400).json({ error: message, code: error.code });
   }
   if (error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {

@@ -46,6 +46,7 @@ const documentTypes = new Map([
 const supportedUploadExtensions = new Set([...imageTypes.keys(), ...documentTypes.keys(), '.mp4', '.vtt']);
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const maxCourseCoverDimension = 4096;
+const maxCaptionFileBytes = 5 * 1024 * 1024;
 const maxJpegCoverHeaderBytes = 1024 * 1024;
 const maxJpegCoverHeaderSegments = 1024;
 const jpegCoverFrameMarkers = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
@@ -171,7 +172,7 @@ async function fileSignatureMatchesKind(file, kind) {
   if (kind === 'caption') {
     try {
       const size = (await fs.promises.stat(file.path)).size;
-      if (size < 6 || size > 5 * 1024 * 1024) return false;
+      if (size < 6 || size > maxCaptionFileBytes) return false;
       const contents = await fs.promises.readFile(file.path);
       const text = contents.toString('utf8');
       if (!Buffer.from(text, 'utf8').equals(contents) || text.includes('\0')) return false;
@@ -331,7 +332,7 @@ const upload = multer({
 });
 const captionUpload = multer({
   storage: uploadStorage,
-  limits: { ...commonUploadLimits, fileSize: 5 * 1024 * 1024 },
+  limits: { ...commonUploadLimits, fileSize: maxCaptionFileBytes },
   fileFilter(_req, file, callback) {
     if (fileMatchesKind(file, 'caption')) return callback(null, true);
     return callback(new ApiError(400, uploadTypeMessage('caption'), 'invalid_media_type'));
@@ -341,6 +342,14 @@ const captionUpload = multer({
 function setUploadRouteMode(mode) {
   return (req, _res, next) => {
     req.uploadRouteMode = mode;
+    req.uploadLimitBytes = config.maxUploadBytes;
+    next();
+  };
+}
+
+function setUploadLimitBytes(bytes) {
+  return (req, _res, next) => {
+    req.uploadLimitBytes = bytes;
     next();
   };
 }
@@ -528,7 +537,7 @@ mediaUploadRouter.post('/manage/courses/:courseId/lesson-documents', requireAuth
   res.status(201).json({ resource: { id, kind: 'document', title, url: `/media/resources/${id}`, fileName: originalName } });
 });
 
-mediaUploadRouter.post('/manage/courses/:courseId/lesson-captions', requireAuth, authorizeManagerParam, captionUpload.single('file'), async (req, res) => {
+mediaUploadRouter.post('/manage/courses/:courseId/lesson-captions', requireAuth, authorizeManagerParam, setUploadLimitBytes(maxCaptionFileBytes), captionUpload.single('file'), async (req, res) => {
   if (!req.file) fail(400, 'Choose a WebVTT captions file to upload.', 'file_required');
   const course = courseById(req.params.courseId);
   if (!course) {
