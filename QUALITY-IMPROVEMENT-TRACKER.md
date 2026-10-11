@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep course-creation context in the editor breadcrumb
+
+- **Reviewed:** The live “Create course” navigation, immediate draft creation, editor route replacement, and breadcrumb shown after the new draft loaded.
+- **Improvement:** Carry the created course ID in router state when `/manage/courses/new` replaces itself with the draft editor route. Render “Create course” for that matching route state and keep “Edit course” for existing courses. A helper validates the state shape and route ID; a comment explains why the create context survives the URL replacement.
+- **Why it helps:** The breadcrumb now matches the action learners’ moderators just took and removes the mismatch visible in the rendered new-draft editor.
+- **Backend review:** Course creation already validates its fields and writes the draft, audit record, and response payload transactionally; no server change was needed.
+- **Checked:** The focused course-editor route-state tests passed (6/6); `npm run build` passed TypeScript checking and Vite bundling; `git diff --check` passed. Before the change, the rendered new-draft editor showed “Courses / Edit course.” A post-change live create-flow replay was skipped because opening `/manage/courses/new` persists another draft; the route-state condition and existing-course fallback are covered in the client regression.
+
 ## 2026-10-11 — Recheck shared select pointer and keyboard behavior
 
 - **Reviewed:** Shared `AppSelect` trigger and listbox semantics, pointer focus retention, option selection, keyboard navigation, typeahead, menu positioning, scroll/resize dismissal, and the reported account-role hit boundary.

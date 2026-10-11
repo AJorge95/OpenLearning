@@ -4,8 +4,20 @@ import path from 'node:path';
 import test from 'node:test';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
+import { isCourseCreationEditorState } from '../../src/course-editor-state.ts';
 
 const sourcePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/pages-manage.tsx');
+
+test('course editor breadcrumb follows the create route through its draft redirect', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  assert.match(source, /isCourseCreationEditorState\(location\.state, route\.courseId\)/);
+  assert.match(source, /navigate\(`\/manage\/courses\/\$\{response\.course\.id\}\/edit`, \{ replace: true, state: \{ createdCourseId: response\.course\.id \} \}\)/);
+  assert.match(source, /<span>\{isNewCourseDraft \? 'Create course' : 'Edit course'\}<\/span>/);
+  assert.equal(isCourseCreationEditorState({ createdCourseId: 'course-new' }, 'course-new'), true);
+  assert.equal(isCourseCreationEditorState({ createdCourseId: 'course-new' }, 'course-existing'), false);
+  assert.equal(isCourseCreationEditorState(null, 'course-new'), false);
+  assert.equal(isCourseCreationEditorState({ createdCourseId: 'course-new' }, undefined), false);
+});
 
 test('changing course routes resets publication-only options', () => {
   const source = fs.readFileSync(sourcePath, 'utf8');

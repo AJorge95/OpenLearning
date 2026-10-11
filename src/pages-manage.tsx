@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Activity, AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, Filter, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload, UsersRound } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { Link, NavLink, useNavigate, useParams } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
 import { requestPendingRegistrationCountRefresh } from './admin-navigation-events';
 import { AppSelect, Button, ConfirmationDialog, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PasswordField, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
@@ -11,6 +11,7 @@ import { accountCourseAssignmentLabel } from './account-course-activity';
 import { accountDisableConfirmation } from './account-disable-confirmation';
 import { courseDeletionConfirmation } from './course-deletion-confirmation';
 import { courseRowActionStatus } from './course-row-action-status';
+import { isCourseCreationEditorState } from './course-editor-state';
 import { getAppSelectVerticalPosition } from './app-select-position';
 import { filterCourseCompetencies, updateCourseCompetencySelection } from './course-competency-selection';
 import type { CourseRowAction } from './course-row-action-status';
@@ -850,6 +851,7 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
 
 export function CourseEditorPage() {
   const route = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const { user: editorUser } = useAuth();
   const coverHelpId = useId();
@@ -862,6 +864,7 @@ export function CourseEditorPage() {
   const versionHistoryLoadControllerRef = useRef<AbortController | null>(null);
   const routeCourseIdRef = useRef(route.courseId || '');
   routeCourseIdRef.current = route.courseId || '';
+  const isNewCourseDraft = isCourseCreationEditorState(location.state, route.courseId);
   const [courseId, setCourseId] = useState(route.courseId || '');
   const [course, setCourse] = useState<Course | null>(null);
   const [title, setTitle] = useState('Untitled course');
@@ -1063,7 +1066,8 @@ export function CourseEditorPage() {
       .then((response) => {
         if (!active) return;
         setCourseId(response.course.id);
-        navigate(`/manage/courses/${response.course.id}/edit`, { replace: true });
+        // Keep the create-flow context when replacing /new with the saved draft's editor route.
+        navigate(`/manage/courses/${response.course.id}/edit`, { replace: true, state: { createdCourseId: response.course.id } });
         setCourse(response.course); setTitle(response.course.title); setDescription(response.course.description); setCategory(response.course.category); setVisibility(response.course.visibility); setCompletionWindowDays(response.course.completionWindowDays ? String(response.course.completionWindowDays) : '');
       }).catch((cause) => {
         if (active) setError(cause instanceof ApiError ? cause.message : 'Course could not be created.');
@@ -1572,7 +1576,7 @@ export function CourseEditorPage() {
   if (!course) return <div className="management-page">{error && <Notice>{error}</Notice>}<Link className="back-link" to="/manage/courses"><ArrowLeft size={17} />Back to courses</Link></div>;
 
   return <div className="editor-page">
-    <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>Edit course</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving || (review?.status === 'in_review' && review.submittedBy === editorUser?.id)} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
+    <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>{isNewCourseDraft ? 'Create course' : 'Edit course'}</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving || (review?.status === 'in_review' && review.submittedBy === editorUser?.id)} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
     {error && error !== COMPLETION_WINDOW_ERROR && <Notice>{error}</Notice>}{notice && <Notice kind="success">{notice}</Notice>}
     <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{movingCurriculumItems.size ? 'Updating course content order…' : ''}</p>
     <p className="course-editing-note">{courseEditingNote(course.status, course.visibility)}</p>
