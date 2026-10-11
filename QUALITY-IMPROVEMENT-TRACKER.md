@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Announce per-course competency completion states
+
+- **Reviewed:** Learner competency cards showed each mapped course's completion with a check or book icon and the course title, without an explicit text status for assistive technology.
+- **Improvement:** Mark the status icons decorative and add screen-reader-only “completed” or “not completed” text next to each course title.
+- **Why it helps:** Screen-reader users can identify which mapped courses demonstrate each competency without changing the visible card layout.
+- **Checked:** The new client regression failed before the markup change and passed afterward (3/3 competency progress tests). Full `npm test` passed (377/377), `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Rendered interaction remains unverified: the Browser plugin is unavailable, Playwright's Chromium executable is missing, and the in-app browser is signed out at `/login`.
+
 ## 2026-10-11 — Stabilize calendar ordering for duplicate course titles
 
 - **Reviewed:** Learner calendar deadlines were ordered by timestamp and case-insensitive course title. Distinct courses can share both values, leaving their visible order dependent on SQLite's chosen row order.

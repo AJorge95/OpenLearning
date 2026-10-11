@@ -21,3 +21,11 @@ test('competency progress keeps overall totals while rendering a bounded card li
   assert.match(source, /Show \{Math\.min\(COMPETENCY_PROGRESS_BATCH_SIZE, competencies\.length - visibleCompetencyCount\)\} more competencies/);
   assert.match(source, /if \(nextCount === competencies\.length\) window\.requestAnimationFrame\(\(\) => competencyListStatusRef\.current\?\.focus\(\)\)/);
 });
+
+test('mapped course completion states are announced alongside each course title', () => {
+  const source = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
+  const mappedCourses = source.match(/<ul>\{item\.courses\.map\(\(course\) => <li key=\{course\.id\}>.*?<\/ul>/s)?.[0] || '';
+
+  assert.match(mappedCourses, /course\.completed \? <Check size=\{15\} aria-hidden="true" \/> : <BookOpen size=\{15\} aria-hidden="true" \/>/);
+  assert.match(mappedCourses, /<span>\{course\.title\}<span className="sr-only">, \{course\.completed \? 'completed' : 'not completed'\}<\/span><\/span>/);
+});
