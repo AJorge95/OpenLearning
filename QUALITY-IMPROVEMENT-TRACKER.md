@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Cover protected caption-track downloads
+
+- **Reviewed:** Protected video and document downloads have route-level coverage for authentication and lesson access, but caption downloads did not. The role-selector screenshot still identifies the old wrapping-label structure; current source uses a separate visible label and a trigger-bounded selector, and its focused regression passes.
+- **Improvement:** Add HTTP regressions for anonymous caption requests, learner downloads and `HEAD` requests for an unlocked track, and denial of a track attached to a locked lesson.
+- **Why it helps:** Caption files can contain the same lesson content as the video or handout. The tests protect their authentication, lesson-unlock, cache, content-type, and empty `HEAD` response behavior from regressions.
+- **Checked:** Focused media-route and role-selector tests passed (21/21). The full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/server/media-routes.test.js`, and `git diff --check` passed. The in-app browser is redirected to `/login`, so the protected account-role interaction could not be replayed from the supplied screenshot.
+
 ## 2026-10-11 — Stop media reads for already-closed responses
 
 - **Reviewed:** Video and document routes check media with asynchronous `fs.stat` before creating a read stream. If a client disconnects while that check is pending, the response's `close` event has already fired when the stream helper installs its listener. A 16 MiB reproduction left the stream alive after reading 128 KiB.
