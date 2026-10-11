@@ -3,6 +3,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { config } from './config.js';
 import { unicodeContains } from './sql.js';
+import { sessionUserIdFromJson } from './session-data.js';
 
 const latestSchemaVersion = 34;
 
@@ -294,16 +295,7 @@ export function migrateDatabase(database = db) {
         const rows = rowsAfter.all(lastRowId, 500);
         if (!rows.length) break;
         for (const row of rows) {
-          let userId = null;
-          try {
-            const sessionData = JSON.parse(row.session_data);
-            if (sessionData && typeof sessionData === 'object' && !Array.isArray(sessionData) && typeof sessionData.userId === 'string') {
-              userId = sessionData.userId;
-            }
-          } catch {
-            // Keep malformed legacy sessions unowned; the session store discards them on read.
-          }
-          saveUserId.run(userId, row.row_id);
+          saveUserId.run(sessionUserIdFromJson(row.session_data), row.row_id);
           lastRowId = row.row_id;
         }
       }

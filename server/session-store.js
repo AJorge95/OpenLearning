@@ -1,10 +1,7 @@
 import session from 'express-session';
+import { parseSessionData, sessionUserId } from './session-data.js';
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
-
-function sessionUserId(sessionData) {
-  return typeof sessionData?.userId === 'string' ? sessionData.userId : null;
-}
 
 export class SQLiteSessionStore extends session.Store {
   constructor(database, { onCleanupError = (error) => console.error('Unable to prune expired sessions:', error?.message || error) } = {}) {
@@ -43,14 +40,8 @@ export class SQLiteSessionStore extends session.Store {
         if (row.expires_at <= Date.now()) {
           this.deleteStmt.run(sid);
         } else {
-          let parsed;
-          let invalidJson = false;
-          try {
-            parsed = JSON.parse(row.session_data);
-          } catch {
-            invalidJson = true;
-          }
-          if (invalidJson || !parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          const parsed = parseSessionData(row.session_data);
+          if (!parsed) {
             this.deleteStmt.run(sid);
           } else sessionData = parsed;
         }
