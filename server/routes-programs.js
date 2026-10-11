@@ -3,13 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireObjectBody, requireStaff } from './http.js';
 import { courseSummaries, courseSummary, ensureCourseLearningStateWithStatus } from './course-service.js';
-import { courseVersionHistory, logicalCourseId, publishRevision, restoreCourseVersion } from './course-versioning.js';
+import { courseVersionHistoryPage, logicalCourseId, publishRevision, restoreCourseVersion } from './course-versioning.js';
 import { writeAuditLog } from './log-store.js';
 import { textSearchPredicate } from './sql.js';
 
 export const programsRouter = Router();
 programsRouter.use(requireAuth);
 const LEARNING_PATH_PAGE_SIZE = 20;
+const COURSE_VERSION_PAGE_SIZE = 20;
 const COMPETENCY_ADMIN_PAGE_SIZE = 25;
 const MAX_CALENDAR_RANGE_DAYS = 62;
 const SELF_ENROLLMENT_PATH_COURSE_FILTER = `p.self_enrollment = 1
@@ -547,8 +548,14 @@ programsRouter.put('/manage/courses/:courseId/competencies', requireStaff, (req,
 programsRouter.get('/manage/courses/:courseId/versions', requireStaff, (req, res) => {
   requireCourseManager(req.params.courseId, req.currentUser);
   const courseId = logicalCourseId(req.params.courseId) || req.params.courseId;
+  const requestedPage = pageQuery(req.query.page);
+  const historySummary = db.prepare('SELECT COUNT(*) AS count, MAX(version_number) AS currentVersionNumber FROM course_versions WHERE course_id = ?').get(courseId);
+  const total = historySummary.count;
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / COURSE_VERSION_PAGE_SIZE)));
   const revision = db.prepare('SELECT r.*, u.username AS author FROM course_revisions r LEFT JOIN users u ON u.id = r.author_id WHERE r.course_id = ?').get(courseId);
-  res.json({ versions: courseVersionHistory(courseId), revision: revision ? {
+  res.json({ versions: courseVersionHistoryPage(courseId, COURSE_VERSION_PAGE_SIZE, (page - 1) * COURSE_VERSION_PAGE_SIZE),
+    total, page, pageSize: COURSE_VERSION_PAGE_SIZE, hasMore: page * COURSE_VERSION_PAGE_SIZE < total,
+    currentVersionNumber: historySummary.currentVersionNumber, revision: revision ? {
     status: revision.review_status, author: revision.author, submittedAt: revision.submitted_at,
     submittedBy: revision.submitted_by, reviewedBy: revision.reviewed_by, reviewNote: revision.review_note,
   } : null });

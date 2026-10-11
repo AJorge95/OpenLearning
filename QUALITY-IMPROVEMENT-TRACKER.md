@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Paginate course version history
+
+- **Reviewed:** The editor requested and rendered every published version for a course. Version history can grow with each publication, while the existing `course_versions_course_order` index already supports newest-first reads.
+- **Improvement:** Return 20 versions per request with total/page metadata and the current version number; add accessible Newer/Older controls, loading and retry feedback, and responsive layout. Keep restore actions available on every historical page and mark only the true latest version as current.
+- **Why it helps:** Large course histories transfer and render in bounded chunks. Staff retain access to restore any older version without the first item on a later page being mistaken for the current version.
+- **Backend review:** Count and maximum version number are read together, requests beyond the last page clamp to the final page, and ordered rows use the existing course/version index.
+- **Checked:** A route regression covers 42 versions across three pages, newest-first ordering, page clamping, current-version metadata, and the indexed query plan without a temporary sort. Client contract/accessibility checks cover bounded page requests, restore availability, status announcements, retry, and mobile layout. `npm test -- --test-reporter=dot`, focused version-history tests, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed. The protected editor was not rendered live because the available browser session is signed out.
+
 ## 2026-10-11 — Paginate competency administration
 
 - **Reviewed:** Competency definitions can be added without a catalog limit, while the administrator endpoint returned every row and the page rendered every action on each reload. The sort had no matching index.

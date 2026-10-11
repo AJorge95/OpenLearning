@@ -1419,6 +1419,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .course-version-history li > div { display: grid; gap: 5px; min-width: 0; }
 .course-version-history li strong { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; }
 .course-version-history li small, .course-version-history li p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.course-version-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 3px; color: var(--muted); font-size: 12px; }
+.course-version-pagination > div { display: flex; align-items: center; gap: 10px; }
+.course-version-pagination .button { min-height: 36px; padding-inline: 12px; font-size: 11px; }
 .current-version-label { padding: 3px 6px; border-radius: 99px; color: #176b40; background: var(--green-soft); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
 
 .account-name-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; min-width: 0; }
@@ -1480,6 +1483,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .course-competency-picker > div { grid-template-columns: minmax(0, 1fr); }
   .course-version-history li { align-items: stretch; flex-direction: column; }
   .course-version-history li > .button { align-self: flex-start; }
+  .course-version-pagination { align-items: flex-start; flex-direction: column; }
+  .course-version-pagination > div { width: 100%; justify-content: space-between; }
   .revision-actions { align-items: stretch; flex-direction: column; }
   .review-submit-actions { align-items: stretch; flex-direction: column; }
   .review-decision-actions { width: 100%; }
