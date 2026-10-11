@@ -119,12 +119,12 @@
 - **Why no change:** The current markup separates the visible label from the control, and pointer events reach only the trigger. Repeating the screenshot's older structure in source would duplicate the existing fix; a new runtime patch needs a repro against the current render.
 - **Checked:** The account role hit-area and `AppSelect` label regression tests passed (10/10). Browser interaction verified the trigger and outside-click boundary on an enabled account; no account changes were submitted.
 
-## 2026-10-11 — Recheck learner video controls at desktop size
+## 2026-10-11 — Recheck responsive caption controls and protected delivery
 
-- **Reviewed:** The rendered learner video controls, accessibility labels, watch-progress announcement, and existing 600px and 400px responsive layouts.
-- **Result:** No source change; the authenticated lesson rendered its video and labeled playback controls, and the progress indicator exposed its accessible value. The existing mobile rules move caption, volume, and fullscreen controls into a second row.
-- **Why no change:** No desktop layout or interaction defect was reproduced. This lesson has no caption track, and the connected in-app browser cannot set a mobile viewport, so a narrow caption-selector issue cannot be verified from this sample.
-- **Checked:** Read the player JSX and responsive CSS, then inspected the live lesson in the local browser; the video loaded with an 8:29 duration and the accessibility tree exposed the named controls. No user data was changed.
+- **Reviewed:** The captioned player control group, accessible names and states, its 600px/400px grid rules, fullscreen menu portal, and protected caption-delivery route.
+- **Result:** No source change. The existing desktop render showed the video and named controls, while the client and server tests cover caption selection, the dedicated fullscreen grid cell, and lesson-access checks before caption delivery.
+- **Why no change:** The current evidence does not show a layout or delivery defect. The connected CUA browser exposes page state and screenshots but no viewport override, so changing grid dimensions without a captioned 320–600px render would be speculative.
+- **Checked:** Focused caption, fullscreen, and media-route tests passed (31/31); the responsive source rules and protected route were inspected. No user or course data was changed.
 - **Next evidence needed:** A captioned lesson rendered at a 320–600px viewport to assess the compact control row.
 
 ## 2026-10-11 — Index pending account-list ordering
