@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Review media cleanup and shared recovery surfaces
+
+- **Reviewed:** Startup orphan-media cleanup, its generated-name and age filters, database reference checks for uploads/documents/captions, media-upload transaction and temporary-file recovery paths, SQL wildcard and Unicode search handling, and the application and management-page error boundaries.
+- **Result:** No runtime change. Cleanup only removes stale, unreferenced files that match generated upload names; upload writes recheck manager access inside the transaction and clean failed temporary files; shared search treats wildcard punctuation literally and normalizes Unicode; page-level rendering failures have reload recovery.
+- **Why no change:** The reviewed paths already have concrete safeguards and regression coverage. More cleanup behavior needs evidence of storage or startup pressure and a safe ownership policy for any additional filesystem targets.
+- **Checked:** `npm test -- --test-reporter=dot` passed across the existing suite. No application data or media was modified.
+
 ## 2026-10-11 — Surface platform-reset recovery failures
 
 - **Reviewed:** Platform reset backup cleanup, media quarantine and rollback, bounded system logging, the settings confirmation UI, and existing isolated reset and status tests.
