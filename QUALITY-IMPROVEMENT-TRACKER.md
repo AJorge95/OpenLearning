@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep quiz saves and editor responses transactional
+
+- **Reviewed:** The quiz PUT route committed quiz edits and their audit event before assembling the full editor response. Its unchanged-save path also returned before producing a response inside the transaction.
+- **Improvement:** Build the editor course payload in the transaction for changed and unchanged saves. The route comment documents why response reads belong within that boundary.
+- **Why it helps:** If related course data cannot be read, the quiz and audit entry roll back instead of returning an error after the edit succeeded; unchanged saves still return the complete editor course without writing a new audit event.
+- **Checked:** An injected module-query failure reproduced the old false failure before the fix, with the new quiz and audit entry persisted despite HTTP 500. After the fix, neither remains. A no-op save returned the course without adding an audit event. Focused quiz tests passed (4/4); the full suite passed (499/499); `npm run build` passed strict TypeScript checking and Vite bundling; syntax checks and `git diff --check` passed.
+
 ## 2026-10-11 — Keep course creation and its response transactional
 
 - **Reviewed:** The course-creation route committed its new row and audit entry before building the editor response. A failed payload read returned HTTP 500 while leaving the course created.

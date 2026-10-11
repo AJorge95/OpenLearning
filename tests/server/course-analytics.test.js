@@ -3104,6 +3104,102 @@ test('quiz saves roll back when their audit entry cannot be saved', async () => 
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.quiz_saved' AND entity_id = ?").get(originalQuiz.id).count, 1);
 });
 
+test('quiz saves roll back when the course editor response cannot be read', async () => {
+  const courseId = 'course-quiz-payload-read';
+  const moduleId = 'module-quiz-payload-read';
+  const auditSummary = 'Saved quiz for Payload transaction quiz module';
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Quiz payload response fixture', 'draft', 'admin-1', 'admin-1')`).run(courseId);
+  database.prepare(`INSERT INTO course_modules (id, course_id, title, position)
+    VALUES (?, ?, 'Payload transaction quiz module', 0)`).run(moduleId, courseId);
+  const initialAuditCount = database.prepare('SELECT COUNT(*) AS count FROM audit_logs WHERE action = ? AND summary = ?')
+    .get('course.quiz_saved', auditSummary).count;
+  const originalPrepare = database.prepare;
+  let payloadReadFailed = false;
+
+  database.prepare = (sql) => {
+    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT * FROM course_modules WHERE course_id = ? ORDER BY position, id') {
+      payloadReadFailed = true;
+      throw new Error('Injected quiz response payload read failure');
+    }
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    // The module read follows quiz replacement and audit logging; its failure must undo both.
+    const response = await fetch(apiUrl(`/manage/modules/${moduleId}/quiz`), {
+      method: 'PUT',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Quiz saved before payload failure',
+        passMark: 75,
+        questions: [{
+          prompt: 'Which choice is correct?',
+          explanation: 'The first choice is correct.',
+          choices: [{ text: 'First', isCorrect: true }, { text: 'Second', isCorrect: false }],
+        }],
+      }),
+    });
+
+    assert.equal(payloadReadFailed, true);
+    assert.equal(response.status, 500);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM quizzes WHERE module_id = ?').get(moduleId).count, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_logs WHERE action = ? AND summary = ?')
+      .get('course.quiz_saved', auditSummary).count, initialAuditCount);
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM audit_logs WHERE action = ? AND summary = ?').run('course.quiz_saved', auditSummary);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
+test('unchanged quiz saves still return the editor course from their transaction', async () => {
+  const courseId = 'course-quiz-unchanged-payload';
+  const moduleId = 'module-quiz-unchanged-payload';
+  const quizId = 'quiz-unchanged-payload';
+  const questionId = 'question-unchanged-payload';
+  const auditSummary = 'Saved quiz for Unchanged payload quiz module';
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('${courseId}', 'Unchanged quiz payload fixture', 'draft', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('${moduleId}', '${courseId}', 'Unchanged payload quiz module', 0);
+    INSERT INTO quizzes (id, module_id, title, pass_mark)
+      VALUES ('${quizId}', '${moduleId}', 'Stable quiz', 70);
+    INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position)
+      VALUES ('${questionId}', '${quizId}', 'Which answer is correct?', 'The first answer is correct.', 0);
+    INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES
+      ('choice-unchanged-correct', '${questionId}', 'First', 1, 0),
+      ('choice-unchanged-wrong', '${questionId}', 'Second', 0, 1);
+  `);
+  const initialAuditCount = database.prepare('SELECT COUNT(*) AS count FROM audit_logs WHERE action = ? AND summary = ?')
+    .get('course.quiz_saved', auditSummary).count;
+
+  try {
+    const response = await fetch(apiUrl(`/manage/modules/${moduleId}/quiz`), {
+      method: 'PUT',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Stable quiz',
+        passMark: 70,
+        questions: [{
+          prompt: 'Which answer is correct?',
+          explanation: 'The first answer is correct.',
+          choices: [{ text: 'First', isCorrect: true }, { text: 'Second', isCorrect: false }],
+        }],
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).course.id, courseId);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_logs WHERE action = ? AND summary = ?')
+      .get('course.quiz_saved', auditSummary).count, initialAuditCount);
+  } finally {
+    database.prepare('DELETE FROM audit_logs WHERE action = ? AND summary = ?').run('course.quiz_saved', auditSummary);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('quiz deletion rolls back when its audit entry cannot be saved', async () => {
   const quiz = database.prepare("SELECT id FROM quizzes WHERE module_id = 'module-analytics'").get();
   const initialQuestionCount = database.prepare('SELECT COUNT(*) AS count FROM quiz_questions WHERE quiz_id = ?').get(quiz.id).count;

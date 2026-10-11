@@ -1077,6 +1077,12 @@ courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
       isCorrect: choice.isCorrect === true,
     })),
   }));
+  // Keep response reads inside the transaction for both changed and unchanged quiz saves.
+  function buildEditorCourse(courseId) {
+    const course = db.prepare('SELECT * FROM courses WHERE id = ?').get(courseId);
+    return getCoursePayload(course, req.currentUser, { includeAnswers: true });
+  }
+
   const saveQuiz = db.transaction(() => {
     const currentModule = moduleCourse(req.params.moduleId);
     if (!currentModule) fail(404, 'Module not found.', 'not_found');
@@ -1104,7 +1110,7 @@ courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
               && choice.choice_text === requested.choices[cIndex].text
               && Boolean(choice.is_correct) === requested.choices[cIndex].isCorrect);
         });
-      if (unchanged) return;
+      if (unchanged) return buildEditorCourse(currentModule.id);
     }
     const quizId = existingQuiz?.id || randomUUID();
     db.prepare(`INSERT INTO quizzes (id, module_id, title, pass_mark) VALUES (?, ?, ?, ?)
@@ -1124,10 +1130,10 @@ courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
     const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.quiz_saved', entityType: 'quiz', entityId: quizId,
       summary: `Saved quiz for ${currentModule.title}`, details: { courseId: currentModule.id, passMark, questionCount: normalizedQuestions.length } });
     if (!auditId) fail(500, 'Quiz could not be saved because the audit log is unavailable.', 'audit_unavailable');
+    return buildEditorCourse(currentModule.id);
   });
-  saveQuiz.immediate();
-  const course = db.prepare('SELECT * FROM courses WHERE id = ?').get(module.id);
-  res.json({ course: getCoursePayload(course, req.currentUser, { includeAnswers: true }) });
+  const course = saveQuiz.immediate();
+  res.json({ course });
 });
 
 courseRouter.delete('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
