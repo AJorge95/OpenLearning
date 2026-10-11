@@ -225,9 +225,9 @@ export function LoginPage() {
     finally { releaseSubmissionLock(submissionInFlightRef); setSaving(false); }
   }
 
-  return <AuthPanel><h1>Welcome back</h1><p className="auth-description">{hasRequestedDestination ? 'Sign in to return to the page you requested.' : 'Sign in to continue learning.'}</p>
+  return <AuthPanel><h1>Welcome back</h1><p id="login-description" className="auth-description">{hasRequestedDestination ? 'Sign in to return to the page you requested.' : 'Sign in to continue learning.'}</p>
     <form onSubmit={submit} className="form-stack" aria-busy={saving}>
-      <label>Username<input required maxLength={32} autoComplete="username" autoFocus value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /></label>
+      <label>Username<input aria-describedby="login-description" required maxLength={32} autoComplete="username" autoFocus value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /></label>
       <label>Password<input required maxLength={256} type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving}>{saving ? 'Signing in…' : 'Sign in'}</Button>
