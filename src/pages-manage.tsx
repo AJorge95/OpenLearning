@@ -1708,7 +1708,14 @@ export function AdminUsersPage() {
         setUsers((current) => current.map((row) => row.id === user.id ? { ...row, ...response.user } : row));
       }
       setSuccess(`${user.username}'s account was updated.`);
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'User could not be updated.'); }
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'last_admin') {
+        const currentListState = userListStateRef.current;
+        if (await load(currentListState.page, currentListState.query, currentListState.roleFilter)) setError(cause.message);
+      } else {
+        setError(cause instanceof ApiError ? cause.message : 'User could not be updated.');
+      }
+    }
     finally { markSaving(user.id, false); }
   }
 
