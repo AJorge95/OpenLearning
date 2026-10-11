@@ -1316,6 +1316,8 @@ export function CourseAccessPage() {
   const [query, setQuery] = useState('');
   const [appliedQuery, setAppliedQuery] = useState('');
   const [page, setPage] = useState(1);
+  const accessListStateRef = useRef({ query: appliedQuery, page });
+  accessListStateRef.current = { query: appliedQuery, page };
   const [pageSize, setPageSize] = useState(50);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
@@ -1333,6 +1335,7 @@ export function CourseAccessPage() {
   }
 
   async function load(search = appliedQuery, requestedPage = page, failureMessage = 'Access list could not be loaded.') {
+    accessListStateRef.current = { query: search, page: requestedPage };
     const requestSequence = ++loadSequenceRef.current;
     loadControllerRef.current?.abort();
     const controller = new AbortController();
@@ -1376,7 +1379,8 @@ export function CourseAccessPage() {
       if (user.granted) await api.delete(`/api/manage/courses/${requestedCourseId}/access/${user.id}`);
       else await api.put(`/api/manage/courses/${requestedCourseId}/access/${user.id}`);
       if (routeCourseIdRef.current === requestedCourseId) {
-        await load(appliedQuery, page, 'Access changed, but the learner list could not be refreshed.');
+        const currentListState = accessListStateRef.current;
+        await load(currentListState.query, currentListState.page, 'Access changed, but the learner list could not be refreshed.');
       }
     } catch (cause) {
       if (routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Access could not be changed.');
