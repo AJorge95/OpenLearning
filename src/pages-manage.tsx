@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
 import { requestPendingRegistrationCountRefresh } from './admin-navigation-events';
-import { AppSelect, Button, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PasswordField, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
+import { AppSelect, Button, ConfirmationDialog, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PasswordField, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
 import { formatCountLabel } from './count-label';
 import { accountCourseAssignmentLabel } from './account-course-activity';
 import { accountDisableConfirmation } from './account-disable-confirmation';
@@ -1656,6 +1656,7 @@ export function AdminUsersPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [success, setSuccess] = useState('');
+  const [pendingDisableUser, setPendingDisableUser] = useState<User | null>(null);
 
   function markSaving(userId: string, saving: boolean) {
     const next = new Set(savingIdsRef.current);
@@ -1761,9 +1762,9 @@ export function AdminUsersPage() {
     };
   }, [resetUser]);
 
-  async function updateUser(user: User, changes: { role?: Role; disabled?: boolean }) {
+  async function updateUser(user: User, changes: { role?: Role; disabled?: boolean }, disableConfirmed = false) {
     if (savingIdsRef.current.has(user.id)) return;
-    if (changes.disabled === true && !window.confirm(accountDisableConfirmation(user.username))) return;
+    if (changes.disabled === true && !disableConfirmed) { setPendingDisableUser(user); return; }
     markSaving(user.id, true); setError(''); setSuccess('');
     try {
       const response = await api.patch<{ user: User }>(`/api/admin/users/${user.id}`, changes);
@@ -1859,6 +1860,7 @@ export function AdminUsersPage() {
       </tr>;
     })}</tbody></table>{!users.length && <div className="access-empty">{approvalFilter === 'pending' ? appliedQuery ? 'No pending registrations match that search.' : 'No registrations are waiting for approval.' : userListEmptyMessage(appliedQuery, roleFilter)}</div>}</div>}
     {!loading && !failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
+    {pendingDisableUser && <ConfirmationDialog {...accountDisableConfirmation(pendingDisableUser.username)} confirmLabel="Disable account" onCancel={() => setPendingDisableUser(null)} onConfirm={() => { const user = pendingDisableUser; setPendingDisableUser(null); if (user) void updateUser(user, { disabled: true }, true); }} />}
     {resetUser && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePasswordReset(); }}><section ref={resetDialogRef} className="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title" aria-describedby="reset-description" tabIndex={-1}><button className="modal-close" type="button" onClick={() => closePasswordReset()} aria-label="Close" disabled={savingIds.has(resetUser.id)}>×</button><h2 id="reset-title">Reset password</h2><p id="reset-description">Set a temporary password for <strong>{resetUser.username}</strong>. Their active sessions will be signed out.</p><form className="form-stack" onSubmit={resetPassword} aria-busy={savingIds.has(resetUser.id)}><PasswordField label="New password" autoFocus required minLength={12} maxLength={256} autoComplete="new-password" value={newPassword} hint="Use at least 12 characters." hintId={resetPasswordHintId} onChange={(event) => { setNewPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={savingIds.has(resetUser.id)} /><PasswordField label="Confirm password" required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={savingIds.has(resetUser.id)} />{error && <Notice>{error}</Notice>}<Button type="submit" disabled={savingIds.has(resetUser.id)}>{savingIds.has(resetUser.id) ? 'Saving…' : 'Reset password'}</Button></form></section></div>}
   </div>;
 }
@@ -1949,6 +1951,7 @@ export function AdminUserDetailsPage() {
   const [profileFirstName, setProfileFirstName] = useState('');
   const [profileLastName, setProfileLastName] = useState('');
   const [profileNamesUserId, setProfileNamesUserId] = useState('');
+  const [pendingDisableAccountId, setPendingDisableAccountId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -1972,12 +1975,12 @@ export function AdminUserDetailsPage() {
     setProfileNamesUserId(account.user.id);
   }, [account?.user.id, account?.user.firstName, account?.user.lastName, userId]);
   useEffect(() => {
-    setError(''); setSuccess(''); setSavingAction(null); setPassword(''); setConfirmPassword('');
+    setError(''); setSuccess(''); setSavingAction(null); setPassword(''); setConfirmPassword(''); setPendingDisableAccountId(null);
   }, [userId]);
 
-  async function updateAccount(changes: { role?: Role; disabled?: boolean; firstName?: string; lastName?: string }, successMessage = 'Account settings were updated.') {
+  async function updateAccount(changes: { role?: Role; disabled?: boolean; firstName?: string; lastName?: string }, successMessage = 'Account settings were updated.', disableConfirmed = false) {
     if (!account || saving) return;
-    if (changes.disabled === true && !window.confirm(accountDisableConfirmation(account.user.username))) return;
+    if (changes.disabled === true && !disableConfirmed) { setPendingDisableAccountId(account.user.id); return; }
     const requestedUserId = account.user.id;
     const actionSequence = ++actionSequenceRef.current;
     const isCurrentAction = () => actionSequenceRef.current === actionSequence && routeUserIdRef.current === requestedUserId;
@@ -2106,6 +2109,7 @@ export function AdminUserDetailsPage() {
       {courses.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable course activity" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Account course activity</caption><thead><tr><th scope="col">Course</th><th scope="col">Assignment</th><th scope="col">Progress</th><th scope="col">Lessons</th><th scope="col">Quizzes</th><th scope="col">Completion</th><th scope="col">Dashboard</th></tr></thead><tbody>{courses.map((course) => <tr key={course.id}><td><strong>{course.title}</strong><small><CourseStatus status={course.status} /></small></td><td>{accountCourseAssignmentLabel(course)}</td><td>{course.progress}%</td><td>{course.completedLessons} / {course.lessonCount}</td><td>{course.quizCount}</td><td>{course.completed ? 'Completed' : course.progress ? 'In progress' : 'Not started'}</td><td><Link className="text-action" to={`/manage/courses/${course.id}/analytics`} aria-label={`Open dashboard for ${course.title}`}>Open dashboard</Link></td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No course activity" detail="This account has not enrolled in or been assigned a course." />}
       {account.total > 0 && <LogPagination page={account.page} pageSize={account.pageSize} total={account.total} loading={loading} onChange={setPage} />}
     </section>
+    {pendingDisableAccountId === user.id && user.id === userId && <ConfirmationDialog {...accountDisableConfirmation(user.username)} confirmLabel="Disable account" onCancel={() => setPendingDisableAccountId(null)} onConfirm={() => { const requestedUserId = pendingDisableAccountId; setPendingDisableAccountId(null); if (requestedUserId === user.id) void updateAccount({ disabled: true }, `${user.username}'s account was disabled.`, true); }} />}
   </div>;
 }
 
