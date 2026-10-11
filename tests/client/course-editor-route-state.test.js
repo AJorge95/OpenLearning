@@ -77,8 +77,21 @@ test('course detail drafts are preserved only while refreshing the same course',
 
   assert.ok(loadStart >= 0 && loadEnd > loadStart);
   assert.match(loadSource, /const previousCourse = course\?\.id === id \? course : null/);
-  assert.match(loadSource, /if \(!previousCourse\) \{\s*setTitle\(response\.course\.title\); setDescription\(response\.course\.description\); setCategory\(response\.course\.category\); setVisibility\(response\.course\.visibility\);/);
+  assert.match(loadSource, /if \(!previousCourse\) \{\s*setCompletionWindowDays\(response\.course\.completionWindowDays \? String\(response\.course\.completionWindowDays\) : ''\);\s*setTitle\(response\.course\.title\); setDescription\(response\.course\.description\); setCategory\(response\.course\.category\); setVisibility\(response\.course\.visibility\);/);
   assert.match(loadSource, /setTitle\(\(current\) => current === previousCourse\.title \? response\.course\.title : current\)/);
+});
+
+test('same-course refreshes preserve an unsaved completion-window value', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const loadStart = source.indexOf('async function load(id = courseId)');
+  const loadEnd = source.indexOf('\n\n  useEffect(() => {', loadStart);
+  const loadSource = source.slice(loadStart, loadEnd);
+
+  assert.ok(loadStart >= 0 && loadEnd > loadStart);
+  assert.match(loadSource, /if \(!previousCourse\) \{\s*setCompletionWindowDays\(response\.course\.completionWindowDays \? String\(response\.course\.completionWindowDays\) : ''\)/);
+  assert.match(loadSource, /else \{\s*setCompletionWindowDays\(\(current\) => current === String\(previousCourse\.completionWindowDays \?\? ''\) \? String\(response\.course\.completionWindowDays \?\? ''\) : current\)/);
+  assert.equal((loadSource.match(/setCompletionWindowDays\(/g) || []).length, 2,
+    'initialize once for a new course and preserve or refresh once for same-course loads');
 });
 
 test('course navigation clears the inline add-module draft and scopes late responses', () => {
