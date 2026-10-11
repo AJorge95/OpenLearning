@@ -7,6 +7,13 @@
 - **Why it helps:** Session cleanup follows one consistent async error path, and the tests protect the important behavior that a temporary audit-storage failure does not leave a learner signed in or prevent logout.
 - **Checked:** `node --test tests/server/auth-logout.test.js` passed (2/2), including CSRF validation, session invalidation, audit persistence, and audit failure. `node --check server/routes-auth.js`, `node --check tests/server/auth-logout.test.js`, `npm test`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
 
+## 2026-10-11 — Protect learner quiz focus transitions
+
+- **Reviewed:** Quiz submission replaces the answer form with a result review, and “Try again” replaces the review with the answer form. The component already directs focus to the review heading and back to the first answer.
+- **Improvement:** Add a focused regression that protects both focus transitions and the focus request made by submission and retry.
+- **Why it helps:** Keyboard users remain oriented when the quiz view changes, and later edits cannot silently leave focus on a removed control or at the document start.
+- **Checked:** `node --test tests/client/quiz-result-accessibility.test.js` passed (2/2), including the existing correctness-text check. Full `npm test`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/quiz-result-accessibility.test.js`, and `git diff --check` passed. Rendered quiz interaction remains unverified because the in-app browser is signed out and Playwright is not installed.
+
 ## 2026-10-11 — Announce progress in paged course lists
 
 - **Reviewed:** The learner catalog, My Learning, and certificate list pagination controls, their changing button labels, result-count status messages, and the corresponding loading state.

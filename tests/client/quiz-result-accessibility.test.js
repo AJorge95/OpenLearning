@@ -9,3 +9,9 @@ test('quiz review labels each selected answer with its correctness in text', () 
   assert.match(source, /className=\{answerIsCorrect \? 'answer-correct' : 'answer-incorrect'\}/);
   assert.match(source, /!answerIsCorrect && <p className="correct-answer">Correct answer:/);
 });
+
+test('quiz submission and retry move focus into the newly displayed view', () => {
+  assert.match(source, /if \(isCurrentSubmission\(\)\) \{\s*focusReviewRef\.current = true;\s*setResult\(response\.attempt\)/);
+  assert.match(source, /if \(currentResult && focusReviewRef\.current\) \{\s*focusReviewRef\.current = false;\s*reviewHeadingRef\.current\?\.focus\(\);\s*\} else if \(!currentResult && focusFirstAnswerRef\.current\) \{\s*focusFirstAnswerRef\.current = false;\s*firstAnswerRef\.current\?\.focus\(\);/);
+  assert.match(source, /function retryQuiz\(\) \{\s*focusFirstAnswerRef\.current = true;\s*setAnswers\(\{\}\); setResult\(null\);/);
+});
