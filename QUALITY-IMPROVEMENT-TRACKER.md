@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck database migration and session startup reliability
+
+- **Reviewed:** SQLite initialization and schema migrations through version 32, session ownership and expiry handling, indexed startup/daily cleanup, cleanup-error reporting, and readiness checks during migration failure and shutdown.
+- **Result:** No code change. Migrations run transactionally; expired or malformed session rows are discarded; cleanup failures are surfaced without preventing store startup; and readiness stays unavailable when its database checks fail.
+- **Why no change:** Existing implementation and regressions already cover the failure modes reviewed. Further tuning needs measured lock contention, session-table growth, or a new migration requirement.
+- **Checked:** `node --test tests/server/session-store.test.js tests/server/readiness.test.js tests/server/last-login.test.js` passed (18/18), including migration-through-32, malformed-session cleanup, cleanup reporter fallback, and readiness failure cases.
+
 ## 2026-10-11 — Recheck public account forms and registration limits
 
 - **Reviewed:** The rendered sign-in and registration pages, their field labels and helper text, setup and platform-settings account-cap controls, and the server's account-limit and registration-availability checks.
