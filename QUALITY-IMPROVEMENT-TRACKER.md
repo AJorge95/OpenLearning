@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck shared HTTP failures and protected media delivery
+
+- **Reviewed:** Shared object-body and query validation, parser-error mapping, authenticated media and document delivery, byte-range streaming, interrupted responses, and stale orphan cleanup.
+- **Result:** No source change. The shared helpers reject malformed body/query shapes, parser failures return structured client errors, protected files check access before delivery, and stream cleanup stops reads after a client disconnect.
+- **Why no change:** The inspected boundaries already match the API and media contracts, and no distinct failure or untested high-risk branch appeared in this pass.
+- **Interface and backend review:** Protected content remains behind course and lesson access checks; cleanup is limited to old generated files not referenced by course data.
+- **Checked:** Focused stream, cleanup, media-route, and HTTP-boundary suites passed (33/33), including client aborts, byte ranges, upload/audit rollback, and structured parser failures. `git diff --check` passed.
+
 ## 2026-10-11 — Verify the role selector's right-side click boundary in the rendered page
 
 - **Reviewed:** The administrator account selector's visible width, containing control hit area, popup width, and dismissal behavior after the repeated click report.
