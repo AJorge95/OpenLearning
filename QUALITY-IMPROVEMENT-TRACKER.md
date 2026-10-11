@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Confirm the role-selector fix is served locally
+
+- **Reviewed:** The repeated right-edge click report against the current account-details markup, pointer-event boundary, trigger and popup sizing, and the Vite process serving `127.0.0.1:5173`.
+- **Result:** No source change was needed. Port 5173 is served by Vite launched from this checkout, and its transformed `pages-manage.tsx` module contains the separate `div.account-role-control` markup. The supplied screenshot still identifies the older wrapping `<label>` structure.
+- **Why no code change:** The committed selector already limits pointer events to the visible trigger and matches the popup to its width. If the open page still exposes the old label, reloading it is the next useful check; another width rule would duplicate the existing fix.
+- **Checked:** The served Vite module returned HTTP 200 and the current role markup; focused account-role/select tests passed (10/10); the path-assignment directory regression passed (1/1); and `git diff --check` passed. The browser's loaded DOM and outside-click interaction were not re-exercised in this pass.
+
 ## 2026-10-11 — Report unknown quiz question IDs accurately
 
 - **Reviewed:** The learner quiz form's required-answer state, submission validation order, and the API's aggregate-only result transaction.
