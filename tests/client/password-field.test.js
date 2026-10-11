@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import test from 'node:test';
+
+const sourceRoot = new URL('../../src/', import.meta.url);
+const componentSource = fs.readFileSync(new URL('components.tsx', sourceRoot), 'utf8');
+const authSource = fs.readFileSync(new URL('pages-auth.tsx', sourceRoot), 'utf8');
+const managementSource = fs.readFileSync(new URL('pages-manage.tsx', sourceRoot), 'utf8');
+const styles = fs.readFileSync(new URL('styles.css', sourceRoot), 'utf8');
+
+test('password fields start concealed and expose an accessible, non-submit visibility toggle', () => {
+  assert.match(componentSource, /const \[visible, setVisible\] = useState\(false\)/);
+  assert.match(componentSource, /type=\{visible \? 'text' : 'password'\}/);
+  assert.match(componentSource, /type="button" className="password-visibility-toggle"/);
+  assert.match(componentSource, /aria-label=\{`\$\{visible \? 'Hide' : 'Show'\} \$\{label\.toLowerCase\(\)\}`\}/);
+  assert.match(componentSource, /aria-controls=\{inputId\} aria-pressed=\{visible\}/);
+  assert.match(componentSource, /onClick=\{\(\) => setVisible\(\(current\) => !current\)\}/);
+  assert.match(componentSource, /\[\.\.\.new Set\(\[describedBy, visibleHintId\]\.filter\(Boolean\)\)\]/);
+});
+
+test('all password-entry forms use the shared field while the setup token stays concealed', () => {
+  assert.equal((authSource.match(/<PasswordField\b/g) || []).length, 8);
+  assert.equal((managementSource.match(/<PasswordField\b/g) || []).length, 6);
+  assert.equal((authSource.match(/type="password"/g) || []).length, 1);
+  assert.match(authSource, /<label>One-time setup token<input required[^>]*type="password"/);
+  assert.doesNotMatch(managementSource, /type="password"/);
+});
+
+test('the visibility control keeps a clear target, palette focus, and room for password text', () => {
+  assert.match(styles, /\.password-visibility-toggle\s*\{[^}]*min-width:\s*44px;[^}]*min-height:\s*36px;/);
+  assert.match(styles, /\.password-visibility-toggle:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--purple\);/);
+  assert.match(styles, /\.form-stack \.password-input-control input, \.account-password-form \.password-input-control input\s*\{\s*padding-inline-end:\s*64px;\s*\}/);
+});

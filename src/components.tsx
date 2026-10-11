@@ -254,6 +254,29 @@ export function Button({ children, variant = 'primary', className = '', type = '
   return <button ref={ref} type={type} className={`button button-${variant} ${className}`.trim()} {...props}>{children}</button>;
 }
 
+type PasswordFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> & {
+  label: string;
+  hint?: string;
+  hintId?: string;
+};
+
+export function PasswordField({ label, hint, hintId, id, disabled, 'aria-describedby': describedBy, ...inputProps }: PasswordFieldProps) {
+  const generatedId = useId().replaceAll(':', '');
+  const inputId = id || `password-${generatedId}`;
+  const visibleHintId = hint ? hintId || `${inputId}-hint` : undefined;
+  const describedByIds = [...new Set([describedBy, visibleHintId].filter(Boolean))].join(' ') || undefined;
+  const [visible, setVisible] = useState(false);
+
+  return <div className="password-field">
+    <label htmlFor={inputId}>{label}</label>
+    <div className="password-input-control">
+      <input {...inputProps} id={inputId} type={visible ? 'text' : 'password'} disabled={disabled} aria-describedby={describedByIds} />
+      <button type="button" className="password-visibility-toggle" aria-label={`${visible ? 'Hide' : 'Show'} ${label.toLowerCase()}`} aria-controls={inputId} aria-pressed={visible} disabled={disabled} onClick={() => setVisible((current) => !current)}>{visible ? 'Hide' : 'Show'}</button>
+    </div>
+    {hint && <small id={visibleHintId}>{hint}</small>}
+  </div>;
+}
+
 export type AppSelectOption<T extends string | number> = { value: T; label: string; disabled?: boolean };
 
 export function AppSelect<T extends string | number>({ value, options, onChange, ariaLabel, ariaLabelledBy, describedBy, controlId, invalid = false, className = '', disabled = false, required = false, leadingIcon, matchTriggerWidth = false }: {
