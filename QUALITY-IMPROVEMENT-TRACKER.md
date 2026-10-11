@@ -6,7 +6,7 @@
 - **Improvement:** Return focus to the row trigger when publish, unpublish, archive, or delete actions close the menu. After a successful status change that removes the row from the selected filter, focus the persistent course search; do the same after a course is deleted. Comments explain both focus destinations.
 - **Why it helps:** Keyboard users remain oriented while an action runs and have a stable next control when the acted-on row leaves the list.
 - **Backend review:** Status and deletion endpoints already return the data needed for the list refresh; their contracts and authorization remain unchanged.
-- **Checked:** Focused row-menu and empty-search recovery tests passed (3/3); `npm run build` passed TypeScript checking and Vite bundling; `git diff --check` passed. No status change or deletion was submitted in the browser.
+- **Checked:** Focused row-menu and empty-search recovery tests passed (3/3); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; `git diff --check` passed. No status change or deletion was submitted in the browser.
 
 ## 2026-10-11 — Keep course-creation context in the editor breadcrumb
 
