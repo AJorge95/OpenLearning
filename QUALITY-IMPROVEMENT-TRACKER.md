@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep course-detail drafts scoped to their route
+
+- **Reviewed:** The editor preserves fields that differ from the prior server response on same-course refreshes. After a route change, the loader closure could still treat the old course as that prior response and carry its unsaved title or description into the newly selected course.
+- **Improvement:** Only preserve form edits when the previously loaded course ID matches the requested course ID. A different course initializes its fields from its own response.
+- **Why it helps:** Unsaved details from one course cannot appear in another course's editor or be accidentally saved there; same-course refresh recovery remains intact.
+- **Backend review:** The management route authorizes access to the requested course and returns that course in its response. No server change was needed.
+- **Checked:** Course-editor route-state tests passed (9/9), the full `npm test` suite passed (596/596), `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. Rendered route switching was not run; Playwright is not installed in this checkout.
+
 ## 2026-10-11 — Keep module drafts with their course
 
 - **Reviewed:** The inline module title and open state survived course-route changes. A pending create could also finish later and clear the new course's form or move focus there.

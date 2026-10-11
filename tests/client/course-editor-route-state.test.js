@@ -69,6 +69,18 @@ test('a stale course refresh cannot abort the newly selected course request', ()
     'ignore stale refreshes before they can abort the active route request');
 });
 
+test('course detail drafts are preserved only while refreshing the same course', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const loadStart = source.indexOf('async function load(id = courseId)');
+  const loadEnd = source.indexOf('\n\n  useEffect(() => {', loadStart);
+  const loadSource = source.slice(loadStart, loadEnd);
+
+  assert.ok(loadStart >= 0 && loadEnd > loadStart);
+  assert.match(loadSource, /const previousCourse = course\?\.id === id \? course : null/);
+  assert.match(loadSource, /if \(!previousCourse\) \{\s*setTitle\(response\.course\.title\); setDescription\(response\.course\.description\); setCategory\(response\.course\.category\); setVisibility\(response\.course\.visibility\);/);
+  assert.match(loadSource, /setTitle\(\(current\) => current === previousCourse\.title \? response\.course\.title : current\)/);
+});
+
 test('course navigation clears the inline add-module draft and scopes late responses', () => {
   const source = fs.readFileSync(sourcePath, 'utf8');
   assert.match(source, /useEffect\(\(\) => \{\s*let active = true;\s*setModuleTitle\(''\); setAddingModule\(false\); addModuleInvokerRef\.current = null;/);

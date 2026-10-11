@@ -999,7 +999,7 @@ export function CourseEditorPage() {
 
   async function load(id = courseId) {
     if (!id || routeCourseIdRef.current !== id) return;
-    const previousCourse = course;
+    const previousCourse = course?.id === id ? course : null;
     const requestSequence = ++courseLoadSequenceRef.current;
     courseLoadControllerRef.current?.abort();
     const controller = new AbortController();
