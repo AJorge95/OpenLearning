@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep profile updates atomic with certificate issuance
+
+- **Reviewed:** Self-service profile changes committed the learner name and audit event before backfilling certificates. If certificate persistence failed, the request returned an error while the profile appeared saved, and a retry could not reliably distinguish the partial result. The administrator profile route already kept those writes in one transaction.
+- **Improvement:** Include completed-certificate backfill in the self-service profile transaction. Add a route regression that forces certificate insertion to fail, verifies the name and audit event roll back, then retries successfully and checks the certificate recipient name.
+- **Why it helps:** A failed profile save leaves the learner's name, audit history, and certificate records consistent, so retrying the request completes the whole change rather than inheriting a partial save.
+- **Interface review:** The existing form reports the request error; transaction rollback keeps that feedback accurate and makes a retry safe. No form changes were needed.
+- **Checked:** `node --test --test-name-pattern="self-service profile and certificate updates|certificate-name updates roll back" tests/server/registration-fields.test.js` passed (2/2), including forced backfill failure and retry. `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, syntax checks for the changed JavaScript files, and `git diff --check` passed.
+
 ## 2026-10-11 — Explain account recovery when session storage fails
 
 - **Reviewed:** Initial setup and public registration commit the administrator or learner before saving its new session. If the session store then failed, the server returned a generic internal error even though the account already existed, leaving registration screens to report failure and invite a retry that would hit an account conflict.
