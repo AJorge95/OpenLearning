@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck for follow-up interface and backend defects
+
+- **Reviewed:** The current account-details role selector markup, its 9rem desktop sizing and mobile full-width rule, the trigger-width popup positioning, and the hit-area regression; also checked decorative-image labels, empty native-dialog/TODO markers, SQLite session expiry/error handling, bounded and redacted log persistence, orphaned-media cleanup reporting, HTTP error mapping, and recent tracker entries.
+- **Why no code change:** The reported role-selector click boundary is already addressed and covered; the inspected backend failure paths already handle expected missing files, cleanup errors, bounded retention, and safe client responses. No new reproducible defect or user benefit was supported by this review.
+- **Checked:** Repository status after the previous push was clean and `main` matched `origin/main` at `939fb00`; focused source and regression review found no duplicate or speculative change.
+- **Needed to continue:** A new reproducible issue, a concrete user workflow that remains unclear, or fresh reliability evidence that points to a gap.
+
 ## 2026-10-11 — Preserve saved quiz scores when breakdown loading fails
 
 - **Reviewed:** Returning to a quiz loads the learner-scoped latest-attempt preview from the course payload, then separately requests the aggregate attempt details. Previously, failure of that second request hid the score and showed only a retry page. The earlier saved-result recovery entry covered keeping the answer form unavailable and retrying; this follow-up preserves the score already returned safely by the course payload.
