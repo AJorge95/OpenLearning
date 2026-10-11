@@ -43,3 +43,14 @@ test('the current Users link retries an unavailable pending count', () => {
   assert.ok(staffShellSource.includes('Users, pending registration count unavailable; activate to retry'));
   assert.ok(staffShellSource.includes('pendingRegistrationCountBadge'));
 });
+
+test('approval success remains visible when the account-list refresh fails', () => {
+  const handlerStart = managementSource.indexOf('async function approveRegistration(user: User)');
+  const handlerEnd = managementSource.indexOf('\n  return <div className="management-page users-page"', handlerStart);
+  const handler = managementSource.slice(handlerStart, handlerEnd);
+  const successNotice = handler.indexOf('setSuccess(response.user.disabled');
+  const listRefresh = handler.indexOf('await load(currentListState.page, currentListState.query, currentListState.roleFilter, currentListState.approvalFilter)');
+
+  assert.ok(handlerStart >= 0 && handlerEnd > handlerStart);
+  assert.ok(successNotice >= 0 && listRefresh > successNotice, 'confirm approval before starting the list refresh');
+});

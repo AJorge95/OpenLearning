@@ -1828,11 +1828,12 @@ export function AdminUsersPage() {
     try {
       const response = await api.patch<{ user: User }>(`/api/admin/users/${user.id}/approval`, {});
       requestPendingRegistrationCountRefresh();
-      const currentListState = userListStateRef.current;
-      if (!(await load(currentListState.page, currentListState.query, currentListState.roleFilter, currentListState.approvalFilter))) return;
+      // The approval has committed; preserve its confirmation if the follow-up list read fails.
       setSuccess(response.user.disabled
         ? `${user.username}'s registration was approved. The account is disabled, so enable it before they can sign in.`
         : `${user.username}'s registration was approved. They can now sign in.`);
+      const currentListState = userListStateRef.current;
+      await load(currentListState.page, currentListState.query, currentListState.roleFilter, currentListState.approvalFilter);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Registration could not be approved.');
     } finally { markSaving(user.id, false); }

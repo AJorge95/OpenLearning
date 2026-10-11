@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve approval confirmation when list refresh fails
+
+- **Reviewed:** The admin approval mutation, its follow-up user-list request, the failed-list retry state, and the success/error notices rendered by the Users page.
+- **Improvement:** Set the approval success notice immediately after the server confirms approval, before reloading the current filtered list. Keep the loader's existing error and retry action if that follow-up read fails.
+- **Why it helps:** Administrators can distinguish a completed approval from a failed list refresh and can retry the read without assuming the approval must be repeated.
+- **Backend review:** The approval endpoint already commits the status change before returning; no backend change was needed.
+- **Checked:** The focused admin-navigation and approval UI regressions passed (4/4); the full suite passed (527/527); `npm run build` passed strict TypeScript checking and Vite bundling; the changed client test syntax check and `git diff --check` passed. A live list-refresh failure was not injected into the signed-in browser, so confirmation ordering is covered by the client regression rather than a rendered failure state.
+
 ## 2026-10-11 — Let administrators retry the pending count from Users
 
 - **Reviewed:** The unavailable-count warning, React Router's same-route link behavior, the approval refresh event, and the state refresh triggered by route changes.
