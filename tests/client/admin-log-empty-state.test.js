@@ -31,6 +31,20 @@ test('system-log empty results can clear the applied search and severity filters
   assert.match(page, /<LogEmptyState message=\{emptyMessage\} hasFilters=\{hasAppliedFilters\} onClear=\{clearFilters\} \/>/);
 });
 
+test('audit action changes apply the visible search draft', () => {
+  const page = functionBody('AdminAuditLogPage');
+
+  assert.match(page, /function applyAuditFilterChange\(nextAction: string\) \{[\s\S]*?const nextQuery = query\.trim\(\);[\s\S]*?setQuery\(nextQuery\);[\s\S]*?setAppliedQuery\(nextQuery\);[\s\S]*?setAction\(nextAction\);[\s\S]*?setPage\(1\);/);
+  assert.match(page, /ariaLabel="Filter by action"[^\n]*onChange=\{applyAuditFilterChange\}/);
+});
+
+test('system severity changes apply the visible search draft', () => {
+  const page = functionBody('AdminSystemLogPage');
+
+  assert.match(page, /function applySystemFilterChange\(nextLevel: string\) \{[\s\S]*?const nextQuery = query\.trim\(\);[\s\S]*?setQuery\(nextQuery\);[\s\S]*?setAppliedQuery\(nextQuery\);[\s\S]*?setLevel\(nextLevel\);[\s\S]*?setPage\(1\);/);
+  assert.match(page, /ariaLabel="Filter by severity"[^\n]*onChange=\{applySystemFilterChange\}/);
+});
+
 test('log empty-state recovery stays conditional on active filters', () => {
   const emptyState = functionBody('LogEmptyState');
 

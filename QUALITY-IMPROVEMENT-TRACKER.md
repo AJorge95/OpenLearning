@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep log search and filters in sync
+
+- **Reviewed:** Audit and system log search drafts, action and severity filter reloads, pagination, and both `/api/admin/*-logs` routes. Changing the select applied only the old search while leaving newer draft text visible.
+- **Improvement:** Apply the trimmed visible search draft whenever the audit action or system severity filter changes, and reset to page one.
+- **Why it helps:** Administrators see log entries that agree with both the search field and selected filter rather than stale results beside newer text.
+- **Backend review:** Both routes already validate their filter values, bind search terms, combine filters before pagination, and return stable result pages. No server change was needed.
+- **Checked:** Focused log client and server tests, full `npm test`, `npm run build`, and `git diff --check` passed. The rendered audit and system logs both apply an unmatched draft when their filter changes and show the matching empty state.
+
 ## 2026-10-11 — Keep administrator user search and filters in sync
 
 - **Reviewed:** The user-list search draft and applied query, role and registration filter reloads, retry snapshots, pagination, and the `/api/admin/users` route. Changing either select reloaded with the old applied search while leaving newer draft text visible.

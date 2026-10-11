@@ -2836,8 +2836,17 @@ export function AdminAuditLogPage() {
     setPage(1);
   }
 
+  // Apply the visible search draft whenever the action filter changes.
+  function applyAuditFilterChange(nextAction: string) {
+    const nextQuery = query.trim();
+    setQuery(nextQuery);
+    setAppliedQuery(nextQuery);
+    setAction(nextAction);
+    setPage(1);
+  }
+
   return <div className="management-page logs-page"><PageHeading title="Audit log" subtitle="Review account, course, and platform changes, including access and comment removals." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
-    <div className="log-filters"><form role="search" aria-label="Search audit log" className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" aria-label="Search audit log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter log-role-filter"><span className="catalog-filter-label">Action</span><AppSelect className="app-select--filter" ariaLabel="Filter by action" leadingIcon={<Filter size={16} />} value={action} onChange={(value) => { setAction(value); setPage(1); }} options={[{ value: '', label: 'All actions' }, ...actions.map((item) => ({ value: item.action, label: `${item.action.replaceAll('_', ' ')} (${item.count})` }))]} /></div></div>
+    <div className="log-filters"><form role="search" aria-label="Search audit log" className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" aria-label="Search audit log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter log-role-filter"><span className="catalog-filter-label">Action</span><AppSelect className="app-select--filter" ariaLabel="Filter by action" leadingIcon={<Filter size={16} />} value={action} onChange={applyAuditFilterChange} options={[{ value: '', label: 'All actions' }, ...actions.map((item) => ({ value: item.action, label: `${item.action.replaceAll('_', ' ')} (${item.count})` }))]} /></div></div>
     {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
     {hasEmptyResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyMessage}</p>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable audit log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">Audit log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Change</th><th scope="col">Details</th></tr></thead><tbody>
@@ -2890,8 +2899,17 @@ export function AdminSystemLogPage() {
     setPage(1);
   }
 
+  // Apply the visible search draft whenever the severity filter changes.
+  function applySystemFilterChange(nextLevel: string) {
+    const nextQuery = query.trim();
+    setQuery(nextQuery);
+    setAppliedQuery(nextQuery);
+    setLevel(nextLevel);
+    setPage(1);
+  }
+
   return <div className="management-page logs-page"><PageHeading title="System log" subtitle="Inspect server startup, runtime errors, and operational events." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
-    <div className="log-filters"><form role="search" aria-label="Search system log" className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search system events" aria-label="Search system log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter log-role-filter"><span className="catalog-filter-label">Severity</span><AppSelect className="app-select--filter" ariaLabel="Filter by severity" leadingIcon={<Activity size={16} />} value={level} onChange={(value) => { setLevel(value); setPage(1); }} options={[{ value: 'all', label: 'All levels' }, { value: 'error', label: 'Errors' }, { value: 'warn', label: 'Warnings' }, { value: 'info', label: 'Info' }]} /></div></div>
+    <div className="log-filters"><form role="search" aria-label="Search system log" className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search system events" aria-label="Search system log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter log-role-filter"><span className="catalog-filter-label">Severity</span><AppSelect className="app-select--filter" ariaLabel="Filter by severity" leadingIcon={<Activity size={16} />} value={level} onChange={applySystemFilterChange} options={[{ value: 'all', label: 'All levels' }, { value: 'error', label: 'Errors' }, { value: 'warn', label: 'Warnings' }, { value: 'info', label: 'Info' }]} /></div></div>
     {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
     {hasEmptyResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyMessage}</p>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable system log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">System log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Level</th><th scope="col">Source</th><th scope="col">Event</th><th scope="col">Details</th></tr></thead><tbody>
