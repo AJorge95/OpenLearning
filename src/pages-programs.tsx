@@ -771,6 +771,7 @@ export function AdminCompetenciesPage() {
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
+  const competencyTitleInputRef = useRef<HTMLInputElement>(null);
   const loadControllerRef = useRef<AbortController | null>(null);
   async function load(requestedPage = page, requestedQuery = appliedQuery) {
     loadControllerRef.current?.abort();
@@ -818,13 +819,21 @@ export function AdminCompetenciesPage() {
   async function create(event: React.FormEvent) {
     event.preventDefault(); if (loading || saving || savingId !== null || !title.trim()) return;
     setSaving(true); setError(''); setNotice('');
+    let created = false;
     try {
       const result = await api.post<{ page: number }>('/api/admin/competencies', { title: title.trim(), description: description.trim() });
+      created = true;
       setTitle(''); setDescription(''); setQuery(''); setAppliedQuery(''); setNotice('Competency added.'); setPage(result.page);
       await load(result.page, '');
     }
     catch (cause) { setError(requestMessage(cause, 'Competency could not be added.')); }
-    finally { setSaving(false); }
+    finally {
+      setSaving(false);
+      if (created) window.requestAnimationFrame(() => {
+        const input = competencyTitleInputRef.current;
+        if (input?.isConnected) input.focus();
+      });
+    }
   }
   async function toggle(item: Competency) {
     if (loading || saving || savingId) return;
@@ -847,7 +856,7 @@ export function AdminCompetenciesPage() {
     {error && <div className="inline-notice" role="alert">{error}</div>}{notice && <div className="inline-notice inline-notice-success" role="status">{notice}</div>}
     {loadError && <div className="error-notice-actionable" role="alert"><span>{loadError}</span><Button variant="secondary" disabled={loading || saving || savingId !== null} onClick={() => void load()}>Try again</Button></div>}
     {!loading && !loadError && !error && items.length === 0 && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{appliedQuery ? `No competencies match ${appliedQuery}.` : 'No competencies yet. Add competencies before mapping courses to them.'}</p>}
-    <form className="program-editor-card competency-create-form" onSubmit={create} aria-busy={loading || saving || savingId !== null}><div className="program-card-heading"><div><span className="program-icon"><CircleHelp size={18} /></span><div><h2>Add a competency</h2><p>Course completions can demonstrate this competency.</p></div></div></div><div className="program-form-grid"><label>Name<input required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} disabled={loading || saving || savingId !== null} /></label><label className="program-full-field">Description<textarea rows={2} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={loading || saving || savingId !== null} /></label></div><div className="program-form-actions"><Button type="submit" disabled={loading || saving || savingId !== null || !title.trim()}><Plus size={16} />{saving ? 'Adding…' : 'Add competency'}</Button></div></form>
+    <form className="program-editor-card competency-create-form" onSubmit={create} aria-busy={loading || saving || savingId !== null}><div className="program-card-heading"><div><span className="program-icon"><CircleHelp size={18} /></span><div><h2>Add a competency</h2><p>Course completions can demonstrate this competency.</p></div></div></div><div className="program-form-grid"><label>Name<input ref={competencyTitleInputRef} required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} disabled={loading || saving || savingId !== null} /></label><label className="program-full-field">Description<textarea rows={2} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={loading || saving || savingId !== null} /></label></div><div className="program-form-actions"><Button type="submit" disabled={loading || saving || savingId !== null || !title.trim()}><Plus size={16} />{saving ? 'Adding…' : 'Add competency'}</Button></div></form>
     <form role="search" className="management-search competency-search" aria-label="Search competencies" onSubmit={searchCompetencies} aria-busy={loading}>
       <Search size={18} aria-hidden="true" />
       <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search competencies" aria-label="Search competency names and descriptions" maxLength={100} disabled={saving || savingId !== null} />
