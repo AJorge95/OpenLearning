@@ -28,3 +28,10 @@ export function isBrandingPalette(value: unknown): value is BrandingPalette {
 
 export const DEFAULT_PALETTE: BrandingPalette = 'violet';
 export const MAX_BRAND_ICON_BYTES = 512 * 1024;
+export const MAX_BRAND_ICON_DIMENSION = 1024;
+
+export function isBrandIconDimensionAllowed(width: number, height: number) {
+  return Number.isSafeInteger(width) && Number.isSafeInteger(height)
+    && width > 0 && height > 0
+    && width <= MAX_BRAND_ICON_DIMENSION && height <= MAX_BRAND_ICON_DIMENSION;
+}

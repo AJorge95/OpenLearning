@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Check platform icon dimensions before staging
+
+- **Reviewed:** The platform-icon picker’s MIME and file-size checks, displayed dimension limit, decoded preview path, and matching server-side bounds.
+- **Improvement:** Decode selected images before staging them, reject non-positive or over-limit dimensions with a field-level error, and derive the visible 1024 × 1024 guidance from the same client constant. Keep the server check in place.
+- **Why it helps:** Administrators and setup users learn immediately when an image exceeds the stated limit, before submitting platform settings or setup.
+- **Backend review:** The server remains authoritative and retains its independent dimension validation; no API contract changed.
+- **Checked:** Focused picker and dimension tests passed (4/4), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict type checking and Vite bundling, and `git diff --check` passed. Browser file-selection rendering was not exercised; a source regression checks that decoded dimensions are validated before the value is staged.
+
 ## 2026-10-11 — Require WebP image data for platform icons
 
 - **Reviewed:** The platform-icon WebP dimension parser and the [WebP container specification](https://developers.google.com/speed/webp/docs/riff_container) for simple, extended, and animated RIFF layouts.
