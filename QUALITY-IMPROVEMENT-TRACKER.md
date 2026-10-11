@@ -24,6 +24,14 @@
 - **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js tests/server/last-login.test.js tests/server/media-routes.test.js` passed (45/45). The open course-editor tab was left untouched; the role-control and HTTP/media source paths were reviewed directly.
 - **Needed to continue:** A reproducible API or media failure outside the existing cases, fresh workload measurements for performance work, or new current-build browser evidence contradicting the selector verification.
 
+## 2026-10-12 — Recheck pending UI and responsive follow-ups
+
+- **Reviewed:** The current account-role selector markup, desktop and mobile hit-area rules, shared HTTP error handling, protected media delivery, and the previously deferred caption-control responsive review.
+- **Result:** No new runtime change was indicated. The role control still separates its visible label and bounded trigger; the error handler and media paths have coverage for expected failures. The local database still has 22 lessons and no caption tracks, so the caption-specific player row cannot be rendered for responsive review.
+- **Why no change:** The role-selector report has no current-build reproduction, the reviewed server failures already have focused regression coverage, and changing a caption-only layout without a captioned lesson would be speculative.
+- **Checked:** The focused UI and server tests passed (45/45). A read-only database query confirmed 22 lessons and zero caption tracks. The existing in-app browser tab was an open course editor and was left untouched; `git diff --check` passed.
+- **Needed to continue:** A reproduced role-selector failure on the current build, a captioned lesson available locally with an effective mobile viewport, or a specific backend failure or representative load measurement.
+
 ## 2026-10-12 — Retain quiz submission locks per route
 
 - **Reviewed:** The learner quiz page's single in-flight route-key ref, route-change state resets, and the attempt endpoint's transactional insert. A pending submission on one quiz could be overwritten by a submission on another route, allowing a second attempt if the learner returned before the first finished; the route sequence also hid a successful response after returning to its quiz.
