@@ -1,13 +1,5 @@
 # Quality Improvement Tracker
 
-## 2026-10-11 — Keep long course titles inside responsive cards
-
-- **Reviewed:** Course title validation allows up to 160 characters, while cards switch to a narrow image-and-copy grid at 420px and did not set a shrink boundary or wrapping rule for unbroken title text.
-- **Improvement:** Allow the course-card copy column to shrink and wrap long title strings at any character boundary. Add a focused client regression that ties those styles to the accepted title limit and compact card layout.
-- **Why it helps:** A long title without spaces no longer widens or clips a course card on narrow screens, so learners can still read and open the course.
-- **Backend review:** The server already enforces the 160-character course title limit; no API change was needed.
-- **Checked:** The focused course-card regression passed (1/1); the full suite passed (528/528); `npm run build` passed strict TypeScript checking and Vite bundling; `node --check tests/client/course-card-responsive.test.js` and `git diff --check` passed. Chrome at 1718×1270 loaded the catalog, reported `min-width: 0` and `overflow-wrap: anywhere` on the rendered card, opened the course page from its card, and returned to the catalog without console warnings or errors. The Browser plugin and local Playwright package were unavailable, so the ≤420px breakpoint and an actual 160-character title were regression-checked but not visually rendered.
-
 ## 2026-10-11 — Preserve account-update confirmation when list refresh fails
 
 - **Reviewed:** The administrator role and admin-status update flow, the server-confirmed PATCH response, and the follow-up reload of the current user-list page and filters.
