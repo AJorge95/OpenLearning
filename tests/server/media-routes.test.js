@@ -799,11 +799,11 @@ test('caption removal preserves its record and file when its audit event cannot 
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.caption_removed' AND entity_id = 'lesson-caption-audit'").get().count, initialAuditCount + 1);
 });
 
-test('accepts a WebP cover with a complete RIFF image chunk', async () => {
+test('accepts a WebP cover when the kind field follows the file part', async () => {
   const webpContents = Buffer.from('UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v89WAAAAA==', 'base64');
   const form = new FormData();
-  form.set('kind', 'cover');
   form.set('file', new File([webpContents], 'valid-cover.webp', { type: 'image/webp' }));
+  form.set('kind', 'cover');
 
   const response = await fetch(apiUrl('/manage/courses/course-caption-audit/media'), {
     method: 'POST',
