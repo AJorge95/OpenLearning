@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep staff course search and status in sync
+
+- **Reviewed:** Course-list search draft and applied state, status-tab reloads, pagination, retry snapshots, and the `/api/manage/courses` route. Changing a tab reloaded with the old applied search while leaving newer draft text visible.
+- **Improvement:** Apply the trimmed visible search draft whenever the course status tab changes, reset to page one, and reload directly when the current tab is selected but the draft changed.
+- **Why it helps:** Staff see course rows that agree with the search text and selected status, with the empty state and retries tied to the same query.
+- **Backend review:** The route already validates status, binds search terms, and combines both filters before pagination. No server change was needed.
+- **Checked:** The focused course list and course route tests passed (111/111), full `npm test`, `npm run build`, and `git diff --check` passed. In the rendered `/manage/courses` page, an unmatched draft applied when the status changed and showed the matching empty state; changing the draft while reselecting the current status returned only the matching draft course.
+
 ## 2026-10-11 — Keep log search and filters in sync
 
 - **Reviewed:** Audit and system log search drafts, action and severity filter reloads, pagination, and both `/api/admin/*-logs` routes. Changing the select applied only the old search while leaving newer draft text visible.
