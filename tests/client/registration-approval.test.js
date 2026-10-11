@@ -20,7 +20,9 @@ test('pending registration does not sign in and shows an approval confirmation',
   );
 
   assert.ok(registerPage.includes('if (result.approvalRequired) { setApprovalSubmitted(true); return; }'));
-  assert.ok(registerPage.includes('<h1>Registration submitted</h1>'));
+  assert.ok(registerPage.includes('const approvalConfirmationHeadingRef = useRef<HTMLHeadingElement>(null);'));
+  assert.match(registerPage, /if \(approvalSubmitted\) approvalConfirmationHeadingRef\.current\?\.focus\(\);/);
+  assert.ok(registerPage.includes('<h1 ref={approvalConfirmationHeadingRef} tabIndex={-1}>Registration submitted</h1>'));
   assert.ok(registerPage.includes('Your account is waiting for administrator approval. You can sign in after it has been approved.'));
   assert.match(signUp, /if \(!approvalRequired\)\s*\{[\s\S]*?setUser\(result\.user\);/);
 });

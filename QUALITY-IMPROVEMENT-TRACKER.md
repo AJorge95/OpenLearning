@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Focus the pending-registration confirmation
+
+- **Reviewed:** Public sign-up submission, the pending-registration confirmation branch, setup-step heading focus behavior, visible focus styling, and the existing confirmation copy.
+- **Improvement:** When approval is required, move focus to the newly displayed “Registration submitted” heading after React replaces the form. The heading is programmatically focusable, and a client regression check protects the focus handoff.
+- **Why it helps:** The submit control disappears after success; moving focus to the confirmation keeps keyboard and assistive-technology users oriented and makes the required next step clear.
+- **Interface review:** The existing visible heading and approval explanation remain in place, with the global focus-visible outline. No layout or copy change was needed.
+- **Checked:** The focused registration-approval client tests passed (3/3); the full suite passed (523/523); `npm run build` passed strict TypeScript checking and Vite bundling; `git diff --check` passed. No live registration was submitted to the user’s application.
+
 ## 2026-10-11 — Validate approval policy before settings writes
 
 - **Reviewed:** Admin settings validation order, the immediate transaction that saves settings and audit history, and the labeled approval checkbox with its explanatory copy.
