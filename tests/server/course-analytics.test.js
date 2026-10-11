@@ -3232,6 +3232,35 @@ test('resource removal preserves its document when its audit entry cannot be sav
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.resource_removed' AND entity_id = 'lesson-resource-audit'").get().count, 1);
 });
 
+test('resource links reject malformed, unsafe, and credentialed URLs without writes', async () => {
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('course-resource-url-validation', 'Resource URL validation', 'draft', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('module-resource-url-validation', 'course-resource-url-validation', 'Resource URL module', 0);
+    INSERT INTO lessons (id, module_id, title, position)
+      VALUES ('lesson-resource-url-validation', 'module-resource-url-validation', 'Resource URL lesson', 0);
+  `);
+  const urls = [
+    ['not a URL', 'Enter a valid link URL.'],
+    ['ftp://example.com/resource', 'Links must use HTTP or HTTPS and cannot contain embedded credentials.'],
+    ['https://teacher:secret@example.com/resource', 'Links must use HTTP or HTTPS and cannot contain embedded credentials.'],
+  ];
+
+  for (const [url, error] of urls) {
+    const response = await fetch(apiUrl('/manage/lessons/lesson-resource-url-validation/resources'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Reference guide', url }),
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error, code: 'validation_error' });
+  }
+
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM lesson_resources WHERE lesson_id = 'lesson-resource-url-validation'").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.resource_link_added' AND entity_id = 'lesson-resource-url-validation'").get().count, 0);
+});
+
 test('resource link creation rolls back when its audit entry cannot be saved', async () => {
   database.exec(`
     INSERT INTO courses (id, title, status, created_by, updated_by)

@@ -8,6 +8,7 @@ import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAuth, req
 import { assertPublishable, canLearnerAccess, courseFromLesson, courseSummaries, courseSummary, enrollLearner, getCoursePayload, isLessonUnlocked, moduleCourse, quizCourse } from './course-service.js';
 import { likeContains, textSearchPredicate } from './sql.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
+import { validateLessonResourceUrl } from '../shared/resource-url-validation.js';
 import { learnerCommentLimiter, learnerReactionLimiter, quizAttemptLimiter } from './rate-limits.js';
 import { canonicalCourse, logicalCourseId, publishRevision, publishedVersion } from './course-versioning.js';
 import { certificatePayload, findCourseCertificate, issueCertificateIfComplete } from './certificate-service.js';
@@ -893,12 +894,9 @@ courseRouter.post('/manage/lessons/:lessonId/resources', requireStaff, (req, res
   requireCourseManager(lesson.id, req.currentUser);
   const title = textField(req.body?.title, 'Resource title', 160, { required: true });
   const rawUrl = textField(req.body?.url, 'Link URL', 2048, { required: true });
-  let url;
-  try { url = new URL(rawUrl); }
-  catch { fail(400, 'Enter a valid link URL.', 'validation_error'); }
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
-    fail(400, 'Links must use HTTP or HTTPS and cannot contain embedded credentials.', 'validation_error');
-  }
+  const urlValidation = validateLessonResourceUrl(rawUrl);
+  if (urlValidation.error) fail(400, urlValidation.error, 'validation_error');
+  const { url } = urlValidation;
   const id = randomUUID();
   const createResource = db.transaction(() => {
     const currentLesson = courseFromLesson(req.params.lessonId);
