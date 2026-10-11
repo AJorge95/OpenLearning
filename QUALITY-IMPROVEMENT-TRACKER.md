@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve keyboard context when editing learning paths
+
+- **Reviewed:** The inline learning-path editor, row actions, cancel/save transitions, and the existing status-filter focus recovery; also rechecked the client request-cancellation flow and structured server parser errors.
+- **Improvement:** Move focus into the path-name field when opening an existing path for editing. Return focus to the initiating row action after cancel or save, with the “All paths” filter as a fallback when a refreshed list removes that row.
+- **Why it helps:** Keyboard and screen-reader users arrive at the form that changed and return to a stable place after leaving it, rather than losing focus when the editor is replaced above the selected row.
+- **Backend review:** API abort handling and structured request-parser error mapping remain covered; no backend behavior change was indicated.
+- **Checked:** Focused learning-path client tests passed (12/12), API transport tests passed (14/14), and the structured parser-error regression passed (1/1). `npm run build` passed TypeScript checking and Vite bundling; `git diff --check` passed. Browser interaction was not run; the new focus transitions are covered by source regression checks.
+
 ## 2026-10-11 — Recheck the administrator role selector boundary
 
 - **Reviewed:** The browser comment's account-details route and saved selector path against the live page, the bounded role control, and clicks beside an enabled selector.
