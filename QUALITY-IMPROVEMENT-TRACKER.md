@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep lesson watch checkpoints and telemetry atomic
+
+- **Reviewed:** Starting tracked playback and recording accepted or rejected watch positions update both `lesson_watch_progress` and `lesson_watch_telemetry`. Those paired writes ran as separate statements, so a failed telemetry write could leave a partial checkpoint or omit its related telemetry.
+- **Improvement:** Wrap each paired start, accepted-heartbeat, and rejected-seek update in a SQLite transaction. Add an isolated regression that forces telemetry insert and update failures and verifies the checkpoint changes roll back.
+- **Why it helps:** Playback state and its audit/coverage telemetry remain consistent when either database write fails.
+- **Interface review:** The administrator role selector remains bounded to its visible trigger, with its popup matched to that width. Existing source and positioning regressions cover the reported click boundary; the signed-out browser session does not expose the authenticated admin control for live interaction.
+- **Checked:** `node --test tests/server/lesson-watch.test.js` passed (13/13), including simulated insert and update failures; full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check server/lesson-watch.js`, `node --check tests/server/lesson-watch.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Announce pending course-list actions in the row
 
 - **Reviewed:** Course status and deletion menus close as soon as an administrator chooses an action. The existing busy state only changed text inside the now-closed menu, leaving no visible or announced progress while the server request was pending.

@@ -123,6 +123,40 @@ test('reuses prepared statements for active video heartbeats', () => {
   });
 });
 
+test('watch checkpoints and telemetry roll back together when telemetry writes fail', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  database.exec(`CREATE TRIGGER fail_watch_telemetry_insert
+    BEFORE INSERT ON lesson_watch_telemetry
+    BEGIN SELECT RAISE(ABORT, 'simulated telemetry failure'); END;`);
+  try {
+    assert.throws(() => lessonWatch.beginLessonWatch(learner, 'watch-lesson', 100), /simulated telemetry failure/);
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM lesson_watch_progress
+      WHERE user_id = ? AND lesson_id = ?`).get(learner.id, 'watch-lesson').count, 0);
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS fail_watch_telemetry_insert;');
+  }
+
+  withFakeClock(4_000_000, (advance) => {
+    lessonWatch.beginLessonWatch(learner, 'watch-lesson', 100);
+    database.exec(`CREATE TRIGGER fail_watch_telemetry_update
+      BEFORE UPDATE OF watched_seconds ON lesson_watch_telemetry
+      BEGIN SELECT RAISE(ABORT, 'simulated telemetry failure'); END;`);
+    try {
+      advance(1_000);
+      assert.throws(() => lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 1), /simulated telemetry failure/);
+    } finally {
+      database.exec('DROP TRIGGER IF EXISTS fail_watch_telemetry_update;');
+    }
+  });
+
+  const row = database.prepare(`SELECT progress.watched_until_seconds, progress.last_position_seconds,
+      telemetry.watched_seconds
+    FROM lesson_watch_progress AS progress
+    JOIN lesson_watch_telemetry AS telemetry USING (user_id, lesson_id)
+    WHERE progress.user_id = ? AND progress.lesson_id = ?`).get(learner.id, 'watch-lesson');
+  assert.deepEqual(row, { watched_until_seconds: 0, last_position_seconds: 0, watched_seconds: 0 });
+});
+
 test('watch progress requires a started video and rejects invalid positions', () => {
   const learner = { id: 'watch-learner', role: 'learner' };
   assertApiError(() => lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 1), 409, 'watch_not_started');
