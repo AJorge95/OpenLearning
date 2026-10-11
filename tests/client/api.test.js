@@ -98,6 +98,22 @@ test('returns a repeated CSRF rejection after one retry instead of looping', asy
   assert.equal(writeRequests, 2);
 });
 
+test('accepts empty 204 responses for delete requests', async (t) => {
+  restoreFetch(t);
+  const requests = [];
+  globalThis.fetch = async (input, options = {}) => {
+    const path = String(input);
+    if (path === '/api/csrf') return jsonResponse({ token: 'delete-token' });
+    requests.push({ path, method: options.method, csrf: new Headers(options.headers).get('X-CSRF-Token') });
+    return new Response(null, { status: 204 });
+  };
+
+  const result = await api.delete('/api/resource');
+
+  assert.equal(result, undefined);
+  assert.deepEqual(requests, [{ path: '/api/resource', method: 'DELETE', csrf: 'delete-token' }]);
+});
+
 test('reports a stable invalid-response error for non-JSON API responses', async (t) => {
   restoreFetch(t);
   globalThis.fetch = async () => new Response('<html>Not an API response</html>', {

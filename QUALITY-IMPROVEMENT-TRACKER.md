@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Type delete response contracts explicitly
+
+- **Reviewed:** The shared API client supports both `204 No Content` deletes and a learner lesson-completion delete that returns JSON. The generic delete helper defaulted to `unknown`, while most callers discard the body.
+- **Improvement:** Default `api.delete` to `void`, explicitly type the completion-reset JSON response, and cover the empty `204` path including its DELETE method and CSRF header.
+- **Why it helps:** Most delete call sites now communicate their actual no-body contract to TypeScript, while the endpoint that returns a payload retains an explicit response type.
+- **Interface review:** The course analytics page clears previous data during route changes and guards against rendering data for the wrong course. No interface change was indicated in this pass.
+- **Checked:** `node --test tests/client/api.test.js` passed (12/12); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/api.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Reset publication options when changing courses
 
 - **Reviewed:** The course editor keeps one component instance while its `courseId` route changes. The recompletion checkbox and publication note are local draft state, so they could carry into another course and affect its next publication.
