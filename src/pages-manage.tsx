@@ -301,7 +301,7 @@ export function CourseManagementPage() {
   const hasEmptyCourseResult = !loading && !failedRequest && courses.length === 0;
   const emptyCourseAction = appliedQuery
     ? <Button type="button" variant="secondary" onClick={clearCourseSearch}>Clear search</Button>
-    : status === 'all' && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} />Create course</Link>;
+    : status === 'all' && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} />Create first course</Link>;
   return <div className="management-page">
     <PageHeading title="Courses" action={<Link className="button button-primary" to="/manage/courses/new"><Plus size={18} />Create course</Link>} />
     <div className="management-tabs" role="group" aria-label="Filter courses by status">

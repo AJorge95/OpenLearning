@@ -25,3 +25,10 @@ test('filtered empty course searches can be cleared and reload the selected stat
   assert.match(page, /const emptyCourseAction = appliedQuery\s*\?\s*<Button type="button" variant="secondary" onClick=\{clearCourseSearch\}>Clear search<\/Button>/);
   assert.match(page, /<EmptyState title=\{emptyCourseState\.title\} detail=\{emptyCourseState\.detail\} action=\{emptyCourseAction\} \/>/);
 });
+
+test('the empty catalog action identifies the first course while the page action stays general', () => {
+  const page = courseManagementPage();
+
+  assert.match(page, /const emptyCourseAction = appliedQuery[\s\S]*?: status === 'all' && <Link className="button button-primary" to="\/manage\/courses\/new"><Plus size=\{17\} \/>Create first course<\/Link>;/);
+  assert.match(page, /<PageHeading title="Courses" action=\{<Link className="button button-primary" to="\/manage\/courses\/new"><Plus size=\{18\} \/>Create course<\/Link>\} \/>/);
+});
