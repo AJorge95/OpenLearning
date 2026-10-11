@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck staff course-list search and pagination
+
+- **Reviewed:** The `/api/manage/courses` query validation, parameterized title/description/category search, status filters, pagination, existing ordering indexes, route tests, and prior course-list tracker entries.
+- **Result:** No backend change; the endpoint bounds search input, validates status, binds search values, and uses the shared page limit. Existing route tests cover filtered later pages and course revisions, while prior migrations cover ordered list access.
+- **Why no change:** No reliability or query-plan gap was demonstrated in source or tests. A backend change needs a reproducible failure or representative performance evidence.
+- **Checked:** The focused course-list status/revision and filtered pagination tests passed (2/2); `git diff --check` passed.
+
 ## 2026-10-11 — Recover from empty course searches
 
 - **Reviewed:** Course-manager search state, status-filtered requests, and the existing empty-state actions.
