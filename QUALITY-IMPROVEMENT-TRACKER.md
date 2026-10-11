@@ -15,6 +15,13 @@
 - **Why no change:** These persistence and recovery paths are already implemented and covered by focused tests; no separate expiry or callback defect appeared in the current source.
 - **Checked:** `node --test tests/server/session-store.test.js` passed (7/7), and `git diff --check` was run.
 
+## 2026-10-11 — Recheck configurable registration validation
+
+- **Reviewed:** Field and option limits, canonical uniqueness, date/choice/checkbox answers, stale form handling, registration-time password hashing, and the field-definition read inside the immediate account-creation transaction.
+- **Result:** No code change. Signup validates answers before the expensive password hash and reloads the field definitions after hashing, validating them again in the same transaction that creates the account and saves answer snapshots.
+- **Why no change:** A settings update during password hashing is caught by the second validation; required fields cannot be silently omitted and removed field IDs return the stale-form conflict.
+- **Checked:** `node --test tests/server/registration-fields.test.js` passed (23/23); `git diff --check` was run.
+
 ## 2026-10-11 — Keep the captioned video controls from overlapping on phones
 
 - **Reviewed:** The learner player's responsive control grid, its child order when captions are available, and the full-screen button placement rules below 600px.
