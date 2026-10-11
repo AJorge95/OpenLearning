@@ -51,7 +51,7 @@ npm start
 
 Open `http://localhost:3000`. On the first launch, the two-step setup wizard asks for the bootstrap token, platform name, optional icon and color palette, initial administrator credentials, public connection protocol, and registration policy. Setup can only be completed once. When registration is enabled, new accounts receive the learner role. Administrators can update branding, protocol, registration access, and the account cap from **Settings**. A limit of `0` means unlimited accounts; a positive limit counts all accounts, including administrators and moderators.
 
-Service monitors can use `/healthz` to check that the HTTP process is responding. `/readyz` reports ready only when SQLite has a schema-migration version, setup is complete (`setup_complete = '1'`), and at least one administrator account exists. It returns HTTP 503 when any readiness check fails or while the server is draining during shutdown.
+Service monitors can use `/healthz` to check that the HTTP process is responding. `/readyz` reports ready only when SQLite has a schema-migration version, setup is complete (`setup_complete = '1'`), and at least one enabled administrator account exists. It returns HTTP 503 when any readiness check fails or while the server is draining during shutdown.
 
 For local development, run the Vite client and API together:
 

@@ -8,7 +8,7 @@ function createReadinessDatabase() {
   database.exec(`
     CREATE TABLE schema_migrations (version INTEGER NOT NULL);
     CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-    CREATE TABLE users (id TEXT PRIMARY KEY, role TEXT NOT NULL);
+    CREATE TABLE users (id TEXT PRIMARY KEY, role TEXT NOT NULL, disabled INTEGER NOT NULL DEFAULT 0);
     INSERT INTO schema_migrations (version) VALUES (1);
     INSERT INTO app_settings (key, value) VALUES ('setup_complete', '0');
   `);
@@ -21,7 +21,9 @@ test('readiness requires a migrated schema and completed administrator setup', (
     assert.equal(isReadyToServe(database, false), false);
     database.prepare("UPDATE app_settings SET value = '1' WHERE key = 'setup_complete'").run();
     assert.equal(isReadyToServe(database, false), false);
-    database.prepare("INSERT INTO users (id, role) VALUES ('admin-1', 'admin')").run();
+    database.prepare("INSERT INTO users (id, role, disabled) VALUES ('admin-1', 'admin', 1)").run();
+    assert.equal(isReadyToServe(database, false), false);
+    database.prepare("UPDATE users SET disabled = 0 WHERE id = 'admin-1'").run();
     assert.equal(isReadyToServe(database, false), true);
     database.prepare("UPDATE app_settings SET value = '0' WHERE key = 'setup_complete'").run();
     assert.equal(isReadyToServe(database, false), false);
