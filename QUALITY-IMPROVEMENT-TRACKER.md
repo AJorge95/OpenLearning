@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Load My Learning courses independently of certificates
+
+- **Reviewed:** The initial My Learning API response included both course and certificate data in one request. A certificate-history query failure therefore rejected the combined request and hid courses that were otherwise available. Certificate pagination and API support for omitting certificate data already existed.
+- **Improvement:** Load the first course page with `includeCertificates=0` and fetch the first certificate page independently. Give certificate history its own loading and retry state, while keeping the course empty state and course errors independent.
+- **Why it helps:** Learners can open their courses when certificate history is temporarily unavailable, and can retry that history without losing course results.
+- **Interface review:** Course pagination, certificate pagination, cancellation, and the shared My Learning empty-state announcement remain intact. The account-role selector comment was also checked against current source: the control has a separate text label and a trigger-bounded hit area. The current browser is signed out at `/login`, so neither protected interaction could be replayed.
+- **Checked:** Focused My Learning and AppSelect regressions passed (12/12). Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/my-learning-loading.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Identify staff learning-path progress
 
 - **Reviewed:** The shared learning-path list returns progress for the signed-in account. The staff management view displayed the same completion line and progress bar as the learner view without identifying whose activity it represented; empty draft paths also showed a zero-of-zero bar.
