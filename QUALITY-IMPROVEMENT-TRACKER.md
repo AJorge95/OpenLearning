@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Review mobile account details and motion preferences
+
+- **Reviewed:** Shared reduced-motion rules, account-detail layout at narrow widths, management navigation overflow, and the horizontally scrollable course-activity table.
+- **Result:** No source change. The account grid collapses to one column, the document remains within 320px and 390px viewports, and wide navigation/table content remains in its labeled scroll regions.
+- **Why no change:** The visible wrapping and overflow are contained within the intended responsive controls; no clipped page content or motion-preference defect appeared.
+- **Interface and backend review:** Existing labels, table caption, focusable scroll region, and reduced-motion scrolling/transition rules remain in place. No backend behavior was involved.
+- **Checked:** Rendered the authenticated account-details route in local Chrome at 390×844 and 320×800, confirmed document width matches both viewports, reviewed screenshots, then restored the default viewport. The browser reported no console warnings or errors. `git diff --check` passed.
+
 ## 2026-10-11 — Recheck shared HTTP failures and protected media delivery
 
 - **Reviewed:** Shared object-body and query validation, parser-error mapping, authenticated media and document delivery, byte-range streaming, interrupted responses, and stale orphan cleanup.
