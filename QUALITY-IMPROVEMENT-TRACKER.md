@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Announce lesson-comment pagination progress
+
+- **Reviewed:** The learner feedback section's existing comment-count announcement, disabled “Loading…” control, page retry behavior, and the server's 20-comment page bound.
+- **Improvement:** Add a polite, atomic live status that announces “Loading more comments” while a later page is being fetched.
+- **Why it helps:** Screen-reader users receive immediate feedback after requesting more discussion, including while the load control is disabled and no new comments have appeared yet.
+- **Checked:** Focused lesson-comment tests passed (7/7); full `npm test` passed (389/389); `npx tsc --noEmit`, `npm run build`, `node --check tests/client/lesson-comments.test.js`, and `git diff --check` passed. Rendered comment interaction remains unverified because the in-app browser is signed out and Playwright is not installed.
+
 ## 2026-10-11 — Review the public sign-in surface and account-list flow
 
 - **Reviewed:** The sign-in page's heading, field names, return guidance, responsive shell, the administrator account list's filter/loading/error states, and its paginated API.

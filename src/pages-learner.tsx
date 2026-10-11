@@ -1411,6 +1411,7 @@ export function CoursePlayerPage() {
             })}
             {!visibleFeedback.comments.length && <p className="comments-empty">{isCourseManager ? 'No learner comments yet.' : 'No comments yet. Start the conversation.'}</p>}
           </div>
+          <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{commentsLoading ? 'Loading more comments.' : ''}</p>
           {visibleFeedback.comments.length < visibleFeedback.total && <Button type="button" variant="secondary" className="load-comments-button" disabled={commentsLoading} onClick={loadMoreComments}>{commentsLoading ? 'Loading…' : 'Load more comments'}</Button>}
         </>}
         {!feedbackLoading && visibleFeedbackError && !visibleFeedback && <ErrorNotice message={visibleFeedbackError} onRetry={() => setFeedbackRefreshVersion((version) => version + 1)} />}
