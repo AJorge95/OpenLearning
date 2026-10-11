@@ -7397,3 +7397,11 @@
 - **Why it helps:** Re-rendering path cards no longer allocates one formatter per dated course, with no change to the displayed date or the backend response contract.
 - **Backend review:** Path summaries and deadlines remain loaded in bounded batches; no server or schema change was needed.
 - **Checked:** `node --test tests/client/program-card-layout.test.js` passed (3/3), including the module-scope formatter regression. The full `npm test -- --test-reporter=dot`, `npm run build` (strict TypeScript checking and Vite), `node --check tests/client/program-card-layout.test.js`, and `git diff --check` passed. The API and displayed date style are unchanged.
+
+## 2026-10-11 — Keep posted lesson comments in feed order
+
+- **Reviewed:** The learner's in-memory comment insertion helper and the feedback API's indexed `created_at DESC, id DESC` ordering.
+- **Improvement:** Insert a newly posted comment at its timestamp-and-ID position, preserving the number of comments already loaded, instead of always prepending it.
+- **Why it helps:** Comments created in the same second now stay in the same deterministic order as the server feed, so the visible list and later pages do not disagree after posting.
+- **Backend review:** The server query already matches the existing composite index and returns the same order; no API or schema change was needed.
+- **Checked:** `node --test tests/client/lesson-comments.test.js` passed (9/9), including same-timestamp tie ordering and page-size preservation. The full `npm test -- --test-reporter=dot`, `npm run build` (strict TypeScript checking and Vite), and `git diff --check` passed.
