@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { createBrowserRouter, Link, Navigate, Outlet, Route, Routes, RouterProvider, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth-context';
 import { AppFrame, Button, LoadingScreen, PageHeading, PlatformBrand, StaffFrame } from './components';
 import { AccountSecurityPage, LoginPage, RegisterPage, SetupPage } from './pages-auth';
@@ -188,7 +188,7 @@ function AuthRoutes() {
     <p className="auth-description" role="alert">{startupError}</p>
     <Button type="button" onClick={() => void retryStartup()}>Try again</Button>
   </section></main>;
-  return <BrowserRouter>
+  return <>
     <RouteStatus configured={configured} />
     {!configured ? <Routes><Route path="*" element={<SetupPage />} /></Routes> : <Routes>
       <Route path="/setup" element={<Navigate to="/login" replace />} />
@@ -233,9 +233,15 @@ function AuthRoutes() {
       </Route>
       <Route path="*" element={<NotFoundRoute />} />
     </Routes>}
-  </BrowserRouter>;
+  </>;
 }
 
+const applicationRouter = createBrowserRouter([{
+  id: 'application',
+  path: '*',
+  element: <AuthProvider><AuthRoutes /></AuthProvider>,
+}]);
+
 export function App() {
-  return <ApplicationErrorBoundary><AuthProvider><AuthRoutes /></AuthProvider></ApplicationErrorBoundary>;
+  return <ApplicationErrorBoundary><RouterProvider router={applicationRouter} /></ApplicationErrorBoundary>;
 }

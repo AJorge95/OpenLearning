@@ -1,12 +1,20 @@
 # Quality Improvement Tracker
 
-## 2026-10-12 — Scope unsaved course-detail navigation
+## 2026-10-12 — Recheck the reported account-role selector width
 
-- **Reviewed:** Course-detail draft fields and their save/publish actions, the course editor's pathname-keyed remount, and the app's `BrowserRouter`/`Routes` navigation structure.
-- **Result:** No runtime change. Course details expose save and publish actions, but there is no app-wide route blocker for unsaved detail edits.
-- **Why no change:** A warning attached only to the editor breadcrumb would leave staff navigation and browser-history transitions uncovered. A complete guard needs one route-level approach that covers every internal exit and has navigation regression coverage.
-- **Next evidence needed:** Define and test the app-wide route-blocking behavior for edits tracked by `courseDetailsChanged` before introducing navigation interception.
-- **Checked:** Read the editor state, save controls, and app route setup; searched for existing route-blocking hooks; `git diff --check` passed.
+- **Reviewed:** The supplied account screenshot and target path against the current role-control markup, desktop sizing, popup width, and pointer hit area.
+- **Result:** No additional selector change was needed. The exact account is the only active administrator, so its role control is disabled. On an enabled account, the visible trigger opened the menu; clicking just outside its right edge and in the blank area to the right left the menu closed. The screenshot's wide wrapping-label target is absent from the current markup.
+- **Why no change:** The current build already bounds the control to its visible trigger and matches the popup to that width. Another CSS change would duplicate the existing behavior without a current-build reproduction.
+- **Checked:** Account-role hit-area and AppSelect-label tests passed (10/10). A temporary local browser tab verified the exact account's disabled state and the enabled account's trigger/outside-click behavior; no role or account data was changed.
+- **Needed to revisit:** A current-build enabled account where a click outside the visible trigger opens the menu, with the click location and viewport.
+
+## 2026-10-12 — Protect unsaved course details during navigation
+
+- **Reviewed:** The editor's `courseDetailsChanged` fields, route-keyed remount, save-in-progress state, browser unload behavior, and application router structure.
+- **Improvement:** Move the app to a data router and block route/history transitions while course details are dirty or saving. Show an accessible keep-editing/discard dialog, wait for active saves and continue automatically after a successful save, and retain the browser's unload warning. Confirmed course deletion bypasses the editor guard after the record is removed.
+- **Why it helps:** Course edits are no longer silently lost through the staff sidebar, editor links, browser Back, or a page refresh; deliberate discard remains available.
+- **Backend review:** Course-save and delete endpoints keep their current validation and persistence behavior; no API or schema change was needed.
+- **Checked:** Focused editor, confirmation-dialog, route-guard, and role-selector tests passed; the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict TypeScript checking and Vite bundling; `git diff --check` passed. In a temporary local browser tab, editing a title then clicking Courses or using browser Back opened the prompt; Keep editing retained the draft and Discard changes returned to the list without changing the saved title. The browser unload guard was verified in code and regression coverage.
 
 ## 2026-10-12 — Retain quiz submission locks per route
 
