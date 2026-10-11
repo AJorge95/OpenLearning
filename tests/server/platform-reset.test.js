@@ -263,6 +263,62 @@ test('a reset transaction failure restores the original media and leaves databas
   assert.equal(fs.existsSync(path.join(fixtureDirectory, prepared.backupLocation, 'manifest.json')), true);
 });
 
+test('a failed media restore is logged without replacing the original reset error', async () => {
+  const prepared = await reset.preparePlatformReset(actor);
+  const mediaRoot = process.env.MEDIA_ROOT;
+  const originalRename = fs.promises.rename;
+  let quarantinedMediaPath;
+  fs.promises.rename = async (source, destination, ...options) => {
+    const sourcePath = String(source);
+    if (path.dirname(sourcePath) === path.dirname(mediaRoot)
+      && path.basename(sourcePath).startsWith('.course-media-reset-')
+      && path.resolve(String(destination)) === path.resolve(mediaRoot)) {
+      quarantinedMediaPath = sourcePath;
+      const error = new Error('fixture restore failure');
+      error.code = 'EIO';
+      throw error;
+    }
+    return originalRename.call(fs.promises, source, destination, ...options);
+  };
+  database.exec(`CREATE TRIGGER fail_platform_reset_audit BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'platform.reset' BEGIN SELECT RAISE(ABORT, 'fixture failure'); END;`);
+  const originalConsoleError = console.error;
+  console.error = (message, ...details) => {
+    if (message === 'Unable to persist audit entry:' && details[0] === 'fixture failure') return;
+    originalConsoleError(message, ...details);
+  };
+
+  try {
+    await assert.rejects(
+      reset.confirmPlatformReset(actor, prepared.confirmationId, 'RESET'),
+      (error) => error instanceof ApiError
+        && error.status === 500
+        && error.code === 'platform_reset_recovery_required'
+        && error.message.includes('Check the System log for the recovery path'),
+    );
+  } finally {
+    console.error = originalConsoleError;
+    fs.promises.rename = originalRename;
+    database.exec('DROP TRIGGER IF EXISTS fail_platform_reset_audit;');
+    if (quarantinedMediaPath && fs.existsSync(quarantinedMediaPath)) {
+      await fs.promises.rm(mediaRoot, { recursive: true, force: true });
+      await originalRename.call(fs.promises, quarantinedMediaPath, mediaRoot);
+    }
+  }
+
+  const cleanupLog = database.prepare(`SELECT details_json FROM system_logs
+    WHERE source = 'platform-reset' AND message = 'Media restore failed after platform reset rollback' ORDER BY id DESC LIMIT 1`).get();
+  const cleanupDetails = JSON.parse(cleanupLog.details_json);
+  assert.equal(cleanupDetails.errorName, 'Error');
+  assert.equal(cleanupDetails.errorCode, 'EIO');
+  assert.equal(cleanupDetails.mediaRoot, mediaRoot);
+  assert.equal(cleanupDetails.quarantinePath, quarantinedMediaPath);
+  assert.equal(cleanupDetails.operationErrorCode, 'audit_unavailable');
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, 2);
+  assert.equal(await fs.promises.readFile(path.join(mediaRoot, 'lesson-video.mp4'), 'utf8'), 'fixture-media');
+  assert.equal(reset.isPlatformResetActive(), false);
+});
+
 test('backup path checks resolve a symlinked media root before checking overlap', async (t) => {
   const mediaTarget = process.env.MEDIA_ROOT;
   const mediaAlias = path.join(fixtureDirectory, 'media-root-alias');

@@ -92,6 +92,15 @@ async function resolveNewPath(targetPath) {
   return path.join(realParentPath, path.basename(targetPath));
 }
 
+function logResetCleanupFailure(message, error, details = {}) {
+  // Preserve the reset error while recording bounded cleanup details for operators.
+  writeSystemLog('error', 'platform-reset', message, {
+    ...details,
+    errorName: String(error?.name || 'Error').slice(0, 100),
+    errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+  });
+}
+
 export async function assertResetBackupPathsSafe({ mediaRoot, databasePath, backupDirectory }) {
   const [realMediaRoot, realDatabasePath, realBackupDirectory] = await Promise.all([
     fs.realpath(mediaRoot),
@@ -164,7 +173,8 @@ async function createBackup() {
     await fs.writeFile(path.join(backupDirectory, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' });
     return { backupDirectory, backupLocation: path.relative(config.dataDir, backupDirectory).split(path.sep).join('/') };
   } catch (error) {
-    await fs.rm(backupDirectory, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(backupDirectory, { recursive: true, force: true })
+      .catch((cleanupError) => logResetCleanupFailure('Incomplete reset backup cleanup failed', cleanupError, { backupDirectory }));
     throw error;
   }
 }
@@ -219,7 +229,7 @@ async function replaceMediaRoot() {
     await fs.rename(mediaRoot, quarantinePath);
     moved = true;
     await fs.mkdir(mediaRoot, { recursive: true });
-    return async (committed) => {
+    const restore = async (committed) => {
       if (committed) {
         await fs.rm(quarantinePath, { recursive: true, force: true });
       } else {
@@ -227,10 +237,29 @@ async function replaceMediaRoot() {
         await fs.rename(quarantinePath, mediaRoot);
       }
     };
+    restore.recoveryDetails = { mediaRoot, quarantinePath };
+    return restore;
   } catch (error) {
+    let mediaRestoreFailed = false;
     if (moved) {
-      await fs.rm(mediaRoot, { recursive: true, force: true }).catch(() => {});
-      await fs.rename(quarantinePath, mediaRoot).catch(() => {});
+      await fs.rm(mediaRoot, { recursive: true, force: true })
+        .catch((cleanupError) => logResetCleanupFailure('Partial media directory cleanup failed', cleanupError, {
+          mediaRoot,
+          quarantinePath,
+        }));
+      await fs.rename(quarantinePath, mediaRoot)
+        .catch((cleanupError) => {
+          mediaRestoreFailed = true;
+          logResetCleanupFailure('Quarantined media restore failed', cleanupError, {
+            mediaRoot,
+            quarantinePath,
+            operationErrorName: String(error?.name || 'Error').slice(0, 100),
+            operationErrorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+          });
+        });
+    }
+    if (mediaRestoreFailed) {
+      fail(500, 'The reset could not start and course media could not be restored. Check the System log for the recovery path before retrying.', 'platform_reset_recovery_required');
     }
     throw error;
   }
@@ -269,13 +298,25 @@ export async function confirmPlatformReset(actor, confirmationId, phrase) {
       await restoreMedia(true);
     } catch (error) {
       writeSystemLog('error', 'platform-reset', 'The platform reset completed but old course media could not be removed from its quarantine folder', {
+        ...restoreMedia.recoveryDetails,
         errorName: String(error?.name || 'Error').slice(0, 100), errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
       });
     }
     writeSystemLog('warn', 'platform-reset', 'Platform data was reset to defaults', { actorId: actor.id, backupLocation: current.backupLocation });
     return { reset: true, backupLocation: current.backupLocation };
   } catch (error) {
-    if (!committed && restoreMedia) await restoreMedia(false).catch(() => {});
+    if (!committed && restoreMedia) {
+      try {
+        await restoreMedia(false);
+      } catch (cleanupError) {
+        logResetCleanupFailure('Media restore failed after platform reset rollback', cleanupError, {
+          ...restoreMedia.recoveryDetails,
+          operationErrorName: String(error?.name || 'Error').slice(0, 100),
+          operationErrorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+        });
+        fail(500, 'The reset failed and course media could not be restored. Check the System log for the recovery path before retrying.', 'platform_reset_recovery_required');
+      }
+    }
     throw error;
   } finally {
     if (!committed && resetState === current) resetState = null;

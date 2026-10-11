@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Surface platform-reset recovery failures
+
+- **Reviewed:** Platform reset backup cleanup, media quarantine and rollback, bounded system logging, the settings confirmation UI, and existing isolated reset and status tests.
+- **Improvement:** Log failed backup/media cleanup with the relevant recovery path and bounded error metadata. If media cannot be restored after reset failure, return an actionable recovery error while retaining the original failure details in the system log. Clear the settings page's stale confirmation after server errors that invalidate it, while preserving it after network failures with uncertain outcomes. Comments explain the logging and recovery boundaries.
+- **Why it helps:** An administrator can locate media left in quarantine, gets a clear warning before retrying, and no longer sees a confirmation the server has already invalidated.
+- **Interface review:** The reset notice already displays the server's actionable error. No reset action was exercised in the browser because it can remove platform data; the status-clearing decision is covered at the helper and source level.
+- **Checked:** Isolated platform-reset and reset-status tests passed (14/14), including injected restore failure, log-path verification, preserved database state, and client confirmation handling. `npm run build` passed strict TypeScript checking and Vite bundling; `git diff --check` passed.
+
 ## 2026-10-11 — Guard administrator password-reset dialog focus behavior
 
 - **Reviewed:** The reset dialog's accessible naming, initial focus, Escape handling, forward and reverse Tab wrapping, cleanup, focus restoration, and saving-state close guard; the administrator password-reset route and its throttling and audit/session transaction tests.
