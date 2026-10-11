@@ -554,6 +554,51 @@ test('course details resolve learner progress before version history exists', as
   assert.equal(course.modules[0].quiz.passed, true);
 });
 
+test('first version requiring recompletion resets legacy progress without deleting its history', async () => {
+  const courseId = 'course-first-version-recompletion';
+  const lessonId = 'course-first-version-recompletion-lesson';
+  database.exec(`
+    INSERT INTO courses (id, title, status, visibility, created_by, updated_by)
+      VALUES ('${courseId}', 'Legacy published course', 'published', 'public', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('${courseId}-module', '${courseId}', 'Legacy module', 0);
+    INSERT INTO media_files (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+      VALUES ('${courseId}-media', '${courseId}', 'legacy.mp4', 'legacy.mp4', 'video/mp4', 1, 'video');
+    INSERT INTO lessons (id, module_id, title, position, media_id)
+      VALUES ('${lessonId}', '${courseId}-module', 'Legacy lesson', 0, '${courseId}-media');
+    INSERT INTO enrollments (id, course_id, user_id, enrolled_at)
+      VALUES ('${courseId}-enrollment', '${courseId}', 'learner-active', '2026-10-01 09:00:00');
+    INSERT INTO lesson_progress (user_id, lesson_id, completed_at)
+      VALUES ('learner-active', '${lessonId}', '2026-10-01 10:00:00');
+  `);
+
+  try {
+    const beforeResponse = await fetch(apiUrl(`/courses/${courseId}`), { headers: userHeaders('learner-active') });
+    assert.equal(beforeResponse.status, 200);
+    assert.equal((await beforeResponse.json()).course.completed, true);
+
+    const publishResponse = await fetch(apiUrl(`/manage/courses/${courseId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'published', requiresRecompletion: true }),
+    });
+    assert.equal(publishResponse.status, 200);
+
+    const afterResponse = await fetch(apiUrl(`/courses/${courseId}`), { headers: userHeaders('learner-active') });
+    assert.equal(afterResponse.status, 200);
+    const { course } = await afterResponse.json();
+    assert.equal(course.versionNumber, 1);
+    assert.equal(course.progress, 0);
+    assert.equal(course.completed, false);
+    assert.notEqual(course.modules[0].lessons[0].id, lessonId);
+    assert.equal(course.modules[0].lessons[0].completed, false);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM lesson_progress WHERE user_id = ? AND lesson_id = ?')
+      .get('learner-active', lessonId).count, 1);
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('course and learning-path detail GETs are read-only while protected actions initialize learner state', async () => {
   database.exec(`
     INSERT INTO courses (id, title, status, created_by, updated_by) VALUES

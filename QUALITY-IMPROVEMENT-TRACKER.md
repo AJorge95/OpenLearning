@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Honor first-version recompletion for legacy courses
+
+- **Reviewed:** A published course without version history stores learner progress against its root lesson and quiz IDs. When its first published version required recompletion, the version reused those same IDs, so the exact-ID reset check still credited the prior work.
+- **Improvement:** Clone the legacy course content into the first version's storage course when recompletion is required. New IDs let the existing progress rule distinguish the new version while stable IDs and historical progress rows remain intact.
+- **Why it helps:** Learners must complete the version an administrator explicitly marked for recompletion, and their earlier completions remain available as history.
+- **Interface review:** The existing publication checkbox clearly says it requires learners to complete the next published version. No UI wording or layout change was needed.
+- **Checked:** The route regression first failed with legacy progress still at 100%, then passed with the first version at 0% while preserving the old completion row. The focused course analytics suite passed (80/80); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, both changed-file syntax checks, and `git diff --check` passed.
+
 ## 2026-10-11 — Cover expired-session cleanup failures
 
 - **Reviewed:** The SQLite session store prunes expired rows at startup and daily. It catches cleanup errors and reports them through the configured callback, with a console fallback if that reporter also fails, but neither failure path had a committed regression.
