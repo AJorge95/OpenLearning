@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Remove setup-order dependencies from account regressions
+
+- **Reviewed:** The account-course activity, sign-in rollback, and self-service password rollback tests read `admin_last_login` created only by an earlier setup test.
+- **Improvement:** Add a shared fixture helper that creates the expected admin only when absent and hashes the known test password with the production scrypt helper. Reuse constants for the fixture username and password in setup and authentication requests.
+- **Why it helps:** Each regression can now run alone and exercise real route authorization, successful sign-in, and password verification instead of failing before the behavior under test. Full-file runs continue using the existing setup fixture.
+- **Interface review:** No user-visible behavior changed; this strengthens backend regression isolation.
+- **Checked:** Each of the three regressions passed alone (1/1 each), `last-login.test.js` passed (16/16), and `npm test` passed (529/529). `node --check` and `git diff --check` passed; no production build was needed because no application source changed.
+
 ## 2026-10-11 — Make admin pagination regression self-contained
 
 - **Reviewed:** The `/admin/users` final-page regression read the administrator password hash from `admin_last_login`, but that user is created by an earlier test in the same file.
