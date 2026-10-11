@@ -525,6 +525,8 @@ export function LearningPathsPage() {
     try {
       await api.delete(`/api/manage/learning-paths/${pending.pathId}/assignments/${learner.id}`);
       if (requestSequence !== assignmentRequestSequenceRef.current || assignmentPathRef.current !== pending.pathId) return;
+      // Removing an assignment changes path access while preserving the learner's course progress.
+      setNotice(`${learner.username} is no longer assigned to “${path.title}”. Course progress was kept.`);
       setLearners((current) => current.map((item) => item.id === learner.id ? { ...item, enrolled: false, source: null } : item));
       await loadPathLearners(pending.pathId, assignmentAppliedSearch, assignmentPage);
     } catch (cause) {
