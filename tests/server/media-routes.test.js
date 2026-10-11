@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import express from 'express';
@@ -274,6 +276,29 @@ test('streams protected video byte ranges and rejects unsatisfiable ranges', asy
   assert.equal(fullResponse.status, 200);
   assert.equal(fullResponse.headers.get('content-length'), '10');
   assert.deepEqual(Buffer.from(await fullResponse.arrayBuffer()), rangeMediaContents);
+});
+
+test('returns a not-found response if protected media disappears before the stream opens', async () => {
+  const originalCreateReadStream = fsSync.createReadStream;
+  fsSync.createReadStream = () => {
+    const stream = new Readable({ read() {} });
+    process.nextTick(() => stream.destroy(Object.assign(new Error('Media file disappeared.'), { code: 'ENOENT' })));
+    return stream;
+  };
+
+  try {
+    const response = await fetch(mediaUrl('/media-range-tests'), {
+      headers: { 'x-test-user': 'admin-media', range: 'bytes=2-5', connection: 'close' },
+    });
+
+    assert.equal(response.status, 404);
+    assert.match(response.headers.get('content-type') || '', /^application\/json/);
+    assert.equal(response.headers.get('content-range'), null);
+    assert.equal(response.headers.get('accept-ranges'), null);
+    assert.deepEqual(await response.json(), { error: 'Media not found.', code: 'not_found' });
+  } finally {
+    fsSync.createReadStream = originalCreateReadStream;
+  }
 });
 
 test('falls back to full protected video responses for unsupported ranges and ranged HEAD requests', async () => {
