@@ -934,7 +934,7 @@ export function CoursePlayerPage() {
     setCommentSavingLessonIds(nextSaving);
   }
 
-  function retryVideo(resumePlayback = true) {
+  function retryVideo(resumePlayback = true, verifiedResume = false) {
     const video = videoRef.current;
     if (!video) return;
     const requestedLessonId = lessonId;
@@ -944,6 +944,7 @@ export function CoursePlayerPage() {
       watchRequired,
       watchProgress,
       startedLessonId: watchStartedLessonRef.current,
+      verifiedResume,
     });
     const verifiedPosition = watchRequired && watchStartedLessonRef.current === requestedLessonId
       ? playbackPositionRef.current
@@ -1036,6 +1037,12 @@ export function CoursePlayerPage() {
           setVideoPosition(resumePosition);
           setWatchProgress({ ...resumeProgress, lessonId: requestedLessonId, ready: true, started: true });
           lastProgressReportAtRef.current = Date.now();
+          pendingVisibilityResumeLessonRef.current = null;
+          // Browsers can discard the decoder buffer while a tab is in the
+          // background. Reload the media at the checkpoint before resuming so
+          // Play does not continue on a stale or partially suspended stream.
+          retryVideo(true, true);
+          return;
         }
         if (video.ended) {
           if (!videoStartPromiseRef.current) {
