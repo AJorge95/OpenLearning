@@ -3032,12 +3032,22 @@ test('path learner directory searches and paginates active learners without hidi
     VALUES ('path-learner-directory', 'Learner directory', 'published', 'admin-1', 'admin-1')`).run();
   const insertLearner = database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
     VALUES (?, ?, ?, 'not-used', 'learner', 0)`);
+  const insertAssignment = database.prepare(`INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by)
+    VALUES (?, 'path-learner-directory', ?, 'assigned', 'admin-1')`);
   for (let index = 1; index <= 52; index++) {
     const suffix = String(index).padStart(3, '0');
     insertLearner.run(`directory-learner-${suffix}`, `page-learner-${suffix}`, `page-${suffix}@example.invalid`);
+    insertAssignment.run(`directory-enrollment-${suffix}`, `directory-learner-${suffix}`);
   }
-  database.prepare(`INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by)
-    VALUES ('directory-enrollment', 'path-learner-directory', 'directory-learner-052', 'assigned', 'admin-1')`).run();
+  const unassignedPlan = database.prepare(`EXPLAIN QUERY PLAN SELECT u.id, u.username, u.email,
+      NULL AS enrollment_source, NULL AS enrolled_at FROM users u
+    WHERE NOT EXISTS (SELECT 1 FROM learning_path_enrollments e
+      WHERE e.path_id = ? AND e.user_id = u.id)
+      AND u.role = 'learner' AND u.disabled = 0
+    ORDER BY u.username COLLATE NOCASE LIMIT ? OFFSET ?`).all('path-learner-directory', 50, 0)
+    .map((item) => item.detail).join('\n');
+  assert.match(unassignedPlan, /users_role_username/);
+  assert.doesNotMatch(unassignedPlan, /USE TEMP B-TREE/);
   const expectedTotal = database.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'learner' AND disabled = 0").get().count;
 
   const firstPageResponse = await fetch(apiUrl('/manage/learning-paths/path-learner-directory/learners'), {
@@ -3050,7 +3060,7 @@ test('path learner directory searches and paginates active learners without hidi
   assert.equal(firstPage.pageSize, 50);
   assert.equal(firstPage.hasMore, true);
   assert.equal(firstPage.learners.length, 50);
-  assert.equal(firstPage.learners[0].id, 'directory-learner-052');
+  assert.equal(firstPage.learners[0].id, 'directory-learner-001');
 
   const secondPageResponse = await fetch(apiUrl('/manage/learning-paths/path-learner-directory/learners?page=2'), {
     headers: userHeaders('admin-1'),
@@ -3059,6 +3069,7 @@ test('path learner directory searches and paginates active learners without hidi
   assert.equal(secondPage.page, 2);
   assert.equal(secondPage.hasMore, false);
   assert.equal(secondPage.learners.length, expectedTotal - 50);
+  assert.equal(secondPage.learners[0].id, 'directory-learner-051');
   assert.equal(new Set([...firstPage.learners, ...secondPage.learners].map((learner) => learner.id)).size, expectedTotal);
   assert.equal([...firstPage.learners, ...secondPage.learners].some((learner) => learner.id === 'learner-disabled'), false);
 

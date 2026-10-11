@@ -349,21 +349,29 @@ programsRouter.get('/manage/learning-paths/:pathId/learners', requireStaff, (req
   if (!path) fail(404, 'Learning path not found.', 'not_found');
   const query = text(req.query.q, 'Search', 100);
   const requestedPage = pageQuery(req.query.page, 100_000);
-  const clauses = ["u.role = 'learner'", 'u.disabled = 0'];
-  const params = [];
-  if (query) {
-    const search = textSearchPredicate(['u.username', 'u.email'], query);
-    clauses.push(`(${search.sql})`);
-    params.push(...search.params);
-  }
-  const where = clauses.join(' AND ');
-  const total = db.prepare(`SELECT COUNT(*) AS count FROM users u WHERE ${where}`).get(...params).count;
+  const search = query ? textSearchPredicate(['u.username', 'u.email'], query) : null;
+  const searchClause = search ? ` AND (${search.sql})` : '';
+  const searchParams = search?.params || [];
+  const where = `u.role = 'learner' AND u.disabled = 0${searchClause}`;
+  const total = db.prepare(`SELECT COUNT(*) AS count FROM users u WHERE ${where}`).get(...searchParams).count;
   const pageSize = 50;
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
-  const learners = db.prepare(`SELECT u.id, u.username, u.email, e.enrollment_source, e.enrolled_at
-    FROM users u LEFT JOIN learning_path_enrollments e ON e.path_id = ? AND e.user_id = u.id
-    WHERE ${where} ORDER BY e.id IS NULL, u.username COLLATE NOCASE, u.id LIMIT ? OFFSET ?`)
-    .all(path.id, ...params, pageSize, (page - 1) * pageSize);
+  const offset = (page - 1) * pageSize;
+  const enrolledTotal = db.prepare(`SELECT COUNT(*) AS count FROM learning_path_enrollments e
+    CROSS JOIN users u ON u.id = e.user_id WHERE e.path_id = ? AND ${where}`)
+    .get(path.id, ...searchParams).count;
+  const enrolledLimit = Math.min(pageSize, Math.max(0, enrolledTotal - offset));
+  const learners = enrolledLimit ? db.prepare(`SELECT u.id, u.username, u.email, e.enrollment_source, e.enrolled_at
+    FROM learning_path_enrollments e CROSS JOIN users u ON u.id = e.user_id
+    WHERE e.path_id = ? AND ${where} ORDER BY u.username COLLATE NOCASE LIMIT ? OFFSET ?`)
+    .all(path.id, ...searchParams, enrolledLimit, offset) : [];
+  const unassignedLimit = pageSize - learners.length;
+  if (unassignedLimit) learners.push(...db.prepare(`SELECT u.id, u.username, u.email,
+    NULL AS enrollment_source, NULL AS enrolled_at FROM users u
+    WHERE NOT EXISTS (SELECT 1 FROM learning_path_enrollments e WHERE e.path_id = ? AND e.user_id = u.id)
+      AND ${where}
+    ORDER BY u.username COLLATE NOCASE LIMIT ? OFFSET ?`)
+    .all(path.id, ...searchParams, unassignedLimit, Math.max(0, offset - enrolledTotal)));
   res.json({ learners: learners.map((item) => ({ id: item.id, username: item.username, email: item.email,
     enrolled: Boolean(item.enrollment_source), source: item.enrollment_source, enrolledAt: item.enrolled_at })),
   total, page, pageSize, hasMore: page * pageSize < total });
