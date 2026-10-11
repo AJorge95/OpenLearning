@@ -7381,3 +7381,11 @@
 - **Result:** No code change; the filter group is labeled, resource actions lock the editor while requests are active and report upload progress, and the server validates uploads and lesson membership before storing protected resources.
 - **Why no change:** The current source and prior validation cover the identified interaction and access boundaries. A further change needs a reproducible rendered issue or a defined new resource workflow.
 - **Checked:** Compared the course list and lesson-resource controls with the upload and download route checks, then ran `git diff --check`. Rendered keyboard and assistive-technology behavior remains unverified without a browser surface.
+
+## 2026-10-11 — Strengthen form-control boundary contrast
+
+- **Reviewed:** Shared input/select/button borders and the hover or expanded border of shared selects across the default, ocean, forest, rose, and amber palettes.
+- **Improvement:** Darken the shared control border to `#858b99` and derive the select hover/expanded border from each palette’s existing accent color.
+- **Why it helps:** Form controls remain easier to identify against white and subtle surfaces, while the select’s interactive state is visible for every theme.
+- **Backend review:** Rechecked course-enrollment eligibility and idempotent responses; the access check and enrollment remain transactional, and retry behavior remains covered by the full suite. No new backend gap surfaced in this pass.
+- **Checked:** Client contrast and select-boundary tests passed (12/12); the full `npm test -- --test-reporter=dot`, `npm run build` (including strict TypeScript checking), and `git diff --check` passed. The rendered account page showed clearer input and selector boundaries; clicking to the right of the open role selector closed it and left Learner selected. No account data changed.
