@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck sign-in and learning-path access flows
+
+- **Reviewed:** The rendered signed-out sign-in page, its labeled username/password fields and responsive auth-panel rules, plus learning-path listing, detail visibility, self-enrollment, staff assignment, and patch validation.
+- **Result:** No code change. The current sign-in screen has a clear heading, labeled fields, a primary sign-in action, and an account-creation link. Existing server integration coverage verifies enrollment access, unavailable-path privacy, idempotent enrollment, pagination, and mutation validation.
+- **Why no change:** The reviewed markup and route checks show no concrete defect to fix. Further staff and learner interaction review needs a signed-in browser session; performance work needs a measured workload or query evidence beyond the existing regression coverage.
+- **Checked:** `node --test tests/server/course-analytics.test.js` passed (81/81); `node --test tests/client/responsive-viewport.test.js` passed (1/1). Inspected the sign-in accessibility tree and default-size rendering; the browser is signed out, so protected pages were not live-tested.
+
 ## 2026-10-11 — Validate course completion windows before saving
 
 - **Reviewed:** The course editor's optional completion-window input, its min/max range, the top-bar draft/publish actions, curriculum operations that save course details first, and the server's whole-day validation.
