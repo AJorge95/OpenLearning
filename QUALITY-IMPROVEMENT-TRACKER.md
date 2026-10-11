@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck shared controls and request validation
+
+- **Reviewed:** The reported administrator role selector against current JSX and the served Vite module; `AppSelect` behavior on page scroll, menu scroll, and resize; image fallback behavior when a source changes; calendar date-range validation; malformed JSON handling; and the working tree.
+- **Result:** No runtime change. The role field uses a separate text label and a trigger-bounded control, while the screenshot still targets an older wrapping `<label>`. `AppSelect` dismisses on page scroll and resize but ignores scrolls inside its own menu. `ImageWithFallback` remounts its image state when the source changes. Calendar ranges reject impossible dates and ranges over 62 days, and malformed JSON returns a structured 400 response.
+- **Why no duplicate fix:** The reported selector boundary and the other reviewed edge cases are already handled in source. An additional CSS or event rule would duplicate existing behavior.
+- **Checked:** Focused selector tests passed (14/14); the calendar-range and malformed-JSON regressions passed (1/1 each). The Vite module returned HTTP 200 and exposed the current separate-label markup. Live clicking was not repeated because the Chrome bridge timed out on `Emulation.setFocusEmulationEnabled`.
+
 ## 2026-10-11 — Confirm learning-path assignment removal
 
 - **Reviewed:** The assignment panel's Remove assignment button sent a DELETE request immediately. The server transaction removes path enrollment and audit-logs the change; existing route coverage verifies that this revokes private course access while retaining course progress.
