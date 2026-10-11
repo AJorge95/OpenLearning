@@ -36,16 +36,18 @@ test('account password reset explains and announces the password length requirem
   const passwordFields = [];
 
   function visit(node, inResetForm = false) {
+    if (ts.isJsxSelfClosingElement(node) && inResetForm
+      && node.tagName.getText() === 'PasswordField'
+      && stringAttribute(node, 'label') === 'New password') {
+      passwordFields.push(node);
+      return;
+    }
     if (ts.isJsxElement(node)) {
       const isResetForm = node.openingElement.tagName.getText() === 'form'
         && stringAttribute(node, 'className') === 'form-stack account-password-form';
       if (isResetForm) {
         node.children.forEach((child) => visit(child, true));
         return;
-      }
-      if (inResetForm && node.openingElement.tagName.getText() === 'div'
-        && stringAttribute(node, 'className') === 'account-password-field') {
-        passwordFields.push(node);
       }
       node.children.forEach((child) => visit(child, inResetForm));
       return;
@@ -57,21 +59,11 @@ test('account password reset explains and announces the password length requirem
   assert.equal(passwordFields.length, 1, 'expected one guided password field in the account reset form');
 
   const field = passwordFields[0];
-  const children = field.children.filter((child) => ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child));
-  const label = children.find((child) => jsxTagName(child) === 'label');
-  const input = children.find((child) => jsxTagName(child) === 'input');
-  const hint = children.find((child) => jsxTagName(child) === 'small');
-  assert.ok(label && input && hint, 'expected a label, input, and visible requirement hint');
-
-  const passwordId = attributeExpression(input, 'id');
-  const labelFor = attributeExpression(label, 'htmlFor');
-  const describedBy = attributeExpression(input, 'aria-describedby');
-  const hintId = attributeExpression(hint, 'id');
-  assert.equal(labelFor, passwordId);
-  assert.equal(describedBy, hintId);
-  assert.equal(hint.getText(sourceFile).replace(/<[^>]+>/g, '').trim(), 'Use at least 12 characters.');
-  assert.equal(attributeExpression(input, 'minLength'), '12');
-  assert.equal(attributeExpression(input, 'maxLength'), '256');
+  assert.equal(stringAttribute(field, 'hint'), 'Use at least 12 characters.');
+  assert.equal(attributeExpression(field, 'id'), 'passwordInputId');
+  assert.equal(attributeExpression(field, 'hintId'), 'passwordHintId');
+  assert.equal(attributeExpression(field, 'minLength'), '12');
+  assert.equal(attributeExpression(field, 'maxLength'), '256');
 });
 
 test('administrator password-reset dialog explains and announces the password length requirement', () => {
@@ -91,21 +83,13 @@ test('administrator password-reset dialog explains and announces the password le
   visit(sourceFile);
   assert.equal(resetForms.length, 1, 'expected one password-reset dialog form');
 
-  const passwordField = resetForms[0].children.find((child) => ts.isJsxElement(child)
-    && child.openingElement.tagName.getText() === 'label'
-    && child.getText(sourceFile).startsWith('<label>New password'));
+  const passwordField = resetForms[0].children.find((child) => ts.isJsxSelfClosingElement(child)
+    && jsxTagName(child) === 'PasswordField'
+    && stringAttribute(child, 'label') === 'New password');
   assert.ok(passwordField, 'expected a labeled new-password field');
-
-  const input = passwordField.children.find((child) => ts.isJsxSelfClosingElement(child)
-    && jsxTagName(child) === 'input');
-  const hint = passwordField.children.find((child) => ts.isJsxElement(child)
-    && jsxTagName(child) === 'small');
-  assert.ok(input && hint, 'expected a password input and visible requirement hint');
-
-  const describedBy = attributeExpression(input, 'aria-describedby');
-  const hintId = attributeExpression(hint, 'id');
-  assert.equal(describedBy, hintId);
-  assert.equal(hint.getText(sourceFile).replace(/<[^>]+>/g, '').trim(), 'Use at least 12 characters.');
-  assert.equal(attributeExpression(input, 'minLength'), '12');
-  assert.equal(attributeExpression(input, 'maxLength'), '256');
+  assert.equal(stringAttribute(passwordField, 'hint'), 'Use at least 12 characters.');
+  assert.equal(attributeExpression(passwordField, 'hintId'), 'resetPasswordHintId');
+  assert.equal(attributeExpression(passwordField, 'minLength'), '12');
+  assert.equal(attributeExpression(passwordField, 'maxLength'), '256');
+  assert.ok(jsxAttribute(passwordField, 'autoFocus'));
 });

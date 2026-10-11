@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Add accessible password visibility controls
+
+- **Reviewed:** Password entry across setup, sign-in, public signup, self-service changes, staff account creation, and password resets. Fields accepted long passwords but gave users no way to verify a typed value before submitting.
+- **Improvement:** Add a shared `PasswordField` with a concealed-by-default input and a field-specific Show/Hide button. Expose the state with `aria-pressed`, connect the toggle to its input, preserve validation hints and autocomplete, and use the component in every password form. Keep the one-time setup token concealed.
+- **Why it helps:** Learners and staff can verify long passwords before submitting, reducing entry mistakes while retaining the existing password requirements and submit behavior.
+- **Backend review:** Password validation, hashing, confirmation, and session behavior are unchanged; the server receives the same form values only on the existing submit actions.
+- **Checked:** Focused password-field, confirmation, and password-guidance tests passed (10/10); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict type checking and Vite; `git diff --check` passed. Local Chrome rendered `/register` at 1260×720; a disposable value became readable on Show, the other field stayed independently concealed, and Hide plus clear restored the blank masked field without submitting.
+
 ## 2026-10-11 — Keep the course-catalog sort label visible on narrow phones
 
 - **Reviewed:** The learner catalog's selected Category and Sort by values at the 420px responsive breakpoint and just above it.
