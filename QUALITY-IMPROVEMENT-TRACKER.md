@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Expose custom signup fields as a heading
+
+- **Reviewed:** The public signup form's conditional “About you” custom-field group, its existing visual heading treatment, server-side answer validation, and the current registration page.
+- **Improvement:** Change the group label from bold text to a level-two heading and reset its margin while retaining the existing 14px visual size.
+- **Why it helps:** Screen-reader users can jump directly to the custom registration fields using heading navigation; the heading appears only when fields are configured.
+- **Backend review:** The server continues to validate required answers, field types, dates, and select options independently; no API change was indicated.
+- **Checked:** The focused registration-field tests passed (9/9), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/registration-fields.test.js`, and `git diff --check` passed. The connected `/register` page has no configured custom fields, so the conditional heading was absent from its rendered accessibility tree.
+
 ## 2026-10-11 — Recheck admin pagination and runtime bounds
 
 - **Reviewed:** Admin user, audit-log, and system-log list page parsing and 50-row limits; the query indexes for account ordering; configuration validation for the port, upload size, request timeout, setup token, and production session secret; and the management result-range status and pager controls.
