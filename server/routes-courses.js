@@ -636,6 +636,7 @@ courseRouter.post('/manage/courses', requireStaff, (req, res) => {
   const visibility = body.visibility === undefined ? 'public' : body.visibility;
   if (!['public', 'private'].includes(visibility)) fail(400, 'Visibility must be public or private.', 'validation_error');
   const id = randomUUID();
+  // Include response reads in the create transaction so a failed read leaves no partial creation.
   const createCourse = db.transaction(() => {
     db.prepare(`INSERT INTO courses (id, title, description, category, visibility, status, created_by, updated_by)
       VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)`)
@@ -643,9 +644,10 @@ courseRouter.post('/manage/courses', requireStaff, (req, res) => {
     const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.created', entityType: 'course', entityId: id,
       summary: `Created course: ${title}`, details: { category, visibility, status: 'draft' } });
     if (!auditId) fail(500, 'Course could not be created because the audit log is unavailable.', 'audit_unavailable');
+    return getCoursePayload(db.prepare('SELECT * FROM courses WHERE id = ?').get(id), req.currentUser, { includeAnswers: true });
   });
-  createCourse.immediate();
-  res.status(201).json({ course: getCoursePayload(db.prepare('SELECT * FROM courses WHERE id = ?').get(id), req.currentUser, { includeAnswers: true }) });
+  const course = createCourse.immediate();
+  res.status(201).json({ course });
 });
 
 courseRouter.patch('/manage/courses/:courseId', requireStaff, (req, res) => {

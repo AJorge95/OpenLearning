@@ -3166,6 +3166,39 @@ test('course creation rolls back when its audit entry cannot be saved', async ()
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.created' AND entity_id = ?").get(course.id).count, 1);
 });
 
+test('course creation rolls back when the editor response cannot be read', async () => {
+  const title = 'Course response read transaction rollback';
+  const summary = `Created course: ${title}`;
+  const originalPrepare = database.prepare;
+  let payloadReadFailed = false;
+
+  database.prepare = (sql) => {
+    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT * FROM course_modules WHERE course_id = ? ORDER BY position, id') {
+      payloadReadFailed = true;
+      throw new Error('Injected course creation payload read failure');
+    }
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    // Fail in payload assembly after the insert and audit write to verify both roll back.
+    const response = await fetch(apiUrl('/manage/courses'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+
+    assert.equal(payloadReadFailed, true);
+    assert.equal(response.status, 500);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM courses WHERE title = ?').get(title).count, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_logs WHERE action = ? AND summary = ?').get('course.created', summary).count, 0);
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM audit_logs WHERE action = ? AND summary = ?').run('course.created', summary);
+    database.prepare('DELETE FROM courses WHERE title = ?').run(title);
+  }
+});
+
 test('course updates roll back when their audit entry cannot be saved', async () => {
   database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
     VALUES ('course-update-audit', 'Draft before update', 'draft', 'admin-1', 'admin-1')`).run();
