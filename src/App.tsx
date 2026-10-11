@@ -23,7 +23,9 @@ const AdminCompetenciesPage = lazy(() => import('./pages-programs').then((pages)
 
 function SignedIn() {
   const { user } = useAuth();
-  return user ? <Outlet /> : <Navigate to="/login" replace />;
+  const location = useLocation();
+  const from = `${location.pathname}${location.search}${location.hash}`;
+  return user ? <Outlet /> : <Navigate to="/login" replace state={{ from }} />;
 }
 
 function StaffOnly() {
