@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Review remaining empty states and file delivery
+
+- **Reviewed:** Staff and learner empty states for learning paths and competencies, remaining native blocking prompt calls, `streamFileToResponse`, and the shared HTTP error handler.
+- **Result:** No runtime change. The empty states fit the actions available to each role; no `window.alert`, `window.confirm`, or `window.prompt` call sites were found. File-stream failures are forwarded to the HTTP handler, and media-route coverage already includes a file disappearing during a stream.
+- **Why no change:** The reviewed UI paths expose role-appropriate next steps, and the file-delivery error path already has a regression. No reliability gap or accessibility failure was reproduced.
+- **Backend review:** Course creation continues to validate title, description, category, and visibility before creating the draft and audit entry in one transaction.
+- **Needed to continue:** A reproducible failure in the current UI or an uncovered backend error case; performance work also needs a representative workload or measurements.
+
 ## 2026-10-11 — Clarify the first-course action
 
 - **Reviewed:** The course list's page heading and its unfiltered empty-catalog action both used the accessible name “Create course.”
