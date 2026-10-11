@@ -10,6 +10,10 @@ test('learning-path assignment removal names identify the learner and path', () 
   assert.match(pageSource, /\{removingLearnerId === learner\.id \? 'Removing…' : 'Remove assignment'\}<\/button>/);
 });
 
+test('assignment confirmation describes the enrollment outcome', () => {
+  assert.match(pageSource, /setNotice\('Learner is enrolled in the path\.'\)/);
+});
+
 test('only published learning paths can be assigned learners', () => {
   assert.equal(canAssignLearningPathLearners('published'), true);
   assert.equal(canAssignLearningPathLearners('draft'), false);

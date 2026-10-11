@@ -390,7 +390,7 @@ export function LearningPathsPage() {
     try {
       await api.post(`/api/manage/learning-paths/${pathId}/assignments`, { userId: learnerId });
       if (requestSequence !== assignmentRequestSequenceRef.current || assignmentPathRef.current !== pathId) return;
-      setNotice('Learner assigned to the path.');
+      setNotice('Learner is enrolled in the path.');
       setLearners((current) => current.map((learner) => learner.id === learnerId ? { ...learner, enrolled: true, source: 'assigned' } : learner));
       setSelectedLearner(''); await loadPathLearners(pathId, assignmentAppliedSearch, assignmentPage); await load();
     } catch (cause) {

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Confirm the resulting learning-path enrollment
+
+- **Reviewed:** Admin assignment uses `INSERT OR IGNORE` to remain safe when a learner enrolls concurrently. The UI displayed “Learner assigned” even when the existing enrollment remained self-enrolled.
+- **Improvement:** Confirm that the learner is enrolled, without claiming the request created an assignment. Add route coverage for an admin assignment arriving after self-enrollment.
+- **Why it helps:** Success feedback remains accurate when the learner directory is stale or enrollment occurs concurrently, while preserving the learner’s original enrollment source and audit history.
+- **Interface review:** The enrollment source continues to be shown by the refreshed learner list; the confirmation only states the shared outcome.
+- **Checked:** Focused learning-path client/server tests passed (102/102), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, JavaScript syntax checks, and `git diff --check` passed. Rendered staff UI was not rechecked because the in-app browser is signed out at `/login`.
+
 ## 2026-10-11 — Refresh account details after last-admin conflicts
 
 - **Reviewed:** The Users list refreshes after a `last_admin` response, but the account-details page only displayed the conflict and left its controls based on the previously loaded account state.
