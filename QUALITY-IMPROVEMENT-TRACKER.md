@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Explain account recovery when session storage fails
+
+- **Reviewed:** Initial setup and public registration commit the administrator or learner before saving its new session. If the session store then failed, the server returned a generic internal error even though the account already existed, leaving registration screens to report failure and invite a retry that would hit an account conflict.
+- **Improvement:** Return a specific `503` recovery message after committed setup or signup when session creation fails, and write a system-log entry with the account ID and bounded error type/code without storing the raw session-store error. Add an isolated registration regression that forces session writes to fail, checks the account and failure log, verifies no session was created, and signs in after storage recovers.
+- **Why it helps:** People are told accurately that account creation succeeded and can continue from the sign-in page; operators can see why automatic sign-in failed without exposing session-store error text.
+- **Interface review:** The signup and setup forms already announce API errors through their alert text; the recovery message is actionable on signup, and setup directs the administrator to reload into sign-in.
+- **Checked:** `node --test tests/server/last-login.test.js` passed (13/13), including the forced session-store failure and recovery sign-in. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, changed-file syntax checks, and `git diff --check` are recorded after cycle validation.
+
 ## 2026-10-11 — Keep active upload cancellation covered
 
 - **Reviewed:** The shared upload client has committed coverage for cancellation before XHR creation and while waiting for a CSRF token. The active-transfer cancellation check had only been recorded as an earlier runtime fixture, so the main request-abort behavior and suppression of late progress were not protected in the test suite.

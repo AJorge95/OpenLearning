@@ -21,6 +21,19 @@ function destroySession(req) {
   return new Promise((resolve, reject) => req.session.destroy((error) => error ? reject(error) : resolve()));
 }
 
+async function establishCreatedAccountSession(req, userId, { event, code, message }) {
+  try {
+    await regenerateSession(req, userId);
+  } catch (error) {
+    writeSystemLog('error', 'auth', event, {
+      userId,
+      errorName: String(error?.name || 'Error').slice(0, 100),
+      ...(typeof error?.code === 'string' ? { errorCode: error.code.slice(0, 100) } : {}),
+    });
+    fail(503, message, code);
+  }
+}
+
 const defaultPalette = 'violet';
 const paletteIds = new Set(['violet', 'ocean', 'forest', 'rose', 'amber']);
 const maxBrandIconBytes = 512 * 1024;
@@ -288,7 +301,11 @@ authRouter.post('/setup', async (req, res) => {
     if (!auditId) fail(500, 'Platform setup could not be completed because the audit log is unavailable.', 'audit_unavailable');
   });
   configure.immediate();
-  await regenerateSession(req, userId);
+  await establishCreatedAccountSession(req, userId, {
+    event: 'Initial setup completed, but administrator sign-in could not be established',
+    code: 'setup_session_unavailable',
+    message: 'Platform setup completed, but automatic sign-in failed. Reload the page and sign in with the administrator account you created.',
+  });
   writeSystemLog('info', 'setup', 'Initial platform setup completed');
   res.status(201).json({ user: publicUser(db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(userId)), ...getPlatformConfiguration() });
 });
@@ -329,7 +346,11 @@ authRouter.post('/auth/register', async (req, res) => {
     if (isUserIdentifierUniqueConstraint(error)) registrationConflict();
     throw error;
   }
-  await regenerateSession(req, user.id);
+  await establishCreatedAccountSession(req, user.id, {
+    event: 'Account registration completed, but learner sign-in could not be established',
+    code: 'registration_session_unavailable',
+    message: 'Your account was created, but automatic sign-in failed. Go to the sign-in page and use the credentials you just registered.',
+  });
   res.status(201).json({ user: publicUser(user), registrationAvailable: registrationAvailable() });
 });
 

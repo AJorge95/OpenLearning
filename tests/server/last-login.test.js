@@ -864,3 +864,50 @@ test('self-service password changes roll back when their audit event cannot be s
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get(otherSessionId).count, 0);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.password_changed' AND entity_id = ?").get(user.id).count, initialAuditCount + 1);
 });
+
+test('registration explains how to sign in when the account is saved but session storage fails', async () => {
+  const originalSet = sessionStore.set;
+  const originalConsoleError = console.error;
+  const originalSessionIds = await storedSessionIds();
+  console.error = () => {};
+  sessionStore.set = (_sessionId, _session, callback) => callback(new Error('session store unavailable'));
+
+  let response;
+  try {
+    response = await fetch(apiUrl('/auth/register'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        username: 'session_recovery_learner',
+        email: 'session.recovery@example.invalid',
+        firstName: 'Session',
+        lastName: 'Recovery',
+        password: 'SessionRecoveryPassphrase-2026',
+        confirmPassword: 'SessionRecoveryPassphrase-2026',
+      }),
+    });
+  } finally {
+    sessionStore.set = originalSet;
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    error: 'Your account was created, but automatic sign-in failed. Go to the sign-in page and use the credentials you just registered.',
+    code: 'registration_session_unavailable',
+  });
+  const createdUser = database.prepare('SELECT id FROM users WHERE username = ?').get('session_recovery_learner');
+  assert.ok(createdUser);
+  const sessionFailure = database.prepare(`SELECT details_json FROM system_logs
+    WHERE source = 'auth' AND message = ? ORDER BY id DESC LIMIT 1`)
+    .get('Account registration completed, but learner sign-in could not be established');
+  assert.deepEqual(JSON.parse(sessionFailure.details_json), { userId: createdUser.id, errorName: 'Error' });
+  assert.deepEqual(await storedSessionIds(), originalSessionIds);
+
+  const signInResponse = await fetch(apiUrl('/auth/login'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ username: 'session_recovery_learner', password: 'SessionRecoveryPassphrase-2026' }),
+  });
+  assert.equal(signInResponse.status, 200);
+});
