@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep the captioned video controls from overlapping on phones
+
+- **Reviewed:** The learner player's responsive control grid, its child order when captions are available, and the full-screen button placement rules below 600px.
+- **Improvement:** Give the full-screen button a dedicated class and place it in the fifth column of the second row at the narrow breakpoints. Replace the `:last-child` rule, which stopped matching once the caption selector was appended after the button.
+- **Why it helps:** The full-screen action keeps a distinct, reachable target beside the volume slider, and no longer auto-places underneath or overlaps the caption selector on narrow screens.
+- **Interface and backend review:** Caption selection, playback state, and watch-progress behavior are unchanged; no backend change was needed.
+- **Checked:** Focused caption tests passed (4/4), including the mobile grid regression; the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict type checking and Vite bundling; `git diff --check` passed. The protected learner playback route could not be rendered in this signed-out browser session.
+
 ## 2026-10-11 — Recheck the administrator role selector click boundary
 
 - **Reviewed:** The new screenshot's target path, current account-detail JSX and CSS, Vite's transformed module, and the selector width and positioning regressions.

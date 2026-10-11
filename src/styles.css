@@ -1389,7 +1389,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 @media (max-width: 400px) {
   .lesson-video-controls { display: grid; grid-template-columns: 34px 54px max-content minmax(40px, 1fr) 34px; gap: 8px; }
   .video-volume-control { grid-column: 4; grid-row: 2; justify-self: start; }
-  .lesson-video-controls > .video-control-button:last-child { grid-column: 5; grid-row: 2; }
+  .lesson-video-controls > .video-fullscreen-button { grid-column: 5; grid-row: 2; }
 }
 
 @media (max-width: 600px) {
@@ -1399,7 +1399,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .lesson-video-controls.has-caption-tracks .video-caption-select { grid-column: 1 / 4; grid-row: 2; width: 100%; min-width: 0; }
   .lesson-video-controls.has-caption-tracks .video-caption-select .app-select-trigger { min-height: 34px; padding: 5px 8px; font-size: 11px; }
   .lesson-video-controls.has-caption-tracks .video-volume-control { grid-column: 4; grid-row: 2; width: 58px; justify-self: start; }
-  .lesson-video-controls.has-caption-tracks > .video-control-button:last-child { grid-column: 5; grid-row: 2; }
+  .lesson-video-controls.has-caption-tracks > .video-fullscreen-button { grid-column: 5; grid-row: 2; }
 }
 
 @media print {
