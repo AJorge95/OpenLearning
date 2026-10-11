@@ -25,3 +25,7 @@ export function groupCalendarDeadlines(items: CourseDeadline[], year: number, mo
   }
   return { monthItems, itemsByLocalDay };
 }
+
+export function shouldShowCalendarEmptyState(loading: boolean, error: string, itemCount: number) {
+  return !loading && !error && itemCount === 0;
+}

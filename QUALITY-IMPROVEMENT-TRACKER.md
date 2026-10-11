@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep calendar load errors distinct from empty months
+
+- **Reviewed:** The calendar clears its items on month load and offers a retry alert on request failure, but its empty-month message also appeared whenever the failed request left the item list empty.
+- **Improvement:** Show “No course deadlines this month” only after a successful, finished request with zero items. Add client tests for loading, error, successful-empty, populated, and page wiring states in `tests/client`.
+- **Why it helps:** Learners no longer see a false empty result beside a load error and can rely on the retry message to explain the missing calendar data.
+- **Checked:** Focused calendar tests passed (3/3); full `npm test` passed; `npx tsc --noEmit`, `npm run build`, `node --check tests/client/calendar-dates.test.js`, and `git diff --check` passed. The authenticated calendar was not rendered because the in-app browser is signed out at `/login`.
+
 ## 2026-10-11 — Disable custom selects without enabled choices
 
 - **Reviewed:** The shared `AppSelect` navigation helper falls back to option index 0 when every option is disabled, while the trigger could still open that listbox.
