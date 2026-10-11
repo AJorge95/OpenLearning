@@ -17,6 +17,14 @@ test('required registration answers are found when choices or text are blank', (
   assert.equal(findMissingRequiredRegistrationField(fields, { department: 'Design', about: 'Returning learner' })?.id, 'start-date');
 });
 
+test('custom signup fields use a navigable heading without changing its visual size', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-auth.tsx', import.meta.url), 'utf8');
+  const styles = fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
+
+  assert.match(pageSource, /registration-form-fields-heading"><h2>About you<\/h2><span>/);
+  assert.match(styles, /\.registration-form-fields-heading h2 \{ margin: 0; color: var\(--ink\); font-size: 14px; \}/);
+});
+
 test('checkbox requiredness and optional blank fields are handled separately', () => {
   const values = { department: 'Research', about: 'Here', 'start-date': '2026-10-09', policy: false, optional: '  ' };
   assert.equal(findMissingRequiredRegistrationField(fields, values)?.id, 'policy');

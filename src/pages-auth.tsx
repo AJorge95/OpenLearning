@@ -30,7 +30,7 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
 }) {
   if (!fields.length) return null;
   return <div className="registration-form-fields">
-    <div className="registration-form-fields-heading"><strong>About you</strong><span>Share the details requested by this learning space.</span></div>
+    <div className="registration-form-fields-heading"><h2>About you</h2><span>Share the details requested by this learning space.</span></div>
     {fields.map((field) => {
       if (field.type === 'checkbox') return <label className="registration-checkbox-field" key={field.id}>
         <input
