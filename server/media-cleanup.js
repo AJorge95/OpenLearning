@@ -45,6 +45,7 @@ export async function cleanupOrphanedCourseMedia(database, mediaRoot, minAgeMs) 
   const failureSamples = [];
   const recordFailure = (stage, courseId, fileName, error) => {
     failed++;
+    // Keep the failure total accurate without flooding startup diagnostics.
     if (failureSamples.length >= maxFailureSamples) return;
     failureSamples.push({
       stage,
