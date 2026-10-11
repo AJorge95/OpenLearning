@@ -2468,6 +2468,7 @@ export function AdminSettingsPage() {
   const [requireRegistrationApproval, setRequireRegistrationApproval] = useState(registrationApprovalRequired);
   const [userLimitValue, setUserLimitValue] = useState(String(userLimit));
   const [registeredUserCount, setRegisteredUserCount] = useState<number | null>(null);
+  const [registeredUserCountLoading, setRegisteredUserCountLoading] = useState(true);
   const [registeredUserCountError, setRegisteredUserCountError] = useState('');
   const [registeredUserCountRetryVersion, setRegisteredUserCountRetryVersion] = useState(0);
   const registeredUserCountRevisionRef = useRef(0);
@@ -2483,16 +2484,26 @@ export function AdminSettingsPage() {
   const [resetBusy, setResetBusy] = useState(false);
   const [resetStatusLoaded, setResetStatusLoaded] = useState(false);
   useEffect(() => { setName(platformName); setIcon(platformIcon); setIconEdited(false); setPalette(themePalette); setProtocol(connectionProtocol); setAllowRegistration(registrationEnabled); setRequireRegistrationApproval(registrationApprovalRequired); setUserLimitValue(String(userLimit)); }, [platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, userLimit]);
+  function refreshRegisteredUserCount() {
+    // Reuse the existing request effect so refreshes share its abort and stale-response guards.
+    setRegisteredUserCountRetryVersion((version) => version + 1);
+  }
   useEffect(() => {
     let active = true;
     const revision = registeredUserCountRevisionRef.current;
     const controller = new AbortController();
+    setRegisteredUserCountLoading(true);
     setRegisteredUserCountError('');
     registeredUserCountControllerRef.current = controller;
     api.get<{ registeredUserCount: number }>('/api/admin/settings', { signal: controller.signal })
       .then((result) => { if (active && revision === registeredUserCountRevisionRef.current) setRegisteredUserCount(result.registeredUserCount); })
       .catch((cause) => { if (active && revision === registeredUserCountRevisionRef.current) setRegisteredUserCountError(cause instanceof ApiError ? cause.message : 'Registered account count could not be loaded.'); })
-      .finally(() => { if (registeredUserCountControllerRef.current === controller) registeredUserCountControllerRef.current = null; });
+      .finally(() => {
+        if (registeredUserCountControllerRef.current === controller) {
+          registeredUserCountControllerRef.current = null;
+          setRegisteredUserCountLoading(false);
+        }
+      });
     return () => {
       active = false;
       controller.abort();
@@ -2564,7 +2575,7 @@ export function AdminSettingsPage() {
       registeredUserCountRevisionRef.current += 1;
       registeredUserCountControllerRef.current?.abort();
       registeredUserCountControllerRef.current = null;
-      setError(''); setRegisteredUserCountError(''); setName(result.platformName); setBranding(result.platformName, result.themePalette, result.platformIcon); setPlatformAccessSettings(result.connectionProtocol, result.registrationEnabled, result.registrationApprovalRequired, result.registrationAvailable, result.userLimit); setIconEdited(false); setRegisteredUserCount(result.registeredUserCount); setSuccess('Platform settings saved.');
+      setError(''); setRegisteredUserCountError(''); setRegisteredUserCountLoading(false); setName(result.platformName); setBranding(result.platformName, result.themePalette, result.platformIcon); setPlatformAccessSettings(result.connectionProtocol, result.registrationEnabled, result.registrationApprovalRequired, result.registrationAvailable, result.userLimit); setIconEdited(false); setRegisteredUserCount(result.registeredUserCount); setSuccess('Platform settings saved.');
     } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Settings could not be saved.'); }
     finally { setSaving(false); }
   }
@@ -2637,6 +2648,7 @@ export function AdminSettingsPage() {
           {accountLimit > 0 && registeredUserCount !== null && <div className="account-usage-track" role="progressbar" aria-label="Registered account limit usage" aria-valuemin={0} aria-valuemax={accountLimit} aria-valuenow={Math.min(registeredUserCount, accountLimit)} aria-valuetext={`${registeredUserCount} of ${accountLimit} accounts registered`}>
             <span style={{ width: `${accountUsagePercent}%` }} />
           </div>}
+          <Button type="button" variant="quiet" className="registered-count-refresh" aria-busy={registeredUserCountLoading} disabled={registeredUserCountLoading} onClick={refreshRegisteredUserCount}>{registeredUserCountLoading ? registeredUserCount === null ? 'Loading account count…' : 'Refreshing account count…' : 'Refresh account count'}</Button>
           {accountLimitReached && <p className="registered-count-limit-warning">The cap has no room for additional accounts. Increase it to create more.</p>}
         </div>}
       <div className="settings-card-footer"><span>Database and media paths remain managed through the server environment.</span><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</Button></div>
