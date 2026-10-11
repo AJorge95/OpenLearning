@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { ApiError, api, getMe, getSetupStatus } from './api';
 import { BRAND_PALETTES, DEFAULT_PALETTE } from './branding';
 import type { BrandingPalette, ConnectionProtocol, PlatformConfiguration } from './branding';
+import { isRegistrationAvailabilityError } from './registration-availability';
 import type { RegistrationFieldValues, Role, User } from './types';
 
 interface AuthContextValue {
@@ -121,12 +122,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signUp = useCallback(async (email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => {
-    const result = await api.post<{ user: User; registrationAvailable: boolean }>('/api/auth/register', { email, firstName, lastName, username, password, confirmPassword, registrationFieldValues });
+    let result: { user: User; registrationAvailable: boolean };
+    try {
+      result = await api.post<{ user: User; registrationAvailable: boolean }>('/api/auth/register', { email, firstName, lastName, username, password, confirmPassword, registrationFieldValues });
+    } catch (cause) {
+      if (isRegistrationAvailabilityError(cause)) {
+        try { await refresh(); } catch { /* Keep the original registration error visible if status refresh fails. */ }
+      }
+      throw cause;
+    }
     authStateRevision.current += 1;
     api.clearCsrf();
     setUser(result.user);
     setRegistrationAvailableState(result.registrationAvailable);
-  }, []);
+  }, [refresh]);
 
   const completeSetup = useCallback(async (name: string, email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, setupToken: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => {
     const result = await api.post<{ user: User } & PlatformConfiguration>('/api/setup', {
