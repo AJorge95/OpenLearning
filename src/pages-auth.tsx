@@ -60,6 +60,12 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
           options={[{ value: '', label: 'Choose an option' }, ...field.options.map((option) => ({ value: option, label: option }))]}
         />
       </div>;
+      const isInvalid = invalidFieldId === field.id;
+      const fieldValue = typeof values[field.id] === 'string' ? values[field.id] as string : '';
+      const fieldDescriptionId = field.type === 'text' ? `registration-field-count-${field.id}` : undefined;
+      const describedBy = [fieldDescriptionId, isInvalid ? 'registration-form-error' : undefined]
+        .filter((id): id is string => Boolean(id))
+        .join(' ') || undefined;
       return <label className="registration-custom-field" key={field.id}>
         <span>{field.label}{field.required && <small>Required</small>}</span>
         <input
@@ -69,12 +75,13 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
           maxLength={field.type === 'text' ? 2000 : undefined}
           min={field.type === 'date' ? '0001-01-01' : undefined}
           max={field.type === 'date' ? '9999-12-31' : undefined}
-          value={typeof values[field.id] === 'string' ? values[field.id] as string : ''}
-          aria-invalid={invalidFieldId === field.id || undefined}
-          aria-describedby={invalidFieldId === field.id ? 'registration-form-error' : undefined}
+          value={fieldValue}
+          aria-invalid={isInvalid || undefined}
+          aria-describedby={describedBy}
           onChange={(event) => onChange(field.id, event.target.value)}
           disabled={disabled}
         />
+        {fieldDescriptionId && <small id={fieldDescriptionId} className="field-character-count">{fieldValue.length} / 2,000 characters</small>}
       </label>;
     })}
   </div>;

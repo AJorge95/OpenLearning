@@ -1084,7 +1084,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .registration-form-fields-heading span { color: var(--muted); font-size: 11px; font-weight: 450; }
 .registration-custom-field { display: flex; flex-direction: column; gap: 7px; color: #303443; font-size: 13px; font-weight: 650; }
 .registration-custom-field > span { display: flex; align-items: center; gap: 7px; }
-.registration-custom-field small, .registration-checkbox-field small { color: var(--muted); font-size: 10px; font-weight: 500; }
+.registration-custom-field > span small, .registration-checkbox-field small { color: var(--muted); font-size: 10px; font-weight: 500; }
 .registration-custom-field input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 4px; color: #222634; background: #fff; font: inherit; font-size: 14px; font-weight: 450; }
 .registration-custom-field input:focus { outline: 2px solid var(--purple); border-color: var(--purple); }
 .registration-custom-field input[aria-invalid="true"], .registration-custom-field .app-select-trigger[aria-invalid="true"] { border-color: var(--danger); }
