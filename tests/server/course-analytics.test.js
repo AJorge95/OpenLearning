@@ -2055,6 +2055,74 @@ test('admin competency pages are bounded, stable, clamped, and include the creat
   }
 });
 
+test('admin competency search filters titles and descriptions before pagination', async () => {
+  const pageSize = 25;
+  const cohortIds = Array.from({ length: pageSize + 2 }, (_, index) => `competency-search-${String(index).padStart(2, '0')}`);
+  const extraIds = ['competency-search-description', 'competency-search-literal', 'competency-search-near'];
+  const fixtureIds = [...cohortIds, ...extraIds];
+  const insert = database.prepare(`INSERT INTO competencies (id, title, description, active, created_by)
+    VALUES (?, ?, ?, ?, 'admin-1')`);
+  try {
+    database.transaction(() => {
+      cohortIds.forEach((id, index) => insert.run(id, `Search cohort ${String(index).padStart(2, '0')}`, 'Large skill catalog', index % 2));
+      insert.run(extraIds[0], 'Accessibility standards', 'Compliance matrix for learning', 1);
+      insert.run(extraIds[1], 'Literal %_! marker', '', 1);
+      insert.run(extraIds[2], 'Literal xx! marker', '', 1);
+    }).immediate();
+
+    const searchUrl = (query, page = 1) => {
+      const params = new URLSearchParams({ q: query, page: String(page) });
+      return apiUrl(`/admin/competencies?${params}`);
+    };
+    const firstPageResponse = await fetch(searchUrl('SEARCH COHORT'), { headers: userHeaders('admin-1') });
+    assert.equal(firstPageResponse.status, 200);
+    const firstPage = await firstPageResponse.json();
+    assert.equal(firstPage.total, cohortIds.length);
+    assert.equal(firstPage.page, 1);
+    assert.equal(firstPage.competencies.length, pageSize);
+    assert.equal(firstPage.hasMore, true);
+    assert.ok(firstPage.competencies.every((competency) => competency.title.startsWith('Search cohort')));
+
+    const secondPageResponse = await fetch(searchUrl('SEARCH COHORT', 2), { headers: userHeaders('admin-1') });
+    const secondPage = await secondPageResponse.json();
+    assert.equal(secondPage.total, cohortIds.length);
+    assert.equal(secondPage.page, 2);
+    assert.equal(secondPage.competencies.length, 2);
+    assert.equal(secondPage.hasMore, false);
+
+    const toggleResponse = await fetch(apiUrl(`/admin/competencies/${cohortIds[24]}?q=SEARCH%20COHORT`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ active: true }),
+    });
+    assert.equal(toggleResponse.status, 200);
+    const toggleResult = await toggleResponse.json();
+    assert.equal(toggleResult.page, 1, 'the returned page should account for the filtered rank after activation');
+    const afterToggleResponse = await fetch(searchUrl('SEARCH COHORT', toggleResult.page), { headers: userHeaders('admin-1') });
+    const afterTogglePage = await afterToggleResponse.json();
+    assert.equal(afterTogglePage.total, cohortIds.length);
+    assert.equal(afterTogglePage.page, 1);
+    assert.ok(afterTogglePage.competencies.some((competency) => competency.id === cohortIds[24]));
+
+    const descriptionResponse = await fetch(searchUrl('COMPLIANCE MATRIX'), { headers: userHeaders('admin-1') });
+    const descriptionResults = await descriptionResponse.json();
+    assert.equal(descriptionResults.total, 1);
+    assert.equal(descriptionResults.competencies[0].id, extraIds[0]);
+
+    const literalResponse = await fetch(searchUrl('%_!'), { headers: userHeaders('admin-1') });
+    const literalResults = await literalResponse.json();
+    assert.equal(literalResults.total, 1);
+    assert.equal(literalResults.competencies[0].id, extraIds[1]);
+
+    const repeatedQueryResponse = await fetch(`${apiUrl('/admin/competencies')}?q=first&q=second`, { headers: userHeaders('admin-1') });
+    assert.equal(repeatedQueryResponse.status, 400);
+    assert.equal((await repeatedQueryResponse.json()).code, 'validation_error');
+  } finally {
+    database.prepare(`DELETE FROM audit_logs WHERE action = 'competency.updated' AND entity_id IN (${fixtureIds.map(() => '?').join(', ')})`).run(...fixtureIds);
+    database.prepare(`DELETE FROM competencies WHERE id IN (${fixtureIds.map(() => '?').join(', ')})`).run(...fixtureIds);
+  }
+});
+
 test('admin competency updates reject duplicate titles without changing or auditing the record', async () => {
   database.prepare(`INSERT INTO competencies (id, title, description, active, created_by) VALUES
     ('competency-update-existing', 'Existing competency', 'Original description', 1, 'admin-1'),
