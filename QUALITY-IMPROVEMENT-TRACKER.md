@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Refresh stale controls after last-admin conflicts
+
+- **Reviewed:** Server-side protection correctly rejects demoting or disabling the last active administrator, but the Users page only displayed the conflict. A different admin session may have changed the account count since this list was loaded, leaving its role/status controls stale.
+- **Improvement:** On a `last_admin` response, reload the current page/search/role-filter state and retain the server’s explanatory conflict message when that refresh succeeds. A failed refresh continues to show its own retryable loading error.
+- **Why it helps:** Administrators see the updated disabled controls immediately after a concurrent change and understand why the attempted action was rejected.
+- **Interface review:** The conflict path does not clear the active query or filter. Failed list refreshes retain the existing Try again action.
+- **Checked:** Focused account/UI tests passed (31/31), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/app-select-label.test.js`, and `git diff --check` passed. The in-app browser is signed out at `/login`, so the concurrent-conflict interaction was not replayed in the authenticated UI.
+
 ## 2026-10-11 — Refresh administrator safeguards after status changes
 
 - **Reviewed:** The Users table now receives `isLastActiveAdmin` and disables the guarded actions, but the client updated only the changed row after account-status updates. Disabling one of two administrators therefore left the remaining row’s restriction flag stale until a later list reload.
