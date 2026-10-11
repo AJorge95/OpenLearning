@@ -28,3 +28,19 @@ test('course catalog filters stack before the sort value is truncated', () => {
   assert.match(filterRules, /\.catalog-tools\s+\.filter-controls\s*\{[^}]*flex-direction:\s*column;[^}]*align-items:\s*stretch;/);
   assert.match(filterRules, /\.catalog-tools\s+\.catalog-filter-control\s*\{\s*width:\s*100%;\s*\}/);
 });
+
+test('platform icon picker actions can wrap at mobile widths', () => {
+  const styles = fs.readFileSync(stylesPath, 'utf8');
+  const mobilePickerRule = styles.indexOf('.platform-icon-picker { align-items: flex-start;');
+  const mobileBreakpoint = styles.lastIndexOf('@media (max-width: 720px)', mobilePickerRule);
+  const mobileBreakpointEnd = styles.indexOf('\n}', mobilePickerRule);
+
+  assert.notEqual(mobilePickerRule, -1, 'expected a mobile platform icon picker rule');
+  assert.notEqual(mobileBreakpoint, -1, 'expected the picker rule to be inside the mobile breakpoint');
+  assert.notEqual(mobileBreakpointEnd, -1, 'expected the mobile breakpoint to close');
+
+  const mobileRules = styles.slice(mobileBreakpoint, mobileBreakpointEnd);
+  const actionRule = mobileRules.match(/\.platform-icon-actions\s*\{([^}]*)\}/);
+  assert.ok(actionRule, 'expected mobile platform icon actions styling');
+  assert.match(actionRule[1], /flex-wrap:\s*wrap;/);
+});

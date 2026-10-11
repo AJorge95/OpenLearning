@@ -1291,7 +1291,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .platform-icon-preview { width: 64px; height: 64px; }
   .platform-icon-controls { align-items: flex-start; gap: 8px 10px; }
   .platform-icon-controls > span { white-space: normal; }
-  .platform-icon-actions { width: 100%; margin-left: 0; }
+  .platform-icon-actions { width: 100%; flex-wrap: wrap; margin-left: 0; }
   .setup-panel { padding: 0; }
   .setup-panel h1 { font-size: 29px; }
   .setup-panel > p { font-size: 14px; margin-bottom: 27px; }

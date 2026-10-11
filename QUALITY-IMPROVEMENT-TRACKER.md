@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Let platform icon actions wrap on mobile
+
+- **Reviewed:** The platform icon picker’s action controls at the desktop layout and its narrow-screen flex rules.
+- **Improvement:** Allow the upload and remove actions to wrap within the picker on mobile widths, while keeping their full button sizes. Add a responsive stylesheet regression for the mobile rule.
+- **Why it helps:** The two actions no longer have to compress into one row when the icon preview and picker padding leave less room on a narrow phone.
+- **Checked:** The focused responsive-viewport tests passed (3/3), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict type checking and Vite bundling, and `git diff --check` passed. Desktop Chrome measured the action row at about 223px; narrow-viewport rendering was unavailable in the connected browser surface.
+
 ## 2026-10-11 — Validate decoded PNG branding data
 
 - **Reviewed:** After structural checks, a PNG with valid CRCs could still contain an invalid compressed image stream.
