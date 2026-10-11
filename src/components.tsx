@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
-import { pendingRegistrationCountChangedEvent } from './admin-navigation-events';
+import { pendingRegistrationCountRefreshRequestedEvent, requestPendingRegistrationCountRefresh } from './admin-navigation-events';
 import { BRAND_PALETTES, isBrandIconDimensionAllowed, MAX_BRAND_ICON_BYTES, MAX_BRAND_ICON_DIMENSION } from './branding';
 import type { BrandingPalette } from './branding';
 import { shouldCloseAppSelectForLayoutChange } from './app-select-layout';
@@ -274,20 +274,20 @@ export function StaffFrame() {
     const refresh = () => { void refreshPendingRegistrationCount(); };
     refresh();
     window.addEventListener('focus', refresh);
-    window.addEventListener(pendingRegistrationCountChangedEvent, refresh);
+    window.addEventListener(pendingRegistrationCountRefreshRequestedEvent, refresh);
     return () => {
       requestController?.abort();
       window.removeEventListener('focus', refresh);
-      window.removeEventListener(pendingRegistrationCountChangedEvent, refresh);
+      window.removeEventListener(pendingRegistrationCountRefreshRequestedEvent, refresh);
     };
   }, [pathname, user?.role]);
   const pendingRegistrationCountLabel = pendingRegistrationCountUnavailable
-    ? 'Users, pending registration count unavailable'
+    ? 'Users, pending registration count unavailable; activate to retry'
     : pendingRegistrationCount !== null && pendingRegistrationCount > 0
       ? `Users, ${formatCountLabel(pendingRegistrationCount, 'pending registration', 'pending registrations')}`
       : undefined;
   const pendingRegistrationCountBadge = pendingRegistrationCountUnavailable
-    ? <span className="staff-nav-count staff-nav-count-unavailable" aria-hidden="true" title="Pending registration count unavailable">!</span>
+    ? <span className="staff-nav-count staff-nav-count-unavailable" aria-hidden="true" title="Pending registration count unavailable. Select Users to retry.">!</span>
     : pendingRegistrationCount !== null && pendingRegistrationCount > 0
       ? <span className="staff-nav-count" aria-hidden="true">{pendingRegistrationCount > 99 ? '99+' : pendingRegistrationCount}</span>
       : null;
@@ -298,7 +298,7 @@ export function StaffFrame() {
         <PlatformBrand className="staff-brand" />
         <nav ref={staffNavigationRef} aria-label="Management navigation">
           <NavLink to="/manage/courses"><BookOpen size={18} />Courses</NavLink>
-          {user?.role === 'admin' && <NavLink to="/admin/users" aria-label={pendingRegistrationCountLabel}><UsersRound size={18} />Users{pendingRegistrationCountBadge}</NavLink>}
+          {user?.role === 'admin' && <NavLink to="/admin/users" aria-label={pendingRegistrationCountLabel} onClick={() => { if (pathname === '/admin/users') requestPendingRegistrationCountRefresh(); }}><UsersRound size={18} />Users{pendingRegistrationCountBadge}</NavLink>}
           <NavLink to="/manage/learning-paths"><Route size={18} />Learning paths</NavLink>
           {user?.role === 'admin' && <NavLink to="/admin/competencies"><Award size={18} />Competencies</NavLink>}
           {user?.role === 'admin' && <NavLink to="/admin/audit-log"><ClipboardList size={18} />Audit log</NavLink>}

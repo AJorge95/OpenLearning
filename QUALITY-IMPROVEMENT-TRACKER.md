@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Let administrators retry the pending count from Users
+
+- **Reviewed:** The unavailable-count warning, React Router's same-route link behavior, the approval refresh event, and the state refresh triggered by route changes.
+- **Improvement:** Make the shared event a refresh request, reuse it after both approval workflows, and dispatch it when an administrator activates the Users link while already on that page. The unavailable label and tooltip now explain that activation retries the count.
+- **Why it helps:** An administrator who sees the warning can retry immediately without reloading the page or switching windows.
+- **Backend review:** The existing admin-only count endpoint still provides the data; no backend change was needed.
+- **Checked:** Focused navigation tests passed (3/3); the full suite passed (526/526); `npm run build` passed strict TypeScript checking and Vite bundling; changed JavaScript syntax checks and `git diff --check` passed. A live endpoint outage and same-route retry were not simulated in the signed-in browser, so those states remain source- and regression-verified.
+
 ## 2026-10-11 — Distinguish an unavailable pending count from zero
 
 - **Reviewed:** The administrator Users badge's loading, valid-count, request-failure, malformed-response, and cancellation paths after the previous navigation improvement.
