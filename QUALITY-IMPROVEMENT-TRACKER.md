@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Announce progress in paged course lists
+
+- **Reviewed:** The learner catalog, My Learning, and certificate list pagination controls, their changing button labels, result-count status messages, and the corresponding loading state.
+- **Improvement:** Add persistent polite status regions that announce while another course or certificate page is loading.
+- **Why it helps:** Screen-reader users get immediate feedback after activating a load-more control while the button is disabled and results have not changed yet.
+- **Checked:** Focused pagination/comment tests passed (9/9); full `npm test` passed (391/391); `npx tsc --noEmit`, `npm run build`, `node --check tests/client/course-pagination-announcements.test.js`, and `git diff --check` passed. Rendered interaction remains unverified because the in-app browser is signed out and Playwright is not installed.
+
 ## 2026-10-11 — Announce lesson-comment pagination progress
 
 - **Reviewed:** The learner feedback section's existing comment-count announcement, disabled “Loading…” control, page retry behavior, and the server's 20-comment page bound.
