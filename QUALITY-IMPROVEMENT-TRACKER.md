@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve current learner filters after access changes
+
+- **Reviewed:** Course access mutations can take time while staff continue using search or pagination. The mutation callback captured the query and page from its original render, then refreshed that stale view after the assignment completed.
+- **Improvement:** Track the latest requested query and page in a ref whenever the list loads, then use that current view when refreshing after a grant or revoke.
+- **Why it helps:** Finishing an assignment no longer switches staff back to an older search or page and replaces the results they are currently reviewing.
+- **Interface review:** Route changes already clear the course and learner rows, and the loading guard prevents the prior course's access list from rendering under the next course. No markup or layout change was needed.
+- **Checked:** The new client regression passed (1/1); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/course-access-refresh.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Type delete response contracts explicitly
 
 - **Reviewed:** The shared API client supports both `204 No Content` deletes and a learner lesson-completion delete that returns JSON. The generic delete helper defaulted to `unknown`, while most callers discard the body.
