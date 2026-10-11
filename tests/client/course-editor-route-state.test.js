@@ -28,18 +28,20 @@ test('changing course routes resets publication-only options', () => {
   assert.equal(routeEffect.length, 1, 'expected one effect keyed to the course route');
   const effectCallback = routeEffect[0].arguments[0];
   assert.ok(ts.isArrowFunction(effectCallback) && ts.isBlock(effectCallback.body), 'expected a block route effect');
-  const initialStateResets = effectCallback.body.statements
+  const resetCalls = effectCallback.body.statements
     .filter((statement) => ts.isExpressionStatement(statement) && ts.isCallExpression(statement.expression))
-    .slice(0, 2)
     .map((statement) => {
       const call = statement.expression;
       return [call.expression.getText(sourceFile), call.arguments[0]?.getText(sourceFile)];
     });
 
-  assert.deepEqual(initialStateResets, [
+  const publicationStateResets = resetCalls.filter(([name]) => ['setRequiresRecompletion', 'setChangeNote'].includes(name));
+  assert.deepEqual(publicationStateResets, [
     ['setRequiresRecompletion', 'false'],
     ['setChangeNote', "''"],
   ]);
+  assert.ok(effectCallback.body.getText(sourceFile).includes('coverValidationSequenceRef.current += 1;'), 'stale cover validation should be invalidated on route changes');
+  assert.ok(resetCalls.some(([name, value]) => name === 'setCoverValidating' && value === 'false'), 'cover validation state should reset on route changes');
 });
 
 test('course publishing keeps save failures distinct from settings refresh failures', () => {
