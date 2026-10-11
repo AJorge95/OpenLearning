@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Explain carried-forward quiz passes
+
+- **Reviewed:** Versioned course progress retains earlier quiz passes by stable ID when publication does not require recompletion, while a new version has no attempt preview under its new quiz ID. The learner quiz page previously showed a fresh answer form without explaining why course progress already counted the quiz as passed.
+- **Improvement:** Show an accessible status notice when a previous pass still counts but the current attempt has not passed. Explain both the retake option and, after a failed retake, that the earlier pass still satisfies the quiz for course completion.
+- **Why it helps:** Learners can tell that their earlier completion remains valid and understand that another attempt records a new result rather than restoring lost progress.
+- **Backend review:** Existing stable-ID progress and learner-scoped attempt behavior remain unchanged. A server regression confirms that the current version reports the carried-forward pass without presenting an older attempt as a current-version result.
+- **Checked:** Focused client notice tests passed (3/3); the versioned course-detail regression passed (1/1); full `npm test -- --test-reporter=dot` passed; `npm run build` passed TypeScript checking and Vite; and `git diff --check` passed. Chrome showed the notice on an existing passed course at 1718×1270 and 390×844; it wrapped cleanly at mobile width with no document overflow or console warnings/errors. No quiz was submitted.
+
 ## 2026-10-11 — Recheck quiz editor and save validation
 
 - **Reviewed:** Quiz editor prompt and choice validation, focus/error associations, question and choice limits, server-side payload checks, transactional quiz replacement, audit rollback, and learner submission completeness.

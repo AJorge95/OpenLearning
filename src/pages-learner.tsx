@@ -9,6 +9,7 @@ import { formatLearningDeadlineDate, getLearningDeadlineStatus } from './learnin
 import { courseActivityActionLabel, nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from './course-navigation';
 import { summarizeCourseProgress } from './course-progress';
 import { shuffleQuizChoices } from './quiz-choice-order';
+import { quizPriorPassNotice } from './quiz-prior-pass';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
 import { lessonCommentRemovalConfirmation } from './lesson-comment-confirmation';
 import { tryToggleFullscreen } from './video-fullscreen';
@@ -1648,6 +1649,7 @@ export function QuizPage() {
   const answeredCount = quiz.questions.filter((question) => Boolean(answers[question.id || ''])).length;
   const allAnswered = quiz.questions.length > 0 && answeredCount === quiz.questions.length;
   const courseFinished = course.completed || availableCertificate?.courseId === course.id;
+  const priorPassNotice = quizPriorPassNotice(quiz.passed, currentResult?.passed ?? null);
   const nextResultActivity = currentResult?.passed && !courseFinished ? nextCourseActivity(course.modules) : null;
 
   function retryQuiz() {
@@ -1662,6 +1664,7 @@ export function QuizPage() {
       <div className="quiz-main">
         {!currentResult && <div className="quiz-topline"><span>{formatCountLabel(quiz.questions.length, 'question', 'questions')}</span><span>Pass mark {quiz.passMark}%</span></div>}
         <h1>{quiz.title}</h1>
+        {priorPassNotice && <div className="inline-notice inline-notice-success" role="status">{priorPassNotice}</div>}
         {!currentResult ? <><p className="lead-copy">Choose one answer for each question. You can retry this quiz if you need another attempt.</p>
           {error && <ErrorNotice message={error} />}
           <form onSubmit={submit} className="quiz-form" aria-busy={saving}>
