@@ -20,6 +20,7 @@ test('only the catch-all category omits the category query parameter', () => {
   assert.equal(literalCategory.get('sort'), 'title');
   assert.equal(literalCategory.get('q'), 'skills');
   assert.equal(literalCategory.get('page'), '2');
+  assert.equal(literalCategory.get('includeCategories'), '0');
 });
 
 test('catalog empty-state filtering recognizes only submitted search and category values', () => {
