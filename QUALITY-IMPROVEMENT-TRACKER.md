@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Clarify the first-course action
+
+- **Reviewed:** The course list's page heading and its unfiltered empty-catalog action both used the accessible name “Create course.”
+- **Improvement:** Name the empty-catalog action “Create first course” while keeping the persistent page action as “Create course” and retaining the same route.
+- **Why it helps:** The first-course setup action is distinct in the page and when staff navigate by links with assistive technology.
+- **Backend review:** `/api/manage/courses` already validates the course fields and creates the course and audit entry in one transaction; no backend change was indicated.
+- **Checked:** The focused course empty-state test passed (2/2), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. The live empty-catalog state was not opened because the current catalog has data and reproducing it would require creating or deleting a course; the regression covers the conditional label and unchanged header action.
+
 ## 2026-10-11 — Distinguish the first-module action
 
 - **Reviewed:** The course editor's persistent curriculum action and empty-state call to action both rendered as “Add module” in the accessibility tree.
