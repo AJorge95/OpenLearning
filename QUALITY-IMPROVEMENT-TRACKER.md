@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Confirm module removal and its full data impact
+
+- **Reviewed:** Removing a module permanently deletes its lessons, quiz and saved attempts, and uploaded lesson videos, documents, and captions. The editor previously used a blocking browser prompt that did not name all of those consequences.
+- **Improvement:** Defer module deletion until the shared accessible confirmation is accepted. Name the module and list the removed content, and clear or revalidate the pending target when the course route changes.
+- **Why it helps:** Course managers can review the full data loss before confirming, and a stale dialog cannot delete a similarly positioned module from another course.
+- **Backend review:** The existing endpoint already deletes module records transactionally and removes associated files after commit; its behavior is unchanged.
+- **Checked:** Four focused client confirmation tests passed; the module-delete audit-rollback regression passed; `npm run build` passed TypeScript checking and Vite bundling. Chrome showed the full consequence warning with focus on Cancel; cancelling closed the dialog and left the module, lessons, and quiz in place. No deletion was submitted. `git diff --check` passed.
+
 ## 2026-10-11 — Warn before quiz removal deletes learner attempts
 
 - **Reviewed:** Removing a module quiz also deletes all saved attempts, but the confirmation used a blocking browser prompt and named the consequence only in its text.

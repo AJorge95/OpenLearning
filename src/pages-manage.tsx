@@ -853,6 +853,7 @@ export function CourseEditorPage() {
   const deleteCourseRequestRef = useRef(false);
   const [deletingCourse, setDeletingCourse] = useState(false);
   const [pendingDeleteCourseId, setPendingDeleteCourseId] = useState<string | null>(null);
+  const [pendingDeleteModule, setPendingDeleteModule] = useState<{ courseId: string; module: CourseModule } | null>(null);
   const deleteCurriculumItemRef = useRef('');
   const [deletingCurriculumItem, setDeletingCurriculumItem] = useState('');
   const [movingCurriculumItems, setMovingCurriculumItems] = useState<Set<string>>(() => new Set());
@@ -956,6 +957,7 @@ export function CourseEditorPage() {
   useEffect(() => {
     let active = true;
     setPendingDeleteCourseId(null);
+    setPendingDeleteModule(null);
     coverValidationSequenceRef.current += 1;
     abortCoverValidation();
     coverUploadRef.current = false;
@@ -1294,14 +1296,22 @@ export function CourseEditorPage() {
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Module could not be updated.'); }
   }
 
-  async function deleteModule(module: CourseModule) {
-    if (deleteCurriculumItemRef.current || deleteCourseRequestRef.current || saving) return;
-    if (!window.confirm(`Remove “${module.title}” and all of its lessons and quiz?`)) return;
+  async function deleteModule(module: CourseModule, confirmed = false) {
+    if (deleteCurriculumItemRef.current || deleteCourseRequestRef.current || saving || !course) return;
+    if (!confirmed) { setPendingDeleteModule({ courseId: course.id, module }); return; }
     const target = `module:${module.id}`;
     deleteCurriculumItemRef.current = target; setDeletingCurriculumItem(target); setError('');
     try { await saveCourseDetailsIfChanged(); await api.delete(`/api/manage/modules/${module.id}`); await load(); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Module could not be removed.'); }
     finally { deleteCurriculumItemRef.current = ''; setDeletingCurriculumItem(''); }
+  }
+
+  function confirmPendingModuleDeletion() {
+    const pending = pendingDeleteModule;
+    setPendingDeleteModule(null);
+    if (!course || !pending || pending.courseId !== course.id || routeCourseIdRef.current !== pending.courseId) return;
+    const currentModule = course.modules?.find((module) => module.id === pending.module.id);
+    if (currentModule) void deleteModule(currentModule, true);
   }
 
   async function deleteLesson(lessonId: string, currentTitle: string) {
@@ -1528,6 +1538,7 @@ export function CourseEditorPage() {
     </section>
     {course.status === 'archived' && <div className="delete-course-row"><div><strong>Delete this course permanently</strong><span>This also removes its uploaded media and cannot be undone.</span></div><Button variant="danger" onClick={() => void deleteArchivedCourse()} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} aria-busy={deletingCourse}><Trash2 size={16} />{deletingCourse ? 'Deleting course…' : 'Delete course'}</Button></div>}
     {pendingDeleteCourseId === course.id && routeCourseIdRef.current === course.id && <ConfirmationDialog {...courseDeletionConfirmation(course.title)} confirmLabel="Delete course" onCancel={() => setPendingDeleteCourseId(null)} onConfirm={() => { const requestedCourseId = pendingDeleteCourseId; setPendingDeleteCourseId(null); if (requestedCourseId === course.id && routeCourseIdRef.current === course.id) void deleteArchivedCourse(true); }} />}
+    {pendingDeleteModule?.courseId === course.id && routeCourseIdRef.current === course.id && course.modules?.some((module) => module.id === pendingDeleteModule.module.id) && <ConfirmationDialog title={`Remove “${pendingDeleteModule.module.title}”?`} description={`This removes all lessons in this module, its quiz and saved attempts, and their uploaded videos, documents, and captions. This action cannot be undone.`} confirmLabel="Remove module" onCancel={() => setPendingDeleteModule(null)} onConfirm={confirmPendingModuleDeletion} />}
   </div>;
 }
 
