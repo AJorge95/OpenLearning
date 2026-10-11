@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Confirm learning-path assignment removal in the app
+
+- **Reviewed:** Removing an assigned learner revokes their access to private path courses while keeping course progress. The page used a blocking browser prompt; the route removes only assigned enrollments and records the audit event in the same transaction.
+- **Improvement:** Use the shared accessible confirmation dialog with the learner and path named in its title. Explain the access change and retained progress, and revalidate the path and assigned learner when confirming. Clear pending confirmation when the assignment panel closes or reloads.
+- **Why it helps:** Staff can review the access impact in the application before proceeding, and a stale dialog cannot target a different path or learner.
+- **Backend review:** The existing route’s transactional delete and audit behavior is unchanged.
+- **Checked:** Both focused client confirmation tests passed; the private-path access and assignment-removal audit-rollback regression passed; `npm run build` passed type-checking and Vite bundling; and `git diff --check` passed. The local admin account has no learning paths, so the dialog could not be opened in the browser without creating test records. No test data was created.
+
 ## 2026-10-11 — Confirm removal of lesson links, documents, and captions
 
 - **Reviewed:** Lesson-detail controls used native prompts for link/document removal and caption-track removal. Document and caption routes also delete their uploaded files after their audit-backed database transactions.
