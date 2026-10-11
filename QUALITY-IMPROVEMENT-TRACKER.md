@@ -7389,3 +7389,11 @@
 - **Why it helps:** Form controls remain easier to identify against white and subtle surfaces, while the select’s interactive state is visible for every theme.
 - **Backend review:** Rechecked course-enrollment eligibility and idempotent responses; the access check and enrollment remain transactional, and retry behavior remains covered by the full suite. No new backend gap surfaced in this pass.
 - **Checked:** Client contrast and select-boundary tests passed (12/12); the full `npm test -- --test-reporter=dot`, `npm run build` (including strict TypeScript checking), and `git diff --check` passed. The rendered account page showed clearer input and selector boundaries; clicking to the right of the open role selector closed it and left Learner selected. No account data changed.
+
+## 2026-10-11 — Reuse date formatting for learning-path deadlines
+
+- **Reviewed:** Learning-path course cards can render many deadlines, and each card previously constructed a new locale-aware date formatter during rendering. The server already batches course summaries and deadline reads for the visible path page.
+- **Improvement:** Hoist the date-only formatter to module scope and reuse it for each course deadline while keeping the existing localized date style.
+- **Why it helps:** Re-rendering path cards no longer allocates one formatter per dated course, with no change to the displayed date or the backend response contract.
+- **Backend review:** Path summaries and deadlines remain loaded in bounded batches; no server or schema change was needed.
+- **Checked:** `node --test tests/client/program-card-layout.test.js` passed (3/3), including the module-scope formatter regression. The full `npm test -- --test-reporter=dot`, `npm run build` (strict TypeScript checking and Vite), `node --check tests/client/program-card-layout.test.js`, and `git diff --check` passed. The API and displayed date style are unchanged.

@@ -18,3 +18,13 @@ test('enrolled learner list has a heading beneath the assignment panel heading',
   assert.match(pageSource, /<h3>Assign a learner<\/h3>[\s\S]*?<h4 className="path-assigned-heading">Enrollments on this page<\/h4>/);
   assert.match(styles, /\.path-assigned-heading\s*\{[^}]*font-size:\s*11px;[^}]*font-weight:\s*650;/);
 });
+
+test('learning-path course deadlines reuse a module-level locale formatter', () => {
+  const pageSource = fs.readFileSync(path.join(sourceDirectory, 'pages-programs.tsx'), 'utf8');
+  const formatterDeclaration = pageSource.indexOf('const pathCourseDeadlineFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: \'medium\' });');
+  const pathPageDeclaration = pageSource.indexOf('export function LearningPathsPage()');
+
+  assert.ok(formatterDeclaration >= 0 && formatterDeclaration < pathPageDeclaration);
+  assert.match(pageSource, /pathCourseDeadlineFormatter\.format\(new Date\(course\.deadlineAt\)\)/);
+  assert.doesNotMatch(pageSource, /new Intl\.DateTimeFormat\(undefined, \{ dateStyle: 'medium' \}\)\.format\(new Date\(course\.deadlineAt\)\)/);
+});

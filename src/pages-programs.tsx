@@ -30,6 +30,8 @@ const learningPathStatusFilters: Array<{ label: string; value: LearningPathStatu
   { label: 'All paths', value: 'all' }, { label: 'Published', value: 'published' },
   { label: 'Drafts', value: 'draft' }, { label: 'Archived', value: 'archived' },
 ];
+// Reuse one locale formatter across all course deadlines rendered in path cards.
+const pathCourseDeadlineFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 const calendarTimeFormatter = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
 const calendarDateTimeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
 
@@ -487,7 +489,7 @@ export function LearningPathsPage() {
         </>}
         <ol className="path-course-list">{path.courses.map((course) => <li key={course.id} className={!course.unlocked && !staff ? 'locked' : ''}>
           <span className="path-course-number">{course.completed ? <Check size={14} /> : course.position + 1}</span>
-          <div><strong>{course.title}</strong><small>{course.category}{course.deadlineAt ? ` · Due ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(course.deadlineAt))}` : ''}</small></div>
+          <div><strong>{course.title}</strong><small>{course.category}{course.deadlineAt ? ` · Due ${pathCourseDeadlineFormatter.format(new Date(course.deadlineAt))}` : ''}</small></div>
           {!staff && course.unlocked ? <Link className="text-action" to={`/courses/${course.id}`} aria-label={`${course.completed ? 'Review course' : 'Start course'}: ${course.title}`}>{course.completed ? 'Review course' : 'Start course'}</Link> : !staff ? <span className="muted">Complete earlier courses to unlock</span> : <Link className="text-action" to={`/manage/courses/${course.id}/edit`} aria-label={`Edit course: ${course.title}`}>Edit course</Link>}
         </li>)}</ol>
         <div className="program-card-footer">
