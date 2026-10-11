@@ -508,6 +508,27 @@ test('learner catalog hides version snapshots from results and categories', asyn
   }
 });
 
+test('learner catalog can filter a real category named All courses', async () => {
+  const matchingCourseId = 'course-catalog-all-courses-category';
+  const otherCourseId = 'course-catalog-other-category';
+  const addCourse = database.prepare(`INSERT INTO courses (id, title, category, visibility, status, created_by, updated_by)
+    VALUES (?, 'All courses category regression', ?, 'public', 'published', 'admin-1', 'admin-1')`);
+  try {
+    addCourse.run(matchingCourseId, 'All courses');
+    addCourse.run(otherCourseId, 'Special topics');
+
+    const params = new URLSearchParams({ q: 'All courses category regression', category: 'All courses' });
+    const response = await fetch(apiUrl(`/courses?${params}`), { headers: userHeaders('learner-active') });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.total, 1);
+    assert.deepEqual(result.courses.map((course) => course.id), [matchingCourseId]);
+    assert.ok(result.categories.includes('All courses'));
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(matchingCourseId, otherCourseId);
+  }
+});
+
 test('course analytics eligibility reads course memberships before learner accounts', () => {
   const plan = database.prepare(`EXPLAIN QUERY PLAN SELECT u.id, u.username, u.disabled FROM (
     SELECT user_id AS id FROM enrollments WHERE course_id = ?
