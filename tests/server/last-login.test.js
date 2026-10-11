@@ -781,9 +781,13 @@ test('admin user list returns the final page and clamps requests beyond the sear
     id: `admin-user-pagination-${index}`,
     username: `${usernamePrefix}${String(index).padStart(3, '0')}`,
   }));
-  const passwordHash = database.prepare("SELECT password_hash FROM users WHERE username = 'admin_last_login'").get().password_hash;
+  const existingAdmin = database.prepare("SELECT id, password_hash FROM users WHERE username = 'admin_last_login'").get();
+  const adminId = existingAdmin?.id ?? 'admin-user-pagination-admin';
+  const passwordHash = existingAdmin?.password_hash ?? 'pagination-test-admin-hash';
   const insertUser = database.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)');
   const seedUsers = database.transaction(() => {
+    // The admin middleware resolves its operator by username, including in this isolated test.
+    if (!existingAdmin) insertUser.run(adminId, 'admin_last_login', passwordHash, 'admin');
     fixtureUsers.forEach(({ id, username }) => insertUser.run(id, username, passwordHash, 'learner'));
   });
   seedUsers();
@@ -818,7 +822,10 @@ test('admin user list returns the final page and clamps requests beyond the sear
     assert.deepEqual(clampedPage.users, finalPage.users);
   } finally {
     const deleteUser = database.prepare('DELETE FROM users WHERE id = ?');
-    database.transaction(() => fixtureUsers.forEach(({ id }) => deleteUser.run(id)))();
+    database.transaction(() => {
+      fixtureUsers.forEach(({ id }) => deleteUser.run(id));
+      if (!existingAdmin) deleteUser.run(adminId);
+    })();
   }
 });
 

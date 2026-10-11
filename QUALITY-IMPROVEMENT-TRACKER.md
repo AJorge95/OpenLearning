@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Make admin pagination regression self-contained
+
+- **Reviewed:** The `/admin/users` final-page regression read the administrator password hash from `admin_last_login`, but that user is created by an earlier test in the same file.
+- **Improvement:** Seed a minimal `admin_last_login` operator in the test transaction only when it is missing, and remove that temporary operator with the 51 pagination users during cleanup.
+- **Why it helps:** Running the pagination regression alone now reaches the endpoint assertions instead of failing before setup because a prior test did not run. The full-file path reuses its existing admin and keeps the same endpoint behavior.
+- **Interface review:** No application UI or API behavior changed; this is a test-fixture reliability improvement.
+- **Checked:** The isolated regression passed (1/1), the complete `last-login.test.js` file passed (16/16), and `npm test` passed (529/529). JavaScript syntax and `git diff --check` are also checked; no application build was needed because no production source changed.
+
 ## 2026-10-11 — Batch sequential MP4 header reads
 
 - **Reviewed:** The MP4 duration parser's 200,000-box safety bound and its excessive-box regression, which took about 6.1 seconds because every top-level header triggered a separate filesystem read.
