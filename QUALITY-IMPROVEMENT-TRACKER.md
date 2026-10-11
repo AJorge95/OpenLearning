@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck learner quiz failure recovery
+
+- **Reviewed:** Quiz submission and saved-result loading, required-answer semantics, route/request sequencing, error announcements, result focus, score fallback, and detail retry behavior.
+- **Result:** No runtime change. Submission errors are announced through the shared `role="alert"` notice; questions use required native radio groups; failed detail loads preserve the learner-scoped score and provide a retry; and route guards prevent stale results from replacing the active quiz.
+- **Why no change:** Existing client and server coverage verifies the reviewed recovery and access contracts, and the source exposes a clear retry without clearing learner answers after a failed submission. No untested behavior or reproducible failure justified another patch.
+- **Checked:** `node --test tests/client/quiz-result-accessibility.test.js tests/server/quiz-attempt-results.test.js` passed (7/7). No attempt was created and no learner data changed.
+- **Needed to continue:** A reproducible failure in the current learner quiz flow or a deterministic transport-failure fixture exposing a missing recovery state.
+
 ## 2026-10-11 — Recheck the reported role-selector click boundary
 
 - **Reviewed:** The user-supplied screenshot and target path, current account-details markup, the selector's desktop width and pointer-event boundary, and the existing hit-area regressions.
