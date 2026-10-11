@@ -756,6 +756,39 @@ test('public registration stores answer snapshots and rejects invalid submission
     WHERE user_id = ? AND field_id = 'department'`).get(user.id).field_label, 'Department');
 });
 
+test('public registration reports stale field answers without creating an account', async () => {
+  const username = 'registration_stale_fields';
+  registrationFields.saveRegistrationFields(fieldDefinitions.filter((field) => field.id !== 'about'));
+  try {
+    const response = await fetch(apiUrl('/auth/register'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        email: 'stale-fields@example.invalid',
+        firstName: 'Stale',
+        lastName: 'Fields',
+        username,
+        password: 'RegistrationPassphrase-2026',
+        confirmPassword: 'RegistrationPassphrase-2026',
+        registrationFieldValues: {
+          department: 'Research',
+          acknowledgement: true,
+          'start-date': '2026-10-09',
+          about: 'Answer from the older form',
+        },
+      }),
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).code, 'registration_fields_changed');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get(username).count, 0);
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM user_registration_field_values
+      WHERE user_id IN (SELECT id FROM users WHERE username = ?)`)
+      .get(username).count, 0);
+  } finally {
+    registrationFields.saveRegistrationFields(fieldDefinitions);
+  }
+});
+
 test('public registration rolls back account state when its required audit entry cannot be written', async () => {
   const originalFields = registrationFields.getRegistrationFields();
   registrationFields.saveRegistrationFields(fieldDefinitions);

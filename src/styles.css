@@ -1028,6 +1028,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .registration-fields-page-notice, .registration-fields-load-error { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; width: 100%; max-width: 840px; margin: 0 auto 16px; }
 .registration-fields-page-notice .inline-notice, .registration-fields-load-error .form-error { flex: 1 1 260px; margin: 0; }
 .registration-fields-loading { margin: 2px 0; color: var(--muted); font-size: 12px; }
+.registration-fields-changed { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 5px; color: #414657; background: var(--subtle); font-size: 12px; line-height: 1.45; }
 .registration-form-fields { display: grid; gap: 15px; padding: 17px; border: 1px solid var(--line); border-radius: 5px; background: #fbfbfd; }
 .registration-form-fields-heading { display: grid; gap: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .registration-form-fields-heading h2 { margin: 0; color: var(--ink); font-size: 14px; }

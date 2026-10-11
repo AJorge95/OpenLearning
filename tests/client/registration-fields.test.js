@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { findMissingRequiredRegistrationField, validateRegistrationFieldEditor } from '../../src/registration-fields.ts';
+import { findMissingRequiredRegistrationField, refreshRegistrationFieldValues, validateRegistrationFieldEditor } from '../../src/registration-fields.ts';
 
 const fields = [
   { id: 'department', label: 'Department', type: 'select', required: true, options: ['Design', 'Research'] },
@@ -29,6 +29,52 @@ test('checkbox requiredness and optional blank fields are handled separately', (
   const values = { department: 'Research', about: 'Here', 'start-date': '2026-10-09', policy: false, optional: '  ' };
   assert.equal(findMissingRequiredRegistrationField(fields, values)?.id, 'policy');
   assert.equal(findMissingRequiredRegistrationField(fields, { ...values, policy: true }), undefined);
+});
+
+test('registration field refresh keeps only answers that remain compatible with the updated schema', () => {
+  const previousFields = [
+    ...fields,
+    { id: 'changed-type', label: 'Old text', type: 'text', required: false, options: [] },
+    { id: 'long-text', label: 'Long response', type: 'text', required: false, options: [] },
+  ];
+  const nextFields = [
+    { ...fields[0], label: 'Team', options: ['Design', 'Research', 'Support'] },
+    { ...fields[1], label: 'Updated about you' },
+    { ...fields[2], required: false },
+    { ...fields[3], label: 'Updated policy text' },
+    { ...fields[4] },
+    { id: 'changed-type', label: 'Updated choice', type: 'select', required: false, options: ['A', 'B'] },
+    { id: 'new-field', label: 'New detail', type: 'date', required: false, options: [] },
+  ];
+
+  assert.deepEqual(refreshRegistrationFieldValues(previousFields, nextFields, {
+    department: 'Research',
+    policy: true,
+    'start-date': '2026-10-09',
+    about: 'Returning learner',
+    optional: 'Optional answer',
+    'changed-type': 'Old answer',
+    'long-text': 'x'.repeat(2001),
+    removed: 'Old field answer',
+  }), {
+    department: 'Research',
+    policy: true,
+    'start-date': '2026-10-09',
+    about: 'Returning learner',
+    optional: 'Optional answer',
+    'changed-type': '',
+    'new-field': '',
+  });
+});
+
+test('stale registration field answers reload the schema and announce that review is needed', () => {
+  const source = fs.readFileSync(new URL('../../src/pages-auth.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /cause instanceof ApiError && cause\.code === 'registration_fields_changed'/);
+  assert.match(source, /setRegistrationFieldsRetryVersion\(\(version\) => version \+ 1\)/);
+  assert.match(source, /refreshRegistrationFieldValues\(previousFields, result\.fields, current\)/);
+  assert.match(source, /Answers that still match were kept; review the updated fields and submit again\./);
+  assert.match(source, /registrationFieldsRef\.current = result\.fields/);
 });
 
 test('invalid registration checkboxes can receive focus and reference the form error', () => {
