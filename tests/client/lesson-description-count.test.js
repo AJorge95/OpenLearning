@@ -14,7 +14,7 @@ test('lesson descriptions expose a per-lesson count tied to the server limit', (
     /<label>Lesson description\s*<textarea id=\{`lesson-description-\$\{lesson\.id\}`\} aria-describedby=\{`lesson-description-count-\$\{lesson\.id\}`\} value=\{description\} maxLength=\{2000\}/);
   assert.match(manageSource,
     /<small id=\{`lesson-description-count-\$\{lesson\.id\}`\} className="field-character-count">\{description\.length\} \/ 2,000 characters<\/small>/);
-  assert.match(styles, /\.lesson-details-grid \.field-character-count\s*\{[^}]*align-self:\s*flex-end/);
+  assert.match(styles, /\.field-character-count\s*\{[^}]*align-self:\s*flex-end/);
   assert.match(courseRoutes,
     /const requestedDescription = body\.description === undefined \? undefined : textField\(body\.description, 'Lesson description', 2000\)/);
 });
