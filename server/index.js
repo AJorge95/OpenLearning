@@ -160,6 +160,7 @@ function shutdown() {
   shutdownDeadline.unref?.();
   server.close(() => {
     clearTimeout(shutdownDeadline);
+    sessionStore.close();
     db.close();
     process.exit(0);
   });

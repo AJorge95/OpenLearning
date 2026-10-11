@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Close the session cleanup timer during shutdown
+
+- **Reviewed:** The SQLite session store starts a daily expiry-pruning timer, while graceful shutdown drained HTTP requests and closed SQLite without explicitly stopping that timer. Several tests also reached into the store's timer property to clean it up.
+- **Improvement:** Add an idempotent `close()` method, call it after the HTTP server drains and before closing SQLite, and use it in session-store test cleanup. Add a regression for repeated close calls.
+- **Why it helps:** The store now has an explicit lifecycle boundary; its maintenance timer cannot run against a closed database, and tests no longer need to clear an internal timer directly.
+- **Checked:** Focused session-store tests passed (8/8); `node --check` passed for the changed JavaScript files; `npm run build` passed; and `git diff --check` passed for the changed files. The full test suite has one failure in the uncommitted quiz-attempt regression (`tests/server/quiz-attempt-results.test.js:176`, expected 201, got 400); the quiz files were left untouched.
+
 ## 2026-10-11 — Protect AppSelect layout dismissal behavior
 
 - **Reviewed:** The shared portal menu's scroll and resize lifecycle. The menu should close when page layout changes move its trigger, but remain open when a learner scrolls within the option list.

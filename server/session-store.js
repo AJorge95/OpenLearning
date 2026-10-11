@@ -88,6 +88,12 @@ export class SQLiteSessionStore extends session.Store {
     callback(null);
   }
 
+  close() {
+    if (!this.cleanupTimer) return;
+    clearInterval(this.cleanupTimer);
+    this.cleanupTimer = null;
+  }
+
   destroy(sid, callback = () => {}) {
     try {
       this.deleteStmt.run(sid);
