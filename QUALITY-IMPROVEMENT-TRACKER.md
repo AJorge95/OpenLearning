@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck existing role-selector and session safeguards
+
+- **Reviewed:** The account-details `AppSelect` wrapper, trigger and popup sizing, self-service password change route, audit transaction, and SQLite session invalidation.
+- **Result:** No source change. The role selector uses a separate non-clickable wrapper, limits pointer input to its 9rem desktop trigger, and matches the popup width to the trigger. Existing route and session-store tests cover password-change rollback, other-session revocation, and current-session retention.
+- **Why no code change:** The supplied selector target identifies the former wrapping `<label>`; current markup and the prior signed-in browser check already cover the reported right-side click. Another event handler or duplicate regression would add no behavior.
+- **Checked:** Account-role selector tests passed (5/5); password-route and SQLite session-store tests passed (18/18). The current in-app tab is signed out at `/login`, so this cycle could not repeat the authenticated browser click. `git diff --check` passed.
+
 ## 2026-10-11 — Protect the last active administrator
 
 - **Reviewed:** Account role changes and deactivation already reject changes that would remove the final active administrator, but the route guard had no regression coverage.
