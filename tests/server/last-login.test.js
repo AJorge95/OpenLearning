@@ -656,12 +656,26 @@ test('setup, registration, and successful sign-in record last login for admin de
     return response.json();
   };
   const userCountBeforeCollisions = database.prepare('SELECT COUNT(*) AS count FROM users').get().count;
-  const usernameCollision = await registrationCollision({ username: 'ADMIN_LAST_LOGIN', email: 'unused.username@example.invalid' });
-  const emailCollision = await registrationCollision({ username: 'unused_email', email: 'ADMIN.LAST-LOGIN@EXAMPLE.INVALID' });
-  const bothCollisions = await registrationCollision({ username: 'admin_last_login', email: 'admin.last-login@example.invalid' });
+  const originalTransaction = database.transaction;
+  let collisionTransactionsStarted = 0;
+  database.transaction = function (...args) {
+    collisionTransactionsStarted += 1;
+    return originalTransaction.apply(this, args);
+  };
+  let usernameCollision;
+  let emailCollision;
+  let bothCollisions;
+  try {
+    usernameCollision = await registrationCollision({ username: 'ADMIN_LAST_LOGIN', email: 'unused.username@example.invalid' });
+    emailCollision = await registrationCollision({ username: 'unused_email', email: 'ADMIN.LAST-LOGIN@EXAMPLE.INVALID' });
+    bothCollisions = await registrationCollision({ username: 'admin_last_login', email: 'admin.last-login@example.invalid' });
+  } finally {
+    database.transaction = originalTransaction;
+  }
   assert.deepEqual(usernameCollision, { error: 'An account with those details could not be registered.', code: 'registration_conflict' });
   assert.deepEqual(emailCollision, usernameCollision);
   assert.deepEqual(bothCollisions, usernameCollision);
+  assert.equal(collisionTransactionsStarted, 0, 'known conflicts should be rejected before the write transaction');
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, userCountBeforeCollisions);
 
   const registrationResponse = await fetch(apiUrl('/auth/register'), {
