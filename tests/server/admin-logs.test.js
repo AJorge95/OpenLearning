@@ -130,3 +130,39 @@ test('audit log route is admin-only and keeps paging, filters, and action counts
     { action: 'course.published', count: 12 },
   ]);
 });
+
+test('system log route applies severity and text filters before paging results', async () => {
+  const insert = database.prepare(`INSERT INTO system_logs (level, source, message, details_json)
+    VALUES (?, ?, ?, ?)`);
+  const seed = database.transaction(() => {
+    for (let index = 1; index <= 53; index += 1) {
+      insert.run('error', 'uploads', `Lesson save failed ${index}`, JSON.stringify({ attempt: index }));
+    }
+    for (let index = 1; index <= 12; index += 1) {
+      insert.run('info', 'startup', `Routine startup ${index}`, '{}');
+    }
+  });
+  seed();
+
+  const response = await fetch(apiUrl('/system-logs?page=2&level=error&q=lesson%20save'), {
+    headers: { 'x-test-role': 'admin' },
+  });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.total, 53);
+  assert.equal(result.page, 2);
+  assert.equal(result.pageSize, 50);
+  assert.deepEqual(result.entries.map((entry) => entry.id), [3, 2, 1]);
+  assert.equal(result.entries[0].level, 'error');
+  assert.equal(result.entries[0].source, 'uploads');
+  assert.equal(result.entries[0].details.attempt, 3);
+
+  const invalidLevelResponse = await fetch(apiUrl('/system-logs?level=critical'), {
+    headers: { 'x-test-role': 'admin' },
+  });
+  assert.equal(invalidLevelResponse.status, 400);
+  assert.deepEqual(await invalidLevelResponse.json(), {
+    error: 'Choose a valid log level.',
+    code: 'validation_error',
+  });
+});
