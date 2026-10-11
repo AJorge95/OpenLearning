@@ -25,3 +25,11 @@ test('filtered empty account lists can clear all filters and reload unfiltered r
   assert.match(page, /userListEmptyMessage\(appliedQuery, roleFilter, approvalFilter\)/);
   assert.match(page, /hasAppliedUserFilters && <Button type="button" variant="secondary" onClick=\{clearUserListFilters\}>Clear filters<\/Button>/);
 });
+
+test('role and registration changes apply the visible user search draft', () => {
+  const page = adminUsersPage();
+
+  assert.match(page, /function applyUserListFilterChange\(nextRoleFilter: UserRoleFilter, nextApprovalFilter: UserApprovalFilter\) \{[\s\S]*?const nextQuery = query\.trim\(\);[\s\S]*?const filtersChanged = nextRoleFilter !== roleFilter \|\| nextApprovalFilter !== approvalFilter;[\s\S]*?const searchChanged = nextQuery !== appliedQuery;[\s\S]*?setQuery\(nextQuery\);[\s\S]*?setAppliedQuery\(nextQuery\);[\s\S]*?setRoleFilter\(nextRoleFilter\);[\s\S]*?setApprovalFilter\(nextApprovalFilter\);[\s\S]*?setPage\(1\);[\s\S]*?if \(!filtersChanged && searchChanged\) void load\(1, nextQuery, nextRoleFilter, nextApprovalFilter\);/);
+  assert.match(page, /ariaLabel="Filter by role"[^\n]*onChange=\{\(nextRoleFilter\) => applyUserListFilterChange\(nextRoleFilter, approvalFilter\)\}/);
+  assert.match(page, /ariaLabel="Filter by registration approval"[^\n]*onChange=\{\(nextApprovalFilter\) => applyUserListFilterChange\(roleFilter, nextApprovalFilter\)\}/);
+});

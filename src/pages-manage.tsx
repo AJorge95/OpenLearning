@@ -2023,6 +2023,19 @@ export function AdminUsersPage() {
     return () => { loadSequenceRef.current += 1; loadControllerRef.current?.abort(); };
   }, [roleFilter, approvalFilter]);
 
+  // Apply the visible search draft together with either account filter.
+  function applyUserListFilterChange(nextRoleFilter: UserRoleFilter, nextApprovalFilter: UserApprovalFilter) {
+    const nextQuery = query.trim();
+    const filtersChanged = nextRoleFilter !== roleFilter || nextApprovalFilter !== approvalFilter;
+    const searchChanged = nextQuery !== appliedQuery;
+    setQuery(nextQuery);
+    setAppliedQuery(nextQuery);
+    setRoleFilter(nextRoleFilter);
+    setApprovalFilter(nextApprovalFilter);
+    setPage(1);
+    if (!filtersChanged && searchChanged) void load(1, nextQuery, nextRoleFilter, nextApprovalFilter);
+  }
+
   const hasAppliedUserFilters = Boolean(appliedQuery || roleFilter !== 'all' || approvalFilter !== 'all');
   // Role and approval changes reload through the effect; search-only resets need their own request.
   // The empty-state action disappears on reset, so keep keyboard focus in the persistent search field.
@@ -2160,7 +2173,7 @@ export function AdminUsersPage() {
   }
 
   return <div className="management-page users-page"><PageHeading title="Users" subtitle="Create accounts, review learning activity, and manage roles and access." action={<Link className="button button-primary" to="/admin/users/new"><Plus size={17} />Create account</Link>} />
-    <div className="user-filter-row"><form role="search" aria-label="Search users" className="management-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); void load(1, search, roleFilter, approvalFilter); }}><Search size={18} /><input ref={userListSearchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search username or email" aria-label="Search username or email" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter user-role-filter"><span className="catalog-filter-label">Role</span><AppSelect className="app-select--filter" ariaLabel="Filter by role" leadingIcon={<UsersRound size={16} />} value={roleFilter} onChange={setRoleFilter} options={[{ value: 'all', label: 'All roles' }, { value: 'admin', label: 'Administrators' }, { value: 'moderator', label: 'Moderators' }, { value: 'learner', label: 'Learners' }]} /></div><div className="select-wrap role-filter user-approval-filter"><span className="catalog-filter-label">Registration</span><AppSelect className="app-select--filter" ariaLabel="Filter by registration approval" value={approvalFilter} onChange={setApprovalFilter} options={[{ value: 'all', label: 'All accounts' }, { value: 'pending', label: 'Pending approval' }, { value: 'approved', label: 'Approved' }]} /></div></div>
+    <div className="user-filter-row"><form role="search" aria-label="Search users" className="management-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); void load(1, search, roleFilter, approvalFilter); }}><Search size={18} /><input ref={userListSearchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search username or email" aria-label="Search username or email" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter user-role-filter"><span className="catalog-filter-label">Role</span><AppSelect className="app-select--filter" ariaLabel="Filter by role" leadingIcon={<UsersRound size={16} />} value={roleFilter} onChange={(nextRoleFilter) => applyUserListFilterChange(nextRoleFilter, approvalFilter)} options={[{ value: 'all', label: 'All roles' }, { value: 'admin', label: 'Administrators' }, { value: 'moderator', label: 'Moderators' }, { value: 'learner', label: 'Learners' }]} /></div><div className="select-wrap role-filter user-approval-filter"><span className="catalog-filter-label">Registration</span><AppSelect className="app-select--filter" ariaLabel="Filter by registration approval" value={approvalFilter} onChange={(nextApprovalFilter) => applyUserListFilterChange(roleFilter, nextApprovalFilter)} options={[{ value: 'all', label: 'All accounts' }, { value: 'pending', label: 'Pending approval' }, { value: 'approved', label: 'Approved' }]} /></div></div>
     {error && !resetUser && (failedRequest
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest.query, failedRequest.roleFilter, failedRequest.approvalFilter); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
