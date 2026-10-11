@@ -9,6 +9,7 @@ import { AppSelect, Button, ConfirmationDialog, CourseStatus, EmptyState, ImageW
 import { formatCountLabel } from './count-label';
 import { accountCourseAssignmentLabel } from './account-course-activity';
 import { accountDisableConfirmation } from './account-disable-confirmation';
+import { courseDeletionConfirmation } from './course-deletion-confirmation';
 import { courseRowActionStatus } from './course-row-action-status';
 import { getAppSelectVerticalPosition } from './app-select-position';
 import { filterCourseCompetencies, updateCourseCompetencySelection } from './course-competency-selection';
@@ -193,6 +194,7 @@ export function CourseManagementPage() {
   const [failedRequest, setFailedRequest] = useState<FailedCourseListRequest | null>(null);
   const [busyActions, setBusyActions] = useState<Record<string, CourseRowAction>>({});
   const busyActionsRef = useRef(busyActions);
+  const [pendingDeleteCourse, setPendingDeleteCourse] = useState<Course | null>(null);
 
   function markCourseAction(courseId: string, action: CourseRowAction | null) {
     const next = { ...busyActionsRef.current };
@@ -252,9 +254,9 @@ export function CourseManagementPage() {
     finally { markCourseAction(course.id, null); }
   }
 
-  async function deleteCourse(course: Course) {
+  async function deleteCourse(course: Course, confirmed = false) {
     if (busyActionsRef.current[course.id]) return;
-    if (!window.confirm(`Permanently delete “${course.title}” and its uploaded media? This cannot be undone.`)) return;
+    if (!confirmed) { setPendingDeleteCourse(course); return; }
     markCourseAction(course.id, 'delete'); setError('');
     try { await api.delete(`/api/manage/courses/${course.id}`); await load(); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Course could not be deleted.'); }
@@ -299,6 +301,7 @@ export function CourseManagementPage() {
       })}
     </tbody></table></div> : <EmptyState title={emptyCourseState.title} detail={emptyCourseState.detail} action={status === 'all' && !appliedQuery && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} />Create course</Link>} />}
     {!loading && !failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
+    {pendingDeleteCourse && <ConfirmationDialog {...courseDeletionConfirmation(pendingDeleteCourse.title)} confirmLabel="Delete course" onCancel={() => setPendingDeleteCourse(null)} onConfirm={() => { const courseToDelete = pendingDeleteCourse; setPendingDeleteCourse(null); if (courseToDelete) void deleteCourse(courseToDelete, true); }} />}
   </div>;
 }
 
@@ -845,6 +848,7 @@ export function CourseEditorPage() {
   const saving = savingStatus !== null;
   const deleteCourseRequestRef = useRef(false);
   const [deletingCourse, setDeletingCourse] = useState(false);
+  const [pendingDeleteCourseId, setPendingDeleteCourseId] = useState<string | null>(null);
   const deleteCurriculumItemRef = useRef('');
   const [deletingCurriculumItem, setDeletingCurriculumItem] = useState('');
   const [movingCurriculumItems, setMovingCurriculumItems] = useState<Set<string>>(() => new Set());
@@ -947,6 +951,7 @@ export function CourseEditorPage() {
 
   useEffect(() => {
     let active = true;
+    setPendingDeleteCourseId(null);
     coverValidationSequenceRef.current += 1;
     abortCoverValidation();
     coverUploadRef.current = false;
@@ -1231,14 +1236,15 @@ export function CourseEditorPage() {
     finally { competencyMappingSaveRef.current = false; setSavingCompetencyMapping(false); }
   }
 
-  async function deleteArchivedCourse() {
+  async function deleteArchivedCourse(confirmed = false) {
     if (deleteCourseRequestRef.current || deleteCurriculumItemRef.current || saving || !course || course.status !== 'archived') return;
-    if (!window.confirm(`Permanently delete “${course.title}” and its uploaded media?`)) return;
+    if (!confirmed) { setPendingDeleteCourseId(course.id); return; }
+    const requestedCourseId = course.id;
     deleteCourseRequestRef.current = true;
     setDeletingCourse(true);
     setError('');
     try {
-      await api.delete(`/api/manage/courses/${course.id}`);
+      await api.delete(`/api/manage/courses/${requestedCourseId}`);
       navigate('/manage/courses');
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Course could not be deleted.');
@@ -1516,7 +1522,8 @@ export function CourseEditorPage() {
         {!course.modules?.length && <EmptyState headingLevel={3} icon={<BookOpen size={22} />} title="Start with a module" detail="Modules organize the video lessons in your course." action={<Button variant="secondary" onClick={(event) => { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); }}><Plus size={16} />Add module</Button>} />}
       </div>
     </section>
-    {course.status === 'archived' && <div className="delete-course-row"><div><strong>Delete this course permanently</strong><span>This also removes its uploaded media and cannot be undone.</span></div><Button variant="danger" onClick={deleteArchivedCourse} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} aria-busy={deletingCourse}><Trash2 size={16} />{deletingCourse ? 'Deleting course…' : 'Delete course'}</Button></div>}
+    {course.status === 'archived' && <div className="delete-course-row"><div><strong>Delete this course permanently</strong><span>This also removes its uploaded media and cannot be undone.</span></div><Button variant="danger" onClick={() => void deleteArchivedCourse()} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} aria-busy={deletingCourse}><Trash2 size={16} />{deletingCourse ? 'Deleting course…' : 'Delete course'}</Button></div>}
+    {pendingDeleteCourseId === course.id && routeCourseIdRef.current === course.id && <ConfirmationDialog {...courseDeletionConfirmation(course.title)} confirmLabel="Delete course" onCancel={() => setPendingDeleteCourseId(null)} onConfirm={() => { const requestedCourseId = pendingDeleteCourseId; setPendingDeleteCourseId(null); if (requestedCourseId === course.id && routeCourseIdRef.current === course.id) void deleteArchivedCourse(true); }} />}
   </div>;
 }
 

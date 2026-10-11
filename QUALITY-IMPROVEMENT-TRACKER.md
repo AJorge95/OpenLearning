@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Use the shared dialog for permanent course deletion
+
+- **Reviewed:** The course list and archived-course editor used blocking browser prompts before permanently deleting a course and its uploaded media.
+- **Improvement:** Route both actions through the shared accessible confirmation dialog, with the course title and irreversible media-removal consequence. Keep the request behind the explicit confirmation and clear a pending editor confirmation when its course route changes.
+- **Why it helps:** Administrators get a consistent, accessible warning before destructive deletion, while navigating between courses cannot leave a stale confirmation tied to another course.
+- **Backend review:** The existing delete endpoint already requires archived status, writes its audit entry transactionally, and logs media cleanup failure separately; no backend behavior changed.
+- **Checked:** Six focused client tests passed, including deferred deletion and route-change clearing; two existing course-deletion server regressions passed; and `npm run build` passed TypeScript checking and Vite bundling. The local admin list rendered, but its only course is published, so the delete dialog could not be opened there. No course data was changed. `git diff --check` passed.
+
 ## 2026-10-11 — Use an accessible in-app confirmation for account disabling
 
 - **Reviewed:** The admin user list and account-details page used blocking native confirmation prompts with different behavior from the rest of the application.
