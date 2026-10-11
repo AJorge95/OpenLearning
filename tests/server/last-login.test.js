@@ -637,6 +637,53 @@ test('setup, registration, and successful sign-in record last login for admin de
   assert.equal(details.user.lastLoginAt, lastLoginAt);
 });
 
+test('admin user list returns the final page and clamps requests beyond the search results', async () => {
+  const usernamePrefix = 'admin-user-pagination-fixture-';
+  const fixtureUsers = Array.from({ length: 51 }, (_, index) => ({
+    id: `admin-user-pagination-${index}`,
+    username: `${usernamePrefix}${String(index).padStart(3, '0')}`,
+  }));
+  const passwordHash = database.prepare("SELECT password_hash FROM users WHERE username = 'admin_last_login'").get().password_hash;
+  const insertUser = database.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)');
+  const seedUsers = database.transaction(() => {
+    fixtureUsers.forEach(({ id, username }) => insertUser.run(id, username, passwordHash, 'learner'));
+  });
+  seedUsers();
+
+  try {
+    const firstResponse = await fetch(apiUrl(`/admin/users?q=${encodeURIComponent(usernamePrefix)}&page=1`), {
+      headers: { connection: 'close' },
+    });
+    assert.equal(firstResponse.status, 200);
+    const firstPage = await firstResponse.json();
+    assert.equal(firstPage.total, fixtureUsers.length);
+    assert.equal(firstPage.page, 1);
+    assert.equal(firstPage.pageSize, 50);
+    assert.deepEqual(firstPage.users.map((user) => user.username), fixtureUsers.slice(0, 50).map((user) => user.username));
+
+    const finalResponse = await fetch(apiUrl(`/admin/users?q=${encodeURIComponent(usernamePrefix)}&page=2`), {
+      headers: { connection: 'close' },
+    });
+    assert.equal(finalResponse.status, 200);
+    const finalPage = await finalResponse.json();
+    assert.equal(finalPage.total, fixtureUsers.length);
+    assert.equal(finalPage.page, 2);
+    assert.equal(finalPage.pageSize, 50);
+    assert.deepEqual(finalPage.users.map((user) => user.username), fixtureUsers.slice(50).map((user) => user.username));
+
+    const clampedResponse = await fetch(apiUrl(`/admin/users?q=${encodeURIComponent(usernamePrefix)}&page=99`), {
+      headers: { connection: 'close' },
+    });
+    assert.equal(clampedResponse.status, 200);
+    const clampedPage = await clampedResponse.json();
+    assert.equal(clampedPage.page, 2);
+    assert.deepEqual(clampedPage.users, finalPage.users);
+  } finally {
+    const deleteUser = database.prepare('DELETE FROM users WHERE id = ?');
+    database.transaction(() => fixtureUsers.forEach(({ id }) => deleteUser.run(id)))();
+  }
+});
+
 test('admin account course activity starts from memberships and deduplicates overlapping access', async () => {
   const adminId = database.prepare("SELECT id FROM users WHERE username = 'admin_last_login'").get().id;
   const courseIds = ['account-activity-enrolled', 'account-activity-overlap', 'account-activity-granted'];

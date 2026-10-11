@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Cover administrator user-list page boundaries
+
+- **Reviewed:** The administrator account endpoint's 50-row page size, role/name ordering, matching-search count, and last-page clamping.
+- **Improvement:** Add an isolated API regression with 51 matching accounts that checks the first and final pages and confirms an out-of-range request returns the same final page.
+- **Why it helps:** Account managers keep reliable access to every matching user when a search crosses the page boundary or a stale page number is requested.
+- **Checked:** Focused last-login/account route tests passed (12/12); full `npm test` passed (388/388); `npx tsc --noEmit`, `npm run build`, `node --check tests/server/last-login.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Recheck existing role-selector and session safeguards
 
 - **Reviewed:** The account-details `AppSelect` wrapper, trigger and popup sizing, self-service password change route, audit transaction, and SQLite session invalidation.
