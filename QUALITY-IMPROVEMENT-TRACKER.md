@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck shared API failures and quiz settings
+
+- **Reviewed:** The shared API client's JSON response checks, CSRF refresh/retry behavior, cancellation and upload network errors; quiz editor pass-mark options and save feedback; and the matching server pass-mark range validation.
+- **Result:** No code change. The editor only offers supported preset pass marks, the server independently enforces an integer from 1 to 100, and shared request failures resolve to actionable API errors without retry loops.
+- **Why no change:** The reviewed client/server contracts match, and the available tests already exercise the relevant failure and validation cases. A deeper editor interaction change needs a signed-in browser session or a reproducible user issue.
+- **Checked:** `node --test tests/client/api.test.js tests/server/quiz-attempt-results.test.js` passed (13/13). Source review confirmed setup and platform-settings account caps remain native-form validated and server bounded.
+
 ## 2026-10-11 — Recheck sign-in and learning-path access flows
 
 - **Reviewed:** The rendered signed-out sign-in page, its labeled username/password fields and responsive auth-panel rules, plus learning-path listing, detail visibility, self-enrollment, staff assignment, and patch validation.
