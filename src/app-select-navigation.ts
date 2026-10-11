@@ -29,6 +29,17 @@ export function findEnabledAppSelectIndex(
   return 0;
 }
 
+export function resolveAppSelectActiveIndex(
+  options: readonly AppSelectNavigationOption[],
+  activeIndex: number,
+  selectedIndex: number,
+) {
+  const activeOption = options[activeIndex];
+  return activeOption && !activeOption.disabled
+    ? activeIndex
+    : findEnabledAppSelectIndex(options, selectedIndex);
+}
+
 export function findAppSelectTypeaheadIndex(
   options: readonly AppSelectTypeaheadOption[],
   start: number,

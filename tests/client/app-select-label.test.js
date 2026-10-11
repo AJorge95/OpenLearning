@@ -246,6 +246,14 @@ test('AppSelect disables its trigger and popup when no enabled options remain', 
   assert.match(componentSource, /\{menuOpen && createPortal/);
 });
 
+test('AppSelect resolves dynamic active options before announcing or choosing them', () => {
+  const componentSource = fs.readFileSync(path.join(sourceDirectory, 'components.tsx'), 'utf8');
+
+  assert.match(componentSource, /resolveAppSelectActiveIndex\(options, activeIndex, selectedIndex\)/);
+  assert.match(componentSource, /choose\(activeOptionIndex\)/);
+  assert.match(componentSource, /aria-activedescendant=\{menuOpen \? `\$\{menuId\}-option-\$\{activeOptionIndex\}` : undefined\}/);
+});
+
 test('catalog filter accessible names contain their visible labels', () => {
   const source = fs.readFileSync(path.join(sourceDirectory, 'pages-learner.tsx'), 'utf8');
   const sourceFile = ts.createSourceFile('pages-learner.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
