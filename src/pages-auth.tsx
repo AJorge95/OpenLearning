@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
 import { AppSelect, Button, ImageWithFallback, PalettePicker, PasswordField, PlatformBrand, PlatformIconPicker } from './components';
 import { getPostLoginPath } from './post-login-path';
 import { findMissingRequiredRegistrationField, refreshRegistrationFieldValues } from './registration-fields';
-import { clearPasswordConfirmationError, getPasswordConfirmationError } from './password-confirmation';
+import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordConfirmationFieldProps } from './password-confirmation';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import type { RegistrationField, RegistrationFieldValues } from './types';
@@ -83,6 +83,7 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
 export function SetupPage() {
   const { completeSetup, configured, setupAvailable, user, connectionProtocol: initialProtocol, registrationEnabled: initialRegistrationEnabled, userLimit: initialUserLimit } = useAuth();
   const navigate = useNavigate();
+  const setupErrorId = useId();
   const [step, setStep] = useState<1 | 2>(1);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousStepRef = useRef(step);
@@ -176,9 +177,9 @@ export function SetupPage() {
             <div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} /></label></div>
             <label>Admin username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
             <PasswordField label="Password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} hint="Use at least 12 characters." />
-            <PasswordField label="Confirm password" required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} />
+            <PasswordField label="Confirm password" {...passwordConfirmationFieldProps(error, setupErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} />
             <label>One-time setup token<input required minLength={32} maxLength={256} type="password" autoComplete="off" value={setupToken} onChange={(event) => setSetupToken(event.target.value)} /><small>Enter the private bootstrap credential configured by the server operator.</small></label>
-            {error && <p className="form-error" role="alert">{error}</p>}
+            {error && <p id={setupErrorId} className="form-error" role="alert">{error}</p>}
             <Button type="submit">Continue to access settings</Button>
           </form>
         </> : <>
@@ -333,7 +334,7 @@ export function RegisterPage() {
         : <RegistrationFieldsForm fields={registrationFields} values={registrationFieldValues} disabled={saving} invalidFieldId={invalidRegistrationFieldId} onChange={(id, value) => { setRegistrationFieldValues((current) => ({ ...current, [id]: value })); setRegistrationFieldsChanged(false); if (id === invalidRegistrationFieldId) { setInvalidRegistrationFieldId(''); setError(''); } }} />}
       {registrationFieldsChanged && <p className="registration-fields-changed" role="status" aria-live="polite">{registrationFieldsLoading ? 'Registration details changed. Refreshing the latest fields…' : registrationFieldsError ? 'Registration details changed. Retry loading the latest fields before continuing.' : 'Registration details changed. Answers that still match were kept; review the updated fields and submit again.'}</p>}
       <PasswordField label="Password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} hint="Use at least 12 characters." />
-      <PasswordField label="Confirm password" required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />
+      <PasswordField label="Confirm password" {...passwordConfirmationFieldProps(error, 'registration-form-error')} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />
       {error && <p id="registration-form-error" className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving || registrationFieldsLoading || Boolean(registrationFieldsError)}>{saving ? 'Creating account…' : 'Create account'}</Button>
     </form>
@@ -343,6 +344,7 @@ export function RegisterPage() {
 
 export function AccountSecurityPage() {
   const { user, refresh } = useAuth();
+  const passwordErrorId = useId();
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
   const [profileMessage, setProfileMessage] = useState('');
@@ -417,8 +419,8 @@ export function AccountSecurityPage() {
     <form className="surface-form form-stack" onSubmit={submit} aria-busy={saving}>
       <PasswordField label="Current password" required maxLength={256} autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} disabled={saving} />
       <PasswordField label="New password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} hint="Use at least 12 characters." />
-      <PasswordField label="Confirm new password" required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />
-      {message && <p className="form-success" role="status">{message}</p>}{error && <p className="form-error" role="alert">{error}</p>}
+      <PasswordField label="Confirm new password" {...passwordConfirmationFieldProps(error, passwordErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />
+      {message && <p className="form-success" role="status">{message}</p>}{error && <p id={passwordErrorId} className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Update password'}</Button>
     </form>
     </section>
