@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
+import { MAX_COURSE_COVER_DIMENSION } from '../../src/course-cover-validation.ts';
 
 const sourcePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/pages-manage.tsx');
 const source = fs.readFileSync(sourcePath, 'utf8');
@@ -29,7 +30,8 @@ test('course cover file input announces its accepted formats and dimension limit
   const inputs = [];
   function visit(node) {
     if (ts.isJsxElement(node) && node.openingElement.tagName.getText() === 'small'
-      && node.getText(sourceFile).includes('JPG, PNG, or WebP · max 4096 × 4096 px')) {
+      && node.getText(sourceFile).includes('JPG, PNG, or WebP · max')
+      && (node.getText(sourceFile).match(/MAX_COURSE_COVER_DIMENSION/g) || []).length === 2) {
       hints.push(node.openingElement);
     }
     if (ts.isJsxSelfClosingElement(node) && node.tagName.getText() === 'input'
@@ -46,4 +48,5 @@ test('course cover file input announces its accepted formats and dimension limit
   const hintId = expressionAttribute(hints[0], 'id');
   assert.ok(hintId, 'the visible course cover hint should have an id');
   assert.equal(expressionAttribute(inputs[0], 'aria-describedby'), hintId);
+  assert.equal(MAX_COURSE_COVER_DIMENSION, 4096);
 });

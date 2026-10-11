@@ -1,5 +1,20 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reproduce the account-role selector's right-side boundary
+
+- **Reviewed:** The supplied target path and screenshot against the current JSX, selector root/trigger dimensions, pointer-event rules, and outside-click handling.
+- **Result:** No additional selector code change. The supplied account is the only active administrator, so its control is disabled in the live app. On an editable learner account, the visible trigger and `AppSelect` root both measured 144px; opening the menu and clicking 6px to the right closed it without changing the selected role. The current JSX uses a separate text label, so the screenshot's wrapping-label target is from older markup.
+- **Why no duplicate fix:** The current build already bounds the hit area to the trigger and dismisses the menu on outside clicks; another width rule would not change the reported interaction.
+- **Checked:** Signed-in local Chrome at the account-details route, DOM snapshot, measured bounds, and the right-side gap click. No account setting was changed.
+
+## 2026-10-11 — Check course-cover dimensions before upload
+
+- **Reviewed:** The editor's existing 4096 × 4096 px guidance, the client upload sequence, the server's independent image-dimension checks, upload cancellation, and route-change cleanup.
+- **Improvement:** Decode a selected cover before saving draft details or sending the file. Reject dimensions above the server limit or images the browser cannot display, show an accessible page alert, and expose a temporary “Checking cover dimensions…” status while validation runs. Reuse the generic image-dimension check and revoke temporary object URLs after decoding.
+- **Why it helps:** Administrators get a prompt, actionable error before the editor saves or uploads an oversized or unreadable cover; stale validation cannot affect a different course after navigation.
+- **Backend review:** The server's 4096 px and file-size validation remains authoritative; no endpoint or upload contract changed.
+- **Checked:** Focused role-selector, cover, and image-dimension tests passed (22/22); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict type checking and Vite bundling; and `git diff --check` passed. Authenticated Chrome rendered the course editor at 1718 × 1214 and displayed the shared 4096 px limit. I did not select a file in the browser; validation and decode-error paths are covered by unit and source regressions. The console contained earlier `AuthRoutes` errors from route transitions before this render, with no newer entries.
+
 ## 2026-10-11 — Check platform icon dimensions before staging
 
 - **Reviewed:** The platform-icon picker’s MIME and file-size checks, displayed dimension limit, decoded preview path, and matching server-side bounds.

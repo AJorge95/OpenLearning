@@ -1,3 +1,5 @@
+import { isImageDimensionWithinLimit } from './image-dimensions.ts';
+
 export const BRAND_PALETTES = [
   { id: 'violet', label: 'Violet', color: '#5424d8' },
   { id: 'ocean', label: 'Ocean', color: '#1b64d8' },
@@ -31,7 +33,5 @@ export const MAX_BRAND_ICON_BYTES = 512 * 1024;
 export const MAX_BRAND_ICON_DIMENSION = 1024;
 
 export function isBrandIconDimensionAllowed(width: number, height: number) {
-  return Number.isSafeInteger(width) && Number.isSafeInteger(height)
-    && width > 0 && height > 0
-    && width <= MAX_BRAND_ICON_DIMENSION && height <= MAX_BRAND_ICON_DIMENSION;
+  return isImageDimensionWithinLimit(width, height, MAX_BRAND_ICON_DIMENSION);
 }

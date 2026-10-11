@@ -17,6 +17,8 @@ import { useAuth } from './auth-context';
 import { canonicalCaptionLanguageTag, captionFileSizeError, captionLanguageErrorMessage } from './caption-validation';
 import { courseEditingNote } from './course-editing-note';
 import { COMPLETION_WINDOW_ERROR, validateCompletionWindowDays } from './course-editor-validation';
+import { isCourseCoverDimensionAllowed, MAX_COURSE_COVER_DIMENSION } from './course-cover-validation';
+import { readImageDimensions } from './image-dimensions';
 import { firstQuizTextIssue } from './quiz-validation';
 import { lessonResourceUrlError } from './resource-validation';
 import { clearPasswordConfirmationError, getPasswordConfirmationError } from './password-confirmation';
@@ -859,7 +861,9 @@ export function CourseEditorPage() {
   const [uploading, setUploading] = useState<Record<string, number>>({});
   const uploadingLessonIdsRef = useRef<Set<string>>(new Set());
   const [coverProgress, setCoverProgress] = useState<number | null>(null);
+  const [coverValidating, setCoverValidating] = useState(false);
   const coverUploadRef = useRef(false);
+  const coverValidationSequenceRef = useRef(0);
   const uploadControllersRef = useRef(new Map<string, { controller: AbortController; input: HTMLInputElement; cancelledByUser: boolean }>());
   const governanceReady = Boolean(route.courseId && governanceCourseId === route.courseId);
   const selectedCompetencyIds = new Set(selectedCompetencies);
@@ -935,12 +939,15 @@ export function CourseEditorPage() {
 
   useEffect(() => {
     let active = true;
+    coverValidationSequenceRef.current += 1;
+    coverUploadRef.current = false;
+    setCoverValidating(false);
+    setCoverProgress(null);
     setRequiresRecompletion(false);
     setChangeNote('');
     setCompetencySearch('');
     if (route.courseId) {
       uploadingLessonIdsRef.current = new Set(); setUploading({});
-      coverUploadRef.current = false; setCoverProgress(null);
       createCourseRequestRef.current = null;
       setCourseId(route.courseId);
       setCourse(null);
@@ -952,7 +959,14 @@ export function CourseEditorPage() {
       setError(''); setNotice(''); setSavingStatus(null);
       setLoading(true);
       load(route.courseId);
-      return () => { active = false; courseLoadSequenceRef.current += 1; abortGovernanceLoad(); courseLoadControllerRef.current?.abort(); abortActiveUploads(); };
+      return () => {
+        active = false;
+        coverValidationSequenceRef.current += 1;
+        courseLoadSequenceRef.current += 1;
+        abortGovernanceLoad();
+        courseLoadControllerRef.current?.abort();
+        abortActiveUploads();
+      };
     }
     setCourse(null);
     setError('');
@@ -1331,27 +1345,49 @@ export function CourseEditorPage() {
   async function uploadCover(file: File, input: HTMLInputElement) {
     if (coverUploadRef.current) return;
     const requestedCourseId = courseId;
-    const upload = { controller: new AbortController(), input, cancelledByUser: false };
-    uploadControllersRef.current.set('cover', upload);
+    const validationSequence = ++coverValidationSequenceRef.current;
+    const isCurrentRequest = () => validationSequence === coverValidationSequenceRef.current
+      && routeCourseIdRef.current === requestedCourseId;
     coverUploadRef.current = true;
-    setError(''); setCoverProgress(0);
+    setCoverValidating(true);
+    setError(''); setNotice('');
+    let upload: { controller: AbortController; input: HTMLInputElement; cancelledByUser: boolean } | null = null;
     try {
+      const dimensions = await readImageDimensions(file);
+      if (!isCurrentRequest()) return;
+      if (!isCourseCoverDimensionAllowed(dimensions.width, dimensions.height)) {
+        setError(`Course cover must be ${MAX_COURSE_COVER_DIMENSION} × ${MAX_COURSE_COVER_DIMENSION} pixels or smaller.`);
+        return;
+      }
+
+      const activeUpload = { controller: new AbortController(), input, cancelledByUser: false };
+      upload = activeUpload;
+      uploadControllersRef.current.set('cover', activeUpload);
+      setCoverValidating(false);
+      setCoverProgress(0);
       await saveCourseDetailsIfChanged();
-      if (upload.controller.signal.aborted || routeCourseIdRef.current !== requestedCourseId) return;
+      if (activeUpload.controller.signal.aborted || !isCurrentRequest()) return;
       await api.upload(`/api/manage/courses/${requestedCourseId}/media`, { kind: 'cover' }, file, (progress) => {
-        if (!upload.controller.signal.aborted && routeCourseIdRef.current === requestedCourseId) setCoverProgress(progress);
-      }, { signal: upload.controller.signal });
-      if (upload.controller.signal.aborted || routeCourseIdRef.current !== requestedCourseId) return;
+        if (!activeUpload.controller.signal.aborted && isCurrentRequest()) setCoverProgress(progress);
+      }, { signal: activeUpload.controller.signal });
+      if (activeUpload.controller.signal.aborted || !isCurrentRequest()) return;
       await load(requestedCourseId);
-      if (!upload.controller.signal.aborted && routeCourseIdRef.current === requestedCourseId) setNotice('Course cover uploaded.');
+      if (!activeUpload.controller.signal.aborted && isCurrentRequest()) setNotice('Course cover uploaded.');
     } catch (cause) {
-      if (!upload.controller.signal.aborted && routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Course cover could not be uploaded.');
+      if (isCurrentRequest() && (!upload || !upload.controller.signal.aborted)) {
+        setError(upload
+          ? cause instanceof ApiError ? cause.message : 'Course cover could not be uploaded.'
+          : 'Course cover could not be displayed. Choose a different image.');
+      }
     }
     finally {
-      if (uploadControllersRef.current.get('cover') === upload) uploadControllersRef.current.delete('cover');
-      if (routeCourseIdRef.current === requestedCourseId) {
-        coverUploadRef.current = false; setCoverProgress(null);
-        if (upload.cancelledByUser) requestAnimationFrame(() => { if (routeCourseIdRef.current === requestedCourseId && upload.input.isConnected) upload.input.focus(); });
+      if (upload && uploadControllersRef.current.get('cover') === upload) uploadControllersRef.current.delete('cover');
+      if (isCurrentRequest()) {
+        coverUploadRef.current = false;
+        setCoverValidating(false);
+        setCoverProgress(null);
+        const completedUpload = upload;
+        if (completedUpload?.cancelledByUser) requestAnimationFrame(() => { if (isCurrentRequest() && completedUpload.input.isConnected) completedUpload.input.focus(); });
       }
     }
   }
@@ -1371,7 +1407,19 @@ export function CourseEditorPage() {
         <label className="completion-window-field">Completion window (optional)<input ref={completionWindowInputRef} type="number" min="1" max="3650" step="1" inputMode="numeric" value={completionWindowDays} aria-invalid={completionWindow.error ? true : undefined} aria-describedby={completionWindow.error ? 'completion-window-help completion-window-error' : 'completion-window-help'} onChange={(event) => { setCompletionWindowDays(event.target.value); setError((currentError) => currentError === COMPLETION_WINDOW_ERROR ? '' : currentError); }} placeholder="No deadline" disabled={saving} /><small id="completion-window-help">Days are 24-hour periods. Deadlines do not block course access.</small>{completionWindow.error && <small id="completion-window-error" className="completion-window-error">{completionWindow.error}</small>}</label>
         <label className="field-wide">Description<textarea rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What will learners understand or be able to do after this course?" disabled={saving} /></label>
       </div>
-      <div className="cover-upload-row"><div><ImageWithFallback src={course.coverUrl} className="course-cover-image" alt="Course cover preview" fallback={<span className="cover-preview-empty"><BookOpen size={22} /></span>} /><div><strong>Course cover</strong><small id={coverHelpId}>JPG, PNG, or WebP · max 4096 × 4096 px</small></div></div><label className={`button button-secondary file-button ${coverProgress !== null || saving ? 'file-button-busy' : ''}`} aria-disabled={coverProgress !== null || saving}><Upload size={16} />{coverProgress === null ? course.coverUrl ? 'Replace cover' : 'Upload cover' : coverProgress >= 100 ? 'Saving cover…' : 'Uploading cover…'}<input type="file" accept="image/jpeg,image/png,image/webp" aria-describedby={coverHelpId} disabled={coverProgress !== null || saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCover(file, event.currentTarget); event.currentTarget.value = ''; }} /></label>{coverProgress !== null && (coverProgress >= 100 ? <span className="upload-percent upload-progress-saving-compact" role="status">Saving cover…</span> : <span className="upload-percent" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverProgress} aria-label="Course cover upload progress">{coverProgress}%</span>)}{coverProgress !== null && coverProgress < 100 && <button type="button" className="text-action upload-cancel-action" aria-label="Cancel cover upload" onClick={() => cancelUpload('cover')}>Cancel upload</button>}</div>
+      <div className="cover-upload-row" aria-busy={coverValidating || coverProgress !== null || undefined}>
+        <div>
+          <ImageWithFallback src={course.coverUrl} className="course-cover-image" alt="Course cover preview" fallback={<span className="cover-preview-empty"><BookOpen size={22} /></span>} />
+          <div><strong>Course cover</strong><small id={coverHelpId}>JPG, PNG, or WebP · max {MAX_COURSE_COVER_DIMENSION} × {MAX_COURSE_COVER_DIMENSION} px</small></div>
+        </div>
+        <label className={`button button-secondary file-button ${coverValidating || coverProgress !== null || saving ? 'file-button-busy' : ''}`} aria-disabled={coverValidating || coverProgress !== null || saving}>
+          <Upload size={16} />{coverValidating ? 'Checking cover…' : coverProgress === null ? course.coverUrl ? 'Replace cover' : 'Upload cover' : coverProgress >= 100 ? 'Saving cover…' : 'Uploading cover…'}
+          <input type="file" accept="image/jpeg,image/png,image/webp" aria-describedby={coverHelpId} disabled={coverValidating || coverProgress !== null || saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCover(file, event.currentTarget); event.currentTarget.value = ''; }} />
+        </label>
+        {coverValidating && <span className="upload-percent" role="status">Checking cover dimensions…</span>}
+        {coverProgress !== null && (coverProgress >= 100 ? <span className="upload-percent upload-progress-saving-compact" role="status">Saving cover…</span> : <span className="upload-percent" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverProgress} aria-label="Course cover upload progress">{coverProgress}%</span>)}
+        {coverProgress !== null && coverProgress < 100 && <button type="button" className="text-action upload-cancel-action" aria-label="Cancel cover upload" onClick={() => cancelUpload('cover')}>Cancel upload</button>}
+      </div>
     </section>
     <section className="editor-section course-governance-section" aria-label="Course publication and learning settings" aria-busy={governanceLoading}>
       <div className="curriculum-editor-title"><div><h2>Publication and learning settings</h2><p>Choose how a new publication affects learners and manage its review history.</p></div></div>
