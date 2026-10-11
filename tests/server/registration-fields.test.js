@@ -88,19 +88,25 @@ function pngChunk(type, data) {
   return chunk;
 }
 
-function createPlatformIconPng(red, green, blue, width = 1, height = 1) {
-  const scanline = Buffer.alloc(1 + width * 4);
-  for (let x = 0; x < width; x += 1) {
-    scanline.set([red, green, blue, 255], 1 + x * 4);
+function createPlatformIconPng(red, green, blue, width = 1, height = 1, interlace = 0) {
+  const passes = interlace === 0
+    ? [[0, 0, 1, 1]]
+    : [[0, 0, 8, 8], [4, 0, 8, 8], [0, 4, 4, 8], [2, 0, 4, 4], [0, 2, 2, 4], [1, 0, 2, 2], [0, 1, 1, 2]];
+  const scanlines = [];
+  for (const [startX, startY, stepX, stepY] of passes) {
+    const passWidth = width <= startX ? 0 : Math.ceil((width - startX) / stepX);
+    const passHeight = passWidth === 0 || height <= startY ? 0 : Math.ceil((height - startY) / stepY);
+    const scanline = Buffer.alloc(1 + passWidth * 4);
+    for (let x = 0; x < passWidth; x += 1) scanline.set([red, green, blue, 255], 1 + x * 4);
+    for (let y = 0; y < passHeight; y += 1) scanlines.push(scanline);
   }
-  const imageData = Buffer.alloc(scanline.length * height);
-  for (let y = 0; y < height; y += 1) scanline.copy(imageData, y * scanline.length);
+  const imageData = Buffer.concat(scanlines);
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     pngChunk('IHDR', Buffer.from([
       (width >>> 24) & 0xff, (width >>> 16) & 0xff, (width >>> 8) & 0xff, width & 0xff,
       (height >>> 24) & 0xff, (height >>> 16) & 0xff, (height >>> 8) & 0xff, height & 0xff,
-      8, 6, 0, 0, 0,
+      8, 6, 0, 0, interlace,
     ])),
     pngChunk('IDAT', deflateSync(imageData)),
     pngChunk('IEND', Buffer.alloc(0)),
@@ -400,6 +406,21 @@ test('platform settings reject malformed and oversized icons without changing br
   corruptedPngCrc[29] ^= 1;
   const pngWithoutImageData = createPlatformIconPng(10, 20, 30);
   const missingPngDataChunk = Buffer.concat([pngWithoutImageData.subarray(0, 33), pngWithoutImageData.subarray(-12)]);
+  const invalidCompressedPng = Buffer.concat([
+    pngWithoutImageData.subarray(0, 33),
+    pngChunk('IDAT', Buffer.from([0xff, 0xff, 0xff])),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+  const excessivePngImageData = Buffer.concat([
+    pngWithoutImageData.subarray(0, 33),
+    pngChunk('IDAT', deflateSync(Buffer.alloc(100_000))),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+  const invalidPngFilter = Buffer.concat([
+    pngWithoutImageData.subarray(0, 33),
+    pngChunk('IDAT', deflateSync(Buffer.from([5, 10, 20, 30, 40]))),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
   const oversizedJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 4, 1, 1, 0x11, 0, 0xff, 0xd9]);
   const oversizedWebp = Buffer.alloc(30);
   oversizedWebp.write('RIFF', 0, 'ascii');
@@ -412,6 +433,9 @@ test('platform settings reject malformed and oversized icons without changing br
     ['png', Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])],
     ['png', corruptedPngCrc],
     ['png', missingPngDataChunk],
+    ['png', invalidCompressedPng],
+    ['png', excessivePngImageData],
+    ['png', invalidPngFilter],
     ['jpeg', Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
     ['webp', truncatedWebp],
     ['png', oversizedPng],
@@ -442,7 +466,7 @@ test('platform icon URLs remain stable across unrelated changes and change when 
   const originalIcon = settingValue('platform_icon');
   const originalVersion = settingValue('platform_icon_version');
   const firstIcon = createPlatformIconPng(31, 116, 75);
-  const secondIcon = createPlatformIconPng(26, 89, 142);
+  const secondIcon = createPlatformIconPng(26, 89, 142, 3, 3, 1);
   const iconDataUrl = (bytes) => `data:image/png;base64,${bytes.toString('base64')}`;
   const updateSettings = (body) => fetch(apiUrl('/admin/settings'), {
     method: 'PUT',
@@ -480,7 +504,7 @@ test('platform icon URLs remain stable across unrelated changes and change when 
       platformName: 'Renamed cache test',
       platformIcon: iconDataUrl(secondIcon),
     });
-    assert.equal(replacementResponse.status, 200);
+    assert.equal(replacementResponse.status, 200, await replacementResponse.clone().text());
     const replacementUrl = (await replacementResponse.json()).platformIcon;
     const replacementVersion = new URL(replacementUrl, 'http://127.0.0.1').searchParams.get('v');
     assert.notEqual(replacementVersion, initialVersion);

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { inflateSync } from 'node:zlib';
 import { config } from './config.js';
 import { db, setSetting, setting, setupComplete } from './db.js';
 import { createUser, hashPassword, normalizeEmail, normalizeUsername, publicUser, regenerateSession, validateCredentials, validateEmail, validatePassword, verifyLoginPassword, verifyPassword } from './auth.js';
@@ -48,6 +49,8 @@ const brandIconPngBitDepths = {
   4: [8, 16],
   6: [8, 16],
 };
+const brandIconPngChannels = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
+const brandIconPngAdam7Passes = [[0, 0, 8, 8], [4, 0, 8, 8], [0, 4, 4, 8], [2, 0, 4, 4], [0, 2, 2, 4], [1, 0, 2, 2], [0, 1, 1, 2]];
 const brandIconJpegStart = Buffer.from([0xff, 0xd8, 0xff]);
 const brandIconJpegEnd = Buffer.from([0xff, 0xd9]);
 const brandIconJpegFrameMarkers = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
@@ -148,6 +151,27 @@ function platformIconPngCrc32(bytes) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
+function platformIconPngScanlineLayout(width, height, bitDepth, colorType, interlace) {
+  const bitsPerPixel = brandIconPngChannels[colorType] * bitDepth;
+  const passes = interlace === 0 ? [[0, 0, 1, 1]] : brandIconPngAdam7Passes;
+  return passes.map(([startX, startY, stepX, stepY]) => {
+    const passWidth = width <= startX ? 0 : Math.ceil((width - startX) / stepX);
+    const passHeight = passWidth === 0 || height <= startY ? 0 : Math.ceil((height - startY) / stepY);
+    return { rowBytes: Math.ceil(passWidth * bitsPerPixel / 8), rows: passHeight };
+  });
+}
+
+function platformIconPngScanlinesMatch(imageData, layout) {
+  let offset = 0;
+  for (const { rowBytes, rows } of layout) {
+    for (let row = 0; row < rows; row += 1) {
+      if (offset >= imageData.length || imageData[offset] > 4) return false;
+      offset += rowBytes + 1;
+    }
+  }
+  return offset === imageData.length;
+}
+
 function platformIconDimensions(type, bytes) {
   if (type === 'png') {
     if (bytes.length < 45
@@ -155,9 +179,13 @@ function platformIconDimensions(type, bytes) {
     let offset = brandIconPngSignature.length;
     let width = 0;
     let height = 0;
+    let bitDepth = 0;
+    let colorType = 0;
+    let interlace = 0;
     let hasHeader = false;
     let hasImageData = false;
     let hasImageDataBytes = false;
+    const imageDataChunks = [];
     let imageDataEnded = false;
     let hasPalette = false;
     while (offset < bytes.length) {
@@ -173,10 +201,12 @@ function platformIconDimensions(type, bytes) {
         if (chunkType !== 'IHDR' || chunkLength !== 13) return null;
         width = bytes.readUInt32BE(offset + 8);
         height = bytes.readUInt32BE(offset + 12);
-        const bitDepth = bytes[offset + 16];
-        const colorType = bytes[offset + 17];
+        bitDepth = bytes[offset + 16];
+        colorType = bytes[offset + 17];
+        interlace = bytes[offset + 20];
         if (width === 0 || height === 0 || !brandIconPngBitDepths[colorType]?.includes(bitDepth)
-          || bytes[offset + 18] !== 0 || bytes[offset + 19] !== 0 || bytes[offset + 20] > 1) return null;
+          || bytes[offset + 18] !== 0 || bytes[offset + 19] !== 0 || interlace > 1) return null;
+        if (width > maxBrandIconDimension || height > maxBrandIconDimension) return { width, height };
         hasHeader = true;
       } else if (chunkType === 'IHDR') {
         return null;
@@ -184,18 +214,32 @@ function platformIconDimensions(type, bytes) {
       if (chunkType.charCodeAt(0) >= 65 && chunkType.charCodeAt(0) <= 90
         && !brandIconPngCriticalChunks.has(chunkType)) return null;
       if (chunkType === 'PLTE') {
-        if (hasPalette || hasImageData || chunkLength === 0 || chunkLength > 768 || chunkLength % 3 !== 0) return null;
+        if (hasPalette || hasImageData || colorType === 0 || colorType === 4
+          || chunkLength === 0 || chunkLength > 768 || chunkLength % 3 !== 0
+          || (colorType === 3 && chunkLength / 3 > 2 ** bitDepth)) return null;
         hasPalette = true;
       }
       if (chunkType === 'IDAT') {
-        if (imageDataEnded) return null;
+        if (imageDataEnded || (colorType === 3 && !hasPalette)) return null;
         hasImageData = true;
-        if (chunkLength > 0) hasImageDataBytes = true;
+        if (chunkLength > 0) {
+          hasImageDataBytes = true;
+          imageDataChunks.push(bytes.subarray(offset + 8, offset + 8 + chunkLength));
+        }
       } else if (hasImageData && chunkType !== 'IEND') {
         imageDataEnded = true;
       }
       if (chunkType === 'IEND') {
         if (chunkLength !== 0 || !hasImageData || !hasImageDataBytes || chunkEnd !== bytes.length) return null;
+        const layout = platformIconPngScanlineLayout(width, height, bitDepth, colorType, interlace);
+        const expectedLength = layout.reduce((total, pass) => total + pass.rows * (1 + pass.rowBytes), 0);
+        let imageData;
+        try {
+          imageData = inflateSync(Buffer.concat(imageDataChunks), { maxOutputLength: expectedLength + 1 });
+        } catch {
+          return null;
+        }
+        if (!platformIconPngScanlinesMatch(imageData, layout)) return null;
         return { width, height };
       }
       offset = chunkEnd;
