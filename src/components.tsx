@@ -2,8 +2,9 @@ import { Activity, BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, Clipb
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ApiError } from './api';
+import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
+import { pendingRegistrationCountChangedEvent } from './admin-navigation-events';
 import { BRAND_PALETTES, isBrandIconDimensionAllowed, MAX_BRAND_ICON_BYTES, MAX_BRAND_ICON_DIMENSION } from './branding';
 import type { BrandingPalette } from './branding';
 import { shouldCloseAppSelectForLayoutChange } from './app-select-layout';
@@ -226,6 +227,7 @@ export function StaffFrame() {
   const { user } = useAuth();
   const { pathname } = useLocation();
   const staffNavigationRef = useRef<HTMLElement>(null);
+  const [pendingRegistrationCount, setPendingRegistrationCount] = useState<number | null>(null);
   const { submit: handleSignOut, signingOut, error: signOutError } = useSignOutAction();
   useEffect(() => {
     const revealActiveLink = () => {
@@ -240,6 +242,38 @@ export function StaffFrame() {
     window.addEventListener('resize', revealActiveLink);
     return () => window.removeEventListener('resize', revealActiveLink);
   }, [pathname]);
+  useEffect(() => {
+    if (user?.role !== 'admin') {
+      setPendingRegistrationCount(null);
+      return;
+    }
+
+    let requestController: AbortController | null = null;
+    async function refreshPendingRegistrationCount() {
+      // Focus and approval events can overlap, so only the latest response should update the badge.
+      requestController?.abort();
+      const controller = new AbortController();
+      requestController = controller;
+      try {
+        const result = await api.get<{ count: number }>('/api/admin/users/pending-count', { signal: controller.signal });
+        if (!controller.signal.aborted) {
+          setPendingRegistrationCount(Number.isSafeInteger(result.count) && result.count >= 0 ? result.count : null);
+        }
+      } catch {
+        if (!controller.signal.aborted) setPendingRegistrationCount(null);
+      }
+    }
+
+    const refresh = () => { void refreshPendingRegistrationCount(); };
+    refresh();
+    window.addEventListener('focus', refresh);
+    window.addEventListener(pendingRegistrationCountChangedEvent, refresh);
+    return () => {
+      requestController?.abort();
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener(pendingRegistrationCountChangedEvent, refresh);
+    };
+  }, [pathname, user?.role]);
   return (
     <div className="staff-layout">
       <a className="skip-link" href="#main-content">Skip to main content</a>
@@ -247,7 +281,7 @@ export function StaffFrame() {
         <PlatformBrand className="staff-brand" />
         <nav ref={staffNavigationRef} aria-label="Management navigation">
           <NavLink to="/manage/courses"><BookOpen size={18} />Courses</NavLink>
-          {user?.role === 'admin' && <NavLink to="/admin/users"><UsersRound size={18} />Users</NavLink>}
+          {user?.role === 'admin' && <NavLink to="/admin/users" aria-label={pendingRegistrationCount !== null && pendingRegistrationCount > 0 ? `Users, ${formatCountLabel(pendingRegistrationCount, 'pending registration', 'pending registrations')}` : undefined}><UsersRound size={18} />Users{pendingRegistrationCount !== null && pendingRegistrationCount > 0 && <span className="staff-nav-count" aria-hidden="true">{pendingRegistrationCount > 99 ? '99+' : pendingRegistrationCount}</span>}</NavLink>}
           <NavLink to="/manage/learning-paths"><Route size={18} />Learning paths</NavLink>
           {user?.role === 'admin' && <NavLink to="/admin/competencies"><Award size={18} />Competencies</NavLink>}
           {user?.role === 'admin' && <NavLink to="/admin/audit-log"><ClipboardList size={18} />Audit log</NavLink>}

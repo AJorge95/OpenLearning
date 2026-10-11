@@ -1014,6 +1014,11 @@ test('registration explains how to sign in when the account is saved but session
 });
 
 test('registration approval blocks sign-in and rolls back if its audit record fails', async () => {
+  const initialPendingCountResponse = await fetch(apiUrl('/admin/users/pending-count'), { headers: { connection: 'close' } });
+  assert.equal(initialPendingCountResponse.status, 200);
+  const initialPendingCount = (await initialPendingCountResponse.json()).count;
+  assert.ok(Number.isSafeInteger(initialPendingCount) && initialPendingCount >= 0);
+
   const settingsResponse = await fetch(apiUrl('/admin/settings'), { headers: { connection: 'close' } });
   assert.equal(settingsResponse.status, 200);
   const settings = await settingsResponse.json();
@@ -1053,6 +1058,8 @@ test('registration approval blocks sign-in and rolls back if its audit record fa
     .registration_status, 'pending');
   assert.equal(database.prepare('SELECT last_login_at FROM users WHERE id = ?').get(registration.user.id).last_login_at, null);
   assert.deepEqual(await storedSessionIds(), initialSessionIds, 'pending registration must not create a sign-in session');
+  const pendingCountResponse = await fetch(apiUrl('/admin/users/pending-count'), { headers: { connection: 'close' } });
+  assert.equal((await pendingCountResponse.json()).count, initialPendingCount + 1);
 
   const pendingAccountsResponse = await fetch(apiUrl('/admin/users?registrationStatus=pending&q=approval.gate'), { headers: { connection: 'close' } });
   assert.equal(pendingAccountsResponse.status, 200);
@@ -1093,6 +1100,8 @@ test('registration approval blocks sign-in and rolls back if its audit record fa
   assert.equal((await failedApprovalResponse.json()).code, 'audit_unavailable');
   assert.equal(database.prepare('SELECT registration_status FROM users WHERE id = ?').get(registration.user.id).registration_status, 'pending');
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get(staleSessionId).count, 1);
+  const rolledBackPendingCountResponse = await fetch(apiUrl('/admin/users/pending-count'), { headers: { connection: 'close' } });
+  assert.equal((await rolledBackPendingCountResponse.json()).count, initialPendingCount + 1);
 
   const approveUrl = apiUrl(`/admin/users/${registration.user.id}/approval`);
   const approvalResponse = await fetch(approveUrl, {
@@ -1103,6 +1112,8 @@ test('registration approval blocks sign-in and rolls back if its audit record fa
   assert.equal(approvalResponse.status, 200);
   const approval = await approvalResponse.json();
   assert.equal(approval.user.registrationStatus, 'approved');
+  const approvedCountResponse = await fetch(apiUrl('/admin/users/pending-count'), { headers: { connection: 'close' } });
+  assert.equal((await approvedCountResponse.json()).count, initialPendingCount);
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get(staleSessionId).count, 0);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.registration_approved' AND entity_id = ?")
     .get(registration.user.id).count, 1);

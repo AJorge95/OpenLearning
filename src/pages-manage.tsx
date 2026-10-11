@@ -4,6 +4,7 @@ import { Activity, AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
+import { notifyPendingRegistrationCountChanged } from './admin-navigation-events';
 import { AppSelect, Button, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PasswordField, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
 import { formatCountLabel } from './count-label';
 import { accountCourseAssignmentLabel } from './account-course-activity';
@@ -1826,6 +1827,7 @@ export function AdminUsersPage() {
     markSaving(user.id, true); setError(''); setSuccess('');
     try {
       const response = await api.patch<{ user: User }>(`/api/admin/users/${user.id}/approval`, {});
+      notifyPendingRegistrationCountChanged();
       const currentListState = userListStateRef.current;
       if (!(await load(currentListState.page, currentListState.query, currentListState.roleFilter, currentListState.approvalFilter))) return;
       setSuccess(response.user.disabled
@@ -2037,6 +2039,7 @@ export function AdminUserDetailsPage() {
     try {
       const result = await api.patch<{ user: User }>(`/api/admin/users/${requestedUserId}/approval`, {});
       if (!isCurrentAction()) return;
+      notifyPendingRegistrationCountChanged();
       setAccount((current) => current && current.user.id === requestedUserId ? { ...current, user: { ...current.user, ...result.user } } : current);
       setSuccess(result.user.disabled
         ? `${result.user.username}'s registration was approved. The account is disabled, so enable it before they can sign in.`
