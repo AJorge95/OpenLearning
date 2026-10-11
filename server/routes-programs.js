@@ -291,6 +291,7 @@ programsRouter.post('/manage/learning-paths', requireStaff, (req, res) => {
   const status = body.status === undefined ? 'draft' : body.status;
   if (!['draft', 'published'].includes(status)) fail(400, 'Choose draft or published for this learning path.', 'validation_error');
   const id = randomUUID();
+  // Build the returned path before commit so summary-read failures roll back creation and audit logging.
   const create = db.transaction(() => {
     const courses = normalizePathCourses(body.courses === undefined ? [] : body.courses, selfEnrollment);
     if (status === 'published' && courses.length === 0) fail(400, 'Add at least one course before publishing a learning path.', 'empty_path');
@@ -298,13 +299,15 @@ programsRouter.post('/manage/learning-paths', requireStaff, (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, title, description, status, selfEnrollment ? 1 : 0, req.currentUser.id, req.currentUser.id);
     savePathCourses(id, courses);
     logAudit(req.currentUser, 'path.created', 'learning_path', id, `Created learning path: ${title}`, { courseCount: courses.length, status, selfEnrollment });
+    return pathPayload(db.prepare('SELECT * FROM learning_paths WHERE id = ?').get(id), null);
   });
-  create.immediate();
-  res.status(201).json({ path: pathPayload(db.prepare('SELECT * FROM learning_paths WHERE id = ?').get(id), null) });
+  const path = create.immediate();
+  res.status(201).json({ path });
 });
 
 programsRouter.patch('/manage/learning-paths/:pathId', requireStaff, (req, res) => {
   const body = requireObjectBody(req.body, 'Learning path changes');
+  // Resolve course summaries before commit, including for no-op saves, to keep errors atomic.
   const update = db.transaction(() => {
     const current = db.prepare('SELECT * FROM learning_paths WHERE id = ?').get(req.params.pathId);
     if (!current) fail(404, 'Learning path not found.', 'not_found');
@@ -328,7 +331,7 @@ programsRouter.patch('/manage/learning-paths/:pathId', requireStaff, (req, res) 
       || selfEnrollment !== Boolean(current.self_enrollment)
       || status !== current.status
       || coursesChanged;
-    if (!changed) return current;
+    if (!changed) return pathPayload(current, null);
     db.prepare(`UPDATE learning_paths SET title = ?, description = ?, self_enrollment = ?, status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(title, description, selfEnrollment ? 1 : 0, status, req.currentUser.id, current.id);
     if (coursesChanged) {
@@ -337,9 +340,10 @@ programsRouter.patch('/manage/learning-paths/:pathId', requireStaff, (req, res) 
       for (const enrollment of enrolledLearners) syncUnlockedPathStates([current.id], enrollment.user_id);
     }
     logAudit(req.currentUser, 'path.updated', 'learning_path', current.id, `Updated learning path: ${title}`, { status, selfEnrollment, courseCount: courses.length });
-    return db.prepare('SELECT * FROM learning_paths WHERE id = ?').get(current.id);
+    return pathPayload(db.prepare('SELECT * FROM learning_paths WHERE id = ?').get(current.id), null);
   });
-  res.json({ path: pathPayload(update.immediate(), null) });
+  const path = update.immediate();
+  res.json({ path });
 });
 
 programsRouter.post('/manage/learning-paths/:pathId/assignments', requireStaff, (req, res) => {

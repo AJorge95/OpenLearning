@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep learning-path save responses transactional
+
+- **Reviewed:** Learning-path create and update routes committed their path changes and audit events before assembling course summaries for the response. A summary-read failure therefore returned HTTP 500 after the mutation had succeeded. The patch no-op path also built its response after the transaction.
+- **Improvement:** Build path responses inside the create/update transactions, including no-op updates, so response-read failures roll back with the path and audit changes.
+- **Why it helps:** Staff get an error only when the change is rolled back, avoiding hidden path creation or edits followed by duplicate retries.
+- **Interface review:** The path editor already uses associated field labels, a fieldset and legend for course selection, announced validation/loading states, retry feedback, keyboard-focus outlines, and a single-column layout at narrow widths; no additional UI change was needed.
+- **Checked:** Injected course-summary read failures reproduced the old behavior for both create and update. After the fix, path and audit state roll back; existing no-op update behavior still passes. Focused path tests passed (5/5); the full suite passed (501/501); `npm run build` passed strict TypeScript checking and Vite bundling; syntax checks and `git diff --check` passed.
+
 ## 2026-10-11 — Keep quiz saves and editor responses transactional
 
 - **Reviewed:** The quiz PUT route committed quiz edits and their audit event before assembling the full editor response. Its unchanged-save path also returned before producing a response inside the transaction.
