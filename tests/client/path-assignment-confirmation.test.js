@@ -24,3 +24,14 @@ test('assignment removal opens an accessible confirmation before sending the req
   assert.match(pageSource, /<ConfirmationDialog \{\.\.\.pathAssignmentRemovalConfirmation\(pendingAssignmentRemoval\.learnerUsername, pendingAssignmentRemoval\.pathTitle\)\} confirmLabel="Remove assignment"/);
   assert.doesNotMatch(removalFlow, /window\.confirm/);
 });
+
+test('assignment removal announces the confirmed result only in its active path panel', () => {
+  const removalFlow = pageSource.slice(pageSource.indexOf('async function confirmAssignmentRemoval'), pageSource.indexOf('const assignableLearners'));
+  const responsePosition = removalFlow.indexOf('await api.delete(');
+  const routeGuardPosition = removalFlow.indexOf('if (requestSequence !== assignmentRequestSequenceRef.current || assignmentPathRef.current !== pending.pathId) return;');
+  const noticePosition = removalFlow.indexOf('setNotice(`${learner.username} is no longer assigned to “${path.title}”. Course progress was kept.`);');
+
+  assert.ok(responsePosition >= 0 && routeGuardPosition > responsePosition && noticePosition > routeGuardPosition);
+  assert.match(removalFlow, /catch \(cause\) \{\s*if \(requestSequence === assignmentRequestSequenceRef\.current && assignmentPathRef\.current === pending\.pathId\) setError/);
+  assert.match(pageSource, /notice && <div className="inline-notice inline-notice-success" role="status">\{notice\}<\/div>/);
+});

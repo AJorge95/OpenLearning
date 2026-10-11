@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Announce completed path-assignment removal
+
+- **Reviewed:** The assignment confirmation, transactional DELETE route, roster refresh, and success feedback shown for the related learner-assignment action. Successful removal refreshed the roster but did not announce a completion result.
+- **Improvement:** After the DELETE response, show a status message that the learner is no longer assigned and their course progress was kept. Set it only while the assignment panel still belongs to that path.
+- **Why it helps:** Staff can confirm the access change, and screen-reader users receive an explicit result even when the removed learner disappears from the refreshed list.
+- **Backend review:** The route already removes only assigned path enrollments and writes its audit event transactionally; course progress is retained. Its 204 response remains unchanged.
+- **Checked:** Focused assignment-removal and path-panel tests passed (10/10); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. No learner enrollment was changed in the browser.
+
 ## 2026-10-11 — Close the matching editor after path archiving
 
 - **Reviewed:** The path archive action and an open editor for the same path. The archive endpoint changes the path status, while the editor retains its prior draft or published value and can submit it later.
