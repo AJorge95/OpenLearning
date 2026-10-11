@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Search competency definitions in the admin catalog
+
+- **Reviewed:** The administrator competency list's stable 25-row pagination, available title/description fields, existing literal-safe search helper, shared management-search styling, and status-toggle rank recalculation.
+- **Improvement:** Add a validated 100-character search across competency titles and descriptions before pagination. Return filtered totals and page bounds, calculate a toggled row's page within the current filter, and keep the filter on pagination and status updates. The page exposes a named search field, a clear-search recovery action for empty matches, and resets the filter after creation so the new competency remains visible. Comments document filtered server pagination and toggle ranking.
+- **Why it helps:** Administrators can find a definition in a large catalog without paging through unrelated records, while counts, navigation, and the result after an active-status change stay consistent with the current search.
+- **Checked:** The full `npm test -- --test-reporter=dot` suite passed. Focused competency server tests passed (5/5); `npm run build` passed strict TypeScript checking and Vite bundling. In the local admin browser, the search field appeared with its accessible name, a non-matching query showed the live no-results message and clear action, and clearing restored the default state. The browser session contained no competency rows, so visible populated-list pagination was not exercised; API pagination and status-rank behavior passed against isolated fixtures. `git diff --check` passed. Browser console logs were unavailable from the connected CUA surface.
+
 ## 2026-10-11 — Review media cleanup and shared recovery surfaces
 
 - **Reviewed:** Startup orphan-media cleanup, its generated-name and age filters, database reference checks for uploads/documents/captions, media-upload transaction and temporary-file recovery paths, SQL wildcard and Unicode search handling, and the application and management-page error boundaries.

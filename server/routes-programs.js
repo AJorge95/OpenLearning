@@ -52,11 +52,19 @@ function logAudit(actor, action, entityType, entityId, summary, details = {}) {
   if (!auditId) fail(500, 'The change could not be saved because the audit log is unavailable.', 'audit_unavailable');
 }
 
-function competencyAdminPage(competency) {
-  const precedingCount = db.prepare(`SELECT COUNT(*) AS count FROM competencies
-    WHERE active > ? OR (active = ? AND (title COLLATE NOCASE < ?
-      OR (title COLLATE NOCASE = ? AND id < ?)))`)
-    .get(competency.active, competency.active, competency.title, competency.title, competency.id).count;
+function competencyAdminPage(competency, query = '') {
+  const conditions = [];
+  const params = [];
+  if (query) {
+    const search = textSearchPredicate(['title', 'description'], query);
+    conditions.push(`(${search.sql})`);
+    params.push(...search.params);
+  }
+  conditions.push(`(active > ? OR (active = ? AND (title COLLATE NOCASE < ?
+    OR (title COLLATE NOCASE = ? AND id < ?))))`);
+  params.push(competency.active, competency.active, competency.title, competency.title, competency.id);
+  const precedingCount = db.prepare(`SELECT COUNT(*) AS count FROM competencies WHERE ${conditions.join(' AND ')}`)
+    .get(...params).count;
   return Math.floor(precedingCount / COMPETENCY_ADMIN_PAGE_SIZE) + 1;
 }
 
@@ -497,13 +505,17 @@ programsRouter.get('/competencies', (req, res) => {
   });
 });
 
-programsRouter.get('/admin/competencies', requireAdmin, (_req, res) => {
-  const requestedPage = pageQuery(_req.query.page);
-  const total = db.prepare('SELECT COUNT(*) AS count FROM competencies').get().count;
+programsRouter.get('/admin/competencies', requireAdmin, (req, res) => {
+  const query = text(req.query.q, 'Search', 100);
+  const search = query ? textSearchPredicate(['title', 'description'], query) : null;
+  const where = search ? `WHERE (${search.sql})` : '';
+  const params = search?.params ?? [];
+  const requestedPage = pageQuery(req.query.page);
+  const total = db.prepare(`SELECT COUNT(*) AS count FROM competencies ${where}`).get(...params).count;
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / COMPETENCY_ADMIN_PAGE_SIZE)));
-  const competencies = db.prepare(`SELECT * FROM competencies
+  const competencies = db.prepare(`SELECT * FROM competencies ${where}
     ORDER BY active DESC, title COLLATE NOCASE, id LIMIT ? OFFSET ?`)
-    .all(COMPETENCY_ADMIN_PAGE_SIZE, (page - 1) * COMPETENCY_ADMIN_PAGE_SIZE);
+    .all(...params, COMPETENCY_ADMIN_PAGE_SIZE, (page - 1) * COMPETENCY_ADMIN_PAGE_SIZE);
   res.json({ competencies, total, page, pageSize: COMPETENCY_ADMIN_PAGE_SIZE,
     hasMore: page * COMPETENCY_ADMIN_PAGE_SIZE < total });
 });
@@ -525,6 +537,7 @@ programsRouter.post('/admin/competencies', requireAdmin, (req, res) => {
 });
 
 programsRouter.patch('/admin/competencies/:competencyId', requireAdmin, (req, res) => {
+  const query = text(req.query.q, 'Search', 100);
   const body = requireObjectBody(req.body, 'Competency changes');
   const change = db.transaction(() => {
     const current = db.prepare('SELECT * FROM competencies WHERE id = ?').get(req.params.competencyId);
@@ -541,7 +554,7 @@ programsRouter.patch('/admin/competencies/:competencyId', requireAdmin, (req, re
       logAudit(req.currentUser, 'competency.updated', 'competency', current.id, `Updated competency: ${title}`, { active: Boolean(active) });
     }
     const competency = db.prepare('SELECT * FROM competencies WHERE id = ?').get(current.id);
-    return { competency, page: competencyAdminPage(competency) };
+    return { competency, page: competencyAdminPage(competency, query) };
   });
   res.json(change.immediate());
 });
