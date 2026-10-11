@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Label quiz-answer correctness in the review text
+
+- **Reviewed:** Quiz review colored selected answers green or red, but did not say whether each answer was correct in text. The correct answer was named only for incorrect responses.
+- **Improvement:** Label the selected response as “Your answer is correct” or “Your answer is incorrect”; retain the separate correct-answer line for an incorrect response.
+- **Why it helps:** Per-question feedback is clear to screen-reader users and learners who cannot distinguish the green/red styling, without changing scoring or attempt behavior.
+- **Backend review:** The attempt endpoint already saves the selected and correct choice IDs in a user-scoped result snapshot; no API or persistence change was needed.
+- **Checked:** Added `tests/client/quiz-result-accessibility.test.js`. In the local browser, the saved quiz review displayed “Your answer is correct” in both the accessibility tree and rendered page. Focused test, full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Allow another automatic recovery after playback resumes
 
 - **Reviewed:** The lesson player limited automatic stall recovery to one retry per lesson and never reset that limit after a successful resume. A later, separate stall therefore required the learner to retry manually.
