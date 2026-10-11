@@ -22,6 +22,12 @@ test('draft learning paths explain why learner assignment is unavailable', () =>
   assert.match(pageSource, /staff && canAssignLearningPathLearners\(path\.status\) && assignmentPath === path\.id/);
 });
 
+test('staff learning-path cards identify personal progress and omit zero-course progress', () => {
+  assert.match(pageSource, /\{path\.courseCount > 0 && <>/);
+  assert.match(pageSource, /\{staff \? 'Your progress: ' : ''\}\{path\.completedCourses\} of \{path\.courseCount\} courses complete/);
+  assert.match(pageSource, /label=\{`\$\{staff \? 'Your progress in' : 'Progress in'\} \$\{path\.title\}`\}/);
+});
+
 test('changing an assigned published path back to draft closes its assignment panel after saving', () => {
   assert.match(pageSource, /if \(editing && !canAssignLearningPathLearners\(value\.status\) && assignmentPathRef\.current === editing\.id\) clearAssignmentPanel\(\);/);
 });
