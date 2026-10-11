@@ -40,6 +40,14 @@ const maxBrandIconBytes = 512 * 1024;
 const maxBrandIconDimension = 1024;
 const maxUserLimit = 1_000_000;
 const brandIconPngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const brandIconPngCriticalChunks = new Set(['IHDR', 'PLTE', 'IDAT', 'IEND']);
+const brandIconPngBitDepths = {
+  0: [1, 2, 4, 8, 16],
+  2: [8, 16],
+  3: [1, 2, 4, 8],
+  4: [8, 16],
+  6: [8, 16],
+};
 const brandIconJpegStart = Buffer.from([0xff, 0xd8, 0xff]);
 const brandIconJpegEnd = Buffer.from([0xff, 0xd9]);
 const brandIconJpegFrameMarkers = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
@@ -131,17 +139,68 @@ function parseUserLimit(value) {
   return value;
 }
 
+function platformIconPngCrc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 function platformIconDimensions(type, bytes) {
   if (type === 'png') {
     if (bytes.length < 45
-      || !bytes.subarray(0, brandIconPngSignature.length).equals(brandIconPngSignature)
-      || bytes.readUInt32BE(8) !== 13
-      || bytes.toString('ascii', 12, 16) !== 'IHDR'
-      || bytes.readUInt32BE(16) === 0
-      || bytes.readUInt32BE(20) === 0) return null;
-    const trailer = bytes.subarray(bytes.length - 12);
-    if (trailer.readUInt32BE(0) !== 0 || trailer.toString('ascii', 4, 8) !== 'IEND') return null;
-    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+      || !bytes.subarray(0, brandIconPngSignature.length).equals(brandIconPngSignature)) return null;
+    let offset = brandIconPngSignature.length;
+    let width = 0;
+    let height = 0;
+    let hasHeader = false;
+    let hasImageData = false;
+    let hasImageDataBytes = false;
+    let imageDataEnded = false;
+    let hasPalette = false;
+    while (offset < bytes.length) {
+      if (offset + 12 > bytes.length) return null;
+      const chunkLength = bytes.readUInt32BE(offset);
+      const chunkEnd = offset + 12 + chunkLength;
+      if (chunkEnd > bytes.length) return null;
+      const chunkType = bytes.toString('ascii', offset + 4, offset + 8);
+      if (!/^[A-Za-z]{4}$/.test(chunkType)) return null;
+      const crcInput = bytes.subarray(offset + 4, offset + 8 + chunkLength);
+      if (bytes.readUInt32BE(offset + 8 + chunkLength) !== platformIconPngCrc32(crcInput)) return null;
+      if (!hasHeader) {
+        if (chunkType !== 'IHDR' || chunkLength !== 13) return null;
+        width = bytes.readUInt32BE(offset + 8);
+        height = bytes.readUInt32BE(offset + 12);
+        const bitDepth = bytes[offset + 16];
+        const colorType = bytes[offset + 17];
+        if (width === 0 || height === 0 || !brandIconPngBitDepths[colorType]?.includes(bitDepth)
+          || bytes[offset + 18] !== 0 || bytes[offset + 19] !== 0 || bytes[offset + 20] > 1) return null;
+        hasHeader = true;
+      } else if (chunkType === 'IHDR') {
+        return null;
+      }
+      if (chunkType.charCodeAt(0) >= 65 && chunkType.charCodeAt(0) <= 90
+        && !brandIconPngCriticalChunks.has(chunkType)) return null;
+      if (chunkType === 'PLTE') {
+        if (hasPalette || hasImageData || chunkLength === 0 || chunkLength > 768 || chunkLength % 3 !== 0) return null;
+        hasPalette = true;
+      }
+      if (chunkType === 'IDAT') {
+        if (imageDataEnded) return null;
+        hasImageData = true;
+        if (chunkLength > 0) hasImageDataBytes = true;
+      } else if (hasImageData && chunkType !== 'IEND') {
+        imageDataEnded = true;
+      }
+      if (chunkType === 'IEND') {
+        if (chunkLength !== 0 || !hasImageData || !hasImageDataBytes || chunkEnd !== bytes.length) return null;
+        return { width, height };
+      }
+      offset = chunkEnd;
+    }
+    return null;
   }
   if (type === 'jpeg') {
     if (bytes.length < 5 || !bytes.subarray(0, 3).equals(brandIconJpegStart)
