@@ -790,6 +790,50 @@ test('first version requiring recompletion resets legacy progress without deleti
   }
 });
 
+test('course details preserve a prior quiz pass without presenting it as a current-version attempt', async () => {
+  const courseId = 'course-carried-quiz-pass';
+  const versionCourseId = `${courseId}-v2`;
+  database.exec(`
+    INSERT INTO courses (id, title, status, visibility, created_by, updated_by, logical_course_id) VALUES
+      ('${courseId}', 'Carried quiz pass', 'published', 'public', 'admin-1', 'admin-1', NULL),
+      ('${versionCourseId}', 'Carried quiz pass', 'published', 'public', 'admin-1', 'admin-1', '${courseId}');
+    INSERT INTO course_modules (id, course_id, title, position, stable_id) VALUES
+      ('${courseId}-module', '${courseId}', 'Module', 0, 'carried-quiz-pass-module'),
+      ('${versionCourseId}-module', '${versionCourseId}', 'Module', 0, 'carried-quiz-pass-module');
+    INSERT INTO quizzes (id, module_id, title, pass_mark, stable_id) VALUES
+      ('${courseId}-quiz', '${courseId}-module', 'Quiz', 70, 'carried-quiz-pass-stable'),
+      ('${versionCourseId}-quiz', '${versionCourseId}-module', 'Quiz', 70, 'carried-quiz-pass-stable');
+    INSERT INTO quiz_questions (id, quiz_id, prompt, position) VALUES
+      ('${courseId}-question', '${courseId}-quiz', 'Earlier question?', 0),
+      ('${versionCourseId}-question', '${versionCourseId}-quiz', 'Current question?', 0);
+    INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES
+      ('${courseId}-choice-1', '${courseId}-question', 'Earlier correct answer', 1, 0),
+      ('${courseId}-choice-2', '${courseId}-question', 'Earlier other answer', 0, 1),
+      ('${versionCourseId}-choice-1', '${versionCourseId}-question', 'Current correct answer', 1, 0),
+      ('${versionCourseId}-choice-2', '${versionCourseId}-question', 'Current other answer', 0, 1);
+    INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by, requires_recompletion) VALUES
+      ('${courseId}-version-1', '${courseId}', '${courseId}', 1, 'admin-1', 0),
+      ('${courseId}-version-2', '${courseId}', '${versionCourseId}', 2, 'admin-1', 0);
+    INSERT INTO enrollments (id, course_id, user_id)
+      VALUES ('${courseId}-enrollment', '${courseId}', 'learner-active');
+    INSERT INTO quiz_attempts (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json, submitted_at)
+      VALUES ('${courseId}-attempt', '${courseId}-quiz', 'learner-active', 100, 1, '{}', '[]', '2026-10-01 12:00:00');
+  `);
+
+  try {
+    const response = await fetch(apiUrl(`/courses/${courseId}`), { headers: userHeaders('learner-active') });
+    assert.equal(response.status, 200);
+    const { course } = await response.json();
+    assert.equal(course.versionNumber, 2);
+    assert.equal(course.modules[0].quiz.id, `${versionCourseId}-quiz`);
+    assert.equal(course.modules[0].quiz.passed, true);
+    assert.equal(course.modules[0].quiz.latestAttempt, null);
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(versionCourseId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('course and learning-path detail GETs are read-only while protected actions initialize learner state', async () => {
   database.exec(`
     INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
