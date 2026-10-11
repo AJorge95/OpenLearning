@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Remask password fields when their value clears
+
+- **Reviewed:** The shared password visibility control and form flows that clear controlled password values after completion, especially the account-details password reset that stays mounted after success.
+- **Improvement:** Automatically hide a revealed password when its controlled value is reset to empty, and remask immediately when the user clears the field. Preserve the existing input callback and password requirements.
+- **Why it helps:** A successful reset or manual clear cannot leave the next password entry exposed in plain text.
+- **Backend review:** Password submission, validation, hashing, and session behavior are unchanged.
+- **Checked:** Focused password-field, confirmation, and guidance tests passed (11/11); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict type checking and Vite; `git diff --check` passed. In local Chrome, a disposable value became readable on Show, returned to a masked field when cleared, and a subsequent entry stayed masked; the form was not submitted.
+
 ## 2026-10-11 — Add accessible password visibility controls
 
 - **Reviewed:** Password entry across setup, sign-in, public signup, self-service changes, staff account creation, and password resets. Fields accepted long passwords but gave users no way to verify a typed value before submitting.
