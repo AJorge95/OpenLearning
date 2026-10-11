@@ -239,7 +239,7 @@ export function LoginPage() {
 }
 
 export function RegisterPage() {
-  const { signUp, user, configured, registrationEnabled, registrationAvailable } = useAuth();
+  const { signUp, user, configured, registrationEnabled, registrationApprovalRequired, registrationAvailable } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const postLoginPath = getPostLoginPath(location.state?.from);
@@ -259,6 +259,7 @@ export function RegisterPage() {
   const [invalidRegistrationFieldId, setInvalidRegistrationFieldId] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [approvalSubmitted, setApprovalSubmitted] = useState(false);
   const submissionInFlightRef = useRef(false);
   useEffect(() => {
     let active = true;
@@ -279,6 +280,7 @@ export function RegisterPage() {
   }, [registrationFieldsRetryVersion]);
   if (configured && user) return <Navigate to={postLoginPath} replace />;
   if (!configured) return <Navigate to="/setup" replace />;
+  if (approvalSubmitted) return <AuthPanel><h1>Registration submitted</h1><p className="auth-description">Your account is waiting for administrator approval. You can sign in after it has been approved.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
   if (!registrationEnabled) return <AuthPanel><h1>Registration is closed</h1><p className="auth-description">An administrator has disabled new account registrations.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
   if (!registrationAvailable) return <AuthPanel><h1>Registration is closed</h1><p className="auth-description">The platform has reached its registered-account limit.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
 
@@ -300,7 +302,11 @@ export function RegisterPage() {
     }
     if (!acquireSubmissionLock(submissionInFlightRef)) return;
     setSaving(true);
-    try { await signUp(email, firstName, lastName, username, password, confirmPassword, registrationFieldValues); navigate(postLoginPath, { replace: true }); }
+    try {
+      const result = await signUp(email, firstName, lastName, username, password, confirmPassword, registrationFieldValues);
+      if (result.approvalRequired) { setApprovalSubmitted(true); return; }
+      navigate(postLoginPath, { replace: true });
+    }
     catch (cause) {
       if (cause instanceof ApiError && cause.code === 'registration_fields_changed') {
         setRegistrationFieldsChanged(true);
@@ -312,6 +318,7 @@ export function RegisterPage() {
   }
 
   return <AuthPanel><h1>Create your account</h1><p className="auth-description">Join your learning space and explore available courses.</p>
+    {registrationApprovalRequired && <p className="auth-approval-note" role="note">New accounts need administrator approval before they can sign in.</p>}
     <form onSubmit={submit} className="form-stack" aria-busy={saving}>
       <label>Email<input required type="email" maxLength={254} autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} /></label>
       <div className="account-name-fields"><label>First name <small>Required · used on certificates</small><input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} disabled={saving} /></label><label>Last name <small>Required · used on certificates</small><input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} disabled={saving} /></label></div>

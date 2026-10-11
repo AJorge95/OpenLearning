@@ -14,6 +14,7 @@ export type ConnectionProtocol = 'http' | 'https';
 export interface PlatformAccessSettings {
   connectionProtocol: ConnectionProtocol;
   registrationEnabled: boolean;
+  registrationApprovalRequired: boolean;
   registrationAvailable: boolean;
   userLimit: number;
 }

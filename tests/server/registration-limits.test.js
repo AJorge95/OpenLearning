@@ -129,6 +129,7 @@ test('concurrent registrations cannot exceed the account limit', async () => {
     themePalette: 'violet',
     connectionProtocol: 'http',
     registrationEnabled: true,
+    registrationApprovalRequired: false,
     registrationAvailable: true,
     userLimit: 2,
   });

@@ -169,23 +169,27 @@ adminRouter.get('/system-logs', (req, res) => {
 adminRouter.get('/users', (req, res) => {
   const query = textQuery(req.query.q, 'Search', 100);
   const role = enumQuery(req.query.role, 'role', ['all', 'admin', 'moderator', 'learner']);
+  const registrationStatus = enumQuery(req.query.registrationStatus, 'registration status', ['all', 'pending', 'approved']);
   const clauses = [];
   const params = [];
   if (role !== 'all') { clauses.push('role = ?'); params.push(role); }
+  if (registrationStatus !== 'all') { clauses.push('registration_status = ?'); params.push(registrationStatus); }
   if (query) {
     const search = textSearchPredicate(['username', 'email'], query);
     clauses.push(`(${search.sql})`);
     params.push(...search.params);
   }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-  const orderBy = role === 'all'
+  const orderBy = registrationStatus === 'pending'
+    ? 'created_at ASC, username COLLATE NOCASE'
+    : role === 'all'
     ? "CASE role WHEN 'admin' THEN 1 WHEN 'moderator' THEN 2 ELSE 3 END, username COLLATE NOCASE"
     : 'username COLLATE NOCASE';
   const total = db.prepare(`SELECT COUNT(*) AS count FROM users ${where}`).get(...params).count;
   const requestedPage = pageQuery(req.query.page);
   const pageSize = 50;
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
-  const users = db.prepare(`SELECT id, username, email, role, disabled, created_at FROM users
+  const users = db.prepare(`SELECT id, username, email, role, disabled, registration_status, created_at FROM users
     ${where}
     ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
     .all(...params, pageSize, (page - 1) * pageSize);
@@ -196,6 +200,7 @@ adminRouter.get('/users', (req, res) => {
     email: user.email,
     role: user.role,
     disabled: Boolean(user.disabled),
+    registrationStatus: user.registration_status,
     createdAt: user.created_at,
     isCurrentUser: user.id === req.currentUser.id,
     isLastActiveAdmin: isLastActiveAdministrator(user, activeAdminCount),
@@ -225,7 +230,7 @@ adminRouter.post('/users', async (req, res) => {
     if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) fail(409, 'That email address is already in use.', 'email_taken');
     db.prepare('INSERT INTO users (id, username, email, first_name, last_name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(id, username, email, firstName, lastName, passwordHash, role);
-    const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, created_at, updated_at FROM users WHERE id = ?').get(id);
+    const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, registration_status, created_at, updated_at FROM users WHERE id = ?').get(id);
     const auditId = writeAuditLog({ actor: req.currentUser, action: 'account.created', entityType: 'user', entityId: id,
       summary: `Created account for ${username}`, details: { username, role } });
     if (!auditId) fail(500, 'Account could not be created because the audit log is unavailable.', 'audit_unavailable');
@@ -244,12 +249,38 @@ adminRouter.post('/users', async (req, res) => {
   res.status(201).json({ user: {
     id: user.id, username: user.username, email: user.email,
     firstName: user.first_name, lastName: user.last_name, role: user.role,
-    disabled: Boolean(user.disabled), createdAt: user.created_at, updatedAt: user.updated_at,
+    disabled: Boolean(user.disabled), registrationStatus: user.registration_status, createdAt: user.created_at, updatedAt: user.updated_at,
+  } });
+});
+
+adminRouter.patch('/users/:userId/approval', (req, res) => {
+  // Keep approval, stale-session removal, and its audit entry atomic so an audit failure cannot partially grant access.
+  const approveRegistration = db.transaction(() => {
+    const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, registration_status, created_at, updated_at FROM users WHERE id = ?')
+      .get(req.params.userId);
+    if (!user) fail(404, 'User not found.', 'not_found');
+    if (user.registration_status === 'pending') {
+      db.prepare("UPDATE users SET registration_status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(user.id);
+      invalidateUserSessions(db, user.id);
+      const auditId = writeAuditLog({ actor: req.currentUser, action: 'account.registration_approved', entityType: 'user', entityId: user.id,
+        summary: `Approved learner registration for ${user.username}`, details: { username: user.username } });
+      if (!auditId) fail(500, 'Registration could not be approved because the audit log is unavailable.', 'audit_unavailable');
+    }
+    const updated = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, registration_status, created_at, updated_at FROM users WHERE id = ?')
+      .get(user.id);
+    return updated;
+  });
+  const user = approveRegistration.immediate();
+  res.json({ user: {
+    id: user.id, username: user.username, email: user.email,
+    firstName: user.first_name, lastName: user.last_name, role: user.role,
+    disabled: Boolean(user.disabled), registrationStatus: user.registration_status,
+    createdAt: user.created_at, updatedAt: user.updated_at,
   } });
 });
 
 adminRouter.get('/users/:userId', (req, res) => {
-  const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, created_at, updated_at, last_login_at FROM users WHERE id = ?').get(req.params.userId);
+  const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, registration_status, created_at, updated_at, last_login_at FROM users WHERE id = ?').get(req.params.userId);
   if (!user) fail(404, 'User not found.', 'not_found');
   const userCourseSources = `SELECT course_id, 0 AS learning_path_enrolled FROM enrollments WHERE user_id = ?
        UNION ALL SELECT course_id, 0 FROM course_grants WHERE user_id = ?
@@ -282,7 +313,7 @@ adminRouter.get('/users/:userId', (req, res) => {
       value: field.field_type === 'checkbox' ? field.field_value === 'true' : field.field_value }));
   res.json({
     user: { id: user.id, username: user.username, email: user.email, firstName: user.first_name, lastName: user.last_name,
-      role: user.role, disabled: Boolean(user.disabled), createdAt: user.created_at, updatedAt: user.updated_at,
+      role: user.role, disabled: Boolean(user.disabled), registrationStatus: user.registration_status, createdAt: user.created_at, updatedAt: user.updated_at,
       lastLoginAt: user.last_login_at, isCurrentUser: user.id === req.currentUser.id,
       isLastActiveAdmin: isLastActiveAdministrator(user) },
     registrationFields,
@@ -302,7 +333,7 @@ adminRouter.get('/users/:userId', (req, res) => {
 adminRouter.patch('/users/:userId', (req, res) => {
   const body = requireObjectBody(req.body, 'Account changes');
   const updateUser = db.transaction(() => {
-    const user = db.prepare('SELECT id, username, role, disabled, first_name, last_name FROM users WHERE id = ?').get(req.params.userId);
+    const user = db.prepare('SELECT id, username, role, disabled, registration_status, first_name, last_name FROM users WHERE id = ?').get(req.params.userId);
     if (!user) fail(404, 'User not found.', 'not_found');
     const nextRole = body.role === undefined ? user.role : body.role;
     const hasNameChanges = body.firstName !== undefined || body.lastName !== undefined;
@@ -333,7 +364,7 @@ adminRouter.patch('/users/:userId', (req, res) => {
       if (!auditId) fail(500, 'Account could not be updated because the audit log is unavailable.', 'audit_unavailable');
     }
     if (nextDisabled) invalidateUserSessions(db, user.id);
-    const updated = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, created_at, updated_at FROM users WHERE id = ?').get(user.id);
+    const updated = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, registration_status, created_at, updated_at FROM users WHERE id = ?').get(user.id);
     const certificatesIssued = profileChanged ? issueCompletedCertificatesForUser(updated.id).length : 0;
     return { updated, certificatesIssued, isLastActiveAdmin: isLastActiveAdministrator(updated) };
   });
@@ -341,7 +372,7 @@ adminRouter.patch('/users/:userId', (req, res) => {
   res.json({ user: {
     id: updated.id, username: updated.username, email: updated.email,
     firstName: updated.first_name, lastName: updated.last_name, role: updated.role,
-    disabled: Boolean(updated.disabled), createdAt: updated.created_at, updatedAt: updated.updated_at, isLastActiveAdmin,
+    disabled: Boolean(updated.disabled), registrationStatus: updated.registration_status, createdAt: updated.created_at, updatedAt: updated.updated_at, isLastActiveAdmin,
   }, certificatesIssued });
 });
 
