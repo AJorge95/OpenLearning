@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Restore focus after competency creation
+
+- **Reviewed:** The competency-create submit button's enabled state, success reset, reload, and existing accessibility tests. Clearing the required title disabled the button that had focus, with no return target.
+- **Improvement:** After the server confirms creation and the competency list reload completes, restore focus to the now-empty name field. Failed creates keep the current input and focus behavior.
+- **Why it helps:** Keyboard users can continue adding competencies without focus dropping to the page when the submit button becomes disabled.
+- **Backend review:** Competency creation and audit writes are transactional and have rollback coverage; no backend change was indicated.
+- **Checked:** Competency accessibility and program-card tests passed (6/6). `npm run build` passed TypeScript checking and Vite bundling; `git diff --check` passed. Browser interaction was not run; the success-only focus scheduling is covered by a source regression.
+
 ## 2026-10-11 — Reset the path form after successful creation
 
 - **Reviewed:** The create form's mounted key, save success/error path, the server's insert behavior, and the learning-path title schema. A successful create left the same populated form mounted, and the schema permits another row with the same title.

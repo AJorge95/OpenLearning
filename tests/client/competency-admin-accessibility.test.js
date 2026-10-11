@@ -50,3 +50,12 @@ test('admin competency search is named and keeps its filter through paging and s
   assert.ok(source.includes('void load(nextPage)'), 'pagination should load the requested page with the current query');
   assert.ok(source.includes('onClick={clearSearch}>Clear search'), 'the filtered empty state should let administrators clear the query');
 });
+
+test('successful competency creation restores focus to the cleared name field', () => {
+  const source = fs.readFileSync(pagePath, 'utf8');
+
+  assert.match(source, /const competencyTitleInputRef = useRef<HTMLInputElement>\(null\);/);
+  assert.match(source, /<label>Name<input ref=\{competencyTitleInputRef\}/);
+  assert.match(source, /let created = false;[\s\S]*?created = true;[\s\S]*?setTitle\(''\);/);
+  assert.match(source, /finally \{\s*setSaving\(false\);\s*if \(created\) window\.requestAnimationFrame\(\(\) => \{\s*const input = competencyTitleInputRef\.current;\s*if \(input\?\.isConnected\) input\.focus\(\);/);
+});
