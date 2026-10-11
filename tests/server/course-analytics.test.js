@@ -1736,6 +1736,31 @@ test('competency catalog batches mapped-course completion summaries', async () =
   assert.deepEqual(threeCompetencies.competencies.map((item) => item.courseCount), [1, 1, 1]);
 });
 
+test('competency course lists order duplicate course titles by course ID', async () => {
+  database.exec(`
+    INSERT INTO competencies (id, title, description, active, created_by)
+      VALUES ('competency-course-title-order', 'Duplicate course titles', '', 1, 'admin-1');
+    INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
+      ('course-title-order-z', 'Same mapped course title', 'published', 'admin-1', 'admin-1'),
+      ('course-title-order-a', 'Same mapped course title', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_competencies (course_id, competency_id, created_by) VALUES
+      ('course-title-order-z', 'competency-course-title-order', 'admin-1'),
+      ('course-title-order-a', 'competency-course-title-order', 'admin-1');
+  `);
+
+  let response;
+  database.exec('PRAGMA reverse_unordered_selects = ON');
+  try {
+    response = await fetch(apiUrl('/competencies'), { headers: userHeaders('learner-active') });
+  } finally {
+    database.exec('PRAGMA reverse_unordered_selects = OFF');
+  }
+
+  assert.equal(response.status, 200);
+  const competency = (await response.json()).competencies.find((item) => item.id === 'competency-course-title-order');
+  assert.deepEqual(competency.courses.map((course) => course.id), ['course-title-order-a', 'course-title-order-z']);
+});
+
 test('admin competency creation returns a useful conflict for case-insensitive duplicate titles', async () => {
   database.prepare(`INSERT INTO competencies (id, title, description, active, created_by)
     VALUES (?, ?, '', 1, 'admin-1')`).run('competency-duplicate-title', 'Existing competency');

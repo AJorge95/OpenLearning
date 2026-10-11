@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Stabilize course ordering in competency cards
+
+- **Reviewed:** The learner competency endpoint ordered mapped courses by case-insensitive title, but course titles are not unique. Same-title courses therefore relied on the current SQLite access path for their relative order.
+- **Improvement:** Add course ID as the final ascending sort key and cover duplicate-title courses inserted in reverse ID order in the route test.
+- **Why it helps:** Learners see mapped courses in a consistent order when titles and competency mappings match, regardless of database query-plan changes.
+- **Checked:** The route regression passed with reverse-unordered selects enabled and asserts ascending IDs for duplicate-title courses. Full `npm test` passed (378/378), `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Announce per-course competency completion states
 
 - **Reviewed:** Learner competency cards showed each mapped course's completion with a check or book icon and the course title, without an explicit text status for assistive technology.
