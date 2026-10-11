@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Confirm permanent learner-comment removal accessibly
+
+- **Reviewed:** Moderators removed comments through a native browser confirmation. The API deletes a comment and writes its body-free audit record transactionally, with authorization, cross-lesson, and audit-failure rollback coverage.
+- **Improvement:** Replace the browser prompt with the shared accessible confirmation dialog. Name the comment author, state that removal is permanent, defer the request until confirmation, and verify the comment still belongs to the current lesson before sending it. Clear pending confirmation when feedback refreshes.
+- **Why it helps:** Moderators get a consistent in-app warning, while navigation or refreshed comments cannot leave a stale action targeting another lesson.
+- **Backend review:** Existing moderation authorization, transactional audit, and rollback behavior is unchanged.
+- **Checked:** Three focused client checks passed; three moderation-route regressions passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. The local course’s two lessons have no comments, so the dialog could not be opened in-browser without adding user-facing test content. No comments were created.
+
 ## 2026-10-11 — Confirm learning-path assignment removal in the app
 
 - **Reviewed:** Removing an assigned learner revokes their access to private path courses while keeping course progress. The page used a blocking browser prompt; the route removes only assigned enrollments and records the audit event in the same transaction.

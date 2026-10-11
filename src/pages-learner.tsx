@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownUp, ArrowLeft, ArrowRight, Award, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, LockKeyhole, Maximize, MessageSquare, Minimize, Pause, Play, Printer, RotateCcw, Search, Send, ThumbsDown, ThumbsUp, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
-import { AppSelect, Button, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
+import { AppSelect, Button, ConfirmationDialog, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
 import { formatCountLabel } from './count-label';
 import { courseCatalogCategoryOptions, courseCatalogParams, hasCourseCatalogFilters } from './course-catalog-filters';
 import { formatLearningDeadlineDate, getLearningDeadlineStatus } from './learning-deadline';
@@ -10,6 +10,7 @@ import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCo
 import { summarizeCourseProgress } from './course-progress';
 import { shuffleQuizChoices } from './quiz-choice-order';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
+import { lessonCommentRemovalConfirmation } from './lesson-comment-confirmation';
 import { tryToggleFullscreen } from './video-fullscreen';
 import { selectVideoCaptionTrack } from './video-captions';
 import { getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
@@ -19,6 +20,7 @@ import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeed
 
 type CourseListResponse = { courses: Course[]; categories?: string[]; certificates?: CourseCertificate[]; certificatesTotal?: number; certificatesPage?: number; certificatesPageSize?: number; certificatesHasMore?: boolean; total?: number; page?: number; pageSize?: number; hasMore?: boolean };
 type CertificateListResponse = { certificates: CourseCertificate[]; total: number; page: number; pageSize: number; hasMore: boolean };
+type PendingCommentRemoval = { courseId: string; lessonId: string; commentId: string; username: string };
 
 function coursePageHasDrift(currentCourses: Course[], response: CourseListResponse, expectedTotal: number, expectedPage: number) {
   if (response.total !== undefined && response.total !== expectedTotal) return true;
@@ -560,6 +562,7 @@ export function CoursePlayerPage() {
   const [commentPostedNotice, setCommentPostedNotice] = useState<{ courseId: string; lessonId: string } | null>(null);
   const [commentModerationNotice, setCommentModerationNotice] = useState<{ courseId: string; lessonId: string; message: string } | null>(null);
   const [commentRemovalIds, setCommentRemovalIds] = useState<Set<string>>(() => new Set());
+  const [pendingCommentRemoval, setPendingCommentRemoval] = useState<PendingCommentRemoval | null>(null);
   const [reactionSaving, setReactionSaving] = useState(false);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [commentSavingLessonIds, setCommentSavingLessonIds] = useState<Set<string>>(() => new Set());
@@ -662,7 +665,7 @@ export function CoursePlayerPage() {
     const controller = new AbortController();
     commentPageSequenceRef.current += 1;
     let active = true;
-    setFeedback(null); setFeedbackError(null); setReactionSaving(false); setCommentsLoading(false);
+    setPendingCommentRemoval(null); setFeedback(null); setFeedbackError(null); setReactionSaving(false); setCommentsLoading(false);
     if (!canViewLessonFeedback) {
       setFeedbackLoading(false);
       return () => {
@@ -879,11 +882,22 @@ export function CoursePlayerPage() {
     }
   }
 
-  async function removeComment(comment: LessonComment) {
-    if (!isCourseManager || commentRemovalIds.has(comment.id)) return;
-    if (!window.confirm(`Remove this comment by ${comment.username}? This cannot be undone.`)) return;
-    const requestedCourseId = courseId;
-    const requestedLessonId = lessonId;
+  function requestCommentRemoval(comment: LessonComment) {
+    if (!isCourseManager || commentRemovalIds.has(comment.id) || feedback?.lessonId !== lessonId) return;
+    setPendingCommentRemoval({ courseId, lessonId, commentId: comment.id, username: comment.username });
+  }
+
+  async function confirmCommentRemoval() {
+    const pending = pendingCommentRemoval;
+    if (!pending) return;
+    const comment = feedback?.lessonId === pending.lessonId
+      ? feedback.comments.find((item) => item.id === pending.commentId && item.username === pending.username)
+      : undefined;
+    setPendingCommentRemoval(null);
+    if (!isCourseManager || !comment || commentRemovalIds.has(pending.commentId)
+      || routeCourseIdRef.current !== pending.courseId || routeLessonIdRef.current !== pending.lessonId) return;
+    const requestedCourseId = pending.courseId;
+    const requestedLessonId = pending.lessonId;
     setCommentRemovalIds((current) => new Set(current).add(comment.id));
     setFeedbackError(null);
     setCommentModerationNotice(null);
@@ -1463,7 +1477,7 @@ export function CoursePlayerPage() {
             {visibleFeedback.comments.map((comment) => {
               const timestamp = commentTimestamp(comment.createdAt);
               const removing = commentRemovalIds.has(comment.id);
-              return <article className="lesson-comment" key={comment.id}><span className="comment-avatar" aria-hidden="true">{comment.username.slice(0, 1).toUpperCase()}</span><div><header><strong>{comment.username}</strong><time dateTime={timestamp.dateTime}>{timestamp.label}</time>{isCourseManager && <Button type="button" variant="quiet" className="lesson-comment-remove" aria-label={`Remove comment by ${comment.username}`} disabled={removing} onClick={() => removeComment(comment)}>{removing ? 'Removing…' : <><Trash2 size={14} />Remove</>}</Button>}</header><p>{comment.body}</p></div></article>;
+              return <article className="lesson-comment" key={comment.id}><span className="comment-avatar" aria-hidden="true">{comment.username.slice(0, 1).toUpperCase()}</span><div><header><strong>{comment.username}</strong><time dateTime={timestamp.dateTime}>{timestamp.label}</time>{isCourseManager && <Button type="button" variant="quiet" className="lesson-comment-remove" aria-label={`Remove comment by ${comment.username}`} disabled={removing} onClick={() => requestCommentRemoval(comment)}>{removing ? 'Removing…' : <><Trash2 size={14} />Remove</>}</Button>}</header><p>{comment.body}</p></div></article>;
             })}
             {!visibleFeedback.comments.length && <p className="comments-empty">{isCourseManager ? 'No learner comments yet.' : 'No comments yet. Start the conversation.'}</p>}
           </div>
@@ -1476,6 +1490,9 @@ export function CoursePlayerPage() {
     <aside id="course-content-rail" className="course-rail" aria-labelledby="course-rail-title" hidden={!railOpen}><div className="course-rail-head"><div><h2 id="course-rail-title">Course content</h2><small>{course.progress}% complete</small></div><button ref={railCloseRef} type="button" aria-label="Hide course content" onClick={() => { focusRailAfterOpenRef.current = false; setRailOpen(false); railToggleRef.current?.focus(); }}><ChevronDown size={18} /></button></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} />
       {modules.map((module) => <CurriculumModule key={module.id} module={module} selectedLessonId={lessonId} courseId={course.id} compact onOpenActivity={openCurriculumActivity} />)}
     </aside>
+    {pendingCommentRemoval?.courseId === courseId && pendingCommentRemoval.lessonId === lessonId && isCourseManager
+      && visibleFeedback?.comments.some((comment) => comment.id === pendingCommentRemoval.commentId && comment.username === pendingCommentRemoval.username)
+      && <ConfirmationDialog {...lessonCommentRemovalConfirmation(pendingCommentRemoval.username)} confirmLabel="Remove comment" onCancel={() => setPendingCommentRemoval(null)} onConfirm={() => void confirmCommentRemoval()} />}
   </div>;
 }
 
