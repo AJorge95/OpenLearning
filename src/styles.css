@@ -1016,6 +1016,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .log-details-content code { color: #3d4352; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
 .log-no-details { color: var(--muted); }
 .log-empty { padding: 48px 20px !important; color: var(--muted) !important; text-align: center; }
+.log-empty-content { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.log-empty-content p { margin: 0; }
 .log-loading { padding: 15px 18px; color: var(--muted); background: #fff; font-size: 12px; }
 .log-pagination { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding-top: 15px; color: var(--muted); font-size: 12px; }
 .log-pagination > div { display: flex; align-items: center; gap: 12px; }

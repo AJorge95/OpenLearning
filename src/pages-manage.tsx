@@ -2631,6 +2631,10 @@ function LogPagination({ page, pageSize, total, loading, onChange }: { page: num
   return <div className="log-pagination"><span role="status" aria-live="polite" aria-atomic="true">Showing {first}–{last} of {total}</span><div><Button variant="secondary" disabled={loading || page <= 1} onClick={() => onChange(page - 1)}>Previous</Button><span>Page {page} of {totalPages}</span><Button variant="secondary" disabled={loading || page >= totalPages} onClick={() => onChange(page + 1)}>Next</Button></div></div>;
 }
 
+function LogEmptyState({ message, hasFilters, onClear }: { message: string; hasFilters: boolean; onClear: () => void }) {
+  return <div className="log-empty-content"><p>{message}</p>{hasFilters && <Button type="button" variant="secondary" onClick={onClear}>Clear filters</Button>}</div>;
+}
+
 export function AdminAuditLogPage() {
   const requestSequenceRef = useRef(0);
   const [refreshVersion, setRefreshVersion] = useState(0);
@@ -2664,7 +2668,15 @@ export function AdminAuditLogPage() {
     return () => { active = false; controller.abort(); };
   }, [appliedQuery, action, page, refreshVersion]);
   const emptyMessage = appliedQuery || action ? 'No audit entries match these filters.' : 'No audit entries have been recorded yet.';
+  const hasAppliedFilters = Boolean(appliedQuery || action);
   const hasEmptyResult = !loading && !failedRequest && entries.length === 0;
+
+  function clearFilters() {
+    setQuery('');
+    setAppliedQuery('');
+    setAction('');
+    setPage(1);
+  }
 
   return <div className="management-page logs-page"><PageHeading title="Audit log" subtitle="Review account, course, and platform changes, including access and comment removals." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
     <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" aria-label="Search audit log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter log-role-filter"><span className="catalog-filter-label">Action</span><AppSelect className="app-select--filter" ariaLabel="Filter by action" leadingIcon={<Filter size={16} />} value={action} onChange={(value) => { setAction(value); setPage(1); }} options={[{ value: '', label: 'All actions' }, ...actions.map((item) => ({ value: item.action, label: `${item.action.replaceAll('_', ' ')} (${item.count})` }))]} /></div></div>
@@ -2672,7 +2684,7 @@ export function AdminAuditLogPage() {
     {hasEmptyResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyMessage}</p>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable audit log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">Audit log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Change</th><th scope="col">Details</th></tr></thead><tbody>
       {failedRequest ? <tr><td colSpan={5} className="log-empty">Audit entries are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} details={entry.details} label={entry.summary} columnCount={5}>{(toggle) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td>{entry.actorUsername}</td><td><span className="log-action">{entry.action.replaceAll('_', ' ')}</span></td><td><strong>{entry.summary}</strong><small>{entry.entityType}{entry.entityId ? ` · ${entry.entityId}` : ''}</small></td><td>{toggle}</td></tr>}</LogDetailsDisclosure>)}
-      {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty">{emptyMessage}</td></tr>}
+      {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty"><LogEmptyState message={emptyMessage} hasFilters={hasAppliedFilters} onClear={clearFilters} /></td></tr>}
     </tbody></table>{loading && <div className="log-loading" role="status" aria-live="polite">Loading audit entries…</div>}</div>
     {!failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
   </div>;
@@ -2710,7 +2722,15 @@ export function AdminSystemLogPage() {
     return () => { active = false; controller.abort(); };
   }, [appliedQuery, level, page, refreshVersion]);
   const emptyMessage = appliedQuery || level !== 'all' ? 'No system events match these filters.' : 'No system events have been recorded yet.';
+  const hasAppliedFilters = Boolean(appliedQuery || level !== 'all');
   const hasEmptyResult = !loading && !failedRequest && entries.length === 0;
+
+  function clearFilters() {
+    setQuery('');
+    setAppliedQuery('');
+    setLevel('all');
+    setPage(1);
+  }
 
   return <div className="management-page logs-page"><PageHeading title="System log" subtitle="Inspect server startup, runtime errors, and operational events." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
     <div className="log-filters"><form className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search system events" aria-label="Search system log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter log-role-filter"><span className="catalog-filter-label">Severity</span><AppSelect className="app-select--filter" ariaLabel="Filter by severity" leadingIcon={<Activity size={16} />} value={level} onChange={(value) => { setLevel(value); setPage(1); }} options={[{ value: 'all', label: 'All levels' }, { value: 'error', label: 'Errors' }, { value: 'warn', label: 'Warnings' }, { value: 'info', label: 'Info' }]} /></div></div>
@@ -2718,7 +2738,7 @@ export function AdminSystemLogPage() {
     {hasEmptyResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyMessage}</p>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable system log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">System log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Level</th><th scope="col">Source</th><th scope="col">Event</th><th scope="col">Details</th></tr></thead><tbody>
       {failedRequest ? <tr><td colSpan={5} className="log-empty">System events are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} details={entry.details} label={entry.message} columnCount={5}>{(toggle) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td><span className={`log-level log-level-${entry.level}`}>{entry.level}</span></td><td>{entry.source}</td><td><strong>{entry.message}</strong></td><td>{toggle}</td></tr>}</LogDetailsDisclosure>)}
-      {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty">{emptyMessage}</td></tr>}
+      {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty"><LogEmptyState message={emptyMessage} hasFilters={hasAppliedFilters} onClear={clearFilters} /></td></tr>}
     </tbody></table>{loading && <div className="log-loading" role="status" aria-live="polite">Loading system events…</div>}</div>
     {!failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
   </div>;
