@@ -7,6 +7,14 @@
 - **Why no change:** The screenshot path describes stale label markup. Current source already restricts pointer input to the visible trigger and bounds the desktop selector; changing its width again would repeat the existing fix.
 - **Checked:** The live `antjorge` account route and `abjorge95` enabled account route rendered without browser warnings or errors. Desktop measurements confirmed a 144px wrapper and trigger. The menu opened from the trigger and closed from the adjacent blank area with the role still set to Learner. Focused source regressions and `git diff --check` were run for this recheck.
 
+## 2026-10-11 — Recheck the narrow-screen caption controls
+
+- **Reviewed:** The learner player's two-row control grid below 400px, the caption-specific second row below 600px, and the course-content rail's mobile stacking behavior.
+- **Result:** No source change. At 390px, the available lesson's playback controls fit within their 343px bar and the course-content rail stacks below the player. That lesson has no caption tracks; a read-only query of the local database found zero caption tracks across all 22 lessons, so the caption-specific grid is not rendered here.
+- **Why no change:** The visible player has no overflow or overlap, and current tests cover the caption selector and dedicated full-screen grid cell. Changing the caption grid without any captioned lesson to render would be speculative.
+- **Checked:** Chrome rendered the signed-in lesson at 390×844 with no document overflow or console warnings/errors. The controls' scroll and client widths both measured 343px. A requested 401px viewport override did not affect this existing signed-in tab, which remained at 390px. Focused caption and responsive viewport tests passed (8/8); `git diff --check` passed.
+- **Next evidence needed:** A captioned lesson accessible in this local environment and a viewport override that applies to its signed-in browser tab.
+
 ## 2026-10-11 — Explain carried-forward quiz passes
 
 - **Reviewed:** Versioned course progress retains earlier quiz passes by stable ID when publication does not require recompletion, while a new version has no attempt preview under its new quiz ID. The learner quiz page previously showed a fresh answer form without explaining why course progress already counted the quiz as passed.
