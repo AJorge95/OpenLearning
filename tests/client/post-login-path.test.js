@@ -32,3 +32,11 @@ test('protected route redirects retain the location and login consumes it', () =
   assert.match(authSource, /getPostLoginPath\(location\.state\?\.from\)/);
   assert.match(authSource, /navigate\(postLoginPath, \{ replace: true \}\)/);
 });
+
+test('new account registration retains the requested route through sign-up', () => {
+  const authSource = fs.readFileSync(path.join(sourceDirectory, 'pages-auth.tsx'), 'utf8');
+
+  assert.match(authSource, /<Link to="\/register" state=\{\{ from: postLoginPath \}\}>Create an account<\/Link>/);
+  assert.match(authSource, /export function RegisterPage\(\) \{[\s\S]{0,360}getPostLoginPath\(location\.state\?\.from\)/);
+  assert.match(authSource, /await signUp\([\s\S]*?navigate\(postLoginPath, \{ replace: true \}\)/);
+});
