@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Announce course-access changes
+
+- **Reviewed:** The staff course-access toggle, its source-course request guard, the “Assigned” state row, and the existing grant/revoke routes. Successful changes refreshed the row but did not announce completion.
+- **Improvement:** Show a live status message after the grant or revoke succeeds, scoped to the course where the action began; clear it before another attempt and when the course changes.
+- **Why it helps:** Staff receive explicit confirmation, including screen-reader users, while the existing refreshed row remains the authoritative assignment state.
+- **Backend review:** Grant and revoke endpoints already apply changes and audit entries transactionally, and preserve their idempotent 204 contract. No server change was needed.
+- **Checked:** Focused course-access and account-list refresh tests passed (3/3); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. Browser interaction was not run because it would change a learner's saved course assignment.
+
 ## 2026-10-11 — Announce completed path-assignment removal
 
 - **Reviewed:** The assignment confirmation, transactional DELETE route, roster refresh, and success feedback shown for the related learner-assignment action. Successful removal refreshed the roster but did not announce a completion result.

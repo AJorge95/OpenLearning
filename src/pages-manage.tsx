@@ -1836,6 +1836,7 @@ export function CourseAccessPage() {
   const [pageSize, setPageSize] = useState(50);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [failedRequest, setFailedRequest] = useState<{ query: string; page: number } | null>(null);
   const [savingIds, setSavingIds] = useState<Set<string>>(() => new Set());
@@ -1880,7 +1881,7 @@ export function CourseAccessPage() {
     }
   }
   useEffect(() => {
-    setCourse(null); setUsers([]); setQuery(''); setAppliedQuery(''); setPage(1); setTotal(0);
+    setCourse(null); setUsers([]); setQuery(''); setAppliedQuery(''); setPage(1); setTotal(0); setNotice('');
     savingIdsRef.current = new Set(); setSavingIds(savingIdsRef.current);
     load('', 1);
     return () => { loadSequenceRef.current += 1; loadControllerRef.current?.abort(); };
@@ -1889,11 +1890,12 @@ export function CourseAccessPage() {
   async function toggle(user: CourseAccessUser) {
     if (savingIdsRef.current.has(user.id)) return;
     const requestedCourseId = courseId;
-    markSaving(user.id, true); setError('');
+    markSaving(user.id, true); setError(''); setNotice('');
     try {
       if (user.granted) await api.delete(`/api/manage/courses/${requestedCourseId}/access/${user.id}`);
       else await api.put(`/api/manage/courses/${requestedCourseId}/access/${user.id}`);
       if (routeCourseIdRef.current === requestedCourseId) {
+        setNotice(`Course assignment updated for ${user.username}.`);
         const currentListState = accessListStateRef.current;
         await load(currentListState.query, currentListState.page, 'Access changed, but the learner list could not be refreshed.');
       }
@@ -1910,6 +1912,7 @@ export function CourseAccessPage() {
     {error && (failedRequest
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.query, failedRequest.page); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
+    {notice && <div className="inline-notice inline-notice-success" role="status">{notice}</div>}
     <form className="access-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); setPage(1); load(search, 1); }}><Search size={18} /><input placeholder="Search learners by username or email" aria-label="Search learners by username or email" maxLength={100} value={query} onChange={(event) => setQuery(event.target.value)} /><Button variant="secondary" type="submit">Search</Button></form>
     <div className="access-list">
       <div className="access-list-head"><span>Learner</span><span>Assignment</span><span>Action</span></div>
