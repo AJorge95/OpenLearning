@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck platform-reset and session recovery paths
+
+- **Reviewed:** Reset request draining and gating, backup-path validation, media backup and quarantine recovery, transaction rollback, session parsing and expiry, cleanup-timer failures, and store callback behavior.
+- **Result:** No runtime change. Reset preparation waits for active requests and rejects new API/media work; backup and rollback checks preserve recoverability; malformed and expired sessions are discarded; store callbacks report database errors once; and cleanup-reporting failures do not prevent startup.
+- **Why no change:** I found no untested failure path or reproduced defect in the reviewed contracts. Further storage or cleanup tuning would need evidence from a representative workload.
+- **Checked:** `node --test tests/server/platform-reset.test.js tests/server/session-store.test.js tests/server/session-data.test.js` passed (19/19).
+- **Needed to continue:** A reproducible reset/session recovery failure or workload measurements identifying a specific storage bottleneck.
+
 ## 2026-10-11 — Associate password mismatch feedback with confirmation fields
 
 - **Reviewed:** The setup, learner registration, self-service password change, administrator account creation, user-list reset dialog, and account-details reset form.
