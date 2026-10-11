@@ -21,6 +21,8 @@ const isolatedConfig = {
   MAX_UPLOAD_BYTES: '2147483648',
   REQUEST_TIMEOUT_MS: '300000',
 };
+const lastLoginAdminUsername = 'admin_last_login';
+const lastLoginAdminPassword = 'LastLoginPassphrase-2026';
 const previousConfig = new Map(Object.keys(isolatedConfig).map((key) => [key, process.env[key]]));
 let fixtureDirectory;
 let database;
@@ -73,7 +75,7 @@ before(async () => {
   app.use(session({ secret: isolatedConfig.SESSION_SECRET, resave: false, saveUninitialized: false, store: sessionStore }));
   app.use((req, _res, next) => {
     req.currentUser = database.prepare('SELECT id, username, role, disabled FROM users WHERE username = ?')
-      .get('admin_last_login');
+      .get(lastLoginAdminUsername);
     next();
   });
   app.use('/api', authRouter);
@@ -110,6 +112,19 @@ function storedSessionIds() {
     if (error) reject(error);
     else resolve(Object.keys(sessions || {}).sort());
   }));
+}
+
+async function ensureLastLoginAdmin() {
+  const existingAdmin = database.prepare('SELECT id, password_hash FROM users WHERE username = ?')
+    .get(lastLoginAdminUsername);
+  if (existingAdmin) return existingAdmin;
+
+  // Isolated login and password tests need the same operator their middleware and requests expect.
+  const { hashPassword } = await import('../../server/auth.js');
+  const admin = { id: 'isolated-last-login-admin', password_hash: await hashPassword(lastLoginAdminPassword) };
+  database.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)')
+    .run(admin.id, lastLoginAdminUsername, admin.password_hash, 'admin');
+  return admin;
 }
 
 test('request body parser failures return structured client errors', async () => {
@@ -623,12 +638,12 @@ test('setup, registration, and successful sign-in record last login for admin de
     body: JSON.stringify({
       setupToken: isolatedConfig.SETUP_TOKEN,
       platformName: 'Last Login Test',
-      username: 'admin_last_login',
+      username: lastLoginAdminUsername,
       email: 'admin.last-login@example.invalid',
       firstName: 'Last',
       lastName: 'Login',
-      password: 'LastLoginPassphrase-2026',
-      confirmPassword: 'LastLoginPassphrase-2026',
+      password: lastLoginAdminPassword,
+      confirmPassword: lastLoginAdminPassword,
     }),
   });
   assert.equal(setupResponse.status, 201);
@@ -668,7 +683,7 @@ test('setup, registration, and successful sign-in record last login for admin de
   try {
     usernameCollision = await registrationCollision({ username: 'ADMIN_LAST_LOGIN', email: 'unused.username@example.invalid' });
     emailCollision = await registrationCollision({ username: 'unused_email', email: 'ADMIN.LAST-LOGIN@EXAMPLE.INVALID' });
-    bothCollisions = await registrationCollision({ username: 'admin_last_login', email: 'admin.last-login@example.invalid' });
+    bothCollisions = await registrationCollision({ username: lastLoginAdminUsername, email: 'admin.last-login@example.invalid' });
   } finally {
     database.transaction = originalTransaction;
   }
@@ -708,7 +723,7 @@ test('setup, registration, and successful sign-in record last login for admin de
   const rejectedResponse = await fetch(apiUrl('/auth/login'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' },
-    body: JSON.stringify({ username: 'admin_last_login', password: 'IncorrectPassphrase-2026' }),
+    body: JSON.stringify({ username: lastLoginAdminUsername, password: 'IncorrectPassphrase-2026' }),
   });
   assert.equal(rejectedResponse.status, 401);
   assert.equal(database.prepare('SELECT last_login_at FROM users WHERE id = ?').get(adminId).last_login_at, priorLoginAt);
@@ -716,7 +731,7 @@ test('setup, registration, and successful sign-in record last login for admin de
   const response = await fetch(apiUrl('/auth/login'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' },
-    body: JSON.stringify({ username: 'admin_last_login', password: 'LastLoginPassphrase-2026' }),
+    body: JSON.stringify({ username: lastLoginAdminUsername, password: lastLoginAdminPassword }),
   });
   assert.equal(response.status, 200);
 
@@ -781,13 +796,13 @@ test('admin user list returns the final page and clamps requests beyond the sear
     id: `admin-user-pagination-${index}`,
     username: `${usernamePrefix}${String(index).padStart(3, '0')}`,
   }));
-  const existingAdmin = database.prepare("SELECT id, password_hash FROM users WHERE username = 'admin_last_login'").get();
+  const existingAdmin = database.prepare('SELECT id, password_hash FROM users WHERE username = ?').get(lastLoginAdminUsername);
   const adminId = existingAdmin?.id ?? 'admin-user-pagination-admin';
   const passwordHash = existingAdmin?.password_hash ?? 'pagination-test-admin-hash';
   const insertUser = database.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)');
   const seedUsers = database.transaction(() => {
     // The admin middleware resolves its operator by username, including in this isolated test.
-    if (!existingAdmin) insertUser.run(adminId, 'admin_last_login', passwordHash, 'admin');
+    if (!existingAdmin) insertUser.run(adminId, lastLoginAdminUsername, passwordHash, 'admin');
     fixtureUsers.forEach(({ id, username }) => insertUser.run(id, username, passwordHash, 'learner'));
   });
   seedUsers();
@@ -830,7 +845,8 @@ test('admin user list returns the final page and clamps requests beyond the sear
 });
 
 test('admin account course activity includes published paths and deduplicates overlapping access', async () => {
-  const adminId = database.prepare("SELECT id FROM users WHERE username = 'admin_last_login'").get().id;
+  const admin = await ensureLastLoginAdmin();
+  const adminId = admin.id;
   const courseIds = ['account-activity-enrolled', 'account-activity-overlap', 'account-activity-granted',
     'account-activity-path', 'account-activity-draft-path'];
   const pathIds = ['account-activity-published-path', 'account-activity-draft'];
@@ -900,7 +916,7 @@ test('admin account course activity includes published paths and deduplicates ov
 });
 
 test('sign-in rolls back last-login history and session when its audit entry cannot be written', async () => {
-  const user = database.prepare("SELECT id FROM users WHERE username = 'admin_last_login'").get();
+  const user = await ensureLastLoginAdmin();
   const originalLoginAt = '2001-01-01 00:00:00';
   database.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(originalLoginAt, user.id);
   const originalAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'auth.signed_in' AND entity_id = ?").get(user.id).count;
@@ -916,7 +932,7 @@ test('sign-in rolls back last-login history and session when its audit entry can
     const request = () => fetch(apiUrl('/auth/login'), {
       method: 'POST',
       headers: { 'content-type': 'application/json', connection: 'close' },
-      body: JSON.stringify({ username: 'admin_last_login', password: 'LastLoginPassphrase-2026' }),
+      body: JSON.stringify({ username: lastLoginAdminUsername, password: lastLoginAdminPassword }),
     });
 
     const failedResponse = await request();
@@ -938,7 +954,7 @@ test('sign-in rolls back last-login history and session when its audit entry can
 });
 
 test('self-service password changes roll back when their audit event cannot be saved', async () => {
-  const user = database.prepare("SELECT id, password_hash FROM users WHERE username = 'admin_last_login'").get();
+  const user = await ensureLastLoginAdmin();
   const nextPassword = 'UpdatedLastLoginPassphrase-2026';
   const otherSessionId = 'self-password-change-other-session';
   database.prepare('INSERT INTO sessions (sid, session_data, expires_at, user_id) VALUES (?, ?, ?, ?)')
@@ -954,7 +970,7 @@ test('self-service password changes roll back when their audit event cannot be s
       method: 'PUT',
       headers: { 'content-type': 'application/json', connection: 'close' },
       body: JSON.stringify({
-        currentPassword: 'LastLoginPassphrase-2026',
+        currentPassword: lastLoginAdminPassword,
         password: nextPassword,
         confirmPassword: nextPassword,
       }),
@@ -973,7 +989,7 @@ test('self-service password changes roll back when their audit event cannot be s
     method: 'PUT',
     headers: { 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify({
-      currentPassword: 'LastLoginPassphrase-2026',
+      currentPassword: lastLoginAdminPassword,
       password: nextPassword,
       confirmPassword: nextPassword,
     }),
@@ -982,7 +998,7 @@ test('self-service password changes roll back when their audit event cannot be s
   const updatedPasswordHash = database.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id).password_hash;
   const { verifyPassword } = await import('../../server/auth.js');
   assert.equal(await verifyPassword(nextPassword, updatedPasswordHash), true);
-  assert.equal(await verifyPassword('LastLoginPassphrase-2026', updatedPasswordHash), false);
+  assert.equal(await verifyPassword(lastLoginAdminPassword, updatedPasswordHash), false);
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get(otherSessionId).count, 0);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.password_changed' AND entity_id = ?").get(user.id).count, initialAuditCount + 1);
 });
