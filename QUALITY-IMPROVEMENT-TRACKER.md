@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep module drafts with their course
+
+- **Reviewed:** The inline module title and open state survived course-route changes. A pending create could also finish later and clear the new course's form or move focus there.
+- **Improvement:** Clear the unsaved module draft on route change, keep the add control unavailable while an earlier create is still pending, and scope the request, follow-up refresh, focus, and error to the course where the action began.
+- **Why it helps:** A title typed for one course cannot carry into another course, and a late response cannot erase or misreport work in the new editor.
+- **Backend review:** Module creation already validates the title, checks course-manager access, and writes the module and audit entry transactionally; no server change was needed.
+- **Checked:** Course-editor route-state tests passed (8/8), the full `npm test` suite passed (595/595), `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. Rendered navigation was not run; Playwright is not installed in this checkout.
+
 ## 2026-10-11 — Ignore stale course refreshes after navigation
 
 - **Reviewed:** The course editor invalidates the old route's request on navigation, while several completed curriculum actions call `load()` afterward. The loader aborted its active request before verifying that its requested course was still the current route.
