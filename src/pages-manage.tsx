@@ -862,6 +862,7 @@ export function CourseEditorPage() {
   const [changeNote, setChangeNote] = useState('');
   const [versions, setVersions] = useState<CourseVersion[]>([]);
   const [currentVersion, setCurrentVersion] = useState<CourseVersion | null>(null);
+  const [pendingRestoreVersion, setPendingRestoreVersion] = useState<{ courseId: string; versionId: string; versionNumber: number } | null>(null);
   const [versionPage, setVersionPage] = useState(1);
   const [versionPageSize, setVersionPageSize] = useState(20);
   const [versionTotal, setVersionTotal] = useState(0);
@@ -1008,6 +1009,7 @@ export function CourseEditorPage() {
     setPendingDeleteCourseId(null);
     setPendingDeleteModule(null);
     setPendingDeleteLesson(null);
+    setPendingRestoreVersion(null);
     setEditingModuleTitle(null); setSavingModuleTitleId(''); pendingModuleTitleFocusRef.current = '';
     coverValidationSequenceRef.current += 1;
     abortCoverValidation();
@@ -1246,12 +1248,30 @@ export function CourseEditorPage() {
     finally { reviewDecisionRequestRef.current = false; setSavingReviewDecision(false); }
   }
 
-  async function restoreVersion(version: CourseVersion) {
+  function requestRestoreVersion(version: CourseVersion) {
     const requestedCourseId = courseId;
     if (!requestedCourseId) return;
     const requestKey = `${requestedCourseId}:${version.id}`;
-    if (restoreVersionRequestsRef.current.has(requestKey)
-      || !window.confirm(`Publish version ${version.version_number} as a new course version?`)) return;
+    if (restoreVersionRequestsRef.current.has(requestKey)) return;
+    setPendingRestoreVersion({ courseId: requestedCourseId, versionId: version.id, versionNumber: version.version_number });
+  }
+
+  function confirmPendingVersionRestore() {
+    const pending = pendingRestoreVersion;
+    setPendingRestoreVersion(null);
+    if (!pending || pending.courseId !== courseId || pending.courseId !== routeCourseIdRef.current) return;
+    const version = versions.find((current) => current.id === pending.versionId);
+    if (!version) {
+      setError('This course version is no longer available. Reload the version history before restoring it.');
+      return;
+    }
+    void restoreVersion(version, pending.courseId);
+  }
+
+  async function restoreVersion(version: CourseVersion, requestedCourseId: string) {
+    if (!requestedCourseId || routeCourseIdRef.current !== requestedCourseId) return;
+    const requestKey = `${requestedCourseId}:${version.id}`;
+    if (restoreVersionRequestsRef.current.has(requestKey)) return;
     restoreVersionRequestsRef.current.add(requestKey);
     setRestoringVersionRequests((current) => new Set(current).add(requestKey));
     setError(''); setNotice('');
@@ -1607,7 +1627,7 @@ export function CourseEditorPage() {
           const restoring = restoringVersionRequests.has(`${courseId}:${version.id}`);
           return <li key={version.id}>
         <div><strong>Version {version.version_number}</strong><small>{version.title} · Published {logTimestampFormatter.format(new Date(version.published_at))}{version.publisher ? ` by ${version.publisher}` : ''}</small>{version.change_note && <p>{version.change_note}</p>}</div>
-        <Button type="button" variant="secondary" aria-label={`Restore version ${version.version_number} as a new course version`} disabled={restoring} aria-busy={restoring} onClick={() => void restoreVersion(version)}>{restoring ? 'Restoring version…' : 'Restore as new version'}</Button>
+        <Button type="button" variant="secondary" aria-label={`Restore version ${version.version_number} as a new course version`} disabled={restoring} aria-busy={restoring} onClick={() => requestRestoreVersion(version)}>{restoring ? 'Restoring version…' : 'Restore as new version'}</Button>
       </li>;
           })}</ol>
           <CourseVersionPagination page={versionPage} pageSize={versionPageSize} total={versionTotal} versions={versions} loading={versionHistoryLoading} onChange={(nextPage) => void loadVersionHistory(nextPage)} />
@@ -1659,6 +1679,15 @@ export function CourseEditorPage() {
     </section>
     {course.status === 'archived' && <div className="delete-course-row"><div><strong>Delete this course permanently</strong><span>This also removes its uploaded media and cannot be undone.</span></div><Button variant="danger" onClick={() => void deleteArchivedCourse()} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} aria-busy={deletingCourse}><Trash2 size={16} />{deletingCourse ? 'Deleting course…' : 'Delete course'}</Button></div>}
     {pendingDeleteCourseId === course.id && routeCourseIdRef.current === course.id && <ConfirmationDialog {...courseDeletionConfirmation(course.title)} confirmLabel="Delete course" onCancel={() => setPendingDeleteCourseId(null)} onConfirm={() => { const requestedCourseId = pendingDeleteCourseId; setPendingDeleteCourseId(null); if (requestedCourseId === course.id && routeCourseIdRef.current === course.id) void deleteArchivedCourse(true); }} />}
+    {pendingRestoreVersion?.courseId === course.id && routeCourseIdRef.current === course.id && versions.some((version) => version.id === pendingRestoreVersion.versionId) && <ConfirmationDialog
+      title={`Restore version ${pendingRestoreVersion.versionNumber}?`}
+      description={`This publishes version ${pendingRestoreVersion.versionNumber} as a new course version. Any current unpublished revision will be discarded. ${requiresRecompletion
+        ? 'Learners will need to complete the new version again. Previous completions, quiz attempts, and certificates stay in history.'
+        : 'Existing completions remain valid. Previous quiz attempts and certificates stay in history.'}`}
+      confirmLabel={`Restore version ${pendingRestoreVersion.versionNumber}`}
+      onCancel={() => setPendingRestoreVersion(null)}
+      onConfirm={confirmPendingVersionRestore}
+    />}
     {pendingDeleteModule?.courseId === course.id && routeCourseIdRef.current === course.id && course.modules?.some((module) => module.id === pendingDeleteModule.module.id) && <ConfirmationDialog title={`Remove “${pendingDeleteModule.module.title}”?`} description={`This removes all lessons in this module, its quiz and saved attempts, and their uploaded videos, documents, and captions. This action cannot be undone.`} confirmLabel="Remove module" onCancel={() => setPendingDeleteModule(null)} onConfirm={confirmPendingModuleDeletion} />}
     {pendingDeleteLesson?.courseId === course.id && routeCourseIdRef.current === course.id && course.modules?.some((module) => module.id === pendingDeleteLesson.moduleId && module.lessons.some((lesson) => lesson.id === pendingDeleteLesson.lessonId)) && <ConfirmationDialog title={`Remove “${pendingDeleteLesson.title}”?`} description="This removes the lesson, its video, attached resources, and caption tracks. This action cannot be undone." confirmLabel="Remove lesson" onCancel={() => setPendingDeleteLesson(null)} onConfirm={confirmPendingLessonDeletion} />}
   </div>;
