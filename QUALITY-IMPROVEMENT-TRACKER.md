@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep lesson reaction saves scoped to each lesson
+
+- **Reviewed:** The lesson player's reaction busy state during route changes and the reaction endpoint's transactional upsert and returned counts. The route effect cleared one page-wide busy flag even though the prior lesson's write continued in the background.
+- **Improvement:** Track pending reaction writes by lesson ID, keep each in-flight lesson locked while navigating, and derive the visible busy state from the current lesson.
+- **Why it helps:** Returning to a lesson before its earlier request finishes can no longer submit an overlapping like/dislike update whose response could race the saved selection and counts.
+- **Backend review:** The API already serializes each upsert and count read in an immediate transaction; no route or schema change was needed.
+- **Checked:** Focused reaction-state tests passed (3/3), full `npm test -- --test-reporter=dot`, `npm run build` (strict TypeScript checking and Vite), and `git diff --check` passed.
+
 ## 2026-10-12 — Recheck catalog, calendar, account, and quiz flows
 
 - **Reviewed:** Learner catalog filter and pagination requests, local-time calendar ranges and access filtering, administrator account search and filter changes, and the empty-quiz preparation and publish-readiness contract.
