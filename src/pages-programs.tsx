@@ -9,6 +9,7 @@ import { AppSelect, Button, ConfirmationDialog, EmptyState, PageHeading, Progres
 import type { Competency, Course, CourseDeadline, LearningPath } from './types';
 import { appendPublishedCourseOptions, hasMorePublishedCourseOptions, publishedCourseOptionsPageUrl, type PublishedCoursePage } from './path-course-options';
 import { canAssignLearningPathLearners } from './path-assignment-availability';
+import { appendUnchangedCompetencyPage } from './competency-progress';
 import { MAX_LEARNING_PATH_COURSES } from '../shared/learning-path-limits.js';
 import { isPathCourseCheckboxDisabled, togglePathCourseSelection } from './path-course-selection';
 import { useAuth } from './auth-context';
@@ -635,7 +636,14 @@ export function CompetenciesPage() {
     try {
       const result = await api.get<CompetencyProgressPage>(`/api/competencies?page=${nextPage}`, { signal: controller.signal });
       if (requestId !== competencyRequestRef.current || controller.signal.aborted) return;
-      setCompetencies((current) => [...current, ...result.competencies]);
+      const nextCompetencies = appendUnchangedCompetencyPage(
+        competencies, result.competencies, nextPage, result.page, competencyTotal, result.total,
+      );
+      if (!nextCompetencies) {
+        setReloadSequence((current) => current + 1);
+        return;
+      }
+      setCompetencies(nextCompetencies);
       setCompetencyTotal(result.total); setCompetencyPage(result.page); setCompetencyPageSize(result.pageSize); setHasMoreCompetencies(result.hasMore);
       if (!result.hasMore) window.requestAnimationFrame(() => competencyListStatusRef.current?.focus());
     } catch (cause) {

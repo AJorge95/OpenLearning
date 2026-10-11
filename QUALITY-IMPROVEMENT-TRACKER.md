@@ -7405,3 +7405,11 @@
 - **Why it helps:** Comments created in the same second now stay in the same deterministic order as the server feed, so the visible list and later pages do not disagree after posting.
 - **Backend review:** The server query already matches the existing composite index and returns the same order; no API or schema change was needed.
 - **Checked:** `node --test tests/client/lesson-comments.test.js` passed (9/9), including same-timestamp tie ordering and page-size preservation. The full `npm test -- --test-reporter=dot`, `npm run build` (strict TypeScript checking and Vite), and `git diff --check` passed.
+
+## 2026-10-11 — Refresh learner competency pages after catalog changes
+
+- **Reviewed:** Learner competency offset pagination, the API's clamped page and active-item total, and the list's ID ordering while administrators can activate, deactivate, or rename competencies.
+- **Improvement:** Append a competency page only when its page number and total still match the loaded list and it contains no previously displayed IDs; otherwise reload from the first page.
+- **Why it helps:** A competency removed while a learner is paging can clamp the requested page back to page one. The learner now sees a refreshed list instead of duplicate cards or a count larger than the active catalog. Overlapping results and changed totals also trigger a refresh.
+- **Backend review:** The API already returns the actual clamped page and total with stable title/ID ordering, so no route or schema change was needed.
+- **Checked:** `node --test tests/client/competency-progress-list.test.js` passed (7/7), including clamped-page, changed-total, overlap, and normal-append cases. Focused competency route tests passed (2/2). The full `npm test -- --test-reporter=dot`, `npm run build` (strict TypeScript checking and Vite), and `git diff --check` passed.
