@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Bound the administrator role selector hit area
+
+- **Reviewed:** The supplied account-details screenshot shows a much wider highlighted area than the visible role trigger, and the user reports that clicking to its right still opens the menu. The wrapper was already non-interactive outside its trigger, but the trigger itself inherited a generic full-width rule.
+- **Improvement:** Give the account-role AppSelect a dedicated class and cap both its root and trigger at the compact 9rem desktop width. Keep the entire control full-width on narrow screens and keep pointer input enabled only on the trigger.
+- **Why it helps:** Clickable area now follows the visible combobox width even if surrounding account-row rules expand; mobile keeps the existing stacked layout.
+- **Backend review:** Role changes still use the same staff-protected account update endpoint and role validation; no backend change was indicated.
+- **Checked:** The focused AppSelect structure, hit-area CSS, accessible-name, and positioning tests passed (10/10). Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, and `npm run build` passed. TypeScript compilation and the production build validate the TSX source; Node's `--check` does not support `.tsx`. The connected in-app browser is at `/login`, so the protected account-page click could not be replayed live.
+
 ## 2026-10-11 — Paginate course version history
 
 - **Reviewed:** The editor requested and rendered every published version for a course. Version history can grow with each publication, while the existing `course_versions_course_order` index already supports newest-first reads.
