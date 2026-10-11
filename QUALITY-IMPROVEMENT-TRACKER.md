@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Explain malformed legacy session handling during migration
+
+- **Reviewed:** Schema migration 7 backfills `sessions.user_id` from legacy JSON, while the live session store removes malformed session data when it is read.
+- **Improvement:** Add an inline comment explaining that invalid legacy JSON intentionally leaves the session unowned and does not stop the migration.
+- **Why it helps:** Maintainers can distinguish this deliberate recovery path from an accidentally swallowed migration error and preserve startup for databases containing one damaged session row.
+- **Checked:** `tests/server/session-store.test.js` and `tests/server/last-login.test.js` passed (24/24); `node --check server/db.js` and `git diff --check` passed. The change is comment-only, so runtime behavior and the build were not changed.
+
 ## 2026-10-11 — Make My Learning guidance fit every course state
 
 - **Reviewed:** The live My Learning page showed its only listed course as complete while the subtitle invited the user to “Pick up where you left off.” The page can also contain assigned but unstarted, in-progress, and completed courses, plus certificate history.
