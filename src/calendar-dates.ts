@@ -1,5 +1,9 @@
 import type { CourseDeadline } from './types';
 
+export function currentCalendarMonth(now = new Date()) {
+  return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
 export function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }

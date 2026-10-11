@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArrowDown, ArrowUp, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Plus, RotateCcw, Search, UsersRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from './api';
-import { calendarMonthRequestRange, groupCalendarDeadlines, localDateKey, shouldShowCalendarEmptyState } from './calendar-dates';
+import { calendarMonthRequestRange, currentCalendarMonth, groupCalendarDeadlines, localDateKey, shouldShowCalendarEmptyState } from './calendar-dates';
 import { pathAssignmentRemovalConfirmation } from './path-assignment-confirmation';
 import { pathArchiveConfirmation } from './path-archive-confirmation';
 import { AppSelect, Button, ConfirmationDialog, EmptyState, PageHeading, ProgressBar } from './components';
@@ -605,7 +605,7 @@ export function LearningPathsPage() {
 }
 
 export function CalendarPage() {
-  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [month, setMonth] = useState(() => currentCalendarMonth());
   const [items, setItems] = useState<CourseDeadline[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -638,7 +638,7 @@ export function CalendarPage() {
   const fullDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'full' });
   const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   return <div className="management-page programs-page calendar-page">
-    <PageHeading title="Learning calendar" subtitle="Course completion deadlines shown in your local timezone." action={<div className="calendar-month-controls"><Button variant="secondary" aria-label="Previous month" onClick={() => { setItems([]); setMonth(new Date(year, monthIndex - 1, 1)); }}><ChevronLeft size={17} /></Button><span className="calendar-month-label" role="status" aria-live="polite" aria-atomic="true">{formatter.format(month)}</span><Button variant="secondary" aria-label="Next month" onClick={() => { setItems([]); setMonth(new Date(year, monthIndex + 1, 1)); }}><ChevronRight size={17} /></Button></div>} />
+    <PageHeading title="Learning calendar" subtitle="Course completion deadlines shown in your local timezone." action={<div className="calendar-month-controls"><Button variant="secondary" aria-label="Previous month" onClick={() => { setItems([]); setMonth(new Date(year, monthIndex - 1, 1)); }}><ChevronLeft size={17} /></Button><span className="calendar-month-label" role="status" aria-live="polite" aria-atomic="true">{formatter.format(month)}</span><Button variant="secondary" aria-label="Next month" onClick={() => { setItems([]); setMonth(new Date(year, monthIndex + 1, 1)); }}><ChevronRight size={17} /></Button><Button variant="secondary" className="calendar-current-month" onClick={() => { setItems([]); setMonth(currentCalendarMonth()); }}>This month</Button></div>} />
     {error && <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => setReloadSequence((current) => current + 1)}>Try again</Button></div>}
     <section className="calendar-panel" aria-label={`Deadlines for ${formatter.format(month)}`} aria-busy={loading} tabIndex={0}>
       <table className="calendar-grid"><caption className="sr-only">Calendar days and course deadlines for {formatter.format(month)}</caption>

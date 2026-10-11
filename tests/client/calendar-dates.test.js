@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { calendarMonthRequestRange, groupCalendarDeadlines, shouldShowCalendarEmptyState } from '../../src/calendar-dates.ts';
+import { calendarMonthRequestRange, currentCalendarMonth, groupCalendarDeadlines, shouldShowCalendarEmptyState } from '../../src/calendar-dates.ts';
+
+test('current-month navigation returns to the first day of the local month', () => {
+  const month = currentCalendarMonth(new Date(2026, 9, 11, 14, 30));
+
+  assert.equal(month.getFullYear(), 2026);
+  assert.equal(month.getMonth(), 9);
+  assert.equal(month.getDate(), 1);
+  assert.equal(month.getHours(), 0);
+});
 
 test('calendar ranges include UTC dates whose deadlines belong to an adjacent local month', () => {
   const previousTimezone = process.env.TZ;
@@ -46,4 +55,5 @@ test('calendar page uses the successful-empty-state guard', () => {
   const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
 
   assert.match(pageSource, /shouldShowCalendarEmptyState\(loading, error, monthItems\.length\)/);
+  assert.match(pageSource, /className="calendar-current-month" onClick=\{\(\) => \{ setItems\(\[\]\); setMonth\(currentCalendarMonth\(\)\); \}\}>This month<\/Button>/);
 });
