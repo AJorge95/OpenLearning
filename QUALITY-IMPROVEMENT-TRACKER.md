@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep review outcomes clear across editor refreshes
+
+- **Reviewed:** Review submission and approval/change-request handlers, their follow-up governance/course loads, and route changes while a decision request is in flight.
+- **Improvement:** Show the accepted review outcome before refreshing settings, distinguish a refresh failure from a rejected review action, reload the course even if governance refresh fails, and ignore decision responses after the editor has moved to another course. Add client regressions for success-before-refresh and course-scoped updates.
+- **Why it helps:** Authors and reviewers are not told a completed decision failed just because the editor could not reload, and a late response cannot replace feedback on a different course.
+- **Checked:** Focused course-editor route-state tests passed (3/3), including the new refresh-failure and stale-route contracts. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, the changed test-file syntax check, and `git diff --check` passed. Rendered review-action behavior was not replayed because the in-app browser is signed out and Playwright is not installed.
+
 ## 2026-10-11 — Preserve course-publish success when settings refresh fails
 
 - **Reviewed:** Course publishing saves the course first, then reloads publication and competency settings. The shared catch used the same failure message for both steps, so a refresh failure could say the course was not saved.

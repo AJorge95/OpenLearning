@@ -1095,19 +1095,27 @@ export function CourseEditorPage() {
     reviewSubmissionRequestRef.current = true;
     setSubmittingReview(true);
     setError(''); setNotice('');
+    let reviewRequestSubmitted = false;
     try {
       await saveCourseDetailsIfChanged();
       if (!isCurrentRequest()) return;
       await api.post(`/api/manage/courses/${requestedCourseId}/review`, { note: changeNote });
       if (!isCurrentRequest()) return;
+      reviewRequestSubmitted = true;
+      setNotice('Course revision submitted for review.');
       await loadGovernance(requestedCourseId);
-      if (isCurrentRequest()) setNotice('Course revision submitted for review.');
-    } catch (cause) { if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'The course could not be submitted for review.'); }
+    } catch (cause) {
+      if (isCurrentRequest()) setError(reviewRequestSubmitted
+        ? `Review request was submitted, but course settings could not be refreshed. ${cause instanceof ApiError ? cause.message : 'Retry loading course settings.'}`
+        : cause instanceof ApiError ? cause.message : 'The course could not be submitted for review.');
+    }
     finally { reviewSubmissionRequestRef.current = false; setSubmittingReview(false); }
   }
 
   async function decideReview(decision: 'approve' | 'changes_requested', reviewNote = changeNote) {
     if (!courseId || reviewDecisionRequestRef.current) return;
+    const requestedCourseId = courseId;
+    const isCurrentRequest = () => routeCourseIdRef.current === requestedCourseId;
     const note = decision === 'changes_requested' ? reviewNote.trim() : reviewNote;
     if (decision === 'changes_requested' && !note) {
       setError('Describe the changes the editor should make.');
@@ -1116,14 +1124,25 @@ export function CourseEditorPage() {
     reviewDecisionRequestRef.current = true;
     setSavingReviewDecision(true);
     setError(''); setNotice('');
+    let reviewDecisionSaved = false;
     try {
-      await api.post(`/api/manage/courses/${courseId}/review/decision`, {
+      await api.post(`/api/manage/courses/${requestedCourseId}/review/decision`, {
         decision, note, requiresRecompletion: decision === 'approve' && requiresRecompletion,
       });
-      await loadGovernance(); await load();
+      if (!isCurrentRequest()) return;
+      reviewDecisionSaved = true;
       setNotice(decision === 'approve' ? 'Revision approved and published.' : 'Changes requested from the editor.');
       if (decision === 'changes_requested') { setShowChangeRequestForm(false); setChangeRequestNote(''); }
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'The review decision could not be saved.'); }
+      try {
+        await loadGovernance(requestedCourseId);
+      } finally {
+        if (isCurrentRequest()) await load(requestedCourseId);
+      }
+    } catch (cause) {
+      if (isCurrentRequest()) setError(reviewDecisionSaved
+        ? `Review decision was saved, but the course editor could not be refreshed. ${cause instanceof ApiError ? cause.message : 'Retry loading course settings.'}`
+        : cause instanceof ApiError ? cause.message : 'The review decision could not be saved.');
+    }
     finally { reviewDecisionRequestRef.current = false; setSavingReviewDecision(false); }
   }
 

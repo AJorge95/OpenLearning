@@ -63,3 +63,28 @@ test('course publishing keeps save failures distinct from settings refresh failu
   assert.ok(savedStateIndex < settingsRefreshIndex, 'track save success before refreshing editor settings');
   assert.match(saveCourse, /setError\(courseSaved\s*\?[\s\S]*?Course was saved, but the editor settings could not be refreshed\.[\s\S]*?: cause instanceof ApiError \? cause\.message : 'Course could not be saved\.'/);
 });
+
+test('review actions keep successful decisions visible when editor refreshes fail', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const handlers = new Map();
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && ['submitForReview', 'decideReview'].includes(node.name?.text || '')) {
+      handlers.set(node.name.text, node.getText(sourceFile));
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+
+  const submitForReview = handlers.get('submitForReview');
+  const decideReview = handlers.get('decideReview');
+  assert.ok(submitForReview, 'expected a review-submission handler');
+  assert.ok(decideReview, 'expected a review-decision handler');
+  assert.match(submitForReview, /reviewRequestSubmitted = true;[\s\S]*?setNotice\('Course revision submitted for review\.'\);[\s\S]*?await loadGovernance\(requestedCourseId\)/);
+  assert.match(submitForReview, /setError\(reviewRequestSubmitted[\s\S]*?Review request was submitted, but course settings could not be refreshed\./);
+  assert.match(decideReview, /const requestedCourseId = courseId;/);
+  assert.match(decideReview, /await api\.post\(`\/api\/manage\/courses\/\$\{requestedCourseId\}\/review\/decision`/);
+  assert.match(decideReview, /if \(!isCurrentRequest\(\)\) return;[\s\S]*?reviewDecisionSaved = true;[\s\S]*?setNotice\(decision === 'approve'/);
+  assert.match(decideReview, /try \{\s*await loadGovernance\(requestedCourseId\);\s*\} finally \{\s*if \(isCurrentRequest\(\)\) await load\(requestedCourseId\);\s*\}/);
+  assert.match(decideReview, /setError\(reviewDecisionSaved[\s\S]*?Review decision was saved, but the course editor could not be refreshed\./);
+});
