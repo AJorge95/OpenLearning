@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Refresh administrator safeguards after status changes
+
+- **Reviewed:** The Users table now receives `isLastActiveAdmin` and disables the guarded actions, but the client updated only the changed row after account-status updates. Disabling one of two administrators therefore left the remaining row’s restriction flag stale until a later list reload.
+- **Improvement:** Reload the current list after any role update or administrator status update so the server recomputes restriction flags for every visible row. Keep the direct row update for learner and moderator status changes.
+- **Why it helps:** The last remaining administrator’s controls become unavailable immediately after another administrator is disabled, and enabling an administrator restores the expected controls without requiring a manual refresh.
+- **Interface review:** The reload preserves the current page, search, and role filter; self-access changes continue through the existing session refresh path.
+- **Checked:** Focused account/UI tests passed (31/31), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, JavaScript syntax checks, and `git diff --check` passed. The in-app browser is signed out at `/login`, so administrator status changes were not replayed in the authenticated UI.
+
 ## 2026-10-11 — Explain last-administrator restrictions in the Users table
 
 - **Reviewed:** The Users list exposed inline role and account-status changes while the detail page already explained and disabled both actions for the only active administrator. The list API did not return the derived restriction flag.

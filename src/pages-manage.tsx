@@ -1701,7 +1701,7 @@ export function AdminUsersPage() {
           setError('Account updated, but your access could not be refreshed. Reload this page to apply the change.');
           return;
         }
-      } else if (changes.role !== undefined) {
+      } else if (changes.role !== undefined || (changes.disabled !== undefined && user.role === 'admin')) {
         const currentListState = userListStateRef.current;
         if (!(await load(currentListState.page, currentListState.query, currentListState.roleFilter))) return;
       } else {
