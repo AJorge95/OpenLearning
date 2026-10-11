@@ -155,6 +155,41 @@ test('JSON parser failures return structured client errors', async () => {
   }
 });
 
+test('unhandled API errors still return a response when system logging fails', async () => {
+  const originalConsoleError = console.error;
+  let errorServer;
+  console.error = () => {};
+  try {
+    database.exec(`CREATE TRIGGER fail_http_system_log BEFORE INSERT ON system_logs
+      BEGIN SELECT RAISE(ABORT, 'simulated system log failure'); END`);
+    const app = express();
+    app.get('/api/unhandled-error-test', () => { throw new Error('simulated request failure'); });
+    app.use(httpErrorHandler);
+    errorServer = createServer(app);
+    errorServer.listen(0, '127.0.0.1');
+    await once(errorServer, 'listening');
+    const address = errorServer.address();
+    assert(address && typeof address !== 'string');
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/unhandled-error-test`);
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      error: 'Something went wrong. Please try again.',
+      code: 'internal_error',
+    });
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM system_logs WHERE source = 'http' AND message = 'simulated request failure'").get().count, 0);
+  } finally {
+    if (errorServer?.listening) {
+      const closed = once(errorServer, 'close');
+      errorServer.close();
+      errorServer.closeAllConnections();
+      await closed;
+    }
+    database.exec('DROP TRIGGER IF EXISTS fail_http_system_log');
+    console.error = originalConsoleError;
+  }
+});
+
 test('migrations 16 to 33 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
   const migrationDb = new Database(':memory:');
   try {

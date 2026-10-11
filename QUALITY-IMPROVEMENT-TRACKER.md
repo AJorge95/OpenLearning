@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve API errors when system-log writes fail
+
+- **Reviewed:** The HTTP error handler records unhandled request failures through the SQLite system-log writer before returning a generic 500 response. The writer catches persistence errors and falls back to the console.
+- **Improvement:** Add an isolated regression that forces system-log inserts to abort, then verifies the original request still receives the structured 500 response and no false log row appears.
+- **Why it helps:** A logging/storage failure cannot mask the API's error response and leave clients waiting or parsing an unrelated failure.
+- **Checked:** `node --test --test-reporter=spec tests/server/last-login.test.js` passed (11/11); `node --check tests/server/last-login.test.js` and `git diff --check` passed.
+
 ## 2026-10-11 — Match learning-path assignment controls to publication status
 
 - **Reviewed:** Learning-path cards offered “Assign learners” for drafts, while the assignment API accepts only published paths. The assignment panel could therefore be opened for a draft and ended in a predictable 404 on submit.
