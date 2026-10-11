@@ -306,3 +306,49 @@ test('rejects promptly without multipart creation when cancelled while fetching 
   assert.equal(formDataConstructed, false);
   assert.equal(xhrConstructed, false);
 });
+
+test('aborts an active XHR upload and suppresses progress after cancellation', async (t) => {
+  restoreFetch(t);
+  const originalXhr = globalThis.XMLHttpRequest;
+  let xhr;
+  globalThis.fetch = async () => jsonResponse({ token: 'active-upload-token' });
+  globalThis.XMLHttpRequest = class {
+    upload = {};
+    sendCalls = 0;
+    abortCalls = 0;
+    open(method, url) { this.method = method; this.url = url; }
+    setRequestHeader() {}
+    send(body) { this.body = body; this.sendCalls += 1; }
+    abort() { this.abortCalls += 1; this.onabort?.(); }
+    constructor() { xhr = this; }
+  };
+  t.after(() => {
+    if (originalXhr === undefined) delete globalThis.XMLHttpRequest;
+    else globalThis.XMLHttpRequest = originalXhr;
+  });
+
+  const controller = new AbortController();
+  const progress = [];
+  const outcomePromise = api.upload('/api/upload', {}, new Blob(['lesson handout']), (value) => progress.push(value), { signal: controller.signal }).then(
+    () => ({ fulfilled: true }),
+    (error) => ({ fulfilled: false, error }),
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.ok(xhr);
+  assert.equal(xhr.sendCalls, 1);
+  assert.equal(xhr.method, 'POST');
+  assert.equal(xhr.url, '/api/upload');
+  assert.ok(xhr.body instanceof FormData);
+  xhr.upload.onprogress({ lengthComputable: true, loaded: 25, total: 100 });
+  assert.deepEqual(progress, [25]);
+
+  controller.abort();
+  xhr.upload.onprogress({ lengthComputable: true, loaded: 75, total: 100 });
+  const outcome = await outcomePromise;
+
+  assert.equal(xhr.abortCalls, 1);
+  assert.equal(outcome.fulfilled, false);
+  assert.equal(outcome.error.name, 'AbortError');
+  assert.deepEqual(progress, [25]);
+});

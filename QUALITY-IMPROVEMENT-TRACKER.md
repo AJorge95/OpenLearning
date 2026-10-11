@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep active upload cancellation covered
+
+- **Reviewed:** The shared upload client has committed coverage for cancellation before XHR creation and while waiting for a CSRF token. The active-transfer cancellation check had only been recorded as an earlier runtime fixture, so the main request-abort behavior and suppression of late progress were not protected in the test suite.
+- **Improvement:** Add an XHR regression that starts an upload, aborts its signal, verifies the request is aborted and rejects with `AbortError`, and confirms late progress events are ignored. The existing implementation passes without a behavior change.
+- **Why it helps:** Course editors can cancel large uploads without continued transfer or progress updates after cancellation, and future changes to the shared client retain that behavior.
+- **Checked:** `node --test tests/client/api.test.js` passed (14/14). The full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/api.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Cover protected caption-track downloads
 
 - **Reviewed:** Protected video and document downloads have route-level coverage for authentication and lesson access, but caption downloads did not. The role-selector screenshot still identifies the old wrapping-label structure; current source uses a separate visible label and a trigger-bounded selector, and its focused regression passes.
