@@ -30,30 +30,24 @@ function createTopLevelHeaderReader(handle, fileSize) {
 }
 
 function durationFromMovieHeader(movie) {
-  const marker = Buffer.from('mvhd');
-  let markerOffset = movie.indexOf(marker);
-  while (markerOffset >= 4) {
-    const boxOffset = markerOffset - 4;
-    const boxSize = movie.readUInt32BE(boxOffset);
-    if (boxSize >= 28 && boxOffset + boxSize <= movie.length) {
-      const headerBytes = boxSize === 1 ? 16 : 8;
-      const payload = boxOffset + headerBytes;
-      const version = movie[payload];
-      let timeScale;
-      let duration;
-      if (version === 0 && boxSize >= headerBytes + 20) {
-        timeScale = movie.readUInt32BE(payload + 12);
-        duration = movie.readUInt32BE(payload + 16);
-      } else if (version === 1 && boxSize >= headerBytes + 32) {
-        timeScale = movie.readUInt32BE(payload + 20);
-        duration = Number(movie.readBigUInt64BE(payload + 24));
-      }
-      const seconds = timeScale && duration ? duration / timeScale : 0;
-      if (Number.isFinite(seconds) && seconds > 0 && seconds <= maximumDurationSeconds) return seconds;
-    }
-    markerOffset = movie.indexOf(marker, markerOffset + marker.length);
+  // Reuse the bounded box reader so normal and 64-bit extended headers share the same size checks.
+  const movieHeader = boxesIn(movie)?.find((box) => box.type === 'mvhd');
+  if (!movieHeader) return null;
+
+  const { payload, end } = movieHeader;
+  const version = movie[payload];
+  let timeScale;
+  let duration;
+  if (version === 0 && payload + 20 <= end) {
+    timeScale = movie.readUInt32BE(payload + 12);
+    duration = movie.readUInt32BE(payload + 16);
+  } else if (version === 1 && payload + 32 <= end) {
+    timeScale = movie.readUInt32BE(payload + 20);
+    duration = Number(movie.readBigUInt64BE(payload + 24));
   }
-  return null;
+
+  const seconds = timeScale && duration ? duration / timeScale : 0;
+  return Number.isFinite(seconds) && seconds > 0 && seconds <= maximumDurationSeconds ? seconds : null;
 }
 
 function boxesIn(buffer, start = 0, end = buffer.length) {

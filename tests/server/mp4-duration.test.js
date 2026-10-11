@@ -28,12 +28,12 @@ function movieHeaderV0(timeScale, duration) {
   return makeBox('mvhd', payload);
 }
 
-function movieHeaderV1(timeScale, duration) {
+function movieHeaderV1(timeScale, duration, extended = false) {
   const payload = Buffer.alloc(32);
   payload[0] = 1;
   payload.writeUInt32BE(timeScale, 20);
   payload.writeBigUInt64BE(BigInt(duration), 24);
-  return makeBox('mvhd', payload);
+  return makeBox('mvhd', payload, extended);
 }
 
 function fragmentedMovieMetadata(timeScale, defaultSampleDuration = 0) {
@@ -118,6 +118,14 @@ test('reads version-zero movie duration after earlier top-level media boxes', as
 test('reads version-one duration from an extended-size movie box', async () => {
   const duration = await readFixture('version-one.mp4', [
     makeBox('moov', movieHeaderV1(90_000, 8_122_500), true),
+  ]);
+
+  assert.equal(duration, 90.25);
+});
+
+test('reads duration from an extended-size movie-header box', async () => {
+  const duration = await readFixture('extended-movie-header.mp4', [
+    makeBox('moov', movieHeaderV1(90_000, 8_122_500, true)),
   ]);
 
   assert.equal(duration, 90.25);
