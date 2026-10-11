@@ -56,8 +56,14 @@ function PathEditor({ existing, busy, onSave, onCancel }: {
   const [courseLoading, setCourseLoading] = useState(true);
   const [courseLoadError, setCourseLoadError] = useState('');
   const [failedCoursePage, setFailedCoursePage] = useState<number | null>(null);
+  const pathTitleInputRef = useRef<HTMLInputElement>(null);
   const courseRequestSequenceRef = useRef(0);
   const courseRequestControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (!existing) return;
+    // The editor appears above the selected card, so move keyboard focus into it.
+    pathTitleInputRef.current?.focus();
+  }, [existing]);
   const loadCoursePage = useCallback(async (requestedPage: number, replace = false) => {
     if (courseRequestControllerRef.current) return;
     const controller = new AbortController();
@@ -123,7 +129,7 @@ function PathEditor({ existing, busy, onSave, onCancel }: {
   }} aria-busy={busy}>
     <div className="program-card-heading"><div><span className="program-icon"><BookOpen size={18} /></span><div><h2>{existing ? 'Edit learning path' : 'Create a learning path'}</h2><p>Arrange published courses into a guided sequence.</p></div></div>{existing && <Button variant="quiet" onClick={onCancel} disabled={busy}>Cancel</Button>}</div>
     <div className="program-form-grid">
-      <label>Path name<input required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy} /></label>
+      <label>Path name<input ref={pathTitleInputRef} required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy} /></label>
       <div className="app-select-field"><span>Availability</span><AppSelect ariaLabel="Path availability" value={status} onChange={setStatus} options={[{ value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }]} disabled={busy} /></div>
       <label className="program-full-field">Description<textarea rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={busy} /></label>
     </div>
@@ -169,6 +175,7 @@ export function LearningPathsPage() {
   const [pathStatus, setPathStatus] = useState<LearningPathStatusFilter>('all');
   const pathStatusFilterButtonsRef = useRef<Partial<Record<LearningPathStatusFilter, HTMLButtonElement>>>({});
   const pendingPathStatusFocusRef = useRef<LearningPathStatusFilter | null>(null);
+  const pathEditorReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const [editing, setEditing] = useState<LearningPath | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -203,6 +210,24 @@ export function LearningPathsPage() {
   const pathsLoadSequenceRef = useRef(0);
   const pathsRequestControllerRef = useRef<AbortController | null>(null);
   const requestedPathPageRef = useRef(1);
+
+  function cancelPathEdit() {
+    const trigger = pathEditorReturnFocusRef.current;
+    pathEditorReturnFocusRef.current = null;
+    setEditing(null);
+    if (trigger?.isConnected) trigger.focus();
+    else pathStatusFilterButtonsRef.current.all?.focus();
+  }
+
+  function restorePathEditorFocus() {
+    const trigger = pathEditorReturnFocusRef.current;
+    pathEditorReturnFocusRef.current = null;
+    if (!trigger) return;
+    window.requestAnimationFrame(() => {
+      if (trigger.isConnected) trigger.focus();
+      else pathStatusFilterButtonsRef.current.all?.focus();
+    });
+  }
 
   useEffect(() => {
     if (loading || saving || !pendingPathStatusFocusRef.current) return;
@@ -282,6 +307,7 @@ export function LearningPathsPage() {
       else await api.post('/api/manage/learning-paths', value);
       if (editing && !canAssignLearningPathLearners(value.status) && assignmentPathRef.current === editing.id) clearAssignmentPanel();
       setEditing(null); setPathStatus('all'); setNotice(editing ? 'Learning path updated.' : 'Learning path created.'); await load(1, 'all');
+      restorePathEditorFocus();
     } catch (cause) { setError(requestMessage(cause, 'Learning path could not be saved.')); }
     finally {
       releaseSubmissionLock(savePathSubmissionInFlightRef);
@@ -477,7 +503,7 @@ export function LearningPathsPage() {
     <PageHeading title="Learning paths" subtitle={staff ? 'Guide learners through a course sequence and assign paths.' : 'Follow a guided sequence of courses and track your progress.'} />
     {error && (loadFailed ? <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => void load(requestedPathPageRef.current)}>Try again</Button></div> : <div className="inline-notice" role="alert">{error}</div>)}{notice && <div className="inline-notice inline-notice-success" role="status">{notice}</div>}
     {hasEmptyPathResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyPathState.title}. {emptyPathState.detail}</p>}
-    {staff && <PathEditor key={editing?.id || 'new'} existing={editing} busy={saving} onSave={savePath} onCancel={() => setEditing(null)} />}
+    {staff && <PathEditor key={editing?.id || 'new'} existing={editing} busy={saving} onSave={savePath} onCancel={cancelPathEdit} />}
     {staff && <div className="management-tabs" role="group" aria-label="Filter learning paths by status">{learningPathStatusFilters.map((filter) => <button type="button" key={filter.value} ref={(button) => { if (button) pathStatusFilterButtonsRef.current[filter.value] = button; else delete pathStatusFilterButtonsRef.current[filter.value]; }} aria-pressed={pathStatus === filter.value} className={pathStatus === filter.value ? 'active' : ''} disabled={loading || saving || assignmentBusy} onClick={() => changePathStatus(filter.value)}>{filter.label}</button>)}</div>}
     {loading && !paths.length ? <div className="page-loading" role="status">Loading learning paths…</div> : paths.length ? <>
       {loading && <div className="log-loading" role="status">Loading learning paths…</div>}
@@ -494,7 +520,7 @@ export function LearningPathsPage() {
           {!staff && course.unlocked ? <Link className="text-action" to={`/courses/${course.id}`} aria-label={`${course.completed ? 'Review course' : 'Start course'}: ${course.title}`}>{course.completed ? 'Review course' : 'Start course'}</Link> : !staff ? <span className="muted">Complete earlier courses to unlock</span> : <Link className="text-action" to={`/manage/courses/${course.id}/edit`} aria-label={`Edit course: ${course.title}`}>Edit course</Link>}
         </li>)}</ol>
         <div className="program-card-footer">
-          {staff ? path.status === 'archived' ? <Button variant="secondary" aria-label={`Restore ${path.title} as draft`} disabled={saving || assignmentBusy} aria-busy={changingPathStatusId === path.id} onClick={() => void restorePath(path)}><RotateCcw size={15} />{changingPathStatusId === path.id ? 'Restoring…' : 'Restore as draft'}</Button> : <><Button variant="secondary" aria-label={`Edit path: ${path.title}`} onClick={() => setEditing(path)} disabled={saving || assignmentBusy}>Edit path</Button>
+          {staff ? path.status === 'archived' ? <Button variant="secondary" aria-label={`Restore ${path.title} as draft`} disabled={saving || assignmentBusy} aria-busy={changingPathStatusId === path.id} onClick={() => void restorePath(path)}><RotateCcw size={15} />{changingPathStatusId === path.id ? 'Restoring…' : 'Restore as draft'}</Button> : <><Button variant="secondary" aria-label={`Edit path: ${path.title}`} onClick={(event) => { pathEditorReturnFocusRef.current = event.currentTarget; setEditing(path); }} disabled={saving || assignmentBusy}>Edit path</Button>
             {canAssignLearningPathLearners(path.status)
               ? <Button variant="secondary" aria-label={assignmentPath === path.id ? `Close assignments for ${path.title}` : `Assign learners to ${path.title}`} aria-expanded={assignmentPath === path.id} aria-controls={assignmentPath === path.id ? `path-assignments-${path.id}` : undefined} disabled={saving || assignmentBusy} onClick={() => void toggleAssignments(path)}><UsersRound size={15} />{assignmentPath === path.id ? 'Close assignments' : 'Assign learners'}</Button>
               : <span className="muted">Publish this path to assign learners.</span>}
