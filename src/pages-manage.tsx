@@ -998,7 +998,7 @@ export function CourseEditorPage() {
   }
 
   async function load(id = courseId) {
-    if (!id) return;
+    if (!id || routeCourseIdRef.current !== id) return;
     const previousCourse = course;
     const requestSequence = ++courseLoadSequenceRef.current;
     courseLoadControllerRef.current?.abort();

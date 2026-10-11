@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Ignore stale course refreshes after navigation
+
+- **Reviewed:** The course editor invalidates the old route's request on navigation, while several completed curriculum actions call `load()` afterward. The loader aborted its active request before verifying that its requested course was still the current route.
+- **Improvement:** Return immediately when a refresh targets a different course, before incrementing the request sequence or aborting the active controller.
+- **Why it helps:** A delayed response from an earlier course can no longer cancel the request that is loading the newly selected course.
+- **Backend review:** Curriculum write routes already authorize the course and persist their changes transactionally with audit records; no server contract change was needed.
+- **Checked:** Course-editor route-state tests passed (7/7), the full `npm test` suite passed (594/594), `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. No rendered navigation race was run; Playwright is unavailable in this checkout.
+
 ## 2026-10-11 — Keep focus in newly created module quizzes
 
 - **Reviewed:** The course editor's add-quiz trigger, quiz editor mount, course reload, and the server's transactional upsert. The trigger stayed focused when it became disabled as “Quiz added,” and it had no client-side guard against repeated clicks during the reload.
