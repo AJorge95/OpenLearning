@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Protect orphaned-media cleanup failure handling
+
+- **Reviewed:** Startup cleanup of course media, stale-file checks, reference preservation, filesystem race handling, and the bounded failure-sample policy.
+- **Improvement:** Add server regressions for an inaccessible media root, per-course directory failures, the ten-sample diagnostic cap, and file disappearance or access errors between directory listing and removal. Add a short code comment clarifying that failure counts remain complete while diagnostic samples stay bounded.
+- **Why it helps:** Cleanup can continue past an unreadable course directory, reports root-level failures instead of mistaking them for an empty media tree, and never deletes a file it could not inspect. Failure details remain bounded for startup diagnostics.
+- **Backend review:** No runtime behavior changed; the current cleanup already distinguishes missing roots from other root errors, ignores `ENOENT` races, records other failures, and caps samples at ten.
+- **Checked:** `node --test tests/server/media-cleanup.test.js` passed (5/5); focused coverage reported 100% line and function coverage for `media-cleanup.js`; full `npm test -- --test-reporter=dot` passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed.
+
 ## 2026-10-12 — Protect multipart upload retry and error handling
 
 - **Reviewed:** Shared API multipart upload transport, its abort and progress behavior, server CSRF middleware ordering, and media upload error responses.
