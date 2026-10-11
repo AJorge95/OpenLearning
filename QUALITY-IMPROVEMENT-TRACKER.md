@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Expose the course competency mapping limit
+
+- **Reviewed:** The mapping API already rejected more than 200 selected IDs, but the course editor let staff select any number and surfaced only the generic API error after saving. Existing course mappings above the cap also had no guidance for reducing them.
+- **Improvement:** Return the server's selection limit with mapping options and reuse that constant in validation. Show a live selected-count message, prevent new choices at the limit, allow existing selections to be removed, and disable saving until a legacy over-limit mapping is reduced. Clear prior mapping feedback when the selection changes.
+- **Why it helps:** Staff see the actual constraint before saving and can repair older mappings without losing their existing selections or encountering a predictable validation failure.
+- **Backend review:** The 200-item bound remains enforced before any relationship writes; route coverage now verifies the advertised limit, the 201-item rejection, and unchanged saved rows.
+- **Checked:** The focused selection-helper/UI contract tests passed (2/2), the API mapping boundary regression passed, and full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed. The protected course editor could not be replayed in the signed-out browser.
+
 ## 2026-10-11 — Recover signup when registration fields change
 
 - **Reviewed:** Public signup fetches configurable fields when the form opens. The server correctly returns `409 registration_fields_changed` if an administrator changes those fields before submission, but the client only displayed the conflict message; resolving it required a full page reload and discarded the learner's entered answers.
