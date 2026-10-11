@@ -39,6 +39,7 @@ test('session set, get, and touch preserve expiry and user ownership', async () 
     const touched = database.prepare('SELECT expires_at, user_id FROM sessions WHERE sid = ?').get('session-1');
     assert.deepEqual(touched, { expires_at: extendedExpiry.getTime(), user_id: 'learner-1' });
   } finally {
+    store.close();
     database.close();
   }
 });
@@ -66,7 +67,7 @@ test('session store callbacks that throw are invoked only once', () => {
       assert.equal(callbackCalls, 1, `${name} must not report a callback exception as a store error`);
     }
   } finally {
-    clearInterval(store.cleanupTimer);
+    store.close();
     database.close();
   }
 });
@@ -96,25 +97,27 @@ test('session store reports database errors through each callback only once', ()
       assert.ok(receivedError instanceof Error, `${name} must expose the database failure`);
     }
   } finally {
-    clearInterval(store.cleanupTimer);
+    store.close();
     database.close();
   }
 });
 
 test('startup and reads discard expired or malformed sessions', async () => {
   const database = createDatabase();
+  let store;
   try {
     const insert = database.prepare('INSERT INTO sessions (sid, session_data, expires_at, user_id) VALUES (?, ?, ?, ?)');
     insert.run('expired', JSON.stringify({ userId: 'learner-1' }), Date.now() - 1, 'learner-1');
     insert.run('broken-json', '{', Date.now() + 60_000, null);
     insert.run('array-session', '[]', Date.now() + 60_000, null);
-    const store = new SQLiteSessionStore(database);
+    store = new SQLiteSessionStore(database);
 
     assert.equal(database.prepare('SELECT 1 FROM sessions WHERE sid = ?').get('expired'), undefined);
     assert.equal(await callStore(store, 'get', 'broken-json'), null);
     assert.equal(await callStore(store, 'get', 'array-session'), null);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions').get().count, 0);
   } finally {
+    store?.close();
     database.close();
   }
 });
@@ -136,7 +139,7 @@ test('startup keeps the session store available and reports expired-session clea
     assert.match(failures[0].message, /cleanup unavailable/);
     assert.equal(database.prepare('SELECT 1 FROM sessions WHERE sid = ?').get('expired-cleanup-failure') !== undefined, true);
   } finally {
-    if (store?.cleanupTimer) clearInterval(store.cleanupTimer);
+    store?.close();
     database.close();
   }
 });
@@ -161,7 +164,21 @@ test('a failing cleanup error reporter falls back without aborting store startup
     assert.equal(database.prepare('SELECT 1 FROM sessions WHERE sid = ?').get('expired-cleanup-logger-failure') !== undefined, true);
   } finally {
     console.error = originalConsoleError;
-    if (store?.cleanupTimer) clearInterval(store.cleanupTimer);
+    store?.close();
+    database.close();
+  }
+});
+
+test('closing the session store stops and clears its expiry timer', () => {
+  const database = createDatabase();
+  const store = new SQLiteSessionStore(database);
+  try {
+    assert.ok(store.cleanupTimer);
+    store.close();
+    assert.equal(store.cleanupTimer, null);
+    assert.doesNotThrow(() => store.close(), 'closing the store more than once should be safe');
+  } finally {
+    store.close();
     database.close();
   }
 });
