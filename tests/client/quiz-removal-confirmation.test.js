@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const manageSource = fs.readFileSync(path.join(repositoryRoot, 'src/pages-manage.tsx'), 'utf8');
+const quizEditorStart = manageSource.indexOf('function QuizEditor(');
+const quizEditorEnd = manageSource.indexOf('\nfunction LessonDetailsEditor(', quizEditorStart);
+const quizEditorSource = manageSource.slice(quizEditorStart, quizEditorEnd);
+
+test('quiz removal waits for an accessible warning about saved learner attempts', () => {
+  const removeStart = quizEditorSource.indexOf('async function remove(confirmed = false)');
+  const removeEnd = quizEditorSource.indexOf('\n\n  return <div className="quiz-editor"', removeStart);
+  const removeSource = quizEditorSource.slice(removeStart, removeEnd);
+
+  assert.ok(quizEditorStart >= 0 && quizEditorEnd > quizEditorStart);
+  assert.match(removeSource, /if \(!confirmed\) \{ setConfirmingRemoval\(true\); return; \}/);
+  assert.ok(removeSource.indexOf('setConfirmingRemoval(true)') < removeSource.indexOf('api.delete'));
+  assert.doesNotMatch(quizEditorSource, /window\.confirm\(/);
+  assert.match(quizEditorSource, /<ConfirmationDialog title="Remove this quiz\?" description=\{`All saved learner attempts for \$\{quizContext\} will also be removed\. This action cannot be undone\.`\} confirmLabel="Remove quiz"/);
+  assert.match(quizEditorSource, /onConfirm=\{\(\) => \{ setConfirmingRemoval\(false\); void remove\(true\); \}\}/);
+  assert.match(quizEditorSource, /setConfirmingRemoval\(false\);[\s\S]*?\}, \[module\.id, module\.title, existing\?\.id\]\);/);
+});
