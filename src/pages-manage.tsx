@@ -568,6 +568,12 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
   const [captionFile, setCaptionFile] = useState<File | null>(null);
   const [captionFileError, setCaptionFileError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState<
+    | { kind: 'resource'; courseId: string; lessonId: string; id: string; title: string; resourceKind: LessonResource['kind'] }
+    | { kind: 'caption'; courseId: string; lessonId: string; id: string; label: string; language: string }
+    | null
+  >(null);
+  const removalRequestRef = useRef(false);
   const [uploadKind, setUploadKind] = useState<'document' | 'captions' | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const uploadControllerRef = useRef<{ controller: AbortController; input: HTMLInputElement; cancelledByUser: boolean } | null>(null);
@@ -581,7 +587,8 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
     setTranscript(lesson.transcript);
     setResources(lesson.resources || []);
     setCaptions(lesson.captions || []);
-  }, [lesson.id, lesson.title, lesson.description, lesson.transcript, lesson.resources, lesson.captions]);
+    setPendingRemoval(null);
+  }, [courseId, lesson.id, lesson.title, lesson.description, lesson.transcript, lesson.resources, lesson.captions]);
   useEffect(() => () => { uploadControllerRef.current?.controller.abort(); }, [lesson.id]);
 
   async function persistLessonDetails() {
@@ -701,8 +708,14 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
     }
   }
 
+  function requestResourceRemoval(resource: LessonResource) {
+    if (busy || removalRequestRef.current) return;
+    setPendingRemoval({ kind: 'resource', courseId, lessonId: lesson.id, id: resource.id, title: resource.title, resourceKind: resource.kind });
+  }
+
   async function removeResource(resource: LessonResource) {
-    if (!window.confirm(`Remove “${resource.title}” from this lesson?`)) return;
+    if (busy || removalRequestRef.current) return;
+    removalRequestRef.current = true;
     setBusy(true); onError('');
     try {
       await persistLessonDetails();
@@ -711,11 +724,17 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
       await onChanged();
       onNotice('Lesson resource removed.');
     } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Lesson resource could not be removed.'); }
-    finally { setBusy(false); }
+    finally { removalRequestRef.current = false; setBusy(false); }
+  }
+
+  function requestCaptionRemoval(caption: LessonCaption) {
+    if (busy || removalRequestRef.current) return;
+    setPendingRemoval({ kind: 'caption', courseId, lessonId: lesson.id, id: caption.id, label: caption.label, language: caption.language });
   }
 
   async function removeCaption(caption: LessonCaption) {
-    if (!window.confirm(`Remove “${caption.label}” captions (${caption.language}) from this lesson?`)) return;
+    if (busy || removalRequestRef.current) return;
+    removalRequestRef.current = true;
     setBusy(true); onError('');
     try {
       await persistLessonDetails();
@@ -724,7 +743,20 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
       await onChanged();
       onNotice('Caption track removed.');
     } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Caption track could not be removed.'); }
-    finally { setBusy(false); }
+    finally { removalRequestRef.current = false; setBusy(false); }
+  }
+
+  function confirmPendingRemoval() {
+    const pending = pendingRemoval;
+    setPendingRemoval(null);
+    if (!pending || pending.courseId !== courseId || pending.lessonId !== lesson.id) return;
+    if (pending.kind === 'resource') {
+      const resource = resources.find((item) => item.id === pending.id);
+      if (resource) void removeResource(resource);
+      return;
+    }
+    const caption = captions.find((item) => item.id === pending.id);
+    if (caption) void removeCaption(caption);
   }
 
   return <section id={`lesson-details-${lesson.id}`} className="lesson-details-editor" aria-labelledby={`lesson-details-heading-${lesson.id}`} aria-busy={busy}>
@@ -743,7 +775,7 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
       {resources.length ? <ul className="lesson-resource-list">{resources.map((resource) => <li className="lesson-resource-row" key={resource.id}>
         {resource.kind === 'link' ? <Link2 size={16} /> : <FileText size={16} />}
         <div><strong>{resource.title}</strong><small>{resource.kind === 'document' ? resource.fileName : resource.url}</small></div>
-        <button type="button" className="icon-button danger-icon" title={`Remove ${resource.title}`} aria-label={`Remove ${resource.title}`} disabled={busy} onClick={() => removeResource(resource)}><Trash2 size={15} /></button>
+        <button type="button" className="icon-button danger-icon" title={`Remove ${resource.title}`} aria-label={`Remove ${resource.title}`} disabled={busy} onClick={() => requestResourceRemoval(resource)}><Trash2 size={15} /></button>
       </li>)}</ul> : <p className="lesson-resource-empty">No resources added yet.</p>}
       <form className="lesson-link-form" onSubmit={addLink}>
         <label>Link title<input value={linkTitle} maxLength={160} onChange={(event) => setLinkTitle(event.target.value)} placeholder="e.g. Reference guide" required disabled={busy} /></label>
@@ -763,7 +795,7 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
         {captions.length ? <ul className="lesson-resource-list">{captions.map((caption) => <li className="lesson-resource-row" key={caption.id}>
           <FileText size={16} />
           <div><strong>{caption.label} <span className="caption-language">({caption.language})</span></strong><small>{caption.fileName}</small></div>
-          <button type="button" className="icon-button danger-icon" title={`Remove ${caption.label} captions`} aria-label={`Remove ${caption.label} captions (${caption.language})`} disabled={busy} onClick={() => removeCaption(caption)}><Trash2 size={15} /></button>
+          <button type="button" className="icon-button danger-icon" title={`Remove ${caption.label} captions`} aria-label={`Remove ${caption.label} captions (${caption.language})`} disabled={busy} onClick={() => requestCaptionRemoval(caption)}><Trash2 size={15} /></button>
         </li>)}</ul> : <p className="lesson-resource-empty">No caption tracks added yet.</p>}
         <form className="lesson-caption-form" onSubmit={uploadCaptions}>
           <label>Language tag<input ref={captionLanguageInputRef} type="text" value={captionLanguage} maxLength={35} aria-invalid={captionLanguageError ? true : undefined} aria-describedby={captionLanguageError ? `caption-language-help-${lesson.id} caption-language-error-${lesson.id}` : `caption-language-help-${lesson.id}`} onChange={(event) => { setCaptionLanguage(event.target.value); setCaptionLanguageError(''); }} placeholder="en or en-GB" autoCapitalize="off" spellCheck={false} required disabled={busy} /></label>
@@ -790,6 +822,17 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
         {uploadKind === 'captions' && uploadProgress !== null && uploadProgress < 100 && <button type="button" className="text-action upload-cancel-action" aria-label="Cancel captions upload" onClick={cancelUpload}>Cancel upload</button>}
       </section>
     </section>
+    {pendingRemoval?.courseId === courseId && pendingRemoval.lessonId === lesson.id && <ConfirmationDialog
+      title={pendingRemoval.kind === 'resource' ? `Remove “${pendingRemoval.title}”?` : `Remove “${pendingRemoval.label}” captions?`}
+      description={pendingRemoval.kind === 'resource'
+        ? pendingRemoval.resourceKind === 'document'
+          ? 'This removes the document from the lesson and deletes its uploaded file. This action cannot be undone.'
+          : 'This removes the link from the lesson. This action cannot be undone.'
+        : `This removes the ${pendingRemoval.language} caption track and its uploaded file. This action cannot be undone.`}
+      confirmLabel={pendingRemoval.kind === 'resource' ? pendingRemoval.resourceKind === 'document' ? 'Remove document' : 'Remove link' : 'Remove captions'}
+      onCancel={() => setPendingRemoval(null)}
+      onConfirm={confirmPendingRemoval}
+    />}
   </section>;
 }
 

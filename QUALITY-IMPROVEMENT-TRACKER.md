@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Confirm removal of lesson links, documents, and captions
+
+- **Reviewed:** Lesson-detail controls used native prompts for link/document removal and caption-track removal. Document and caption routes also delete their uploaded files after their audit-backed database transactions.
+- **Improvement:** Use the shared accessible confirmation with content-specific copy: links are detached, while documents and caption tracks also remove their uploaded files. Tie the pending action to the current course and lesson, resolve the matching item before requesting deletion, and guard duplicate removal requests.
+- **Why it helps:** The confirmation makes the exact content loss clear and prevents a stale or repeated action from deleting the wrong attachment.
+- **Backend review:** Existing resource and caption endpoints retain their transactional audit behavior and post-commit file cleanup; no API behavior changed.
+- **Checked:** The focused client confirmation test passed; existing resource-delete and caption-delete audit-rollback regressions passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. Chrome showed both lessons in the available course have no attached resources or caption tracks, so a populated removal dialog could not be opened without creating test data. No test content was created.
+
 ## 2026-10-11 — Confirm lesson removal and caption cleanup
 
 - **Reviewed:** The lesson deletion route removes the lesson, its video, attached resources, and caption files, while the browser prompt mentioned only the video and lesson resources.
