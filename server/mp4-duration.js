@@ -3,12 +3,30 @@ import fs from 'node:fs/promises';
 const maximumMetadataBytes = 128 * 1024 * 1024;
 const maximumFragmentBytes = 16 * 1024 * 1024;
 const maximumTopLevelBoxes = 200_000;
+const topLevelHeaderReadAheadBytes = 4 * 1024;
 const maximumDurationSeconds = 24 * 60 * 60;
 
 async function readAt(handle, length, position) {
   const buffer = Buffer.alloc(length);
   const { bytesRead } = await handle.read(buffer, 0, length, position);
   return bytesRead === length ? buffer : null;
+}
+
+function createTopLevelHeaderReader(handle, fileSize) {
+  let bufferedStart = -1;
+  let bufferedHeaders = null;
+  return async (position) => {
+    if (!bufferedHeaders || position < bufferedStart || position + 16 > bufferedStart + bufferedHeaders.length) {
+      // Read ahead through small boxes without pulling large chunks of video payload.
+      bufferedStart = position;
+      const length = Math.min(topLevelHeaderReadAheadBytes, fileSize - position);
+      bufferedHeaders = await readAt(handle, length, position);
+      if (!bufferedHeaders) return null;
+    }
+    const offset = position - bufferedStart;
+    if (offset + 16 > bufferedHeaders.length) return null;
+    return bufferedHeaders.subarray(offset, offset + 16);
+  };
 }
 
 function durationFromMovieHeader(movie) {
@@ -219,11 +237,12 @@ export async function readMp4Duration(filePath) {
   const handle = await fs.open(filePath, 'r');
   try {
     const { size } = await handle.stat();
+    const readTopLevelHeader = createTopLevelHeaderReader(handle, size);
     let offset = 0;
     let topLevelBoxCount = 0;
     let fragmentedMovie = null;
     while (offset + 8 <= size && topLevelBoxCount < maximumTopLevelBoxes) {
-      const header = await readAt(handle, 16, offset);
+      const header = await readTopLevelHeader(offset);
       if (!header) break;
       const size32 = header.readUInt32BE(0);
       const type = header.toString('ascii', 4, 8);
