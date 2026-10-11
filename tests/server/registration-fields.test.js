@@ -403,6 +403,9 @@ test('the last active administrator cannot be disabled or demoted', async () => 
   const originalUser = database.prepare('SELECT role, disabled FROM users WHERE id = ?').get(adminId);
   const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
     WHERE action = 'account.updated' AND entity_id = ?`).get(adminId).count;
+  const detailsResponse = await fetch(apiUrl(`/admin/users/${adminId}`));
+  assert.equal(detailsResponse.status, 200);
+  assert.equal((await detailsResponse.json()).user.isLastActiveAdmin, true);
 
   for (const change of [{ disabled: true }, { role: 'moderator' }]) {
     const response = await fetch(apiUrl(`/admin/users/${adminId}`), {
@@ -428,14 +431,25 @@ test('an administrator can be disabled while another active administrator remain
     VALUES (?, ?, ?, ?, 'admin')`).run(targetId, 'second_admin', 'second.admin@example.invalid', 'not-used-by-this-fixture');
 
   try {
+    for (const userId of ['registration-fields-admin', targetId]) {
+      const details = await fetch(apiUrl(`/admin/users/${userId}`));
+      assert.equal(details.status, 200);
+      assert.equal((await details.json()).user.isLastActiveAdmin, false);
+    }
+
     const response = await fetch(apiUrl(`/admin/users/${targetId}`), {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', connection: 'close' },
       body: JSON.stringify({ disabled: true }),
     });
     assert.equal(response.status, 200);
-    assert.equal((await response.json()).user.disabled, true);
+    const updatedTarget = await response.json();
+    assert.equal(updatedTarget.user.disabled, true);
+    assert.equal(updatedTarget.user.isLastActiveAdmin, false);
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0").get().count, 1);
+    const remainingAdmin = await fetch(apiUrl('/admin/users/registration-fields-admin'));
+    assert.equal(remainingAdmin.status, 200);
+    assert.equal((await remainingAdmin.json()).user.isLastActiveAdmin, true);
   } finally {
     database.prepare("DELETE FROM audit_logs WHERE action = 'account.updated' AND entity_id = ?").run(targetId);
     database.prepare('DELETE FROM users WHERE id = ?').run(targetId);

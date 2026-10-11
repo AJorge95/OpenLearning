@@ -278,6 +278,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .account-role-control .app-select-trigger { pointer-events: auto; }
 .account-control-row .account-role-control > .account-role-select { width: 9rem; max-width: 9rem; }
 .account-control-row .account-role-control > .account-role-select .app-select-trigger { width: 100%; }
+.account-admin-protection { margin: 9px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .account-password-form { gap: 12px; }
 .account-password-form label { font-size: 11px; }
 .account-password-field { display: grid; gap: 7px; min-width: 0; }

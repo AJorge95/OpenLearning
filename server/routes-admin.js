@@ -16,6 +16,12 @@ import { cancelPlatformReset, confirmPlatformReset, finishPlatformReset, getPlat
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
 
+function isLastActiveAdministrator(user) {
+  if (user.role !== 'admin' || Boolean(user.disabled)) return false;
+  const activeAdmins = db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0").get().count;
+  return activeAdmins <= 1;
+}
+
 function destroyCurrentSession(req) {
   return new Promise((resolve, reject) => req.session.destroy((error) => error ? reject(error) : resolve()));
 }
@@ -275,7 +281,8 @@ adminRouter.get('/users/:userId', (req, res) => {
   res.json({
     user: { id: user.id, username: user.username, email: user.email, firstName: user.first_name, lastName: user.last_name,
       role: user.role, disabled: Boolean(user.disabled), createdAt: user.created_at, updatedAt: user.updated_at,
-      lastLoginAt: user.last_login_at, isCurrentUser: user.id === req.currentUser.id },
+      lastLoginAt: user.last_login_at, isCurrentUser: user.id === req.currentUser.id,
+      isLastActiveAdmin: isLastActiveAdministrator(user) },
     registrationFields,
     courses: courses.map((course) => ({
       ...summaries.get(course.id),
@@ -326,13 +333,13 @@ adminRouter.patch('/users/:userId', (req, res) => {
     if (nextDisabled) invalidateUserSessions(db, user.id);
     const updated = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, created_at, updated_at FROM users WHERE id = ?').get(user.id);
     const certificatesIssued = profileChanged ? issueCompletedCertificatesForUser(updated.id).length : 0;
-    return { updated, certificatesIssued };
+    return { updated, certificatesIssued, isLastActiveAdmin: isLastActiveAdministrator(updated) };
   });
-  const { updated, certificatesIssued } = updateUser.immediate();
+  const { updated, certificatesIssued, isLastActiveAdmin } = updateUser.immediate();
   res.json({ user: {
     id: updated.id, username: updated.username, email: updated.email,
     firstName: updated.first_name, lastName: updated.last_name, role: updated.role,
-    disabled: Boolean(updated.disabled), createdAt: updated.created_at, updatedAt: updated.updated_at,
+    disabled: Boolean(updated.disabled), createdAt: updated.created_at, updatedAt: updated.updated_at, isLastActiveAdmin,
   }, certificatesIssued });
 });
 

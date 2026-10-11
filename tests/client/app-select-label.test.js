@@ -213,6 +213,15 @@ test('the administrator role selector keeps clicks inside its visible trigger', 
   assert.match(styles, /\.app-select-menu--match-trigger \.app-select-option-indicator \{\s*width:\s*16px;\s*flex-basis:\s*16px;\s*\}/);
 });
 
+test('account details explain and disable controls for the last active administrator', () => {
+  const pageSource = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
+
+  assert.match(pageSource, /isLastActiveAdmin: boolean/);
+  assert.equal((pageSource.match(/disabled=\{saving \|\| user\.isLastActiveAdmin\}/g) || []).length, 2);
+  assert.equal((pageSource.match(/user\.isLastActiveAdmin \? lastAdminHelpId : undefined/g) || []).length, 2);
+  assert.match(pageSource, /user\.isLastActiveAdmin && <p className="account-admin-protection" id=\{lastAdminHelpId\}>This is the only active administrator\./);
+});
+
 test('AppSelect disables its trigger and popup when no enabled options remain', () => {
   const componentSource = fs.readFileSync(path.join(sourceDirectory, 'components.tsx'), 'utf8');
 
