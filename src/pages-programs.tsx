@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArrowDown, ArrowUp, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Plus, RotateCcw, Search, UsersRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from './api';
+import { calendarMonthRequestRange, groupCalendarDeadlines, localDateKey } from './calendar-dates';
 import { AppSelect, Button, EmptyState, PageHeading, ProgressBar } from './components';
 import type { Competency, Course, CourseDeadline, LearningPath } from './types';
 import { useAuth } from './auth-context';
@@ -412,10 +413,6 @@ export function LearningPathsPage() {
   </div>;
 }
 
-function localDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
 export function CalendarPage() {
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [items, setItems] = useState<CourseDeadline[]>([]);
@@ -429,8 +426,7 @@ export function CalendarPage() {
   const dayCount = new Date(year, monthIndex + 1, 0).getDate();
   // Fetch a UTC-date buffer around the local month so deadlines near midnight
   // are still grouped into the correct month in the learner's timezone.
-  const dateFrom = localDateKey(new Date(year, monthIndex, 0));
-  const dateTo = localDateKey(new Date(year, monthIndex + 1, 1));
+  const { from: dateFrom, to: dateTo } = calendarMonthRequestRange(year, monthIndex);
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
@@ -441,20 +437,10 @@ export function CalendarPage() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; controller.abort(); };
   }, [dateFrom, dateTo, reloadSequence]);
-  const monthItems = useMemo(() => items.filter((item) => {
-    const due = new Date(item.dueAt);
-    return due.getFullYear() === year && due.getMonth() === monthIndex;
-  }), [items, year, monthIndex]);
-  const itemsByLocalDay = useMemo(() => {
-    const map = new Map<string, CourseDeadline[]>();
-    for (const item of monthItems) {
-      const key = localDateKey(new Date(item.dueAt));
-      const dayItems = map.get(key);
-      if (dayItems) dayItems.push(item);
-      else map.set(key, [item]);
-    }
-    return map;
-  }, [monthItems]);
+  const { monthItems, itemsByLocalDay } = useMemo(
+    () => groupCalendarDeadlines(items, year, monthIndex),
+    [items, year, monthIndex],
+  );
   const days = [...Array(firstDay).fill(null), ...Array.from({ length: dayCount }, (_, index) => index + 1)];
   const cells = [...days, ...Array((7 - days.length % 7) % 7).fill(null)];
   const formatter = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
