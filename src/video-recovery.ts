@@ -13,6 +13,20 @@ export type PendingVideoResume = {
   resumePlayback: boolean;
 };
 
+export function videoRecoveryMadeProgress({
+  lessonId,
+  recoveryLessonId,
+  positionSeconds,
+  resumePositionSeconds,
+}: {
+  lessonId: string;
+  recoveryLessonId: string | null;
+  positionSeconds: number;
+  resumePositionSeconds: number;
+}) {
+  return recoveryLessonId === lessonId && positionSeconds > resumePositionSeconds + 2;
+}
+
 export function shouldResumeVideoPlayback({
   requested,
   lessonId,

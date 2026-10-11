@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Allow another automatic recovery after playback resumes
+
+- **Reviewed:** The lesson player limited automatic stall recovery to one retry per lesson and never reset that limit after a successful resume. A later, separate stall therefore required the learner to retry manually.
+- **Improvement:** Clear the per-lesson recovery guard only after the playhead advances more than two seconds beyond the resumed position. Keep the threshold and lesson-identity check in a tested helper so stalls before meaningful progress do not form an automatic retry loop.
+- **Why it helps:** A transient recovery can be followed by another automatic attempt after genuine playback progress, while repeated failures at the same position still stop for manual recovery.
+- **Interface review:** Existing buffering/reconnecting messages and manual Retry controls remain unchanged; no new autoplay or progress behavior was introduced.
+- **Backend review:** Recovery continues to use the current resume path and server-verified position for tracked lessons; no API or persistence change was needed.
+- **Checked:** Added coverage in `tests/client/video-recovery.test.js`; focused recovery tests, full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Expose required state for registration dropdowns
 
 - **Reviewed:** Required custom registration selects were validated on submission and displayed “Required”, but the combobox exposed the requirement only as text in its accessible name instead of a semantic required state.

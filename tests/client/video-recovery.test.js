@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getVideoRecoveryStatusMessage, getVideoResumeTarget, shouldResumeVideoPlayback } from '../../src/video-recovery.ts';
+import { getVideoRecoveryStatusMessage, getVideoResumeTarget, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from '../../src/video-recovery.ts';
 
 const emptyProgress = {
   lessonId: '',
@@ -78,4 +78,13 @@ test('video recovery status copy reflects whether watch tracking applies', () =>
   assert.equal(getVideoRecoveryStatusMessage('buffering', true), 'Video is buffering. Your verified watch position is saved.');
   assert.equal(getVideoRecoveryStatusMessage('reconnecting', false), 'Playback stalled. Reconnecting from your current position…');
   assert.equal(getVideoRecoveryStatusMessage('reconnecting', true), 'Playback stalled. Reconnecting from the last server-verified position…');
+});
+
+test('automatic video recovery can retry after playback advances beyond the resumed point', () => {
+  const recovery = { lessonId: 'lesson-1', recoveryLessonId: 'lesson-1', resumePositionSeconds: 42 };
+
+  assert.equal(videoRecoveryMadeProgress({ ...recovery, positionSeconds: 44 }), false);
+  assert.equal(videoRecoveryMadeProgress({ ...recovery, positionSeconds: 44.01 }), true);
+  assert.equal(videoRecoveryMadeProgress({ ...recovery, lessonId: 'lesson-2', positionSeconds: 50 }), false);
+  assert.equal(videoRecoveryMadeProgress({ ...recovery, recoveryLessonId: null, positionSeconds: 50 }), false);
 });

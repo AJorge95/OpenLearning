@@ -8,7 +8,7 @@ import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCo
 import { summarizeCourseProgress } from './course-progress';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
 import { tryEnterFullscreen } from './video-fullscreen';
-import { getVideoRecoveryStatusMessage, getVideoResumeTarget, shouldResumeVideoPlayback } from './video-recovery';
+import { getVideoRecoveryStatusMessage, getVideoResumeTarget, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
 import type { PendingVideoResume } from './video-recovery';
 import { useAuth } from './auth-context';
 import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt } from './types';
@@ -1155,6 +1155,12 @@ export function CoursePlayerPage() {
     if (!video) return;
     const position = Math.min(video.currentTime, Number.isFinite(video.duration) ? video.duration : video.currentTime);
     setVideoPosition(position);
+    if (videoRecoveryMadeProgress({
+      lessonId,
+      recoveryLessonId: autoVideoRecoveryLessonRef.current,
+      positionSeconds: position,
+      resumePositionSeconds: playbackPositionRef.current,
+    })) autoVideoRecoveryLessonRef.current = null;
     if (!watchRequired) {
       setVideoDuration(Number.isFinite(video.duration) ? video.duration : 0);
       return;
