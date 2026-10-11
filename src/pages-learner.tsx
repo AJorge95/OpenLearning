@@ -8,7 +8,7 @@ import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCo
 import { summarizeCourseProgress } from './course-progress';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
 import { tryEnterFullscreen } from './video-fullscreen';
-import { getVideoRecoveryStatusMessage, getVideoResumeTarget, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
+import { getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
 import type { PendingVideoResume } from './video-recovery';
 import { useAuth } from './auth-context';
 import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt } from './types';
@@ -666,6 +666,10 @@ export function CoursePlayerPage() {
   const watchRequired = Boolean(current?.hasVideo);
   const watchReadyForCurrent = watchProgress.lessonId === lessonId && watchProgress.ready;
   const watchedForCurrent = watchProgress.lessonId === lessonId && watchProgress.complete;
+  const videoWatchProgressDisplay = getVideoWatchProgressDisplay({
+    watchedUntilSeconds: watchProgress.lessonId === lessonId ? watchProgress.watchedUntilSeconds : 0,
+    durationSeconds: videoDuration,
+  });
   const lessonCanBeCompleted = !watchRequired || current?.completed || watchedForCurrent;
   const commentDraft = commentDrafts[lessonId] ?? '';
   const commentSaving = commentSavingLessonIds.has(lessonId);
@@ -1344,7 +1348,7 @@ export function CoursePlayerPage() {
         <button className="video-control-button video-play-button" type="button" aria-label={videoPlaying ? 'Pause video' : 'Play video'} disabled={!watchReadyForCurrent || videoError} onClick={() => void toggleVideoPlayback()}>{videoPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</button>
         <button className="video-control-button video-rewind-button" type="button" aria-label="Rewind 30 seconds" title="Rewind 30 seconds" disabled={!watchReadyForCurrent || !watchProgress.started || rewindSaving || videoPosition <= 0} onClick={rewindVideo30Seconds}><RotateCcw size={16} /><span>30s</span></button>
         <span className="video-clock" aria-label="Current video time">{videoClock(videoPosition)} <span>/</span> {videoClock(videoDuration)}</span>
-        <div className="video-watch-progress" role="progressbar" aria-label="Video watched; seeking is disabled" aria-valuemin={0} aria-valuemax={Math.max(1, videoDuration)} aria-valuenow={Math.min(videoPosition, videoDuration)}><span style={{ width: `${videoDuration ? Math.min(100, videoPosition / videoDuration * 100) : 0}%` }} /></div>
+        <div className="video-watch-progress" role="progressbar" aria-label="Video watch progress; seeking is disabled" aria-valuemin={0} aria-valuemax={videoWatchProgressDisplay.max} aria-valuenow={videoWatchProgressDisplay.value}><span style={{ width: `${videoWatchProgressDisplay.percentage}%` }} /></div>
         <button className="video-control-button" type="button" aria-label={videoMuted ? 'Unmute video' : 'Mute video'} aria-pressed={videoMuted} onClick={() => updateVolume(videoMuted ? videoVolume || 1 : 0)}>{videoMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
         <input className="video-volume-control" type="range" min="0" max="1" step="0.05" value={videoMuted ? 0 : videoVolume} aria-label="Video volume" onChange={(event) => updateVolume(Number(event.target.value))} />
         <button className="video-control-button" type="button" aria-label="Enter full screen" onClick={() => { void enterVideoFullscreen(); }}><Maximize size={17} /></button>

@@ -27,6 +27,23 @@ export function videoRecoveryMadeProgress({
   return recoveryLessonId === lessonId && positionSeconds > resumePositionSeconds + 2;
 }
 
+export function getVideoWatchProgressDisplay({
+  watchedUntilSeconds,
+  durationSeconds,
+}: {
+  watchedUntilSeconds: number;
+  durationSeconds: number;
+}) {
+  const duration = Number.isFinite(durationSeconds) ? Math.max(0, durationSeconds) : 0;
+  const watched = Number.isFinite(watchedUntilSeconds) ? Math.max(0, watchedUntilSeconds) : 0;
+  const value = Math.min(watched, duration);
+  return {
+    value,
+    max: Math.max(1, duration),
+    percentage: duration > 0 ? Math.min(100, value / duration * 100) : 0,
+  };
+}
+
 export function shouldResumeVideoPlayback({
   requested,
   lessonId,
