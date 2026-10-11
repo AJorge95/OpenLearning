@@ -2841,6 +2841,74 @@ test('lesson reordering rolls back when its audit entry cannot be saved and skip
   }
 });
 
+test('quiz-save validation rejects malformed questions without replacing saved quiz content', async () => {
+  const courseId = 'course-quiz-validation';
+  const moduleId = 'module-quiz-validation';
+  const quizId = 'quiz-validation';
+  const questionId = 'question-validation';
+  const insertFixture = database.transaction(() => {
+    database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES (?, 'Quiz validation fixture', 'draft', 'admin-1', 'admin-1')`).run(courseId);
+    database.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, 0)')
+      .run(moduleId, courseId, 'Validation module');
+    database.prepare('INSERT INTO quizzes (id, module_id, title, pass_mark) VALUES (?, ?, ?, 70)')
+      .run(quizId, moduleId, 'Saved quiz');
+    database.prepare(`INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position)
+      VALUES (?, ?, 'Saved question', 'Saved explanation', 0)`).run(questionId, quizId);
+    database.prepare(`INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position)
+      VALUES ('choice-validation-correct', ?, 'Correct', 1, 0), ('choice-validation-wrong', ?, 'Wrong', 0, 1)`)
+      .run(questionId, questionId);
+  });
+  insertFixture();
+
+  const validQuestion = {
+    prompt: 'A valid question?',
+    explanation: 'A valid explanation.',
+    choices: [{ text: 'Correct', isCorrect: true }, { text: 'Wrong', isCorrect: false }],
+  };
+  const basePayload = { title: 'Replacement quiz', passMark: 80, questions: [validQuestion] };
+  const invalidPayloads = [
+    ['missing question list', { ...basePayload, questions: undefined }],
+    ['non-array question list', { ...basePayload, questions: null }],
+    ['non-object question', { ...basePayload, questions: [null] }],
+    ['missing choice list', { ...basePayload, questions: [{ prompt: 'Question', choices: null }] }],
+    ['too few choices', { ...basePayload, questions: [{ ...validQuestion, choices: [validQuestion.choices[0]] }] }],
+    ['too many choices', { ...basePayload, questions: [{ ...validQuestion, choices: Array.from({ length: 7 }, (_, index) => ({ text: `Choice ${index + 1}`, isCorrect: index === 0 })) }] }],
+    ['no correct answer', { ...basePayload, questions: [{ ...validQuestion, choices: validQuestion.choices.map((choice) => ({ ...choice, isCorrect: false })) }] }],
+    ['multiple correct answers', { ...basePayload, questions: [{ ...validQuestion, choices: validQuestion.choices.map((choice) => ({ ...choice, isCorrect: true })) }] }],
+    ['non-boolean correctness flag', { ...basePayload, questions: [{ ...validQuestion, choices: [{ text: 'Correct', isCorrect: 'true' }, validQuestion.choices[1]] }] }],
+    ['blank question text', { ...basePayload, questions: [{ ...validQuestion, prompt: '   ' }] }],
+    ['blank answer text', { ...basePayload, questions: [{ ...validQuestion, choices: [{ text: '  ', isCorrect: true }, validQuestion.choices[1]] }] }],
+    ['oversized question text', { ...basePayload, questions: [{ ...validQuestion, prompt: 'x'.repeat(1001) }] }],
+    ['fractional pass mark', { ...basePayload, passMark: 70.5 }],
+    ['out-of-range pass mark', { ...basePayload, passMark: 101 }],
+  ];
+  const originalQuiz = database.prepare('SELECT id, title, pass_mark FROM quizzes WHERE id = ?').get(quizId);
+  const originalQuestions = database.prepare('SELECT id, quiz_id, prompt, explanation, position FROM quiz_questions WHERE quiz_id = ? ORDER BY position, id').all(quizId);
+  const originalChoices = database.prepare(`SELECT c.id, c.question_id, c.choice_text, c.is_correct, c.position
+    FROM quiz_choices c JOIN quiz_questions q ON q.id = c.question_id
+    WHERE q.quiz_id = ? ORDER BY q.position, c.position, c.id`).all(quizId);
+
+  try {
+    for (const [label, payload] of invalidPayloads) {
+      const response = await fetch(apiUrl(`/manage/modules/${moduleId}/quiz`), {
+        method: 'PUT',
+        headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      assert.equal(response.status, 400, `${label} should be rejected`);
+      assert.equal((await response.json()).code, 'validation_error', `${label} should use the validation error contract`);
+      assert.deepEqual(database.prepare('SELECT id, title, pass_mark FROM quizzes WHERE id = ?').get(quizId), originalQuiz, `${label} must preserve the quiz`);
+      assert.deepEqual(database.prepare('SELECT id, quiz_id, prompt, explanation, position FROM quiz_questions WHERE quiz_id = ? ORDER BY position, id').all(quizId), originalQuestions, `${label} must preserve questions`);
+      assert.deepEqual(database.prepare(`SELECT c.id, c.question_id, c.choice_text, c.is_correct, c.position
+        FROM quiz_choices c JOIN quiz_questions q ON q.id = c.question_id
+        WHERE q.quiz_id = ? ORDER BY q.position, c.position, c.id`).all(quizId), originalChoices, `${label} must preserve choices`);
+    }
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('quiz saves roll back when their audit entry cannot be saved', async () => {
   const originalQuiz = database.prepare("SELECT id, title, pass_mark FROM quizzes WHERE module_id = 'module-analytics'").get();
   const initialQuestionCount = database.prepare('SELECT COUNT(*) AS count FROM quiz_questions WHERE quiz_id = ?').get(originalQuiz.id).count;

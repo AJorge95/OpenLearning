@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Protect quiz-save validation boundaries
+
+- **Reviewed:** The quiz editor and server agree on text limits, the 50-question cap, two-to-six answer choices, and exactly one correct answer. Existing server coverage tested audit-failure rollback but did not protect malformed quiz-save requests or the client helper used to find the first blank field.
+- **Improvement:** Add client tests for the first missing question or answer text and route regressions for malformed question/choice shapes, empty and oversized text, invalid correctness flags, and invalid pass marks. Each rejected request must return `validation_error` and preserve the existing quiz, questions, and choices.
+- **Why it helps:** Future editor or API changes cannot silently replace saved quiz content with malformed input, and course authors get consistent first-field validation feedback.
+- **Checked:** The focused course-route and client quiz-validation suites passed (97/97). Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, test-file syntax checks, and `git diff --check` passed.
+
 ## 2026-10-11 — Include learning-path courses in account activity
 
 - **Reviewed:** The learner's My learning query includes courses from published learning paths, while the administrator account-detail endpoint counted only direct course enrollments and grants. A learner who was assigned a path could therefore see course activity that staff could not see on the account page.
