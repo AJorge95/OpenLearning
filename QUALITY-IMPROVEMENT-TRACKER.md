@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck remaining quiz and review text limits
+
+- **Reviewed:** Quiz question, explanation, and answer-choice limits against their server validators; publication-note and change-request limits against their route validators; and the learner comment field.
+- **Result:** No runtime change. Quiz fields use matching limits of 1,000, 1,000, and 500 characters; publication notes use 500 on both sides; change-request notes use 1,000 on both sides; and learner comments already show their current count.
+- **Why no change:** Adding counters to every repeated quiz field would make the dense quiz editor busier without evidence that authors are hitting these caps. The one shorter publication-note limit is stated in its label and matches server validation.
+- **Checked:** Read-only source review of the editor limits, existing comment counter, and server validation. No current-build mismatch surfaced.
+- **Needed to revisit:** A reproduced rejection or editing problem caused by a mismatched cap, or evidence that authors need live counts for these shorter, repeated fields.
+
 ## 2026-10-12 — Cover review-note rejection boundaries
 
 - **Reviewed:** The “request changes” form and server route, the approval publication-note limit, and quiz text limits. The review form and server both cap change-request notes at 1,000 characters; the publication-note limit is 500 in both places.
