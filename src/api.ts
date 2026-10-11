@@ -161,7 +161,7 @@ export const api = {
   post: <T>(path: string, body?: unknown) => request<T>(path, json('POST', body)),
   put: <T>(path: string, body?: unknown) => request<T>(path, json('PUT', body)),
   patch: <T>(path: string, body?: unknown) => request<T>(path, json('PATCH', body)),
-  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  delete: <T = void>(path: string) => request<T>(path, { method: 'DELETE' }),
   refreshCsrf,
   clearCsrf: () => {
     csrfGeneration += 1;

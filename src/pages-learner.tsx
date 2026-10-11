@@ -755,7 +755,7 @@ export function CoursePlayerPage() {
     const requestSequence = ++completionSequenceRef.current;
     setSaving(true); setError('');
     try {
-      if (current.completed) await api.delete(`/api/lessons/${current.id}/completion`);
+      if (current.completed) await api.delete<{ completed: boolean }>(`/api/lessons/${current.id}/completion`);
       else {
         const response = await api.put<{ completed: boolean; certificate: CourseCertificate | null }>(`/api/lessons/${current.id}/completion`);
         if (routeCourseIdRef.current === requestedCourseId) setAvailableCertificate(response.certificate);
@@ -846,7 +846,7 @@ export function CoursePlayerPage() {
     setFeedbackError(null);
     setCommentModerationNotice(null);
     try {
-      await api.delete<void>(`/api/lessons/${requestedLessonId}/comments/${comment.id}`);
+      await api.delete(`/api/lessons/${requestedLessonId}/comments/${comment.id}`);
       if (routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) {
         commentPageSequenceRef.current += 1;
         commentPageControllerRef.current?.abort();
