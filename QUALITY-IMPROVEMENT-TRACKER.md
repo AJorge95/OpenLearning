@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck course media uploads and delivery
+
+- **Reviewed:** The MP4, cover, document, and caption upload paths; file signature and dimension validation; cancellation and uncertain-network feedback; transaction/audit rollback and temporary-file cleanup; protected lesson downloads; and byte-range streaming for video seeking.
+- **Result:** No additional code change. The current implementation validates uploads before attaching them, keeps old media when audit writes fail, removes partial response streams after clients disconnect, scopes media delivery to course and lesson access, and handles supported and invalid byte ranges.
+- **Why no change:** The reviewed server and client behavior matches the product requirements, and focused regressions already cover the failure and access cases. Performance tuning needs measurements with representative large files and concurrent learners; protected authoring interactions need an authenticated browser session.
+- **Checked:** Media route, file stream, API transport/cancellation, and upload accessibility tests passed (29/29).
+
 ## 2026-10-11 — Recheck administrator account management
 
 - **Reviewed:** Administrator user search and page bounds, account create/update/password-reset routes, role and disabled-state validation, last-active-admin protection, session revocation, and audit rollback behavior.
