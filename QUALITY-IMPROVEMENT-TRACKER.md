@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck API transport and session recovery
+
+- **Reviewed:** Shared API response parsing and transport failures, concurrent CSRF refresh and retry behavior, request cancellation, SQLite session expiry, malformed-session cleanup, and store error callbacks.
+- **Result:** No runtime change. The API client normalizes network and response failures, retries a CSRF rejection once, and preserves abort behavior. The session store removes expired or malformed data and reports database failures through its callbacks.
+- **Why no change:** The reviewed recovery paths are explicit and have focused regression coverage; no uncovered failure case was found.
+- **Checked:** `node --test tests/client/api.test.js tests/server/session-store.test.js tests/server/session-data.test.js` passed (24/24).
+- **Needed to continue:** A reproducible API/session failure outside these cases, or representative load measurements showing a performance bottleneck.
+
 ## 2026-10-11 — Review remaining empty states and file delivery
 
 - **Reviewed:** Staff and learner empty states for learning paths and competencies, remaining native blocking prompt calls, `streamFileToResponse`, and the shared HTTP error handler.
