@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Make public course enrollment atomic
+
+- **Reviewed:** Public course enrollment inserted the enrollment record before creating the learner's initial course state. If that second write failed, the API returned HTTP 500 while leaving the learner enrolled without the course state required for deadlines and progress.
+- **Improvement:** Run the access check, enrollment insert, and initial learning-state creation in one immediate transaction. A route comment explains the boundary.
+- **Why it helps:** A failed enrollment no longer leaves partial access or a stale row for a retry; eligibility is also checked against the same transaction as the write.
+- **Interface review:** Course overview actions already use clear Start/Continue labels, disable when there is no next activity, prevent duplicate starts, and show recoverable errors. The overview layout also collapses to a single column on narrow screens; no UI change was warranted.
+- **Checked:** Before the fix, an injected learning-state write failure returned HTTP 500 and left an enrollment row. Afterward, the row and course state both roll back. The focused enrollment/read-only tests passed (2/2); the full suite passed (504/504); `npm run build` passed strict TypeScript checking and Vite bundling; JavaScript syntax checks and `git diff --check` passed.
+
 ## 2026-10-11 — Keep setup and registration response reads transactional
 
 - **Reviewed:** Initial setup committed the administrator and platform settings before reading the returned account and configuration. Learner registration committed the new account and audit entry before reading registration availability for its response. A database read failure therefore returned HTTP 500 after either account had been created.

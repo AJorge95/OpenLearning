@@ -852,6 +852,40 @@ test('course and learning-path detail GETs are read-only while protected actions
   }
 });
 
+test('course enrollment rolls back when its learning state cannot be created', async () => {
+  const courseId = 'course-enrollment-atomic';
+  const originalPrepare = database.prepare;
+  const originalConsoleError = console.error;
+  let learningStateWriteFailed = false;
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Enrollment atomicity', 'published', 'admin-1', 'admin-1')`).run(courseId);
+  database.prepare = function prepareWithUnavailableLearningState(sql, ...args) {
+    if (sql.includes('INSERT OR IGNORE INTO course_learning_state')) {
+      learningStateWriteFailed = true;
+      throw new Error('course learning state unavailable');
+    }
+    return originalPrepare.call(this, sql, ...args);
+  };
+  console.error = () => {};
+
+  try {
+    const response = await fetch(apiUrl(`/courses/${courseId}/enroll`), {
+      method: 'POST',
+      headers: userHeaders('learner-unassigned'),
+    });
+    assert.equal(response.status, 500);
+    assert.equal(learningStateWriteFailed, true);
+    assert.equal(originalPrepare.call(database, 'SELECT COUNT(*) AS count FROM enrollments WHERE course_id = ? AND user_id = ?')
+      .get(courseId, 'learner-unassigned').count, 0);
+    assert.equal(originalPrepare.call(database, 'SELECT COUNT(*) AS count FROM course_learning_state WHERE course_id = ? AND user_id = ?')
+      .get(courseId, 'learner-unassigned').count, 0);
+  } finally {
+    console.error = originalConsoleError;
+    database.prepare = originalPrepare;
+    originalPrepare.call(database, 'DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('course summaries batch database reads and preserve progress across versions', () => {
   database.exec(`
     INSERT INTO courses (id, title, status, created_by, updated_by)
