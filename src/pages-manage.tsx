@@ -185,6 +185,7 @@ export function CourseManagementPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [total, setTotal] = useState(0);
+  const courseSearchInputRef = useRef<HTMLInputElement>(null);
   const loadSequenceRef = useRef(0);
   const loadControllerRef = useRef<AbortController | null>(null);
   const filtersRef = useRef({ query: appliedQuery, status });
@@ -236,6 +237,13 @@ export function CourseManagementPage() {
     setAppliedQuery(nextQuery);
     void load(1, { query: nextQuery, status });
   }
+  function clearCourseSearch() {
+    setQuery('');
+    setAppliedQuery('');
+    setPage(1);
+    void load(1, { query: '', status });
+    courseSearchInputRef.current?.focus();
+  }
   useEffect(() => {
     load(1);
     return () => {
@@ -277,12 +285,15 @@ export function CourseManagementPage() {
           ? { title: 'No archived courses', detail: 'Courses you archive will appear here.' }
           : { title: 'Your course catalog is ready', detail: 'Create a course, add modules and video lessons, then publish it for learners.' };
   const hasEmptyCourseResult = !loading && !failedRequest && courses.length === 0;
+  const emptyCourseAction = appliedQuery
+    ? <Button type="button" variant="secondary" onClick={clearCourseSearch}>Clear search</Button>
+    : status === 'all' && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} />Create course</Link>;
   return <div className="management-page">
     <PageHeading title="Courses" action={<Link className="button button-primary" to="/manage/courses/new"><Plus size={18} />Create course</Link>} />
     <div className="management-tabs" role="group" aria-label="Filter courses by status">
       {tabs.map((tab) => <button type="button" key={tab.value} aria-pressed={status === tab.value} className={status === tab.value ? 'active' : ''} onClick={() => setStatus(tab.value)}>{tab.label}</button>)}
     </div>
-    <form className="management-search" onSubmit={submitSearch}><Search size={19} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses" aria-label="Search courses" maxLength={120} /><button type="submit">Search</button></form>
+    <form className="management-search" onSubmit={submitSearch}><Search size={19} /><input ref={courseSearchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses" aria-label="Search courses" maxLength={120} /><button type="submit">Search</button></form>
     {error && (failedRequest
       ? <div className="course-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
@@ -299,7 +310,7 @@ export function CourseManagementPage() {
         <td><div className="table-actions"><Link className="text-action" to={`/manage/courses/${course.id}/edit`}>Edit</Link><Link className="text-action" to={`/manage/courses/${course.id}/analytics`}>Analytics</Link><CourseRowMenu course={course} busyAction={busyAction} onStatusChange={changeStatus} onDelete={deleteCourse} /></div></td>
         </tr>;
       })}
-    </tbody></table></div> : <EmptyState title={emptyCourseState.title} detail={emptyCourseState.detail} action={status === 'all' && !appliedQuery && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} />Create course</Link>} />}
+    </tbody></table></div> : <EmptyState title={emptyCourseState.title} detail={emptyCourseState.detail} action={emptyCourseAction} />}
     {!loading && !failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
     {pendingDeleteCourse && <ConfirmationDialog {...courseDeletionConfirmation(pendingDeleteCourse.title)} confirmLabel="Delete course" onCancel={() => setPendingDeleteCourse(null)} onConfirm={() => { const courseToDelete = pendingDeleteCourse; setPendingDeleteCourse(null); if (courseToDelete) void deleteCourse(courseToDelete, true); }} />}
   </div>;

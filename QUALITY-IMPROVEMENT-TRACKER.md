@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recover from empty course searches
+
+- **Reviewed:** Course-manager search state, status-filtered requests, and the existing empty-state actions.
+- **Improvement:** Add a conditional “Clear search” action when an applied course search returns no matches. It clears draft and applied search text, reloads page one while preserving the selected status, and returns focus to the search field.
+- **Why it helps:** Staff can recover from a restrictive course query in one step and continue searching without manually editing the field or losing their status filter.
+- **Backend review:** The existing `/api/manage/courses` query and pagination contract remains in place; this interaction only resets client filters and requests page one.
+- **Checked:** The focused source regression passed (1/1), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. In the authenticated local browser, an unmatched query showed the clear action; clicking it restored the existing course and focused the search input. Browser console inspection was unavailable through the connected in-app browser controls; no error overlay appeared.
+
 ## 2026-10-11 — Recover from empty administrator log filters
 
 - **Reviewed:** The Audit log and System log empty states explained that filters matched no entries but left administrators to edit each filter manually before retrying.
