@@ -1725,6 +1725,7 @@ export function AdminUsersPage() {
     ) ?? []);
     dialog?.querySelector<HTMLElement>('[autofocus]')?.focus();
 
+    // A document listener keeps Tab inside the aria-modal dialog if focus leaves its controls.
     function handleDialogKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault();

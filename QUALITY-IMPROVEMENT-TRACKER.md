@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Guard administrator password-reset dialog focus behavior
+
+- **Reviewed:** The reset dialog's accessible naming, initial focus, Escape handling, forward and reverse Tab wrapping, cleanup, focus restoration, and saving-state close guard; the administrator password-reset route and its throttling and audit/session transaction tests.
+- **Improvement:** Add a code comment explaining why keyboard handling listens at the document level and focused source regression checks for dialog semantics, keyboard wrapping, listener cleanup, and trigger focus restoration.
+- **Why it helps:** Future edits are less likely to break keyboard access or leave focus behind after the dialog closes, including when focus escapes the dialog controls.
+- **Backend review:** The reset route remains rate-limited and keeps password/session changes within its audited transaction; existing route coverage passed, so no backend behavior change was needed.
+- **Checked:** In the local admin browser, opening the dialog focused New password; five Tabs reached Close; Shift+Tab returned to Reset password; Escape closed the dialog and restored focus to the original Reset password for abjorge95 button. No password was entered or submitted. The new focused source checks and relevant registration-field and rate-limit server suites passed (35/35); `npm run build` passed strict TypeScript checking and Vite bundling; `git diff --check` passed. Browser console logs were not collected.
+
 ## 2026-10-11 — Keep learner playback controls available in fullscreen
 
 - **Reviewed:** The watched-lesson player fullscreen target, custom playback controls, caption selector portal, fullscreen state changes, responsive control layout, and existing watch-progress APIs.
