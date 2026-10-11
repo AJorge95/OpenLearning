@@ -41,6 +41,7 @@ test('changing course routes resets publication-only options', () => {
     ['setChangeNote', "''"],
   ]);
   assert.ok(effectCallback.body.getText(sourceFile).includes('coverValidationSequenceRef.current += 1;'), 'stale cover validation should be invalidated on route changes');
+  assert.equal((effectCallback.body.getText(sourceFile).match(/abortCoverValidation\(\);/g) || []).length, 2, 'pending cover decodes should be aborted when a route starts and when it leaves');
   assert.ok(resetCalls.some(([name, value]) => name === 'setCoverValidating' && value === 'false'), 'cover validation state should reset on route changes');
 });
 

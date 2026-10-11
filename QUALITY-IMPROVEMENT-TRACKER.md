@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Cancel course-cover decoding after navigation
+
+- **Reviewed:** Course-cover preflight invalidated stale results when the editor route changed, but an in-flight browser image decode kept running and held its temporary Blob URL until completion.
+- **Improvement:** Make `readImageDimensions` abortable. On route change or editor cleanup, abort the preflight, detach image and signal handlers, remove the pending image source, and revoke the Blob URL. Already-aborted requests allocate no image or URL.
+- **Why it helps:** Leaving the editor stops unnecessary decode work and releases the selected image promptly, while the existing sequence guard continues to prevent stale validation from affecting another course.
+- **Backend review:** Server-side image dimension and byte limits remain authoritative; no upload endpoint or validation policy changed.
+- **Checked:** Image helper cancellation, pre-aborted request, and late-load regressions passed as part of the full `npm test -- --test-reporter=dot` suite. `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed. Signed-in local Chrome rechecked the reported role selector: its trigger opens normally, adjacent and wide-right clicks do not open it, and outside clicks dismiss it; the current source already contains that fix, so no duplicate selector rule was added.
+
 ## 2026-10-11 — Explain oversized multipart form fields
 
 - **Reviewed:** The media upload middleware's 8 KiB field-value bound, Multer error mapping, and the account-role selector's existing desktop/mobile boundary.
