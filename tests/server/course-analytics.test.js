@@ -3198,6 +3198,85 @@ test('course updates roll back when their audit entry cannot be saved', async ()
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.updated' AND entity_id = 'course-update-audit'").get().count, 1);
 });
 
+test('course updates roll back when the saved editor response cannot be read', async () => {
+  const courseId = 'course-update-payload-read';
+  const originalTitle = 'Draft before response failure';
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, ?, 'draft', 'admin-1', 'admin-1')`).run(courseId, originalTitle);
+  const initialAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.updated' AND entity_id = ?").get(courseId).count;
+  const originalPrepare = database.prepare;
+  let payloadReadFailed = false;
+
+  database.prepare = (sql) => {
+    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT * FROM course_modules WHERE course_id = ? ORDER BY position, id') {
+      payloadReadFailed = true;
+      throw new Error('Injected course payload read failure');
+    }
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    // This read happens after the update and audit insert, so its failure must roll them back together.
+    const response = await fetch(apiUrl(`/manage/courses/${courseId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Updated despite payload failure' }),
+    });
+
+    assert.equal(payloadReadFailed, true);
+    assert.equal(response.status, 500);
+    assert.equal(database.prepare('SELECT title FROM courses WHERE id = ?').get(courseId).title, originalTitle);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.updated' AND entity_id = ?").get(courseId).count, initialAuditCount);
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM audit_logs WHERE entity_id = ?').run(courseId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
+test('course publication rolls back when the published editor response cannot be read', async () => {
+  const courseId = 'course-publish-payload-read';
+  const originalTitle = 'Draft before publication response failure';
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, ?, 'draft', 'admin-1', 'admin-1')`).run(courseId, originalTitle);
+  database.prepare(`INSERT INTO course_modules (id, course_id, title, position)
+    VALUES ('module-publish-payload-read', ?, 'Module', 0)`).run(courseId);
+  database.prepare(`INSERT INTO media_files (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+    VALUES ('media-publish-payload-read', ?, 'lesson.mp4', 'lesson.mp4', 'video/mp4', 1, 'video')`).run(courseId);
+  database.prepare(`INSERT INTO lessons (id, module_id, title, media_id, position)
+    VALUES ('lesson-publish-payload-read', 'module-publish-payload-read', 'Lesson', 'media-publish-payload-read', 0)`).run();
+  const initialAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.published' AND entity_id = ?").get(courseId).count;
+  const originalPrepare = database.prepare;
+  let payloadReadFailed = false;
+
+  database.prepare = (sql) => {
+    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT l.*, mf.original_name, mf.mime_type FROM lessons l JOIN course_modules m ON m.id = l.module_id LEFT JOIN media_files mf ON mf.id = l.media_id WHERE m.course_id = ? ORDER BY m.position, m.id, l.position, l.id') {
+      payloadReadFailed = true;
+      throw new Error('Injected published course payload read failure');
+    }
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    // Fail after version creation and audit logging to verify the publication transaction rolls back.
+    const response = await fetch(apiUrl(`/manage/courses/${courseId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Published despite payload failure', status: 'published' }),
+    });
+
+    assert.equal(payloadReadFailed, true);
+    assert.equal(response.status, 500);
+    assert.deepEqual(database.prepare('SELECT title, status FROM courses WHERE id = ?').get(courseId), { title: originalTitle, status: 'draft' });
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_versions WHERE course_id = ?').get(courseId).count, 0);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.published' AND entity_id = ?").get(courseId).count, initialAuditCount);
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM audit_logs WHERE entity_id = ?').run(courseId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('course management keeps draft edits and published versions under one visible course identity', async () => {
   const titlePrefix = 'Identity flow regression';
   let courseId = '';
