@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Bound the administrator role selector to its trigger
+
+- **Reviewed:** The account row applies a general full-width rule to AppSelect, while the role field has its own fixed desktop width. The previous role-specific width relied on parent sizing and did not override the account-row selector rule directly.
+- **Improvement:** Give the role AppSelect root a higher-specificity 9rem desktop bound and size its trigger to that root. Keep the existing narrow-screen rules that expand the field to the available width.
+- **Why it helps:** The visible selector and its component boundary now resolve to one explicit width, so unused space beside the trigger cannot become part of the role control's hit area.
+- **Checked:** The focused AppSelect label/width regression suite passed (6/6), including checks for the desktop width boundary and mobile full-width override. The full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/app-select-label.test.js`, and `git diff --check` passed. The in-app browser is signed out at `/login`, and Playwright is not installed, so the protected account-role interaction could not be replayed from the supplied screenshot.
+
 ## 2026-10-11 — Load competency progress pages on demand
 
 - **Reviewed:** The learner competency page rendered only 12 cards initially, but its API request still returned every active competency and mapped course. Later “Show more” clicks only revealed data already transferred and rendered summaries for the full catalog at startup.
