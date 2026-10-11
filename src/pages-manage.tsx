@@ -21,6 +21,8 @@ import { firstQuizTextIssue } from './quiz-validation';
 import { lessonResourceUrlError } from './resource-validation';
 import { clearPasswordConfirmationError, getPasswordConfirmationError } from './password-confirmation';
 import { userListEmptyMessage } from './user-list-empty-state';
+import { readResetStatusAfterConflict } from './platform-reset-status';
+import type { PlatformResetStatus } from './platform-reset-status';
 import type { UserRoleFilter } from './user-list-empty-state';
 import type { Competency, Course, CourseAccessUser, CourseAnalytics, CourseModule, CourseVersion, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
 
@@ -1974,7 +1976,7 @@ export function AdminSettingsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
-  const [resetState, setResetState] = useState<{ pending: boolean; phase?: 'preparing' | 'ready' | 'resetting'; confirmationId?: string; backupLocation?: string; expiresAt?: number }>({ pending: false });
+  const [resetState, setResetState] = useState<PlatformResetStatus>({ pending: false });
   const [resetPhrase, setResetPhrase] = useState('');
   const [resetError, setResetError] = useState('');
   const [resetSuccess, setResetSuccess] = useState('');
@@ -1999,7 +2001,7 @@ export function AdminSettingsPage() {
   }, [registeredUserCountRetryVersion]);
   useEffect(() => {
     let active = true;
-    api.get<{ pending: boolean; phase?: 'preparing' | 'ready' | 'resetting'; confirmationId?: string; backupLocation?: string; expiresAt?: number }>('/api/admin/platform-reset')
+    api.get<PlatformResetStatus>('/api/admin/platform-reset')
       .then((result) => { if (active) setResetState(result); })
       .catch((cause) => { if (active) setResetError(cause instanceof ApiError ? cause.message : 'Reset status could not be loaded.'); })
       .finally(() => { if (active) setResetStatusLoaded(true); });
@@ -2042,7 +2044,14 @@ export function AdminSettingsPage() {
     try {
       const result = await api.post<typeof resetState>('/api/admin/platform-reset/prepare');
       setResetState(result); setResetPhrase('');
-    } catch (cause) { setResetError(cause instanceof ApiError ? cause.message : 'A backup could not be created, so nothing was reset.'); }
+    } catch (cause) {
+      const status = await readResetStatusAfterConflict(cause, () => api.get<PlatformResetStatus>('/api/admin/platform-reset'));
+      if (status) {
+        setResetState(status); setResetPhrase(''); setResetError('');
+      } else {
+        setResetError(cause instanceof ApiError ? cause.message : 'A backup could not be created, so nothing was reset.');
+      }
+    }
     finally { setResetBusy(false); }
   }
   async function cancelReset() {
