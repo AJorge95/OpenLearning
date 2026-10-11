@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Cover expired-session cleanup failures
+
+- **Reviewed:** The SQLite session store prunes expired rows at startup and daily. It catches cleanup errors and reports them through the configured callback, with a console fallback if that reporter also fails, but neither failure path had a committed regression.
+- **Improvement:** Add isolated tests for a SQLite cleanup failure and for a cleanup reporter that throws. Both confirm store construction continues and the failure remains observable.
+- **Why it helps:** A transient database cleanup problem will not prevent session middleware from starting, and a broken system-log callback will not turn the cleanup problem into a startup failure.
+- **Interface review:** The live sign-in page renders named username and password fields, a primary sign-in action, and the registration link at the current desktop viewport. No markup or layout issue was evident, so no UI change was indicated.
+- **Checked:** `node --test tests/server/session-store.test.js` passed (5/5); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/server/session-store.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Reset watch checkpoints when replacing lesson video
 
 - **Reviewed:** Video uploads replace `lessons.media_id`, while watch progress is keyed by lesson ID. A learner's saved checkpoint could therefore survive a different video, either resuming at the wrong position or failing the duration consistency check on every playback start.

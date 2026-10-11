@@ -61,6 +61,53 @@ test('startup and reads discard expired or malformed sessions', async () => {
   }
 });
 
+test('startup keeps the session store available and reports expired-session cleanup failures', () => {
+  const database = createDatabase();
+  const failures = [];
+  database.prepare('INSERT INTO sessions (sid, session_data, expires_at) VALUES (?, ?, ?)')
+    .run('expired-cleanup-failure', '{}', Date.now() - 1);
+  database.exec(`CREATE TRIGGER reject_expired_session_cleanup BEFORE DELETE ON sessions
+    WHEN OLD.sid = 'expired-cleanup-failure' BEGIN SELECT RAISE(FAIL, 'cleanup unavailable'); END`);
+
+  let store;
+  try {
+    assert.doesNotThrow(() => {
+      store = new SQLiteSessionStore(database, { onCleanupError: (error) => failures.push(error) });
+    });
+    assert.equal(failures.length, 1);
+    assert.match(failures[0].message, /cleanup unavailable/);
+    assert.equal(database.prepare('SELECT 1 FROM sessions WHERE sid = ?').get('expired-cleanup-failure') !== undefined, true);
+  } finally {
+    if (store?.cleanupTimer) clearInterval(store.cleanupTimer);
+    database.close();
+  }
+});
+
+test('a failing cleanup error reporter falls back without aborting store startup', () => {
+  const database = createDatabase();
+  database.prepare('INSERT INTO sessions (sid, session_data, expires_at) VALUES (?, ?, ?)')
+    .run('expired-cleanup-logger-failure', '{}', Date.now() - 1);
+  database.exec(`CREATE TRIGGER reject_expired_session_cleanup BEFORE DELETE ON sessions
+    WHEN OLD.sid = 'expired-cleanup-logger-failure' BEGIN SELECT RAISE(FAIL, 'cleanup unavailable'); END`);
+  const originalConsoleError = console.error;
+  const reports = [];
+  console.error = (...args) => reports.push(args);
+
+  let store;
+  try {
+    assert.doesNotThrow(() => {
+      store = new SQLiteSessionStore(database, { onCleanupError: () => { throw new Error('logger unavailable'); } });
+    });
+    assert.equal(reports.length, 1);
+    assert.match(String(reports[0][0]), /Unable to report expired-session cleanup failure/);
+    assert.equal(database.prepare('SELECT 1 FROM sessions WHERE sid = ?').get('expired-cleanup-logger-failure') !== undefined, true);
+  } finally {
+    console.error = originalConsoleError;
+    if (store?.cleanupTimer) clearInterval(store.cleanupTimer);
+    database.close();
+  }
+});
+
 test('session revocation preserves the current session and other users', () => {
   const database = createDatabase();
   try {
