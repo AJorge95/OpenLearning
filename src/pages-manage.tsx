@@ -976,6 +976,7 @@ export function CourseEditorPage() {
     const requestSequence = ++courseLoadSequenceRef.current;
     courseLoadControllerRef.current?.abort();
     setSavingStatus(status); setError(''); setNotice('');
+    let courseSaved = false;
     try {
       if (completionWindow.error) {
         completionWindowInputRef.current?.focus();
@@ -988,10 +989,15 @@ export function CourseEditorPage() {
       ...(status === 'published' ? { requiresRecompletion, changeNote } : {}),
       });
       if (routeCourseIdRef.current !== requestedCourseId || requestSequence !== courseLoadSequenceRef.current) return;
+      courseSaved = true;
       setCourse(response.course); setNotice(status === 'published' ? 'Course published for learners.' : status === 'draft' ? 'Draft saved.' : 'Course details saved.');
       if (status === 'published') { setRequiresRecompletion(false); setChangeNote(''); await loadGovernance(requestedCourseId); }
     } catch (cause) {
-      if (routeCourseIdRef.current === requestedCourseId && requestSequence === courseLoadSequenceRef.current) setError(cause instanceof ApiError ? cause.message : 'Course could not be saved.');
+      if (routeCourseIdRef.current === requestedCourseId && requestSequence === courseLoadSequenceRef.current) {
+        setError(courseSaved
+          ? `Course was saved, but the editor settings could not be refreshed. ${cause instanceof ApiError ? cause.message : 'Retry loading course settings.'}`
+          : cause instanceof ApiError ? cause.message : 'Course could not be saved.');
+      }
     } finally {
       if (routeCourseIdRef.current === requestedCourseId) setSavingStatus(null);
     }
