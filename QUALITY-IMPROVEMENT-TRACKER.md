@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Verify the role selector's right-side click boundary in the rendered page
+
+- **Reviewed:** The administrator account selector's visible width, containing control hit area, popup width, and dismissal behavior after the repeated click report.
+- **Result:** No additional source change. In an authenticated local Chrome tab, the role trigger and popup stayed 144px wide; clicking blank space to the right closed the open menu and left the learner's role unchanged.
+- **Why no change:** The existing 9rem width, trigger-only pointer events, and trigger-matched popup already produce the requested boundary in the rendered account page.
+- **Interface and backend review:** The original account is now the only active administrator and its role selector is protected; the interaction was verified on an enabled learner account. No backend request or account mutation occurred.
+- **Checked:** Local Chrome at 1716×1214 rendered the account details page and options correctly; the outside click closed the menu, and the browser reported no console warnings or errors. The standalone Browser plugin and Playwright package were unavailable; the existing Chrome tab interface provided the rendered interaction check.
+
 ## 2026-10-11 — Cover reaction and quiz-attempt throttling
 
 - **Reviewed:** The learner route authentication order, per-user rate-limit configuration, retryable limit responses, and existing coverage for the comment, password-change, and admin-reset limiters.
