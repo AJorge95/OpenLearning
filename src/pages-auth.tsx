@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
 import { AppSelect, Button, ImageWithFallback, PalettePicker, PlatformBrand, PlatformIconPicker } from './components';
+import { getPostLoginPath } from './post-login-path';
 import { findMissingRequiredRegistrationField, refreshRegistrationFieldValues } from './registration-fields';
 import { clearPasswordConfirmationError, getPasswordConfirmationError } from './password-confirmation';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
@@ -203,20 +204,22 @@ function BookOpenMark() {
 
 export function LoginPage() {
   const { signIn, user, configured, registrationEnabled, registrationAvailable } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
+  const postLoginPath = getPostLoginPath(location.state?.from);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const submissionInFlightRef = useRef(false);
-  if (configured && user) return <Navigate to="/courses" replace />;
+  if (configured && user) return <Navigate to={postLoginPath} replace />;
   if (!configured) return <Navigate to="/setup" replace />;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!acquireSubmissionLock(submissionInFlightRef)) return;
     setError(''); setSaving(true);
-    try { await signIn(username, password); navigate('/courses'); }
+    try { await signIn(username, password); navigate(postLoginPath, { replace: true }); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Sign in failed. Try again.'); }
     finally { releaseSubmissionLock(submissionInFlightRef); setSaving(false); }
   }

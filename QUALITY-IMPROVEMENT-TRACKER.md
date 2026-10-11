@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Return signed-in users to their requested page
+
+- **Reviewed:** The signed-in route guard redirected visitors to `/login` without preserving their location, and successful sign-in always sent them to `/courses`.
+- **Improvement:** Preserve the requested path, query, and hash through the login route, then resume that internal destination after sign-in. Reject external, malformed, and authentication-page targets and use `/courses` as the fallback.
+- **Why it helps:** Learners and staff can resume the page they requested after an expired session without navigating back through the app.
+- **Checked:** New destination and route-wiring tests passed (4/4); full `npm test` passed (382/382), `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The local browser redirected the protected user-detail route to the login screen without console errors; post-login navigation is covered by the helper and route-wiring tests because no authenticated session was available.
+
 ## 2026-10-11 — Stabilize course ordering in competency cards
 
 - **Reviewed:** The learner competency endpoint ordered mapped courses by case-insensitive title, but course titles are not unique. Same-title courses therefore relied on the current SQLite access path for their relative order.
