@@ -153,10 +153,19 @@ export function publishRevision(courseId, actor, { requiresRecompletion = false,
   const logicalId = logicalCourseId(courseId) || courseId;
   const root = db.prepare('SELECT * FROM courses WHERE id = ? AND logical_course_id IS NULL').get(logicalId);
   const revision = db.prepare('SELECT * FROM course_revisions WHERE course_id = ?').get(logicalId);
-  const storage = revision ? db.prepare('SELECT * FROM courses WHERE id = ?').get(revision.revision_course_id) : root;
+  let storage = revision ? db.prepare('SELECT * FROM courses WHERE id = ?').get(revision.revision_course_id) : root;
   if (!root || !storage) return null;
   const firstDurationEnabled = !root.completion_window_activated && storage.completion_window_days > 0;
   const versionNumber = db.prepare('SELECT COALESCE(MAX(version_number), 0) + 1 AS next FROM course_versions WHERE course_id = ?').get(logicalId).next;
+  if (versionNumber === 1 && requiresRecompletion && storage.id === root.id) {
+    // Legacy published courses can have completion rows on the same IDs as
+    // their first version. New IDs let reset-required progress ignore those
+    // rows while preserving the historical completion records.
+    const firstVersionStorageId = cloneId();
+    if (!copyPublishedContent(storage.id, firstVersionStorageId, logicalId, actor.id)) return null;
+    storage = db.prepare('SELECT * FROM courses WHERE id = ?').get(firstVersionStorageId);
+    if (!storage) return null;
+  }
   const versionId = cloneId();
   db.prepare(`UPDATE courses SET logical_course_id = ?, status = 'published', updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
     .run(logicalId === storage.id ? null : logicalId, actor.id, storage.id);
