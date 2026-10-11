@@ -622,9 +622,13 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
 });
 
 courseRouter.post('/courses/:courseId/enroll', (req, res) => {
-  const course = requireCourseViewer(req.params.courseId, req.currentUser);
-  if (!canLearnerAccess(course, req.currentUser) || course.status !== 'published') fail(403, 'You do not have access to this course.', 'course_access_denied');
-  enrollLearner(course.id, req.currentUser.id);
+  // Keep eligibility, enrollment, and initial learning state in one transaction.
+  const enroll = db.transaction(() => {
+    const course = requireCourseViewer(req.params.courseId, req.currentUser);
+    if (!canLearnerAccess(course, req.currentUser) || course.status !== 'published') fail(403, 'You do not have access to this course.', 'course_access_denied');
+    enrollLearner(course.id, req.currentUser.id);
+  });
+  enroll.immediate();
   res.status(201).json({ ok: true });
 });
 
