@@ -422,7 +422,7 @@ export function CourseAnalyticsPage() {
   </div>;
 }
 
-function QuizEditor({ module, onSaved, onError }: { module: CourseModule; onSaved: () => void | Promise<void>; onError: (message: string) => void }) {
+function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: CourseModule; onSaved: () => void | Promise<void>; onError: (message: string) => void; titleInputRef?: (node: HTMLInputElement | null) => void }) {
   const existing = module.quiz;
   const [title, setTitle] = useState(existing?.title || `${module.title} quiz`);
   const [passMark, setPassMark] = useState(existing?.passMark ?? 70);
@@ -547,7 +547,7 @@ function QuizEditor({ module, onSaved, onError }: { module: CourseModule; onSave
     <div className="quiz-editor-head"><div><span className="editor-type"><CircleHelp size={15} />Module quiz</span><h4>{existing ? 'Edit quiz' : 'Add a quiz'}</h4></div>{existing && <button type="button" className="icon-button danger-icon" aria-label={busyAction === 'remove' ? `Removing ${quizContext}` : `Remove ${quizContext}`} disabled={busyAction !== null} onClick={() => void remove()}><Trash2 size={16} /></button>}</div>
     {textValidationIssue && <Notice>Enter text for every quiz question and answer choice before saving.</Notice>}
     <fieldset className="quiz-editor-fields" aria-label={`Fields for ${quizContext}`} disabled={busyAction !== null}>
-    <div className="quiz-settings-row"><label>Quiz title<input aria-label={`Quiz title for ${quizContext}`} value={title} maxLength={quizTitleLimit} onChange={(event) => setTitle(event.target.value)} /></label><div className="app-select-field"><span>Pass mark</span><AppSelect<number> ariaLabel={`Pass mark for ${quizContext}`} value={passMark} onChange={setPassMark} options={[50, 60, 70, 80, 90, 100].map((value) => ({ value, label: `${value}%` }))} /></div></div>
+    <div className="quiz-settings-row"><label>Quiz title<input ref={titleInputRef} aria-label={`Quiz title for ${quizContext}`} value={title} maxLength={quizTitleLimit} onChange={(event) => setTitle(event.target.value)} /></label><div className="app-select-field"><span>Pass mark</span><AppSelect<number> ariaLabel={`Pass mark for ${quizContext}`} value={passMark} onChange={setPassMark} options={[50, 60, 70, 80, 90, 100].map((value) => ({ value, label: `${value}%` }))} /></div></div>
     {questions.map((question, questionIndex) => <div className="question-editor" key={question.id || question.editorKey || questionIndex}>
       <div className="question-editor-head"><span>Question {questionIndex + 1}</span><button type="button" className="text-action danger-text" aria-label={`Remove question ${questionIndex + 1} from ${quizContext}`} onClick={() => removeQuestion(questionIndex)}>Remove</button></div>
       <label className="sr-only" htmlFor={`question-${module.id}-${questionIndex}`}>Question {questionIndex + 1} text for {quizContext}</label><textarea ref={(node) => { questionInputRefs.current[questionIndex] = node; }} id={`question-${module.id}-${questionIndex}`} rows={2} maxLength={1000} placeholder="Write a question" value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} aria-invalid={textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === undefined || undefined} aria-describedby={textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === undefined ? `quiz-question-error-${module.id}-${questionIndex}` : undefined} />
@@ -944,6 +944,12 @@ export function CourseEditorPage() {
   const pendingModuleTitleFocusRef = useRef('');
   const [addingLessonModuleIds, setAddingLessonModuleIds] = useState<Set<string>>(() => new Set());
   const addingLessonModuleIdsRef = useRef(addingLessonModuleIds);
+  const [addingQuizModuleIds, setAddingQuizModuleIds] = useState<Set<string>>(() => new Set());
+  const addingQuizModuleIdsRef = useRef(addingQuizModuleIds);
+  const quizTitleInputRefs = useRef(new Map<string, HTMLInputElement>());
+  const quizAddButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingQuizTitleFocusRef = useRef('');
+  const pendingQuizTriggerFocusRef = useRef('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [editingLessonId, setEditingLessonId] = useState('');
   const [uploading, setUploading] = useState<Record<string, number>>({});
@@ -1033,6 +1039,9 @@ export function CourseEditorPage() {
 
   useEffect(() => {
     let active = true;
+    pendingQuizTitleFocusRef.current = '';
+    pendingQuizTriggerFocusRef.current = '';
+    addingQuizModuleIdsRef.current = new Set(); setAddingQuizModuleIds(new Set());
     setPendingDeleteCourseId(null);
     setPendingDeleteModule(null);
     setPendingDeleteLesson(null);
@@ -1098,6 +1107,28 @@ export function CourseEditorPage() {
     pendingModuleTitleFocusRef.current = '';
     button.focus();
   }, [editingModuleTitle, course, loading]);
+
+  useEffect(() => {
+    const moduleId = pendingQuizTitleFocusRef.current;
+    if (!moduleId) return;
+    if (!course?.modules?.some((module) => module.id === moduleId && module.quiz)) {
+      if (!loading) pendingQuizTitleFocusRef.current = '';
+      return;
+    }
+    const titleInput = quizTitleInputRefs.current.get(moduleId);
+    if (!titleInput) return;
+    pendingQuizTitleFocusRef.current = '';
+    titleInput.focus();
+  }, [course, loading]);
+
+  useEffect(() => {
+    const moduleId = pendingQuizTriggerFocusRef.current;
+    if (!moduleId || addingQuizModuleIds.has(moduleId)) return;
+    const trigger = quizAddButtonRefs.current.get(moduleId);
+    if (!trigger || trigger.disabled) return;
+    pendingQuizTriggerFocusRef.current = '';
+    trigger.focus();
+  }, [addingQuizModuleIds]);
 
   async function saveCourse(status: 'draft' | 'published') {
     if (!courseId) return;
@@ -1391,6 +1422,31 @@ export function CourseEditorPage() {
     finally {
       const nextPending = new Set(addingLessonModuleIdsRef.current);
       nextPending.delete(moduleId); addingLessonModuleIdsRef.current = nextPending; setAddingLessonModuleIds(nextPending);
+    }
+  }
+
+  async function addModuleQuiz(module: CourseModule) {
+    if (module.quiz || addingQuizModuleIdsRef.current.has(module.id)) return;
+    const pending = new Set(addingQuizModuleIdsRef.current);
+    pending.add(module.id); addingQuizModuleIdsRef.current = pending; setAddingQuizModuleIds(pending);
+    setError('');
+    const requestedCourseId = courseId;
+    try {
+      await saveCourseDetailsIfChanged();
+      if (routeCourseIdRef.current !== requestedCourseId) return;
+      await api.put(`/api/manage/modules/${module.id}/quiz`, { title: defaultQuizTitle(module.title), passMark: 70, questions: [] });
+      if (routeCourseIdRef.current !== requestedCourseId) return;
+      pendingQuizTitleFocusRef.current = module.id;
+      await load(requestedCourseId);
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId) {
+        pendingQuizTriggerFocusRef.current = module.id;
+        setError(cause instanceof ApiError ? cause.message : 'Quiz could not be added.');
+      }
+    }
+    finally {
+      const nextPending = new Set(addingQuizModuleIdsRef.current);
+      nextPending.delete(module.id); addingQuizModuleIdsRef.current = nextPending; setAddingQuizModuleIds(nextPending);
     }
   }
 
@@ -1691,15 +1747,11 @@ export function CourseEditorPage() {
               </div>
               {editingLessonId === lesson.id && <LessonDetailsEditor lesson={lesson} courseId={courseId} beforeChange={saveCourseDetailsIfChanged} onChanged={load} onClose={() => setEditingLessonId('')} onError={setError} onNotice={setNotice} />}
             </div>)}
-            <div className="module-add-actions"><button type="button" className="text-action" disabled={addingLessonModuleIds.has(module.id)} onClick={() => addLesson(module.id)}><Plus size={15} />{addingLessonModuleIds.has(module.id) ? 'Adding lesson…' : 'Add lesson'}</button><span className="add-action-divider" /><button type="button" className="text-action" onClick={async () => {
-              if (module.quiz) { setError('This module already has a quiz.'); return; }
-              try { await saveCourseDetailsIfChanged(); await api.put(`/api/manage/modules/${module.id}/quiz`, { title: defaultQuizTitle(module.title), passMark: 70, questions: [] }); await load(); }
-              catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Quiz could not be added.'); }
-            }} disabled={Boolean(module.quiz)}><CircleHelp size={15} />{module.quiz ? 'Quiz added' : 'Add module quiz'}</button></div>
+            <div className="module-add-actions"><button type="button" className="text-action" disabled={addingLessonModuleIds.has(module.id)} onClick={() => addLesson(module.id)}><Plus size={15} />{addingLessonModuleIds.has(module.id) ? 'Adding lesson…' : 'Add lesson'}</button><span className="add-action-divider" /><button ref={(node) => { if (node) quizAddButtonRefs.current.set(module.id, node); else quizAddButtonRefs.current.delete(module.id); }} type="button" className="text-action" onClick={() => void addModuleQuiz(module)} disabled={Boolean(module.quiz) || addingQuizModuleIds.has(module.id)} aria-busy={addingQuizModuleIds.has(module.id)}><CircleHelp size={15} />{module.quiz ? 'Quiz added' : addingQuizModuleIds.has(module.id) ? 'Adding quiz…' : 'Add module quiz'}</button></div>
             {module.quiz && <QuizEditor module={module} onSaved={async () => {
               try { await saveCourseDetailsIfChanged(); await load(); setNotice('Quiz saved.'); }
               catch (cause) { setError(cause instanceof ApiError ? `Quiz saved, but course details could not be saved: ${cause.message}` : 'Quiz saved, but course details could not be saved.'); }
-            }} onError={setError} />}
+            }} onError={setError} titleInputRef={(node) => { if (node) quizTitleInputRefs.current.set(module.id, node); else quizTitleInputRefs.current.delete(module.id); }} />}
           </div>}
         </div>)}
         {!course.modules?.length && <EmptyState headingLevel={3} icon={<BookOpen size={22} />} title="Start with a module" detail="Modules organize the video lessons in your course." action={<Button variant="secondary" onClick={(event) => { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); }}><Plus size={16} />Add first module</Button>} />}
