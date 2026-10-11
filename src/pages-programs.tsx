@@ -22,7 +22,7 @@ function requestMessage(error: unknown, fallback: string) {
 
 type PathLearner = { id: string; username: string; email: string | null; enrolled: boolean; source: 'assigned' | 'self' | null };
 type PendingAssignmentRemoval = { pathId: string; pathTitle: string; learnerId: string; learnerUsername: string };
-type PendingPathArchive = { id: string; title: string };
+type PendingPathArchive = { id: string; title: string; discardEditorChanges: boolean };
 type PathLearnerPage = { learners: PathLearner[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type LearningPathListPage = { paths: LearningPath[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type CompetencyAdminPage = { competencies: Competency[]; total: number; page: number; pageSize: number; hasMore: boolean };
@@ -374,6 +374,11 @@ export function LearningPathsPage() {
     setSaving(true); setChangingPathStatusId(path.id); setError(''); setNotice('');
     try {
       await api.patch(`/api/manage/learning-paths/${path.id}`, { status: 'archived' });
+      if (editing?.id === path.id) {
+        // The editor only supports draft and published states, so close it after archive succeeds.
+        pathEditorDirtyRef.current = false;
+        setEditing(null);
+      }
       setNotice(`Learning path “${path.title}” archived. Existing enrollments and course progress were kept.`);
       pendingPathStatusFocusRef.current = 'archived';
       setPathStatus('archived'); await load(1, 'archived');
@@ -383,7 +388,7 @@ export function LearningPathsPage() {
 
   function requestPathArchive(path: LearningPath) {
     if (saving || assignmentBusy || path.status === 'archived') return;
-    setPendingPathArchive({ id: path.id, title: path.title });
+    setPendingPathArchive({ id: path.id, title: path.title, discardEditorChanges: editing?.id === path.id && pathEditorDirtyRef.current });
   }
 
   function confirmPathArchive() {
@@ -592,7 +597,7 @@ export function LearningPathsPage() {
       </nav>}
     </> : loadFailed ? null : <EmptyState title={emptyPathState.title} detail={emptyPathState.detail} />}
     {pendingAssignmentRemoval && assignmentPath === pendingAssignmentRemoval.pathId && pendingRemovalPath && pendingRemovalLearner && <ConfirmationDialog {...pathAssignmentRemovalConfirmation(pendingAssignmentRemoval.learnerUsername, pendingAssignmentRemoval.pathTitle)} confirmLabel="Remove assignment" onCancel={() => setPendingAssignmentRemoval(null)} onConfirm={() => void confirmAssignmentRemoval()} />}
-    {pendingPathArchive && paths.some((path) => path.id === pendingPathArchive.id && path.title === pendingPathArchive.title && path.status !== 'archived') && <ConfirmationDialog {...pathArchiveConfirmation(pendingPathArchive.title)} confirmLabel="Archive path" onCancel={() => setPendingPathArchive(null)} onConfirm={confirmPathArchive} />}
+    {pendingPathArchive && paths.some((path) => path.id === pendingPathArchive.id && path.title === pendingPathArchive.title && path.status !== 'archived') && <ConfirmationDialog {...pathArchiveConfirmation(pendingPathArchive.title, pendingPathArchive.discardEditorChanges)} confirmLabel="Archive path" onCancel={() => setPendingPathArchive(null)} onConfirm={confirmPathArchive} />}
     {pendingPathEdit && <ConfirmationDialog title="Discard unsaved path changes?" description={`Your current path changes will be lost if you switch to editing “${pendingPathEdit.title}”.`} confirmLabel="Discard and edit" onCancel={() => setPendingPathEdit(null)} onConfirm={confirmPathEdit} />}
   </div>;
 }
