@@ -543,6 +543,41 @@ test('course list exposes the current review status for unpublished revisions', 
   }
 });
 
+test('published course management list returns later pages for learning-path options', async () => {
+  const titlePrefix = 'Path option pagination fixture';
+  const courseIds = Array.from({ length: 51 }, (_, index) => `path-options-pagination-${index + 1}`);
+  const insertCourse = database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, ?, 'published', 'admin-1', 'admin-1')`);
+  try {
+    courseIds.forEach((courseId, index) => insertCourse.run(courseId, `${titlePrefix} ${index + 1}`));
+
+    const pageOneResponse = await fetch(apiUrl(`/manage/courses?status=published&q=${encodeURIComponent(titlePrefix)}&page=1`), {
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(pageOneResponse.status, 200);
+    const pageOne = await pageOneResponse.json();
+    assert.equal(pageOne.total, courseIds.length);
+    assert.equal(pageOne.page, 1);
+    assert.equal(pageOne.pageSize, 50);
+    assert.equal(pageOne.courses.length, 50);
+
+    const pageTwoResponse = await fetch(apiUrl(`/manage/courses?status=published&q=${encodeURIComponent(titlePrefix)}&page=2`), {
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(pageTwoResponse.status, 200);
+    const pageTwo = await pageTwoResponse.json();
+    assert.equal(pageTwo.total, courseIds.length);
+    assert.equal(pageTwo.page, 2);
+    assert.equal(pageTwo.courses.length, 1);
+
+    const returnedIds = [...pageOne.courses, ...pageTwo.courses].map((course) => course.id);
+    assert.equal(new Set(returnedIds).size, courseIds.length);
+    assert.deepEqual(returnedIds.slice().sort(), courseIds.slice().sort());
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id LIKE ?').run('path-options-pagination-%');
+  }
+});
+
 test('learner catalog hides version snapshots from results and categories', async () => {
   const courseId = 'course-catalog-root';
   try {

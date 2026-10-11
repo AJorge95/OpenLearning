@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArrowDown, ArrowUp, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Plus, RotateCcw, Search, UsersRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { calendarMonthRequestRange, groupCalendarDeadlines, localDateKey } from './calendar-dates';
 import { AppSelect, Button, EmptyState, PageHeading, ProgressBar } from './components';
 import type { Competency, Course, CourseDeadline, LearningPath } from './types';
+import { appendPublishedCourseOptions, hasMorePublishedCourseOptions, publishedCourseOptionsPageUrl, type PublishedCoursePage } from './path-course-options';
 import { useAuth } from './auth-context';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
 
@@ -24,8 +25,7 @@ const learningPathStatusFilters: Array<{ label: string; value: LearningPathStatu
 const calendarTimeFormatter = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
 const calendarDateTimeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
 
-function PathEditor({ courses, existing, busy, onSave, onCancel }: {
-  courses: Course[];
+function PathEditor({ existing, busy, onSave, onCancel }: {
   existing: LearningPath | null;
   busy: boolean;
   onSave: (path: { title: string; description: string; status: 'draft' | 'published'; selfEnrollment: boolean; courses: Array<{ courseId: string; requiresPrevious: boolean }> }) => void;
@@ -38,6 +38,49 @@ function PathEditor({ courses, existing, busy, onSave, onCancel }: {
   const [selected, setSelected] = useState<Array<{ courseId: string; requiresPrevious: boolean }>>(
     existing?.courses.map((course) => ({ courseId: course.id, requiresPrevious: course.requiresPrevious })) || [],
   );
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [coursePage, setCoursePage] = useState(0);
+  const [coursePageSize, setCoursePageSize] = useState(0);
+  const [courseTotal, setCourseTotal] = useState(0);
+  const [courseLoading, setCourseLoading] = useState(true);
+  const [courseLoadError, setCourseLoadError] = useState('');
+  const [failedCoursePage, setFailedCoursePage] = useState<number | null>(null);
+  const courseRequestSequenceRef = useRef(0);
+  const courseRequestControllerRef = useRef<AbortController | null>(null);
+  const loadCoursePage = useCallback(async (requestedPage: number, replace = false) => {
+    if (courseRequestControllerRef.current) return;
+    const controller = new AbortController();
+    const requestSequence = ++courseRequestSequenceRef.current;
+    courseRequestControllerRef.current = controller;
+    setCourseLoading(true);
+    setCourseLoadError('');
+    setFailedCoursePage(null);
+    try {
+      const result = await api.get<PublishedCoursePage>(publishedCourseOptionsPageUrl(requestedPage), { signal: controller.signal });
+      if (requestSequence !== courseRequestSequenceRef.current) return;
+      setCourses((current) => appendPublishedCourseOptions(replace ? [] : current, result.courses));
+      setCoursePage(result.page);
+      setCoursePageSize(result.pageSize);
+      setCourseTotal(result.total);
+    } catch (cause) {
+      if (requestSequence !== courseRequestSequenceRef.current || controller.signal.aborted) return;
+      setCourseLoadError(requestMessage(cause, 'Published courses could not be loaded.'));
+      setFailedCoursePage(requestedPage);
+    } finally {
+      if (courseRequestControllerRef.current === controller) {
+        courseRequestControllerRef.current = null;
+        if (requestSequence === courseRequestSequenceRef.current) setCourseLoading(false);
+      }
+    }
+  }, []);
+  useEffect(() => {
+    void loadCoursePage(1, true);
+    return () => {
+      courseRequestSequenceRef.current += 1;
+      courseRequestControllerRef.current?.abort();
+      courseRequestControllerRef.current = null;
+    };
+  }, [loadCoursePage]);
   const courseById = useMemo(() => new Map([...courses, ...(existing?.courses || [])].map((course) => [course.id, course])), [courses, existing]);
   const selectedIds = useMemo(() => new Set(selected.map((item) => item.courseId)), [selected]);
   const available = [...courseById.values()].filter((course) =>
@@ -75,7 +118,13 @@ function PathEditor({ courses, existing, busy, onSave, onCancel }: {
     </div>
     <label className="program-toggle"><input type="checkbox" checked={selfEnrollment} onChange={(event) => setSelfEnrollment(event.target.checked)} disabled={busy} /><span><strong>Allow learner self-enrollment</strong><small>Only public courses can be included in an open path.</small></span></label>
     <fieldset className="path-course-selector" disabled={busy}><legend>Courses in this path</legend>
-      {available.length ? <div className="path-course-checklist">{available.map((course) => <label key={course.id} className="path-course-check"><input type="checkbox" checked={selectedIds.has(course.id)} onChange={(event) => toggle(course.id, event.target.checked)} /><span><strong>{course.title}</strong><small>{course.category} · {course.visibility}{course.status !== 'published' ? ` · ${course.status}` : ''}</small></span></label>)}</div> : <p className="muted">Publish a course before adding it to a learning path.</p>}
+      {available.length ? <div className="path-course-checklist">{available.map((course) => <label key={course.id} className="path-course-check"><input type="checkbox" checked={selectedIds.has(course.id)} onChange={(event) => toggle(course.id, event.target.checked)} /><span><strong>{course.title}</strong><small>{course.category} · {course.visibility}{course.status !== 'published' ? ` · ${course.status}` : ''}</small></span></label>)}</div>
+        : courseLoading && coursePage === 0 ? <p className="muted" role="status">Loading published courses…</p>
+          : courseLoadError && coursePage === 0 ? null
+            : selfEnrollment && courses.length ? <p className="muted">No public courses are available in the loaded results.</p>
+              : <p className="muted">Publish a course before adding it to a learning path.</p>}
+      {courseLoadError && <div className="path-course-page-error" role="alert"><p>{courseLoadError}</p><Button type="button" variant="secondary" onClick={() => void loadCoursePage(failedCoursePage || 1, (failedCoursePage || 1) === 1)} disabled={courseLoading}>Retry loading courses</Button></div>}
+      {coursePage > 0 && <div className="path-course-options-footer"><span className="muted" role="status" aria-live="polite">{courseLoading ? 'Loading more courses. ' : ''}Loaded {courses.length} of {courseTotal} published courses.</span>{hasMorePublishedCourseOptions(coursePage, coursePageSize, courseTotal) && !courseLoadError && <Button type="button" variant="secondary" onClick={() => void loadCoursePage(coursePage + 1)} disabled={courseLoading}>{courseLoading ? 'Loading…' : 'Load more courses'}</Button>}</div>}
     </fieldset>
     {hasUnavailableSelection && <p className="path-selection-warning" role="status">Remove private or unpublished courses before saving this path with its current availability.</p>}
     {selected.length > 0 && <ol className="path-course-order">{selected.map((item, index) => {
@@ -98,7 +147,6 @@ export function LearningPathsPage() {
   const [pathStatus, setPathStatus] = useState<LearningPathStatusFilter>('all');
   const pathStatusFilterButtonsRef = useRef<Partial<Record<LearningPathStatusFilter, HTMLButtonElement>>>({});
   const pendingPathStatusFocusRef = useRef<LearningPathStatusFilter | null>(null);
-  const [courses, setCourses] = useState<Course[]>([]);
   const [editing, setEditing] = useState<LearningPath | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -150,10 +198,6 @@ export function LearningPathsPage() {
     try {
       const params = new URLSearchParams({ page: String(requestedPage) });
       if (staff) params.set('status', requestedStatus);
-      const courseRequest = staff
-        ? api.get<{ courses: Course[] }>('/api/manage/courses?status=published', { signal: requestController.signal })
-          .then((result) => ({ ok: true as const, result }), (cause: unknown) => ({ ok: false as const, cause }))
-        : null;
       const result = await api.get<LearningPathListPage>(`/api/learning-paths?${params}`, { signal: requestController.signal });
       if (!isCurrentRequest()) return;
       setPaths(result.paths);
@@ -161,16 +205,10 @@ export function LearningPathsPage() {
       setPathPageSize(result.pageSize);
       setPathTotal(result.total);
       setPathHasMore(result.hasMore);
-      if (courseRequest) {
-        const courseOutcome = await courseRequest;
-        if (!courseOutcome.ok) throw courseOutcome.cause;
-        if (!isCurrentRequest()) return;
-        setCourses(courseOutcome.result.courses);
-      }
     } catch (cause) {
       if (isCurrentRequest()) {
         setLoadFailed(true);
-        setError(requestMessage(cause, 'Learning paths or course options could not be loaded.'));
+        setError(requestMessage(cause, 'Learning paths could not be loaded.'));
       }
     } finally {
       if (pathsRequestControllerRef.current === requestController) pathsRequestControllerRef.current = null;
@@ -373,7 +411,7 @@ export function LearningPathsPage() {
     <PageHeading title="Learning paths" subtitle={staff ? 'Guide learners through a course sequence and assign paths.' : 'Follow a guided sequence of courses and track your progress.'} />
     {error && (loadFailed ? <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => void load(requestedPathPageRef.current)}>Try again</Button></div> : <div className="inline-notice" role="alert">{error}</div>)}{notice && <div className="inline-notice inline-notice-success" role="status">{notice}</div>}
     {hasEmptyPathResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyPathState.title}. {emptyPathState.detail}</p>}
-    {staff && <PathEditor key={editing?.id || 'new'} courses={courses} existing={editing} busy={saving} onSave={savePath} onCancel={() => setEditing(null)} />}
+    {staff && <PathEditor key={editing?.id || 'new'} existing={editing} busy={saving} onSave={savePath} onCancel={() => setEditing(null)} />}
     {staff && <div className="management-tabs" role="group" aria-label="Filter learning paths by status">{learningPathStatusFilters.map((filter) => <button type="button" key={filter.value} ref={(button) => { if (button) pathStatusFilterButtonsRef.current[filter.value] = button; else delete pathStatusFilterButtonsRef.current[filter.value]; }} aria-pressed={pathStatus === filter.value} className={pathStatus === filter.value ? 'active' : ''} disabled={loading || saving || assignmentBusy} onClick={() => changePathStatus(filter.value)}>{filter.label}</button>)}</div>}
     {loading && !paths.length ? <div className="page-loading" role="status">Loading learning paths…</div> : paths.length ? <>
       {loading && <div className="log-loading" role="status">Loading learning paths…</div>}
