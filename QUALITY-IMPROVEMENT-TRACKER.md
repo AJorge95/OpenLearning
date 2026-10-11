@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck public account forms and registration limits
+
+- **Reviewed:** The rendered sign-in and registration pages, their field labels and helper text, setup and platform-settings account-cap controls, and the server's account-limit and registration-availability checks.
+- **Result:** No code change. Setup and settings use required whole-number controls from 0 to 1,000,000, matching the server bound; concurrent registration checks prevent the account cap from being exceeded.
+- **Why no change:** The inspected UI and server constraints agree, and the current pages show no concrete interaction or accessibility issue. Staff and learner routes still need a signed-in browser session for rendered review; configurable registration-field behavior needs a local fixture with fields enabled.
+- **Checked:** `node --test tests/server/registration-limits.test.js tests/server/config.test.js tests/client/responsive-viewport.test.js` passed (9/9). Inspected the sign-in and registration accessibility trees and default-size renderings; no account was submitted or created.
+
 ## 2026-10-11 — Recheck shared API failures and quiz settings
 
 - **Reviewed:** The shared API client's JSON response checks, CSRF refresh/retry behavior, cancellation and upload network errors; quiz editor pass-mark options and save feedback; and the matching server pass-mark range validation.
