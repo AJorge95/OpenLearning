@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reuse promise-based session destruction on sign-out
+
+- **Reviewed:** The logout handler duplicated callback-based session cleanup even though authentication routes already use a shared promise-based `destroySession` helper. Sign-out also needs to complete when its best-effort audit write cannot be persisted.
+- **Improvement:** Await the shared session-destruction helper from the async logout route. Add isolated route regressions for ordinary sign-out and sign-out when the audit insert fails.
+- **Why it helps:** Session cleanup follows one consistent async error path, and the tests protect the important behavior that a temporary audit-storage failure does not leave a learner signed in or prevent logout.
+- **Checked:** `node --test tests/server/auth-logout.test.js` passed (2/2), including CSRF validation, session invalidation, audit persistence, and audit failure. `node --check server/routes-auth.js`, `node --check tests/server/auth-logout.test.js`, `npm test`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Announce progress in paged course lists
 
 - **Reviewed:** The learner catalog, My Learning, and certificate list pagination controls, their changing button labels, result-count status messages, and the corresponding loading state.

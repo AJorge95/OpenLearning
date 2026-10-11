@@ -367,13 +367,11 @@ authRouter.post('/auth/login', async (req, res) => {
   res.json({ user: publicUser(currentUser), ...getPlatformConfiguration() });
 });
 
-authRouter.post('/auth/logout', requireAuth, async (req, res, next) => {
+authRouter.post('/auth/logout', requireAuth, async (req, res) => {
   const user = req.currentUser;
-  req.session.destroy((error) => {
-    if (error) return next(error);
-    writeAuditLog({ actor: user, action: 'auth.signed_out', entityType: 'user', entityId: user.id, summary: `${user.username} signed out` });
-    res.status(204).end();
-  });
+  await destroySession(req);
+  writeAuditLog({ actor: user, action: 'auth.signed_out', entityType: 'user', entityId: user.id, summary: `${user.username} signed out` });
+  res.status(204).end();
 });
 
 authRouter.get('/auth/me', (req, res) => {
