@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck administrator account management
+
+- **Reviewed:** Administrator user search and page bounds, account create/update/password-reset routes, role and disabled-state validation, last-active-admin protection, session revocation, and audit rollback behavior.
+- **Result:** No additional code change. User lists are capped at 50 rows, account updates reject non-object bodies and invalid roles, the last active administrator cannot be demoted or disabled, and sensitive mutations roll back if their required audit event cannot be stored.
+- **Why no change:** The route invariants and current UI refresh/empty states match the existing behavior and tests. Additional search tuning would need representative account counts and query timing evidence.
+- **Checked:** Focused account and user-list regressions passed (32/32), including account creation/profile changes, session revocation, password reset rate limiting, audit failures, user search identity, role-update refresh, and filtered empty states.
+
 ## 2026-10-11 — Bound the administrator role selector hit area
 
 - **Reviewed:** The supplied account-details screenshot shows a much wider highlighted area than the visible role trigger, and the user reports that clicking to its right still opens the menu. The wrapper was already non-interactive outside its trigger, but the trigger itself inherited a generic full-width rule.
