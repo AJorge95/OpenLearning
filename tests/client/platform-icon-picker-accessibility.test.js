@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
+import { MAX_BRAND_ICON_DIMENSION } from '../../src/branding.ts';
 
 const sourcePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/components.tsx');
 const source = fs.readFileSync(sourcePath, 'utf8');
@@ -31,7 +32,12 @@ function iconHintBinding(component) {
       const classValue = className?.initializer && ts.isStringLiteral(className.initializer) ? className.initializer.text : '';
       if (classValue === 'muted' && node.children.some((child) => ts.isJsxText(child) && child.text.includes('512 KB'))) {
         hintId = identifierExpression(jsxAttribute(node.openingElement, 'id'));
-        hintText = node.children.filter(ts.isJsxText).map((child) => child.text.trim()).join('');
+        hintText = node.children.map((child) => {
+          if (ts.isJsxText(child)) return child.text;
+          if (ts.isJsxExpression(child) && child.expression && ts.isIdentifier(child.expression)
+            && child.expression.text === 'MAX_BRAND_ICON_DIMENSION') return String(MAX_BRAND_ICON_DIMENSION);
+          return '';
+        }).join('').trim();
       }
       node.children.forEach(visit);
       return;
@@ -57,4 +63,14 @@ test('platform icon file input exposes its format and size guidance as a descrip
   assert.ok(binding.hintId, 'the visible icon hint should have an id');
   assert.equal(binding.hintText, 'PNG, JPG, or WebP · up to 512 KB · 1024 × 1024 px max');
   assert.equal(binding.inputDescription, binding.hintId);
+});
+
+test('platform icon picker validates decoded dimensions before staging the data URL', () => {
+  const dimensionCheck = source.indexOf('isBrandIconDimensionAllowed(image.naturalWidth, image.naturalHeight)');
+  const stageIcon = source.indexOf('onChange(reader.result as string)', dimensionCheck);
+
+  assert.equal(MAX_BRAND_ICON_DIMENSION, 1024);
+  assert.notEqual(dimensionCheck, -1, 'the decoded image dimensions should be checked');
+  assert.ok(stageIcon > dimensionCheck, 'an oversized image should not be staged before dimension validation');
+  assert.match(source, /The icon must be \$\{MAX_BRAND_ICON_DIMENSION\} × \$\{MAX_BRAND_ICON_DIMENSION\} pixels or smaller\./);
 });

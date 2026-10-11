@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError } from './api';
 import { useAuth } from './auth-context';
-import { BRAND_PALETTES, MAX_BRAND_ICON_BYTES } from './branding';
+import { BRAND_PALETTES, isBrandIconDimensionAllowed, MAX_BRAND_ICON_BYTES, MAX_BRAND_ICON_DIMENSION } from './branding';
 import type { BrandingPalette } from './branding';
 import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel, isAppSelectUnavailable, resolveAppSelectActiveIndex } from './app-select-navigation';
 import { getAppSelectHorizontalPosition, getAppSelectVerticalPosition } from './app-select-position';
@@ -83,8 +83,23 @@ export function PlatformIconPicker({ value, onChange }: { value: string | null; 
     };
     reader.onload = () => {
       if (readSequence !== readSequenceRef.current) return;
-      if (typeof reader.result === 'string') onChange(reader.result);
-      else setError('The selected image could not be read.');
+      if (typeof reader.result !== 'string') {
+        setError('The selected image could not be read.');
+        return;
+      }
+      const image = new Image();
+      image.onerror = () => {
+        if (readSequence === readSequenceRef.current) setError('The selected image could not be displayed. Try a different image.');
+      };
+      image.onload = () => {
+        if (readSequence !== readSequenceRef.current) return;
+        if (!isBrandIconDimensionAllowed(image.naturalWidth, image.naturalHeight)) {
+          setError(`The icon must be ${MAX_BRAND_ICON_DIMENSION} × ${MAX_BRAND_ICON_DIMENSION} pixels or smaller.`);
+          return;
+        }
+        onChange(reader.result as string);
+      };
+      image.src = reader.result;
     };
     reader.readAsDataURL(file);
   }
@@ -93,7 +108,7 @@ export function PlatformIconPicker({ value, onChange }: { value: string | null; 
     <div className="platform-icon-preview"><ImageWithFallback src={value} className="platform-icon-preview-image" alt="Platform icon preview" fallback={<BookOpen size={23} />} onError={() => setError('The selected image could not be displayed. Try a different image.')} /></div>
     <div className="platform-icon-controls">
       <strong>Platform icon</strong>
-      <span id={iconHelpId} className="muted">PNG, JPG, or WebP · up to 512 KB · 1024 × 1024 px max</span>
+      <span id={iconHelpId} className="muted">PNG, JPG, or WebP · up to 512 KB · {MAX_BRAND_ICON_DIMENSION} × {MAX_BRAND_ICON_DIMENSION} px max</span>
       <div className="platform-icon-actions">
         <label className="button button-secondary platform-icon-upload"><ImagePlus size={16} />Upload icon<input type="file" accept="image/png,image/jpeg,image/webp" aria-describedby={iconHelpId} onChange={selectFile} /></label>
         {value && <button type="button" className="button button-quiet platform-icon-remove" onClick={() => { readSequenceRef.current += 1; setError(''); onChange(null); }}><X size={15} />Remove</button>}
