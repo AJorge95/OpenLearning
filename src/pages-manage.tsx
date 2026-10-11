@@ -7,6 +7,7 @@ import { api, ApiError, fetchAccess, fetchCourse } from './api';
 import { AppSelect, Button, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PasswordField, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
 import { formatCountLabel } from './count-label';
 import { accountCourseAssignmentLabel } from './account-course-activity';
+import { accountDisableConfirmation } from './account-disable-confirmation';
 import { courseRowActionStatus } from './course-row-action-status';
 import { getAppSelectVerticalPosition } from './app-select-position';
 import { filterCourseCompetencies, updateCourseCompetencySelection } from './course-competency-selection';
@@ -1750,6 +1751,7 @@ export function AdminUsersPage() {
 
   async function updateUser(user: User, changes: { role?: Role; disabled?: boolean }) {
     if (savingIdsRef.current.has(user.id)) return;
+    if (changes.disabled === true && !window.confirm(accountDisableConfirmation(user.username))) return;
     markSaving(user.id, true); setError(''); setSuccess('');
     try {
       const response = await api.patch<{ user: User }>(`/api/admin/users/${user.id}`, changes);
@@ -1943,6 +1945,7 @@ export function AdminUserDetailsPage() {
 
   async function updateAccount(changes: { role?: Role; disabled?: boolean; firstName?: string; lastName?: string }, successMessage = 'Account settings were updated.') {
     if (!account || saving) return;
+    if (changes.disabled === true && !window.confirm(accountDisableConfirmation(account.user.username))) return;
     const requestedUserId = account.user.id;
     const actionSequence = ++actionSequenceRef.current;
     const isCurrentAction = () => actionSequenceRef.current === actionSequence && routeUserIdRef.current === requestedUserId;
