@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reject malformed PNG branding icons
+
+- **Reviewed:** The PNG upload parser checked the signature and dimensions but did not validate chunk bounds, checksums, image data, or header encoding values.
+- **Improvement:** Validate PNG chunk structure and CRCs, require a supported IHDR configuration and non-empty IDAT data, and reject malformed ordering or trailing bytes. Add regressions for corrupt checksums and missing image data while keeping the oversize-dimension case valid.
+- **Why it helps:** Corrupt branding files fail during settings validation instead of being accepted and then failing to render across the platform.
+- **Backend:** Supported PNG bit depths and color types remain accepted; the existing 512 KB and 1024-pixel limits remain in place, with no new runtime dependency.
+- **Checked:** The focused registration and platform-settings suite passed (24/24); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict type checking and Vite bundling; `git diff --check` passed.
+
 ## 2026-10-11 — Protect platform icon cache versioning
 
 - **Reviewed:** Platform icon storage, the branding URL returned by platform settings, and the one-year immutable response from the icon endpoint.

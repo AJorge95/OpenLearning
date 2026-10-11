@@ -88,11 +88,21 @@ function pngChunk(type, data) {
   return chunk;
 }
 
-function createPlatformIconPng(red, green, blue) {
+function createPlatformIconPng(red, green, blue, width = 1, height = 1) {
+  const scanline = Buffer.alloc(1 + width * 4);
+  for (let x = 0; x < width; x += 1) {
+    scanline.set([red, green, blue, 255], 1 + x * 4);
+  }
+  const imageData = Buffer.alloc(scanline.length * height);
+  for (let y = 0; y < height; y += 1) scanline.copy(imageData, y * scanline.length);
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-    pngChunk('IHDR', Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0])),
-    pngChunk('IDAT', deflateSync(Buffer.from([0, red, green, blue, 255]))),
+    pngChunk('IHDR', Buffer.from([
+      (width >>> 24) & 0xff, (width >>> 16) & 0xff, (width >>> 8) & 0xff, width & 0xff,
+      (height >>> 24) & 0xff, (height >>> 16) & 0xff, (height >>> 8) & 0xff, height & 0xff,
+      8, 6, 0, 0, 0,
+    ])),
+    pngChunk('IDAT', deflateSync(imageData)),
     pngChunk('IEND', Buffer.alloc(0)),
   ]);
 }
@@ -374,7 +384,7 @@ test('platform setting changes roll back when their required audit entry cannot 
     WHERE action = 'platform.settings_updated'`).get().count, originalAuditCount + 1);
 });
 
-test('platform settings reject truncated and oversized icons without changing branding or audit history', async () => {
+test('platform settings reject malformed and oversized icons without changing branding or audit history', async () => {
   const settingValue = (key) => database.prepare('SELECT value FROM app_settings WHERE key = ?').get(key)?.value ?? null;
   const originalName = settingValue('platform_name');
   const originalIcon = settingValue('platform_icon');
@@ -385,14 +395,11 @@ test('platform settings reject truncated and oversized icons without changing br
   truncatedWebp.write('RIFF', 0, 'ascii');
   truncatedWebp.writeUInt32LE(4, 4);
   truncatedWebp.write('WEBP', 8, 'ascii');
-  const oversizedPng = Buffer.alloc(45);
-  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(oversizedPng);
-  oversizedPng.writeUInt32BE(13, 8);
-  oversizedPng.write('IHDR', 12, 'ascii');
-  oversizedPng.writeUInt32BE(1025, 16);
-  oversizedPng.writeUInt32BE(1, 20);
-  oversizedPng.writeUInt32BE(0, 33);
-  oversizedPng.write('IEND', 37, 'ascii');
+  const oversizedPng = createPlatformIconPng(0, 0, 0, 1025, 1);
+  const corruptedPngCrc = createPlatformIconPng(10, 20, 30);
+  corruptedPngCrc[29] ^= 1;
+  const pngWithoutImageData = createPlatformIconPng(10, 20, 30);
+  const missingPngDataChunk = Buffer.concat([pngWithoutImageData.subarray(0, 33), pngWithoutImageData.subarray(-12)]);
   const oversizedJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 4, 1, 1, 0x11, 0, 0xff, 0xd9]);
   const oversizedWebp = Buffer.alloc(30);
   oversizedWebp.write('RIFF', 0, 'ascii');
@@ -403,6 +410,8 @@ test('platform settings reject truncated and oversized icons without changing br
   oversizedWebp.writeUIntLE(1024, 24, 3);
   const invalidIcons = [
     ['png', Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])],
+    ['png', corruptedPngCrc],
+    ['png', missingPngDataChunk],
     ['jpeg', Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
     ['webp', truncatedWebp],
     ['png', oversizedPng],
