@@ -16,11 +16,15 @@ import { selectVideoCaptionTrack } from './video-captions';
 import { getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
 import type { PendingVideoResume } from './video-recovery';
 import { useAuth } from './auth-context';
-import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt } from './types';
+import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt, QuizAttemptPreview } from './types';
 
 type CourseListResponse = { courses: Course[]; categories?: string[]; certificates?: CourseCertificate[]; certificatesTotal?: number; certificatesPage?: number; certificatesPageSize?: number; certificatesHasMore?: boolean; total?: number; page?: number; pageSize?: number; hasMore?: boolean };
 type CertificateListResponse = { certificates: CourseCertificate[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type PendingCommentRemoval = { courseId: string; lessonId: string; commentId: string; username: string };
+
+function hasQuizAttemptBreakdown(attempt: QuizAttempt | QuizAttemptPreview): attempt is QuizAttempt {
+  return 'correctCount' in attempt && 'questionCount' in attempt;
+}
 
 function coursePageHasDrift(currentCourses: Course[], response: CourseListResponse, expectedTotal: number, expectedPage: number) {
   if (response.total !== undefined && response.total !== expectedTotal) return true;
@@ -1515,12 +1519,12 @@ export function QuizPage() {
   const [choiceShuffleGeneration, setChoiceShuffleGeneration] = useState(0);
   const [course, setCourse] = useState<Course | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [result, setResult] = useState<QuizAttempt | null>(null);
+  const [result, setResult] = useState<QuizAttempt | QuizAttemptPreview | null>(null);
   const [availableCertificate, setAvailableCertificate] = useState<CourseCertificate | null>(null);
   const [resultRouteKey, setResultRouteKey] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [attemptLoadFailed, setAttemptLoadFailed] = useState(false);
+  const [attemptDetailsLoadFailed, setAttemptDetailsLoadFailed] = useState(false);
   const [courseLoadRetryVersion, setCourseLoadRetryVersion] = useState(0);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -1532,7 +1536,7 @@ export function QuizPage() {
     const isCurrentRequest = () => requestSequence === loadSequenceRef.current
       && routeCourseIdRef.current === courseId
       && routeKeyRef.current === requestedRouteKey;
-    setCourse(null); setLoading(true); setError(''); setAttemptLoadFailed(false); setSaving(false);
+    setCourse(null); setLoading(true); setError(''); setAttemptDetailsLoadFailed(false); setSaving(false);
     void (async () => {
       try {
         const { course: data } = await fetchCourse(courseId, false, { signal: requestController.signal });
@@ -1543,14 +1547,19 @@ export function QuizPage() {
           try {
             const response = await api.get<{ attempt: QuizAttempt }>(`/api/quizzes/${quizId}/attempts/${latestAttempt.id}`, { signal: requestController.signal });
             if (isCurrentRequest()) {
+              setAttemptDetailsLoadFailed(false);
               focusResultRef.current = true;
               setResult(response.attempt);
               setResultRouteKey(requestedRouteKey);
             }
-          } catch (cause) {
+          } catch {
             if (isCurrentRequest() && !requestController.signal.aborted) {
-              setAttemptLoadFailed(true);
-              setError(cause instanceof ApiError ? cause.message : 'Your latest quiz result could not be loaded.');
+              setAttemptDetailsLoadFailed(true);
+              setError('Your saved score is available, but the question breakdown could not be loaded.');
+              focusResultRef.current = true;
+              // Keep the user-scoped score from the course payload visible if only its breakdown failed.
+              setResult(latestAttempt);
+              setResultRouteKey(requestedRouteKey);
             }
           }
         }
@@ -1570,7 +1579,7 @@ export function QuizPage() {
   useEffect(() => {
     submitSequenceRef.current += 1;
     focusFirstAnswerRef.current = false; focusResultRef.current = false;
-    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setSaving(false);
+    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setAttemptDetailsLoadFailed(false); setSaving(false);
   }, [courseId, quizId]);
   const quiz = course?.modules?.find((module) => module.quiz?.id === quizId)?.quiz;
   const currentResult = resultRouteKey === routeKey ? result : null;
@@ -1602,6 +1611,7 @@ export function QuizPage() {
       if (isCurrentSubmission()) {
         focusResultRef.current = true;
         setResult(response.attempt); setAvailableCertificate(response.certificate); setResultRouteKey(requestedRouteKey);
+        setAttemptDetailsLoadFailed(false);
         setCourse((currentCourse) => {
           if (!currentCourse?.modules || routeKeyRef.current !== requestedRouteKey) return currentCourse;
           let updatedQuiz = false;
@@ -1630,7 +1640,6 @@ export function QuizPage() {
   }
 
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading quiz…</div>;
-  if (attemptLoadFailed) return <div className="narrow-content"><ErrorNotice message={error || 'Your latest quiz result could not be loaded.'} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} /><Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
   if (!course || !quiz) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
   const answeredCount = quiz.questions.filter((question) => Boolean(answers[question.id || ''])).length;
   const allAnswered = quiz.questions.length > 0 && answeredCount === quiz.questions.length;
@@ -1640,7 +1649,7 @@ export function QuizPage() {
   function retryQuiz() {
     focusFirstAnswerRef.current = true;
     setChoiceShuffleGeneration((generation) => generation + 1);
-    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey('');
+    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setAttemptDetailsLoadFailed(false);
   }
 
   return <div className="quiz-page">
@@ -1661,7 +1670,8 @@ export function QuizPage() {
             <Button type="submit" aria-describedby={quiz.questions.length > 0 ? 'quiz-submit-hint' : undefined} disabled={!allAnswered || saving}>{saving ? 'Checking answers…' : 'Submit answers'}<ArrowRight size={17} /></Button>
           </form>
         </> : <div className="quiz-results">
-          <div className={`score-panel ${currentResult.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{currentResult.passed ? <Check size={22} /> : <Clock3 size={22} />}</span><div><span className="score-label">{currentResult.passed ? 'Quiz passed' : 'Quiz not passed'}</span><strong>{currentResult.correctCount} of {currentResult.questionCount} correct</strong><small>Score {currentResult.score}% · {currentResult.passed ? `Pass mark: ${quiz.passMark}%.` : `You need ${quiz.passMark}% to pass.`}</small></div></div>
+          {attemptDetailsLoadFailed && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}
+          <div className={`score-panel ${currentResult.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{currentResult.passed ? <Check size={22} /> : <Clock3 size={22} />}</span><div><span className="score-label">{currentResult.passed ? 'Quiz passed' : 'Quiz not passed'}</span><strong>{hasQuizAttemptBreakdown(currentResult) ? `${currentResult.correctCount} of ${currentResult.questionCount} correct` : 'Question breakdown unavailable'}</strong><small>Score {currentResult.score}% · {currentResult.passed ? `Pass mark: ${quiz.passMark}%.` : `You need ${quiz.passMark}% to pass.`}</small></div></div>
           <h2 ref={resultHeadingRef} tabIndex={-1}>Quiz result</h2>
           <div className="quiz-result-actions">
             {courseFinished && (user?.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} />Add name for certificate</Link>)}

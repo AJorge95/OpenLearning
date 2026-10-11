@@ -6,9 +6,15 @@ const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.met
 
 test('quiz results provide an accessible aggregate score without answer review', () => {
   assert.match(source, /<div className=\{`score-panel \$\{currentResult\.passed \? 'score-pass' : 'score-retry'\}`\} role="status">/);
-  assert.match(source, /\{currentResult\.correctCount\} of \{currentResult\.questionCount\} correct/);
+  assert.match(source, /hasQuizAttemptBreakdown\(currentResult\) \? `\$\{currentResult\.correctCount\} of \$\{currentResult\.questionCount\} correct` : 'Question breakdown unavailable'/);
   assert.match(source, /<h2 ref=\{resultHeadingRef\} tabIndex=\{-1\}>Quiz result<\/h2>/);
   assert.doesNotMatch(source, /Review your answers|Correct answer:|Your answer is (?:correct|incorrect)/);
+});
+
+test('a failed attempt-detail request preserves the saved score and offers a retry', () => {
+  assert.match(source, /catch \{\s*if \(isCurrentRequest\(\) && !requestController\.signal\.aborted\) \{\s*setAttemptDetailsLoadFailed\(true\);[\s\S]*?setResult\(latestAttempt\);\s*setResultRouteKey\(requestedRouteKey\);/);
+  assert.match(source, /attemptDetailsLoadFailed && <ErrorNotice message=\{error\} onRetry=\{\(\) => setCourseLoadRetryVersion/);
+  assert.match(source, /function hasQuizAttemptBreakdown\(attempt: QuizAttempt \| QuizAttemptPreview\): attempt is QuizAttempt/);
 });
 
 test('quiz result feedback includes the score and the threshold for passing', () => {

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve saved quiz scores when breakdown loading fails
+
+- **Reviewed:** Returning to a quiz loads the learner-scoped latest-attempt preview from the course payload, then separately requests the aggregate attempt details. Previously, failure of that second request hid the score and showed only a retry page. The earlier saved-result recovery entry covered keeping the answer form unavailable and retrying; this follow-up preserves the score already returned safely by the course payload.
+- **Improvement:** Keep the saved score and pass state visible when only attempt details fail to load. Label the missing correct-answer breakdown clearly, announce that the breakdown is unavailable, and offer a retry for the result details.
+- **Why it helps:** A transient detail-request failure no longer hides a learner's saved outcome or implies that the quiz attempt was lost.
+- **Backend review:** The course payload already provides a user-scoped `{ id, score, passed, submittedAt }` preview, while the existing attempt-detail route remains user-scoped. No API or persistence change was needed.
+- **Checked:** Focused client and server quiz-result tests passed (7/7); `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. Rendered failure-state verification was unavailable because the Browser plugin and Playwright package are not installed in this environment.
+
 ## 2026-10-11 — Confirm course-version restores and their effects
 
 - **Reviewed:** The restore route publishes the selected historical content as a new version and removes any existing draft revision. Its `requiresRecompletion` option determines whether learners must target the newly published version; previous completion and certificate records remain in history. The editor used a generic native confirmation.
