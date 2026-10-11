@@ -17,6 +17,13 @@
 - **Why it helps:** The wrapper's blank space cannot activate the role menu, while narrow layouts retain a full-width trigger. The CSS intent is now documented and covered against accidental selector-width regressions.
 - **Checked:** The exact target account rendered the disabled last-administrator selector. After reload on an enabled learner account at 1999×1244, the selector opened from its visible trigger and a click 5.5px beyond the measured right edge closed it; the displayed role remained Learner. The browser page was populated and showed no framework error overlay; console logs were unavailable from the connected CUA surface. Focused role/select tests passed (15/15); administrator and registration route tests passed (27/27); `npm run build` passed strict TypeScript checking and Vite bundling; `git diff --check` passed. No account or role data was changed.
 
+## 2026-10-11 — Review learner competency catalog scaling
+
+- **Reviewed:** The learner competency catalog's page bounds, mapped-course summary batching, overall achieved-count query, visibility filtering, and existing route regressions.
+- **Result:** No runtime change. Competency rows are paginated, mapped courses are summarized in batches, and the first page computes the overall achieved total while later pages omit that extra work. Private mapped courses are filtered through the shared course-access checker.
+- **Why no change:** Existing tests cover stable query counts as competencies grow, page boundaries, achieved totals, and private-course visibility. Narrowing the achieved-course query further needs representative mapping and course-history volumes to show a real cost without changing completion semantics.
+- **Checked:** `node --test --test-name-pattern="competency catalog|competency progress pages" tests/server/course-analytics.test.js` passed (3/3). No backend behavior or data changed.
+
 ## 2026-10-11 — Make public course enrollment atomic
 
 - **Reviewed:** Public course enrollment inserted the enrollment record before creating the learner's initial course state. If that second write failed, the API returned HTTP 500 while leaving the learner enrolled without the course state required for deadlines and progress.
