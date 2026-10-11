@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Protect platform icon cache versioning
+
+- **Reviewed:** Platform icon storage, the branding URL returned by platform settings, and the one-year immutable response from the icon endpoint.
+- **Improvement:** Add an integration regression that checks icon response bytes and cache headers, confirms unrelated setting changes preserve the URL version, and confirms replacing the icon produces a new version and image body.
+- **Why it helps:** Browsers can safely cache the image for a year without retaining outdated branding after an administrator replaces the icon.
+- **Backend:** Runtime behavior is unchanged; this adds coverage for the existing versioning contract.
+- **Checked:** The focused registration and platform-settings suite passed (24/24); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict type checking and Vite bundling; `git diff --check` passed.
+
 ## 2026-10-11 — Remask password fields when their value clears
 
 - **Reviewed:** The shared password visibility control and form flows that clear controlled password values after completion, especially the account-details password reset that stays mounted after success.
