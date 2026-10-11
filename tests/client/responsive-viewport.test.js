@@ -16,3 +16,15 @@ test('document and body can shrink to the usable mobile viewport width', () => {
   assert.doesNotMatch(htmlRule[1], /min-width\s*:/);
   assert.doesNotMatch(bodyRule[1], /min-width\s*:/);
 });
+
+test('course catalog filters stack before the sort value is truncated', () => {
+  const styles = fs.readFileSync(stylesPath, 'utf8');
+  const breakpointStart = styles.indexOf('@media (max-width: 450px)');
+
+  assert.notEqual(breakpointStart, -1, 'expected a compact catalog-filter breakpoint');
+  const nextBreakpoint = styles.indexOf('@media', breakpointStart + 1);
+  const filterRules = styles.slice(breakpointStart, nextBreakpoint === -1 ? undefined : nextBreakpoint);
+
+  assert.match(filterRules, /\.catalog-tools\s+\.filter-controls\s*\{[^}]*flex-direction:\s*column;[^}]*align-items:\s*stretch;/);
+  assert.match(filterRules, /\.catalog-tools\s+\.catalog-filter-control\s*\{\s*width:\s*100%;\s*\}/);
+});

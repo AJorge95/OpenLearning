@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep the course-catalog sort label visible on narrow phones
+
+- **Reviewed:** The learner catalog's selected Category and Sort by values at the 420px responsive breakpoint and just above it.
+- **Improvement:** Stack the catalog filters through 450px, keeping “Recently updated” fully visible instead of ellipsized when the two controls are too narrow side by side. Add a responsive stylesheet regression.
+- **Why it helps:** Learners can identify the active sort mode without opening the control, while the compact side-by-side layout returns once both selected values fit.
+- **Interface and backend review:** Search, category filtering, sorting, card layout, and API behavior are unchanged.
+- **Checked:** The focused catalog/responsive tests passed (5/5), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict type checking and Vite bundling, and `git diff --check` passed. Local Chrome rendered the catalog at 320×800, 421×844, and 451×844; the label was fully visible at 421px and 451px, the document stayed within the viewport, and the console had no warnings or errors.
+
 ## 2026-10-11 — Review mobile account details and motion preferences
 
 - **Reviewed:** Shared reduced-motion rules, account-detail layout at narrow widths, management navigation overflow, and the horizontally scrollable course-activity table.
