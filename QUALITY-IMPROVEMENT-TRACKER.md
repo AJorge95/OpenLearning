@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Confirm lesson removal and caption cleanup
+
+- **Reviewed:** The lesson deletion route removes the lesson, its video, attached resources, and caption files, while the browser prompt mentioned only the video and lesson resources.
+- **Improvement:** Defer lesson deletion until the shared accessible confirmation is accepted. Name the lesson and warn about its video, attached resources, and captions; clear pending state on course navigation and verify the same lesson still belongs to the current course before sending the delete request.
+- **Why it helps:** Course managers can see the full file cleanup before confirming, and cancellation or navigation cannot delete an unintended lesson.
+- **Backend review:** The existing endpoint commits lesson deletion and its audit event together, then removes associated files; its behavior is unchanged.
+- **Checked:** Five focused client confirmation tests passed; the lesson-delete audit-rollback regression passed; `npm run build` passed TypeScript checking and Vite bundling. Chrome showed the lesson-specific warning with focus on Cancel; cancelling closed the dialog and left the lesson in the curriculum. No deletion was submitted. `git diff --check` passed.
+
 ## 2026-10-11 — Confirm module removal and its full data impact
 
 - **Reviewed:** Removing a module permanently deletes its lessons, quiz and saved attempts, and uploaded lesson videos, documents, and captions. The editor previously used a blocking browser prompt that did not name all of those consequences.
