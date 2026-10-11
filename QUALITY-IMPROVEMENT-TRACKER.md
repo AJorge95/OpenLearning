@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Refresh reset status after a concurrent preparation conflict
+
+- **Reviewed:** An administrator can leave Settings open while another administrator begins reset preparation. The server correctly rejects the stale page's preparation request, but the client only showed the conflict message and left its reset controls in the idle state.
+- **Improvement:** On the specific `platform_reset_in_progress` response, reload the current reset status and show the preparing, ready, or resetting state. Preserve the original conflict message if the status request fails or the reset is no longer pending. Add isolated helper and UI-wiring regressions.
+- **Why it helps:** Administrators who encounter an in-flight reset see why the platform is paused and the other administrator's current phase without having to reload Settings manually.
+- **Interface review:** The existing phase messages retain their accessible status roles; the reset conflict no longer leaves an actionable-looking idle state. The in-app browser remains signed out, so the authenticated multi-admin flow could not be replayed live.
+- **Checked:** Focused status tests passed (4/4), including a concurrent-reset conflict, unrelated errors, a completed reset, and failed status refresh. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, the changed test syntax check, and `git diff --check` passed.
+
 ## 2026-10-11 — Serialize platform reset confirmation
 
 - **Reviewed:** The reset confirmation checked for a prepared state, then awaited media filesystem work before changing that state. Concurrent confirmation requests could therefore both pass the check; cancellation could also clear the state after a confirmation had already begun.
