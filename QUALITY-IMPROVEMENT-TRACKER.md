@@ -3,10 +3,10 @@
 ## 2026-10-11 — Show verified watched coverage in the lesson player
 
 - **Reviewed:** The lesson player labeled its progressbar as watched video but drove it from the local playhead. The server separately tracks `watchedUntilSeconds` and preserves that high-water mark when the learner rewinds.
-- **Improvement:** Drive the visual and accessible progressbar from the current lesson's server-confirmed watched high-water mark, clamped to the video duration. Keep the adjacent clock tied to the current playback position.
-- **Why it helps:** Rewinding or replaying no longer makes already-verified watch coverage appear to disappear, and the visual and screen-reader progress values describe the same state.
+- **Improvement:** Drive the visual progressbar from the current lesson's server-confirmed watched high-water mark, clamped to the video duration. Keep the adjacent clock tied to the current playback position, and expose rounded integer seconds plus a concise percentage value text to assistive technology.
+- **Why it helps:** Rewinding or replaying no longer makes already-verified watch coverage appear to disappear, and screen readers avoid announcing long floating-point values while receiving a clear percentage.
 - **Backend review:** Existing progress responses already distinguish watched coverage from last playback position; no API or persistence change was needed.
-- **Checked:** Added tests for high-water display after rewind, values beyond the duration, and unknown duration. Focused video recovery tests passed (7/7); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. In the signed-in local player, the accessibility tree exposed “Video watch progress; seeking is disabled” with the coverage value while the clock retained the current playhead; the rendered bar matched the coverage state.
+- **Checked:** Added tests for high-water display after rewind, rounded accessible values, values beyond the duration, and unknown duration. In the signed-in local player, the browser accessibility tree reports integer seconds rather than the former long fractional value, and the rendered bar reflects coverage while the clock retains the current playhead. Focused video recovery tests passed (7/7); `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` all passed.
 
 ## 2026-10-11 — Reload tracked video from verified position after visibility resume
 

@@ -88,14 +88,16 @@ test('watch-progress resume ignores stale lessons and restores the correct posit
 });
 
 test('video watch progress displays verified coverage instead of the rewind position', () => {
-  const coverage = getVideoWatchProgressDisplay({ watchedUntilSeconds: 32, durationSeconds: 120 });
+  const coverage = getVideoWatchProgressDisplay({ watchedUntilSeconds: 32.5, durationSeconds: 120.4 });
 
-  assert.deepEqual(coverage, { value: 32, max: 120, percentage: (32 / 120) * 100 });
+  assert.deepEqual(coverage, {
+    ariaValue: 33, ariaMax: 120, ariaValueText: '27% of video watched', percentage: (32.5 / 120.4) * 100,
+  });
   assert.deepEqual(getVideoWatchProgressDisplay({ watchedUntilSeconds: 150, durationSeconds: 120 }), {
-    value: 120, max: 120, percentage: 100,
+    ariaValue: 120, ariaMax: 120, ariaValueText: '100% of video watched', percentage: 100,
   });
   assert.deepEqual(getVideoWatchProgressDisplay({ watchedUntilSeconds: 12, durationSeconds: 0 }), {
-    value: 0, max: 1, percentage: 0,
+    ariaValue: 0, ariaMax: 1, ariaValueText: '0% of video watched', percentage: 0,
   });
 });
 
