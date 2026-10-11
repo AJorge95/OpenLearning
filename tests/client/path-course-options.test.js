@@ -36,7 +36,7 @@ test('learning-path editor paginates course options with retry and request clean
   const source = fs.readFileSync(path.join(projectDirectory, 'src/pages-programs.tsx'), 'utf8');
   const styles = fs.readFileSync(path.join(projectDirectory, 'src/styles.css'), 'utf8');
 
-  assert.match(source, /function PathEditor\(\{ existing, busy, onSave, onCancel \}/);
+  assert.match(source, /function PathEditor\(\{ existing, busy, onSave, onCancel, onDirtyChange \}/);
   assert.match(source, /api\.get<PublishedCoursePage>\(publishedCourseOptionsPageUrl\(requestedPage\), \{ signal: controller\.signal \}\)/);
   assert.match(source, /appendPublishedCourseOptions\(replace \? \[\] : current, result\.courses\)/);
   assert.match(source, /new Map\(\[\.\.\.courses, \.\.\.\(existing\?\.courses \|\| \[\]\)\]/);
