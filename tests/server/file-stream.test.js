@@ -77,3 +77,27 @@ test('file streams stop reading when the client response closes early', async ()
     removeFixtureDirectory(directory);
   }
 });
+
+test('file streams do not start reading when the client response closed before streaming began', async () => {
+  const directory = createFixtureDirectory();
+  try {
+    const filePath = path.join(directory, 'large-media.bin');
+    fs.writeFileSync(filePath, Buffer.alloc(8 * 1024 * 1024, 0x61));
+
+    const response = new PassThrough();
+    response.destroy();
+    await once(response, 'close');
+
+    const errors = [];
+    const stream = streamFileToResponse(filePath, response, (error) => errors.push(error));
+    const streamClosed = once(stream, 'close');
+    await streamClosed;
+
+    assert.equal(stream.destroyed, true);
+    assert.equal(stream.bytesRead, 0);
+    assert.equal(response.listenerCount('close'), 0);
+    assert.deepEqual(errors, []);
+  } finally {
+    removeFixtureDirectory(directory);
+  }
+});
