@@ -82,11 +82,28 @@ function waitForActiveRequests() {
   return new Promise((resolve) => idleWaiters.push(resolve));
 }
 
-function backupPathIsInsideMediaRoot(backupPath) {
-  const mediaRoot = path.resolve(config.mediaRoot);
-  const resolvedBackup = path.resolve(backupPath);
-  const relative = path.relative(mediaRoot, resolvedBackup);
+function pathIsInside(parentPath, candidatePath) {
+  const relative = path.relative(parentPath, candidatePath);
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+async function resolveNewPath(targetPath) {
+  const realParentPath = await fs.realpath(path.dirname(targetPath));
+  return path.join(realParentPath, path.basename(targetPath));
+}
+
+export async function assertResetBackupPathsSafe({ mediaRoot, databasePath, backupDirectory }) {
+  const [realMediaRoot, realDatabasePath, realBackupDirectory] = await Promise.all([
+    fs.realpath(mediaRoot),
+    fs.realpath(databasePath),
+    resolveNewPath(backupDirectory),
+  ]);
+  if (pathIsInside(realMediaRoot, realBackupDirectory)) {
+    throw new Error('The configured backup location overlaps the course media directory.');
+  }
+  if (pathIsInside(realMediaRoot, realDatabasePath)) {
+    throw new Error('The configured database path is inside the course media directory, so it cannot be reset safely.');
+  }
 }
 
 async function copyMediaTree(source, destination) {
@@ -122,12 +139,7 @@ async function createBackup() {
   const timestamp = new Date().toISOString().replaceAll(':', '-');
   const directoryName = `platform-reset-${timestamp}-${randomBytes(3).toString('hex')}`;
   const backupDirectory = path.join(backupsRoot, directoryName);
-  if (backupPathIsInsideMediaRoot(backupDirectory)) {
-    throw new Error('The configured backup location overlaps the course media directory.');
-  }
-  if (backupPathIsInsideMediaRoot(config.dbPath)) {
-    throw new Error('The configured database path is inside the course media directory, so it cannot be reset safely.');
-  }
+  await assertResetBackupPathsSafe({ mediaRoot: config.mediaRoot, databasePath: config.dbPath, backupDirectory });
   await fs.mkdir(backupDirectory, { recursive: false });
   try {
     const databasePath = path.join(backupDirectory, 'openlearning.sqlite');
@@ -199,7 +211,7 @@ export function cancelPlatformReset(actor, confirmationId) {
 }
 
 async function replaceMediaRoot() {
-  const mediaRoot = path.resolve(config.mediaRoot);
+  const mediaRoot = await fs.realpath(config.mediaRoot);
   const parent = path.dirname(mediaRoot);
   const quarantinePath = path.join(parent, `.course-media-reset-${randomUUID()}`);
   let moved = false;

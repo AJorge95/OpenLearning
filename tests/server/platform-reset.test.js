@@ -239,3 +239,76 @@ test('a reset transaction failure restores the original media and leaves databas
   assert.equal(reset.isPlatformResetActive(), false);
   assert.equal(fs.existsSync(path.join(fixtureDirectory, prepared.backupLocation, 'manifest.json')), true);
 });
+
+test('backup path checks resolve a symlinked media root before checking overlap', async (t) => {
+  const mediaTarget = process.env.MEDIA_ROOT;
+  const mediaAlias = path.join(fixtureDirectory, 'media-root-alias');
+  try {
+    await fs.promises.symlink(mediaTarget, mediaAlias, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'ENOTSUP', 'EOPNOTSUPP', 'EINVAL'].includes(error.code)) {
+      t.skip(`Directory symlinks are unavailable: ${error.code}`);
+      return;
+    }
+    throw error;
+  }
+
+  await assert.rejects(
+    reset.assertResetBackupPathsSafe({
+      mediaRoot: mediaAlias,
+      databasePath: process.env.DB_PATH,
+      backupDirectory: path.join(mediaTarget, 'unsafe-backup'),
+    }),
+    /backup location overlaps the course media directory/,
+  );
+});
+
+test('backup path checks resolve a database path through a symlinked media directory', async (t) => {
+  const databaseTarget = path.join(process.env.MEDIA_ROOT, 'database.sqlite');
+  const mediaAlias = path.join(fixtureDirectory, 'database-media-alias');
+  const backupParent = path.join(fixtureDirectory, 'safe-backup-parent');
+  await fs.promises.copyFile(process.env.DB_PATH, databaseTarget);
+  await fs.promises.mkdir(backupParent, { recursive: true });
+  try {
+    await fs.promises.symlink(process.env.MEDIA_ROOT, mediaAlias, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'ENOTSUP', 'EOPNOTSUPP', 'EINVAL'].includes(error.code)) {
+      t.skip(`Directory symlinks are unavailable: ${error.code}`);
+      return;
+    }
+    throw error;
+  }
+
+  await assert.rejects(
+    reset.assertResetBackupPathsSafe({
+      mediaRoot: process.env.MEDIA_ROOT,
+      databasePath: path.join(mediaAlias, 'database.sqlite'),
+      backupDirectory: path.join(backupParent, 'platform-reset'),
+    }),
+    /database path is inside the course media directory/,
+  );
+});
+
+test('reset clears the target of a symlinked media root and keeps the configured link usable', async (t) => {
+  const configuredMediaPath = process.env.MEDIA_ROOT;
+  const mediaTarget = path.join(fixtureDirectory, 'course-media-target');
+  await fs.promises.rename(configuredMediaPath, mediaTarget);
+  try {
+    await fs.promises.symlink(mediaTarget, configuredMediaPath, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    await fs.promises.rename(mediaTarget, configuredMediaPath);
+    if (['EPERM', 'EACCES', 'ENOTSUP', 'EOPNOTSUPP', 'EINVAL'].includes(error.code)) {
+      t.skip(`Directory symlinks are unavailable: ${error.code}`);
+      return;
+    }
+    throw error;
+  }
+
+  const prepared = await reset.preparePlatformReset(actor);
+  const result = await reset.confirmPlatformReset(actor, prepared.confirmationId, 'RESET');
+  assert.equal(await fs.promises.readFile(path.join(fixtureDirectory, result.backupLocation, 'course-media', 'lesson-video.mp4'), 'utf8'), 'fixture-media');
+  assert.equal(fs.lstatSync(configuredMediaPath).isSymbolicLink(), true);
+  assert.equal(await fs.promises.realpath(configuredMediaPath), await fs.promises.realpath(mediaTarget));
+  assert.deepEqual(await fs.promises.readdir(mediaTarget), []);
+  reset.finishPlatformReset();
+});
