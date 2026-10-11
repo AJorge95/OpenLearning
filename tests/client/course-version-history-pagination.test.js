@@ -17,7 +17,9 @@ test('course version history uses bounded requests and preserves current-version
   assert.match(page, /api\.get<CourseVersionHistoryPage>\(`\/api\/manage\/courses\/\$\{id\}\/versions\?page=\$\{requestedPage\}`/);
   assert.match(page, /version\.version_number === currentVersionNumber && <span className="current-version-label">Current<\/span>/);
   assert.match(page, /version\.version_number !== currentVersionNumber && <Button type="button"/);
-  assert.match(page, />Restore as new version<\/Button>/);
+  assert.match(page, /aria-label=\{`Restore version \$\{version\.version_number\} as a new course version`\}/);
+  assert.match(page, /disabled=\{restoring\} aria-busy=\{restoring\}/);
+  assert.match(page, /\{restoring \? 'Restoring version…' : 'Restore as new version'\}/);
   assert.match(page, /<nav className="course-version-pagination" aria-label="Course version history pages">/);
   assert.match(page, /role="status" aria-live="polite">Showing versions/);
   assert.match(page, />Newer<\/Button>[\s\S]*?>Older<\/Button>/);

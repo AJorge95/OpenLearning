@@ -88,3 +88,24 @@ test('review actions keep successful decisions visible when editor refreshes fai
   assert.match(decideReview, /try \{\s*await loadGovernance\(requestedCourseId\);\s*\} finally \{\s*if \(isCurrentRequest\(\)\) await load\(requestedCourseId\);\s*\}/);
   assert.match(decideReview, /setError\(reviewDecisionSaved[\s\S]*?Review decision was saved, but the course editor could not be refreshed\./);
 });
+
+test('course-version restores prevent duplicate writes and keep feedback scoped to the source course', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const restoreHandlers = [];
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === 'restoreVersion') restoreHandlers.push(node.getText(sourceFile));
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+
+  assert.equal(restoreHandlers.length, 1, 'expected one version restore handler');
+  const restoreVersion = restoreHandlers[0];
+  assert.match(restoreVersion, /const requestedCourseId = courseId;/);
+  assert.match(restoreVersion, /const requestKey = `\$\{requestedCourseId\}:\$\{version\.id\}`;/);
+  assert.match(restoreVersion, /restoreVersionRequestsRef\.current\.has\(requestKey\)/);
+  assert.match(restoreVersion, /api\.post\(`\/api\/manage\/courses\/\$\{requestedCourseId\}\/versions\/\$\{version\.id\}\/restore`/);
+  assert.match(restoreVersion, /if \(routeCourseIdRef\.current !== requestedCourseId\) return;/);
+  assert.match(restoreVersion, /versionRestored = true;[\s\S]*?setNotice\(`Version \$\{version\.version_number\} was restored[\s\S]*?await load\(requestedCourseId\)/);
+  assert.match(restoreVersion, /setError\(versionRestored[\s\S]*?was restored, but the course editor could not be refreshed\./);
+});
