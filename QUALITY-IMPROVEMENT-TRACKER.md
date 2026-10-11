@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Show pending registrations in admin navigation
+
+- **Reviewed:** The administrator sidebar, registration approval actions, the indexed registration-status column, the in-flight server route change, and the repeated report about the account-role selector's right-side click boundary.
+- **Improvement:** Add an admin-only pending-count endpoint and a Users navigation badge when the count is positive. Give the link the exact singular or plural count for assistive technology, cap the visual badge at `99+`, refresh on route changes, window focus, and successful approvals, and cancel obsolete requests.
+- **Why it helps:** Administrators can see pending work without opening the Users page, while approval actions and returning to the window update the count without leaving stale requests behind.
+- **Interface review:** The role selector's current source already limits its trigger and click area to 144px. At `http://127.0.0.1:5173/admin/users/5ee2a3bb-91f0-472a-8869-45c39da550b2` in Chrome at 1718×1270, the enabled Learner selector opened from its trigger, closed on a click 6px to the right, and stayed closed when that adjacent area was clicked again; its role remained Learner. No duplicate selector CSS was added. The local Users list has no pending registrations, so a populated navigation badge was not available for rendered review.
+- **Backend review:** The endpoint is behind the existing admin router guard and uses the existing `registration_status` index. Failed or invalid count reads leave the badge hidden.
+- **Checked:** Focused navigation tests passed (2/2); the isolated registration-approval route tests passed (16/16), covering initial, pending, rollback, and approved counts; the full suite passed (525/525); `npm run build` passed strict TypeScript checking and Vite bundling; changed JavaScript syntax checks and `git diff --check` passed. The Browser plugin was unavailable; the connected Chrome tab was exercised through CUA's Playwright locator API, whose surface did not expose console logs.
+
 ## 2026-10-11 — Focus the pending-registration confirmation
 
 - **Reviewed:** Public sign-up submission, the pending-registration confirmation branch, setup-step heading focus behavior, visible focus styling, and the existing confirmation copy.

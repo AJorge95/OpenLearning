@@ -207,6 +207,11 @@ adminRouter.get('/users', (req, res) => {
   })), total, page, pageSize });
 });
 
+adminRouter.get('/users/pending-count', (_req, res) => {
+  const count = db.prepare("SELECT COUNT(*) AS count FROM users WHERE registration_status = 'pending'").get().count;
+  res.json({ count });
+});
+
 adminRouter.post('/users', async (req, res) => {
   const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
   const email = normalizeEmail(req.body?.email);
