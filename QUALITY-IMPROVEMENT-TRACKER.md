@@ -8,12 +8,12 @@
 - **Interface review:** Video playback still receives the same verified duration or the existing actionable unavailable-duration error; no UI or API response changed.
 - **Checked:** The focused MP4 parser suite passed (9/9), including the new extended-size header boundary case; the 200,000-box fixture still returns no duration and now completes in 309 ms (about 6.1 seconds before batching). `npm run build` passed strict TypeScript checking and Vite bundling; `node --check` passed for the parser and test; and `git diff --check` passed. An initial full-suite run concurrent with the build reported one failure; two sequential reruns passed all 529 tests. The cause of the first run's failure was not captured.
 
-## 2026-10-11 — Confirm the role-selector fix is served locally
+## 2026-10-11 — Verify the role-selector right-edge hit area
 
 - **Reviewed:** The repeated right-edge click report against the current account-details markup, pointer-event boundary, trigger and popup sizing, and the Vite process serving `127.0.0.1:5173`.
-- **Result:** No source change was needed. Port 5173 is served by Vite launched from this checkout, and its transformed `pages-manage.tsx` module contains the separate `div.account-role-control` markup. The supplied screenshot still identifies the older wrapping `<label>` structure.
-- **Why no code change:** The committed selector already limits pointer events to the visible trigger and matches the popup to its width. If the open page still exposes the old label, reloading it is the next useful check; another width rule would duplicate the existing fix.
-- **Checked:** The served Vite module returned HTTP 200 and the current role markup; focused account-role/select tests passed (10/10); the path-assignment directory regression passed (1/1); and `git diff --check` passed. The browser's loaded DOM and outside-click interaction were not re-exercised in this pass.
+- **Result:** No source change was needed. The exact account route now renders the current selector disabled because that user is the only active administrator. On an editable account using the same selector, the trigger opened normally; clicking 5 px to its right closed the menu, and clicking the same adjacent area again left it closed. The supplied screenshot still identifies the older wrapping `<label>` structure.
+- **Why no code change:** The committed selector already limits pointer events to the visible 9rem trigger and matches the popup to its width. The screenshot’s wider label is absent from the current markup, so additional width rules would duplicate the existing fix. Reloading the page should bring the displayed interface up to date.
+- **Checked:** The page loaded at `http://127.0.0.1:5173/admin/users/baf4c6ba-14ec-43b5-aa03-35fa279ef970`; the adjacent right-edge interaction was exercised in Chrome on an editable account; focused account-role/select tests passed (19/19); and `git diff --check` passed. Console logs were not exposed by the connected CUA surface.
 
 ## 2026-10-11 — Report unknown quiz question IDs accurately
 
