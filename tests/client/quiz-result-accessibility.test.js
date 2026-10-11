@@ -11,6 +11,12 @@ test('quiz results provide an accessible aggregate score without answer review',
   assert.doesNotMatch(source, /Review your answers|Correct answer:|Your answer is (?:correct|incorrect)/);
 });
 
+test('quiz result feedback includes the score and the threshold for passing', () => {
+  assert.match(source, /Score \{currentResult\.score\}% ·/);
+  assert.match(source, /Pass mark: \$\{quiz\.passMark\}%\./);
+  assert.match(source, /You need \$\{quiz\.passMark\}% to pass\./);
+});
+
 test('quiz submission and retry move focus into the newly displayed view', () => {
   assert.match(source, /if \(isCurrentSubmission\(\)\) \{\s*focusResultRef\.current = true;\s*setResult\(response\.attempt\)/);
   assert.match(source, /if \(currentResult && focusResultRef\.current\) \{\s*focusResultRef\.current = false;\s*resultHeadingRef\.current\?\.focus\(\);\s*\} else if \(!currentResult && focusFirstAnswerRef\.current\) \{\s*focusFirstAnswerRef\.current = false;\s*firstAnswerRef\.current\?\.focus\(\);/);
