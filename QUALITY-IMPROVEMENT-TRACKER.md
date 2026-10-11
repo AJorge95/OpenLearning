@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Show verified watched coverage in the lesson player
+
+- **Reviewed:** The lesson player labeled its progressbar as watched video but drove it from the local playhead. The server separately tracks `watchedUntilSeconds` and preserves that high-water mark when the learner rewinds.
+- **Improvement:** Drive the visual and accessible progressbar from the current lesson's server-confirmed watched high-water mark, clamped to the video duration. Keep the adjacent clock tied to the current playback position.
+- **Why it helps:** Rewinding or replaying no longer makes already-verified watch coverage appear to disappear, and the visual and screen-reader progress values describe the same state.
+- **Backend review:** Existing progress responses already distinguish watched coverage from last playback position; no API or persistence change was needed.
+- **Checked:** Added tests for high-water display after rewind, values beyond the duration, and unknown duration. Focused video recovery tests passed (7/7); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. In the signed-in local player, the accessibility tree exposed “Video watch progress; seeking is disabled” with the coverage value while the clock retained the current playhead; the rendered bar matched the coverage state.
+
 ## 2026-10-11 — Reload tracked video from verified position after visibility resume
 
 - **Reviewed:** A learner can return to a backgrounded tracked video after the browser has suspended its decoder. The visibility-resume flow fetches the server checkpoint, but its React closure can still hold stale watch state while deciding whether to resume playback.
