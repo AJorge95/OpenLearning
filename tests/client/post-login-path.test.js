@@ -40,3 +40,10 @@ test('new account registration retains the requested route through sign-up', () 
   assert.match(authSource, /export function RegisterPage\(\) \{[\s\S]{0,360}getPostLoginPath\(location\.state\?\.from\)/);
   assert.match(authSource, /await signUp\([\s\S]*?navigate\(postLoginPath, \{ replace: true \}\)/);
 });
+
+test('login copy explains when sign-in will return to a requested page', () => {
+  const authSource = fs.readFileSync(path.join(sourceDirectory, 'pages-auth.tsx'), 'utf8');
+
+  assert.match(authSource, /const hasRequestedDestination = postLoginPath !== '\/courses';/);
+  assert.match(authSource, /hasRequestedDestination \? 'Sign in to return to the page you requested\.' : 'Sign in to continue learning\.'/);
+});
