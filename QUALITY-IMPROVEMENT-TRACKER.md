@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck learner resource-link safety and context
+
+- **Reviewed:** Learner lesson-resource anchor semantics, new-tab announcement, `noopener noreferrer`, request text validation, shared HTTP(S)-only URL validation, and existing client/server coverage.
+- **Result:** No runtime change. The link announces its new-tab behavior; non-text URL fields are rejected before URL parsing; and credentialed or non-HTTP(S) URLs are rejected before persistence.
+- **Why no change:** The rendered link and route validation already provide the intended navigation cue and input boundary. The existing client and route tests cover accepted and rejected values, so another patch would duplicate the current contract.
+- **Checked:** `node --test tests/client/resource-validation.test.js` passed (3/3); the focused resource-link route test passed (1/1). No external link was opened and no resource was written.
+- **Needed to continue:** A current accessibility or navigation failure, or a clarified resource policy that the current validator does not meet.
+
 ## 2026-10-11 — Recheck learner quiz failure recovery
 
 - **Reviewed:** Quiz submission and saved-result loading, required-answer semantics, route/request sequencing, error announcements, result focus, score fallback, and detail retry behavior.
