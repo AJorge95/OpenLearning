@@ -217,6 +217,8 @@ export const api = {
                 reject(uploadAbortError());
                 return;
               }
+              // The global CSRF guard runs before Multer, so a rejected token cannot have stored the file.
+              // Replaying the body is safe here and remains limited to one retry.
               void waitForAbort(refreshCsrf(), options.signal).then((freshToken) => {
                 if (options.signal?.aborted) throw uploadAbortError();
                 onProgress(0);
