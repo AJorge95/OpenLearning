@@ -507,6 +507,13 @@ test('video replacement preserves the old lesson media when its audit event cann
     VALUES ('media-old-video', ?, 'original-video.mp4', ?, 'video/mp4', ?, 'video')`)
     .run(courseId, previousFileName, mp4Contents.length);
   database.prepare('UPDATE lessons SET media_id = ? WHERE id = ?').run('media-old-video', lessonId);
+  database.prepare(`INSERT INTO lesson_watch_progress
+    (user_id, lesson_id, watched_until_seconds, duration_seconds, last_position_seconds, last_heartbeat_at)
+    VALUES ('learner-media', ?, 36, 60, 36, 1_800_000_000_000)`).run(lessonId);
+  database.prepare(`INSERT INTO lesson_watch_telemetry (user_id, lesson_id, watched_seconds)
+    VALUES ('learner-media', ?, 36)`).run(lessonId);
+  const originalWatchProgress = database.prepare(`SELECT watched_until_seconds, duration_seconds, last_position_seconds
+    FROM lesson_watch_progress WHERE user_id = 'learner-media' AND lesson_id = ?`).get(lessonId);
   const originalCourse = database.prepare('SELECT updated_at, updated_by FROM courses WHERE id = ?').get(courseId);
   const originalFiles = (await fs.readdir(path.dirname(captionPath))).sort();
   const initialAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.video_uploaded' AND entity_id = ?").get(courseId).count;
@@ -532,6 +539,8 @@ test('video replacement preserves the old lesson media when its audit event cann
     assert.equal((await failedResponse.json()).code, 'audit_unavailable');
     assert.equal(database.prepare('SELECT media_id FROM lessons WHERE id = ?').get(lessonId).media_id, 'media-old-video');
     assert.ok(database.prepare("SELECT id FROM media_files WHERE id = 'media-old-video'").get());
+    assert.deepEqual(database.prepare(`SELECT watched_until_seconds, duration_seconds, last_position_seconds
+      FROM lesson_watch_progress WHERE user_id = 'learner-media' AND lesson_id = ?`).get(lessonId), originalWatchProgress);
     assert.deepEqual(await fs.readFile(previousFilePath), mp4Contents);
     assert.deepEqual((await fs.readdir(path.dirname(captionPath))).sort(), originalFiles);
     assert.deepEqual(database.prepare('SELECT updated_at, updated_by FROM courses WHERE id = ?').get(courseId), originalCourse);
@@ -552,6 +561,11 @@ test('video replacement preserves the old lesson media when its audit event cann
   assert.equal(media.name, 'updated-video.mp4');
   assert.equal(database.prepare('SELECT media_id FROM lessons WHERE id = ?').get(lessonId).media_id, media.id);
   assert.equal(database.prepare("SELECT id FROM media_files WHERE id = 'media-old-video'").get(), undefined);
+  assert.equal(database.prepare('SELECT 1 FROM lesson_watch_progress WHERE lesson_id = ?').get(lessonId), undefined);
+  assert.equal(database.prepare('SELECT 1 FROM lesson_watch_telemetry WHERE lesson_id = ?').get(lessonId), undefined);
+  const replacementAudit = database.prepare(`SELECT details_json FROM audit_logs
+    WHERE action = 'course.video_uploaded' AND entity_id = ? ORDER BY occurred_at DESC, id DESC LIMIT 1`).get(courseId);
+  assert.equal(JSON.parse(replacementAudit.details_json).resetWatchProgressCount, 1);
   const savedMedia = database.prepare('SELECT file_name FROM media_files WHERE id = ?').get(media.id);
   assert.deepEqual(await fs.readFile(path.join(path.dirname(captionPath), savedMedia.file_name)), mp4Contents);
   await assert.rejects(fs.stat(previousFilePath), { code: 'ENOENT' });

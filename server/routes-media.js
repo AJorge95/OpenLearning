@@ -399,6 +399,7 @@ mediaUploadRouter.post('/manage/courses/:courseId/media', requireAuth, authorize
   const originalName = safeOriginalName(req.file.originalname);
   const id = randomUUID();
   let previousId;
+  let resetWatchProgressCount = 0;
   try {
     const save = db.transaction(() => {
       const currentCourse = requireCurrentCourseManager(course.id, req.currentUser.id);
@@ -421,13 +422,17 @@ mediaUploadRouter.post('/manage/courses/:courseId/media', requireAuth, authorize
         const updatedLesson = db.prepare(`UPDATE lessons SET media_id = ? WHERE id = ?
           AND module_id IN (SELECT id FROM course_modules WHERE course_id = ?)`).run(id, lessonId, currentCourse.id);
         if (updatedLesson.changes !== 1) fail(400, 'Choose a lesson in this course before uploading a video.', 'invalid_lesson');
+        if (previousId) {
+          resetWatchProgressCount = db.prepare('DELETE FROM lesson_watch_progress WHERE lesson_id = ?').run(currentLesson.lesson_id).changes;
+        }
         db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, currentCourse.id);
       }
       const lessonTitle = currentLesson?.lesson_title || null;
       const auditId = writeAuditLog({ actor: req.currentUser, action: kind === 'cover' ? 'course.cover_uploaded' : 'course.video_uploaded',
         entityType: 'course', entityId: currentCourse.id,
         summary: `Uploaded ${kind === 'cover' ? 'cover image' : `video for ${lessonTitle || 'a lesson'}`} to ${currentCourse.title}`,
-        details: { kind, lessonId: lessonId || null, originalName, byteSize: req.file.size } });
+        details: { kind, lessonId: lessonId || null, originalName, byteSize: req.file.size,
+          ...(kind === 'video' && resetWatchProgressCount ? { resetWatchProgressCount } : {}) } });
       if (!auditId) fail(500, 'Media could not be uploaded because the audit log is unavailable.', 'audit_unavailable');
       return previousId;
     });
