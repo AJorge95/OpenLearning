@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Review palette and learning-path action semantics
+
+- **Reviewed:** Shared palette-picker button names and pressed state, learning-path course lookup and reorder labels, the course/path foreign-key cascade, and administrator account-role validation and last-admin protection.
+- **Result:** No new code change. Palette choices expose visible names and `aria-pressed`; selected learning-path courses are resolved from the course page or existing path detail, and deleting a course cascades its path rows. Account-role updates validate the role and protect the final active administrator inside an immediate transaction.
+- **Why no change:** The controls expose their visible names and state, the suspected missing-course fallback is prevented by the course/path foreign key, and the account guard is already covered. No source change would address a reproduced gap.
+- **Checked:** Focused learning-path UI tests passed (5/5); the administrator-filtered registration route tests passed (7/7). No persistent account or course data was changed. No separate responsive defect or backend failure was reproduced.
+- **Needed to continue:** A reproducible control or accessibility failure, an uncovered account-update failure case, or representative workload measurements supporting performance changes.
+
 ## 2026-10-11 — Document batched course-summary reads
 
 - **Reviewed:** `courseSummaryDetails`, its catalog/My Learning/staff-list callers, and the existing one-course versus two-course prepared-query regression.
