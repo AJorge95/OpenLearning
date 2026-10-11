@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Make course-version restores clear and repeat-safe
+
+- **Reviewed:** Version restore confirmation, the restore request and its post-write course/governance reloads, repeated restore-button names, and route changes while a restore is pending.
+- **Improvement:** Give each restore button a version-specific accessible name and pending state, prevent duplicate requests for the same course/version, scope the mutation and follow-up to the initiating course, and preserve success feedback if editor refresh fails. Add client regressions for the action state and route-scoped completion.
+- **Why it helps:** Authors can distinguish restore actions with assistive technology, avoid publishing duplicate copies by double-activating, and see whether the restore succeeded even when the editor cannot reload afterward.
+- **Checked:** Focused course-editor and version-history client tests passed (5/5). Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, both changed test-file syntax checks, and `git diff --check` passed. Rendered restore interaction was not replayed because the in-app browser is signed out and Playwright is not installed.
+
 ## 2026-10-11 — Keep review outcomes clear across editor refreshes
 
 - **Reviewed:** Review submission and approval/change-request handlers, their follow-up governance/course loads, and route changes while a decision request is in flight.

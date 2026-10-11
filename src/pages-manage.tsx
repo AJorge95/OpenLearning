@@ -816,6 +816,8 @@ export function CourseEditorPage() {
   const [changeRequestNote, setChangeRequestNote] = useState('');
   const [savingReviewDecision, setSavingReviewDecision] = useState(false);
   const reviewDecisionRequestRef = useRef(false);
+  const restoreVersionRequestsRef = useRef(new Set<string>());
+  const [restoringVersionRequests, setRestoringVersionRequests] = useState<Set<string>>(() => new Set());
   const [submittingReview, setSubmittingReview] = useState(false);
   const reviewSubmissionRequestRef = useRef(false);
   const requestChangesButtonRef = useRef<HTMLButtonElement>(null);
@@ -1147,13 +1149,39 @@ export function CourseEditorPage() {
   }
 
   async function restoreVersion(version: CourseVersion) {
-    if (!courseId || !window.confirm(`Publish version ${version.version_number} as a new course version?`)) return;
+    const requestedCourseId = courseId;
+    if (!requestedCourseId) return;
+    const requestKey = `${requestedCourseId}:${version.id}`;
+    if (restoreVersionRequestsRef.current.has(requestKey)
+      || !window.confirm(`Publish version ${version.version_number} as a new course version?`)) return;
+    restoreVersionRequestsRef.current.add(requestKey);
+    setRestoringVersionRequests((current) => new Set(current).add(requestKey));
     setError(''); setNotice('');
+    let versionRestored = false;
     try {
-      await api.post(`/api/manage/courses/${courseId}/versions/${version.id}/restore`, { requiresRecompletion });
-      setRequiresRecompletion(false); await load(); await loadGovernance();
+      await api.post(`/api/manage/courses/${requestedCourseId}/versions/${version.id}/restore`, { requiresRecompletion });
+      if (routeCourseIdRef.current !== requestedCourseId) return;
+      versionRestored = true;
+      setRequiresRecompletion(false);
       setNotice(`Version ${version.version_number} was restored and published as a new version.`);
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'This version could not be restored.'); }
+      try {
+        await load(requestedCourseId);
+      } finally {
+        if (routeCourseIdRef.current === requestedCourseId) await loadGovernance(requestedCourseId);
+      }
+    } catch (cause) {
+      if (routeCourseIdRef.current === requestedCourseId) setError(versionRestored
+        ? `Version ${version.version_number} was restored, but the course editor could not be refreshed. ${cause instanceof ApiError ? cause.message : 'Retry loading course settings.'}`
+        : cause instanceof ApiError ? cause.message : 'This version could not be restored.');
+    } finally {
+      restoreVersionRequestsRef.current.delete(requestKey);
+      setRestoringVersionRequests((current) => {
+        if (!current.has(requestKey)) return current;
+        const next = new Set(current);
+        next.delete(requestKey);
+        return next;
+      });
+    }
   }
 
   async function saveCompetencyMapping() {
@@ -1376,10 +1404,13 @@ export function CourseEditorPage() {
       {governanceReady && versionTotal > 0 && <div className="course-version-history"><h3>Published version history</h3>
         {versionHistoryError && <div className="error-notice-actionable" role="alert"><span>{versionHistoryError}</span><Button variant="secondary" disabled={versionHistoryLoading} onClick={() => void loadVersionHistory(versionPage)}>Retry version history</Button></div>}
         {versionHistoryLoading && <p role="status">Loading course versions…</p>}
-        <ol>{versions.map((version) => <li key={version.id}>
+        <ol>{versions.map((version) => {
+          const restoring = restoringVersionRequests.has(`${courseId}:${version.id}`);
+          return <li key={version.id}>
         <div><strong>Version {version.version_number}{version.version_number === currentVersionNumber && <span className="current-version-label">Current</span>}</strong><small>{version.title} · Published {logTimestampFormatter.format(new Date(version.published_at))}{version.publisher ? ` by ${version.publisher}` : ''}</small>{version.change_note && <p>{version.change_note}</p>}</div>
-        {version.version_number !== currentVersionNumber && <Button type="button" variant="secondary" onClick={() => void restoreVersion(version)}>Restore as new version</Button>}
-      </li>)}</ol>
+        {version.version_number !== currentVersionNumber && <Button type="button" variant="secondary" aria-label={`Restore version ${version.version_number} as a new course version`} disabled={restoring} aria-busy={restoring} onClick={() => void restoreVersion(version)}>{restoring ? 'Restoring version…' : 'Restore as new version'}</Button>}
+      </li>;
+        })}</ol>
         <CourseVersionPagination page={versionPage} pageSize={versionPageSize} total={versionTotal} versions={versions} loading={versionHistoryLoading} onChange={(nextPage) => void loadVersionHistory(nextPage)} />
       </div>}
     </section>
