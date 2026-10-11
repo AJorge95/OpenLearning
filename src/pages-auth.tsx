@@ -260,6 +260,7 @@ export function RegisterPage() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [approvalSubmitted, setApprovalSubmitted] = useState(false);
+  const approvalConfirmationHeadingRef = useRef<HTMLHeadingElement>(null);
   const submissionInFlightRef = useRef(false);
   useEffect(() => {
     let active = true;
@@ -278,9 +279,13 @@ export function RegisterPage() {
       .finally(() => { if (active) setRegistrationFieldsLoading(false); });
     return () => { active = false; controller.abort(); };
   }, [registrationFieldsRetryVersion]);
+  // Move focus to the confirmation after the form is replaced so its result is announced.
+  useEffect(() => {
+    if (approvalSubmitted) approvalConfirmationHeadingRef.current?.focus();
+  }, [approvalSubmitted]);
   if (configured && user) return <Navigate to={postLoginPath} replace />;
   if (!configured) return <Navigate to="/setup" replace />;
-  if (approvalSubmitted) return <AuthPanel><h1>Registration submitted</h1><p className="auth-description">Your account is waiting for administrator approval. You can sign in after it has been approved.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
+  if (approvalSubmitted) return <AuthPanel><h1 ref={approvalConfirmationHeadingRef} tabIndex={-1}>Registration submitted</h1><p className="auth-description">Your account is waiting for administrator approval. You can sign in after it has been approved.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
   if (!registrationEnabled) return <AuthPanel><h1>Registration is closed</h1><p className="auth-description">An administrator has disabled new account registrations.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
   if (!registrationAvailable) return <AuthPanel><h1>Registration is closed</h1><p className="auth-description">The platform has reached its registered-account limit.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
 
