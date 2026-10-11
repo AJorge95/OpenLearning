@@ -1541,6 +1541,72 @@ test('admin competency creation returns a useful conflict for case-insensitive d
   }
 });
 
+test('admin competency pages are bounded, stable, clamped, and include the created item page', async () => {
+  const pageSize = 25;
+  const fixtureIds = Array.from({ length: 52 }, (_, index) => `competency-page-${String(index).padStart(2, '0')}`);
+  const insert = database.prepare(`INSERT INTO competencies (id, title, description, active, created_by)
+    VALUES (?, ?, '', ?, 'admin-1')`);
+  let createdId;
+  try {
+    database.transaction(() => {
+      fixtureIds.forEach((id, index) => insert.run(id, `Pagination competency ${String(index).padStart(2, '0')}`, index % 2));
+    }).immediate();
+
+    const secondPageResponse = await fetch(apiUrl('/admin/competencies?page=2'), { headers: userHeaders('admin-1') });
+    assert.equal(secondPageResponse.status, 200);
+    const secondPage = await secondPageResponse.json();
+    const orderedRows = database.prepare(`SELECT id FROM competencies
+      ORDER BY active DESC, title COLLATE NOCASE, id`).all();
+    const pageQueryPlan = database.prepare(`EXPLAIN QUERY PLAN SELECT * FROM competencies
+      ORDER BY active DESC, title COLLATE NOCASE, id LIMIT ? OFFSET ?`).all(pageSize, pageSize);
+    assert.ok(pageQueryPlan.some((row) => row.detail.includes('competencies_admin_order')), JSON.stringify(pageQueryPlan));
+    assert.ok(!pageQueryPlan.some((row) => row.detail.includes('TEMP B-TREE')), JSON.stringify(pageQueryPlan));
+    assert.equal(secondPage.total, orderedRows.length);
+    assert.equal(secondPage.page, 2);
+    assert.equal(secondPage.pageSize, pageSize);
+    assert.equal(secondPage.hasMore, true);
+    assert.deepEqual(secondPage.competencies.map((item) => item.id), orderedRows.slice(pageSize, pageSize * 2).map((item) => item.id));
+
+    const toggledId = fixtureIds[0];
+    const toggleResponse = await fetch(apiUrl(`/admin/competencies/${toggledId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ active: true }),
+    });
+    assert.equal(toggleResponse.status, 200);
+    const toggled = await toggleResponse.json();
+    const movedPageResponse = await fetch(apiUrl(`/admin/competencies?page=${toggled.page}`), { headers: userHeaders('admin-1') });
+    const movedPage = await movedPageResponse.json();
+    assert.equal(movedPage.page, toggled.page);
+    assert.ok(movedPage.competencies.some((item) => item.id === toggledId));
+
+    const createResponse = await fetch(apiUrl('/admin/competencies'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Zulu pagination placement', description: '' }),
+    });
+    assert.equal(createResponse.status, 201);
+    const created = await createResponse.json();
+    createdId = created.competency.id;
+    const placementPage = await fetch(apiUrl(`/admin/competencies?page=${created.page}`), { headers: userHeaders('admin-1') });
+    const placedItems = await placementPage.json();
+    assert.equal(placedItems.page, created.page);
+    assert.ok(placedItems.competencies.some((item) => item.id === createdId));
+
+    const lastPageNumber = Math.ceil(placedItems.total / pageSize);
+    const clampedResponse = await fetch(apiUrl('/admin/competencies?page=999999'), { headers: userHeaders('admin-1') });
+    const clamped = await clampedResponse.json();
+    assert.equal(clamped.page, lastPageNumber);
+    assert.equal(clamped.hasMore, false);
+    assert.ok(clamped.competencies.length <= pageSize);
+  } finally {
+    if (createdId) database.prepare("DELETE FROM audit_logs WHERE action = 'competency.created' AND entity_id = ?").run(createdId);
+    database.prepare(`DELETE FROM audit_logs WHERE action = 'competency.updated' AND entity_id IN (${fixtureIds.map(() => '?').join(', ')})`).run(...fixtureIds);
+    database.prepare(`DELETE FROM competencies WHERE id IN (${fixtureIds.map(() => '?').join(', ')})`).run(...fixtureIds);
+    if (createdId) database.prepare('DELETE FROM competencies WHERE id = ?').run(createdId);
+  }
+});
+
 test('admin competency updates reject duplicate titles without changing or auditing the record', async () => {
   database.prepare(`INSERT INTO competencies (id, title, description, active, created_by) VALUES
     ('competency-update-existing', 'Existing competency', 'Original description', 1, 'admin-1'),

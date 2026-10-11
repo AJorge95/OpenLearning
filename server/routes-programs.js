@@ -10,6 +10,7 @@ import { textSearchPredicate } from './sql.js';
 export const programsRouter = Router();
 programsRouter.use(requireAuth);
 const LEARNING_PATH_PAGE_SIZE = 20;
+const COMPETENCY_ADMIN_PAGE_SIZE = 25;
 const MAX_CALENDAR_RANGE_DAYS = 62;
 const SELF_ENROLLMENT_PATH_COURSE_FILTER = `p.self_enrollment = 1
   AND EXISTS (SELECT 1 FROM learning_path_courses pc WHERE pc.path_id = p.id)
@@ -45,6 +46,14 @@ function isCalendarDate(value) {
 function logAudit(actor, action, entityType, entityId, summary, details = {}) {
   const auditId = writeAuditLog({ actor, action, entityType, entityId, summary, details });
   if (!auditId) fail(500, 'The change could not be saved because the audit log is unavailable.', 'audit_unavailable');
+}
+
+function competencyAdminPage(competency) {
+  const precedingCount = db.prepare(`SELECT COUNT(*) AS count FROM competencies
+    WHERE active > ? OR (active = ? AND (title COLLATE NOCASE < ?
+      OR (title COLLATE NOCASE = ? AND id < ?)))`)
+    .get(competency.active, competency.active, competency.title, competency.title, competency.id).count;
+  return Math.floor(precedingCount / COMPETENCY_ADMIN_PAGE_SIZE) + 1;
 }
 
 function pathCourseRows(pathId) {
@@ -442,7 +451,14 @@ programsRouter.get('/competencies', (req, res) => {
 });
 
 programsRouter.get('/admin/competencies', requireAdmin, (_req, res) => {
-  res.json({ competencies: db.prepare('SELECT * FROM competencies ORDER BY active DESC, title COLLATE NOCASE').all() });
+  const requestedPage = pageQuery(_req.query.page);
+  const total = db.prepare('SELECT COUNT(*) AS count FROM competencies').get().count;
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / COMPETENCY_ADMIN_PAGE_SIZE)));
+  const competencies = db.prepare(`SELECT * FROM competencies
+    ORDER BY active DESC, title COLLATE NOCASE, id LIMIT ? OFFSET ?`)
+    .all(COMPETENCY_ADMIN_PAGE_SIZE, (page - 1) * COMPETENCY_ADMIN_PAGE_SIZE);
+  res.json({ competencies, total, page, pageSize: COMPETENCY_ADMIN_PAGE_SIZE,
+    hasMore: page * COMPETENCY_ADMIN_PAGE_SIZE < total });
 });
 
 programsRouter.post('/admin/competencies', requireAdmin, (req, res) => {
@@ -455,9 +471,10 @@ programsRouter.post('/admin/competencies', requireAdmin, (req, res) => {
     }
     db.prepare('INSERT INTO competencies (id, title, description, created_by) VALUES (?, ?, ?, ?)').run(id, title, description, req.currentUser.id);
     logAudit(req.currentUser, 'competency.created', 'competency', id, `Created competency: ${title}`);
+    const competency = db.prepare('SELECT * FROM competencies WHERE id = ?').get(id);
+    return { competency, page: competencyAdminPage(competency) };
   });
-  create.immediate();
-  res.status(201).json({ competency: db.prepare('SELECT * FROM competencies WHERE id = ?').get(id) });
+  res.status(201).json(create.immediate());
 });
 
 programsRouter.patch('/admin/competencies/:competencyId', requireAdmin, (req, res) => {
@@ -471,13 +488,15 @@ programsRouter.patch('/admin/competencies/:competencyId', requireAdmin, (req, re
     if (title !== current.title && db.prepare('SELECT 1 FROM competencies WHERE title = ? AND id <> ?').get(title, current.id)) {
       fail(409, 'A competency with this name already exists.', 'duplicate_competency');
     }
-    if (title === current.title && description === current.description && active === current.active) return current;
-    db.prepare(`UPDATE competencies SET title = ?, description = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-      .run(title, description, active, current.id);
-    logAudit(req.currentUser, 'competency.updated', 'competency', current.id, `Updated competency: ${title}`, { active: Boolean(active) });
-    return db.prepare('SELECT * FROM competencies WHERE id = ?').get(current.id);
+    if (title !== current.title || description !== current.description || active !== current.active) {
+      db.prepare(`UPDATE competencies SET title = ?, description = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .run(title, description, active, current.id);
+      logAudit(req.currentUser, 'competency.updated', 'competency', current.id, `Updated competency: ${title}`, { active: Boolean(active) });
+    }
+    const competency = db.prepare('SELECT * FROM competencies WHERE id = ?').get(current.id);
+    return { competency, page: competencyAdminPage(competency) };
   });
-  res.json({ competency: change.immediate() });
+  res.json(change.immediate());
 });
 
 programsRouter.delete('/admin/competencies/:competencyId', requireAdmin, (req, res) => {

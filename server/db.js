@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 
-const latestSchemaVersion = 32;
+const latestSchemaVersion = 33;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -807,6 +807,17 @@ export function migrateDatabase(database = db) {
         CREATE INDEX IF NOT EXISTS learning_path_courses_course_path
           ON learning_path_courses(course_id, path_id);
         INSERT INTO schema_migrations (version) VALUES (32);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 33) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS competencies_admin_order
+          ON competencies(active DESC, title COLLATE NOCASE, id);
+        INSERT INTO schema_migrations (version) VALUES (33);
       `);
     });
     migration();

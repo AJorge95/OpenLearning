@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Paginate competency administration
+
+- **Reviewed:** Competency definitions can be added without a catalog limit, while the administrator endpoint returned every row and the page rendered every action on each reload. The sort had no matching index.
+- **Improvement:** Return 25 stable alphabetical rows per request with total and page metadata. Add responsive Previous/Next controls with a polite result-range announcement. Create and active-state updates return the competency's new page so the changed row remains visible. Migration 33 adds an index for the list order.
+- **Why it helps:** Larger competency maps transfer and render fewer controls at once, and SQLite can serve the ordered page without a temporary sort. Administrators keep their place after toggling a row and see newly created competencies even when their alphabetic position is on another page.
+- **Backend review:** The learner-facing map keeps its complete response because it summarizes achievements across all active competencies; this change bounds only the administrative list whose UI supports page navigation.
+- **Checked:** Route coverage verifies page boundaries, the 25-row limit, out-of-range clamping, create/toggle placement, and an indexed query plan without a temporary B-tree. The migration regression passes from schema version 15 through 33. The focused client contract/accessibility tests passed (2/2), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, syntax checks, and `git diff --check` passed. The browser is signed out, so the protected admin page could not be rendered or interacted with live.
+
 ## 2026-10-11 — Recheck database migration and session startup reliability
 
 - **Reviewed:** SQLite initialization and schema migrations through version 32, session ownership and expiry handling, indexed startup/daily cleanup, cleanup-error reporting, and readiness checks during migration failure and shutdown.
