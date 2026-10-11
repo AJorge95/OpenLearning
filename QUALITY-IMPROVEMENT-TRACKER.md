@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Verify the latest account-role selector report
+
+- **Reviewed:** The supplied account-page screenshot, the current role selector markup and hit-area CSS, and the reported account route.
+- **Result:** No runtime change. On the exact reported route, the role selector is disabled because this is the only active administrator. On an enabled account page, clicking the visible 9rem trigger opened the menu; clicking 6px beyond its right edge closed it, and repeating that outside click left it closed. The screenshot's wrapping-label target is absent from the current markup.
+- **Why no change:** The current build already constrains pointer input to the visible trigger, and the enabled-control interaction matched that behavior. A source change would duplicate the existing fix without a current-build reproduction.
+- **Checked:** Focused account-role hitbox, select-label, and shared select interaction tests; exact account route and enabled-control pointer behavior in the local browser. No account role or other data was changed.
+- **Needed to continue:** A current-build enabled account where clicking outside the trigger opens the menu, including the clicked location and viewport.
+
 ## 2026-10-11 — Preserve keyboard focus after course-row actions
 
 - **Reviewed:** Portaled course-row menu actions, focus behavior when the menu closes, status-filtered rows that disappear after a change, and permanent deletion from the course list.
