@@ -589,6 +589,10 @@ authRouter.post('/auth/register', async (req, res) => {
   const normalized = normalizeUsername(username);
   const submittedRegistrationFieldValues = req.body?.registrationFieldValues;
   normalizeRegistrationFieldValues(submittedRegistrationFieldValues, getRegistrationFields());
+  // Reject known identifier collisions before scrypt, then recheck under the write lock for races.
+  if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE LIMIT 1').get(normalized, email)) {
+    registrationConflict();
+  }
   const passwordHash = await hashPassword(password);
   let registrationResult;
   try {

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reject public duplicate registrations before password hashing
+
+- **Reviewed:** Public registration validation, the users table's case-insensitive username and email constraints, scrypt hashing, the generic conflict response, and the transactional collision check.
+- **Improvement:** Check for an existing username or email before hashing the password, while retaining the same generic conflict response and repeating the check inside the immediate transaction to protect concurrent registrations.
+- **Why it helps:** Repeated attempts with an already-used identifier avoid unnecessary password-hashing work without revealing whether the username or email matched.
+- **Interface review:** The registration form already validates required custom fields, password confirmation, and server errors with accessible feedback; no visual change was needed.
+- **Checked:** The focused last-login and registration integration suite passed (16/16); the full suite passed (528/528); `npm run build` passed strict TypeScript checking and Vite bundling; `node --check tests/server/last-login.test.js` and `git diff --check` passed. The regression confirms case-insensitive username, email, and combined collisions share the same response and stop before the write transaction.
+
 ## 2026-10-11 — Check duplicate account names before password hashing
 
 - **Reviewed:** The users table's case-insensitive unique username constraint and the administrator account-creation checks before and inside its write transaction.
