@@ -6,6 +6,7 @@ import { ApiError } from './api';
 import { useAuth } from './auth-context';
 import { BRAND_PALETTES, isBrandIconDimensionAllowed, MAX_BRAND_ICON_BYTES, MAX_BRAND_ICON_DIMENSION } from './branding';
 import type { BrandingPalette } from './branding';
+import { shouldCloseAppSelectForLayoutChange } from './app-select-layout';
 import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel, isAppSelectUnavailable, resolveAppSelectActiveIndex } from './app-select-navigation';
 import { getAppSelectHorizontalPosition, getAppSelectVerticalPosition } from './app-select-position';
 import { formatCountLabel } from './count-label';
@@ -423,7 +424,7 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
       if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
     }
     function closeForLayoutChange(event: Event) {
-      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+      if (!shouldCloseAppSelectForLayoutChange(event.target, menuRef.current)) return;
       setOpen(false);
     }
     document.addEventListener('pointerdown', closeFromOutside);

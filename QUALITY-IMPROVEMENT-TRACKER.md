@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Protect AppSelect layout dismissal behavior
+
+- **Reviewed:** The shared portal menu's scroll and resize lifecycle. The menu should close when page layout changes move its trigger, but remain open when a learner scrolls within the option list.
+- **Improvement:** Extract the layout-event target check into a small helper and add focused tests for menu-internal scroll, outside page/document targets, resize-style targets, missing targets, and listener cleanup. Store the tests in `tests/client` with the existing client suite.
+- **Why it helps:** The custom menu cannot remain stranded at its previous viewport position after the page scrolls or resizes, while long option lists remain scrollable. Direct helper coverage protects this behavior across every `AppSelect` use without adding a browser dependency.
+- **Backend review:** No server or API contract is involved.
+- **Checked:** Focused AppSelect tests passed (18/18); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict TypeScript checking and Vite bundling; and `git diff --check` passed. Live browser replay remains unavailable because Chrome's CDP bridge timed out on `Emulation.setFocusEmulationEnabled` and Playwright is not installed in this checkout.
+
 ## 2026-10-11 — Recheck shared controls and request validation
 
 - **Reviewed:** The reported administrator role selector against current JSX and the served Vite module; `AppSelect` behavior on page scroll, menu scroll, and resize; image fallback behavior when a source changes; calendar date-range validation; malformed JSON handling; and the working tree.
