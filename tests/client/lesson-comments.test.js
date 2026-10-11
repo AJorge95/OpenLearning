@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
 import { addLessonCommentToPage, getNewLessonComments } from '../../src/lesson-comments.ts';
 
@@ -19,6 +20,20 @@ test('lesson comment pagination handles long loaded lists and an overlapping pag
 
   assert.deepEqual(getNewLessonComments(existing, incoming).map(({ id }) => id),
     Array.from({ length: 20 }, (_, index) => `comment-${index + 5001}`));
+});
+
+test('lesson comment pagination detects partial overlap after concurrent feed changes', () => {
+  const existing = [comment('comment-1'), comment('comment-2'), comment('comment-3')];
+  const incoming = [comment('comment-3'), comment('comment-4')];
+
+  assert.equal(getNewLessonComments(existing, incoming).length, 1);
+  assert.notEqual(getNewLessonComments(existing, incoming).length, incoming.length);
+});
+
+test('lesson feedback reloads when any requested page overlaps loaded comments', () => {
+  const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /newComments\.length !== response\.comments\.length/);
 });
 
 test('a newly posted comment is prepended without growing the loaded page', () => {

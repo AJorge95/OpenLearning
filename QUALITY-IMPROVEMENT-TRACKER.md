@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Refresh comment paging after partial overlap
+
+- **Reviewed:** Lesson feedback reloads when the server's total changes or a whole requested page is already loaded. If a comment is added while another is removed, the total can remain unchanged while the next offset page partially overlaps the current list.
+- **Improvement:** Treat any overlap with already-loaded comment IDs as page drift and reload the first page instead of appending a potentially incomplete slice.
+- **Why it helps:** Learners and moderators recover cleanly from concurrent comments or moderation changes, without waiting for a later empty page to expose a skipped or stale result.
+- **Backend review:** The endpoint already returns a stable `created_at, id` order, row total, and clamped page. No query or response-contract change was needed.
+- **Checked:** Focused comment pagination tests passed (6/6), as did full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check` for the helper and test, and `git diff --check`.
+
 ## 2026-10-11 — Guard native button form behavior
 
 - **Reviewed:** Scanned all TSX for native buttons and images. The current source has no native button missing a `type` and no image missing `alt`, but this form-submission invariant had no automated guard.
