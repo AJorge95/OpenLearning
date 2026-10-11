@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Share defensive session-data parsing
+
+- **Reviewed:** Schema migration 7 and the runtime session store parsed the same stored JSON independently, with parallel checks for malformed data and non-object values.
+- **Improvement:** Add a small shared parser for object-shaped session data and string user IDs. Use it for both the ownership backfill and runtime reads, keeping malformed legacy rows unowned during migration and removable on read.
+- **Why it helps:** The migration and live session store cannot drift on what counts as a valid session payload, and the malformed-data behavior now has direct focused coverage.
+- **Checked:** The focused session-data, session-store, and migration tests passed (26/26); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling.
+
 ## 2026-10-11 — Explain malformed legacy session handling during migration
 
 - **Reviewed:** Schema migration 7 backfills `sessions.user_id` from legacy JSON, while the live session store removes malformed session data when it is read.
