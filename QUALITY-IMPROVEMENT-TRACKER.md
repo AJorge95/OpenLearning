@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Show learning-path description character usage
+
+- **Reviewed:** Path authoring limits, the create/update routes, and the path form layout. Learning-path descriptions have a 6,000-character client and server limit, but no visible count; course and lesson description counters already establish the same editing pattern.
+- **Improvement:** Add a count linked to the path description with `aria-describedby` and share one counter style across course, lesson, and path editors. The shared rule aligns counts at the end in both flex and grid layouts.
+- **Why it helps:** Path authors can plan a long description before the server rejects an over-limit save, and the form stays visually consistent with the other editors.
+- **Backend review:** Create and update continue to enforce the canonical 6,000-character path-description limit; no API or database change was needed.
+- **Checked:** The focused learning-path counter test and full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. In the local browser, a temporary value changed the visible count from 0 to 29 and back to 0; the counter rendered at the right edge and no path was saved.
+
 ## 2026-10-12 — Show lesson description character usage
 
 - **Reviewed:** Lesson details editing and the lesson update route. Lesson descriptions already have a 2,000-character limit in the browser and server, but authors could not see their remaining space; the adjacent transcript field already shows a count.

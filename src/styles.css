@@ -708,7 +708,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .editor-field-grid { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(190px, .42fr) minmax(225px, .5fr); gap: 19px 20px; }
 .editor-field-grid > label, .quiz-settings-row label, .quiz-settings-row .app-select-field { display: flex; flex-direction: column; gap: 8px; color: #292d3b; font-size: 13px; font-weight: 650; }
 .editor-field-grid .field-wide { grid-column: 1 / -1; }
-.editor-field-grid .field-character-count { align-self: flex-end; color: var(--muted); font-size: 11px; font-weight: 450; line-height: 1.4; }
+.field-character-count { align-self: flex-end; justify-self: end; color: var(--muted); font-size: 11px; font-weight: 450; line-height: 1.4; }
 .editor-field-grid input, .editor-field-grid textarea, .quiz-settings-row input, .form-stack input, .settings-card input, .question-editor textarea, .question-editor input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 4px; color: #222634; background: #fff; font-size: 14px; font-weight: 450; resize: vertical; }
 .editor-field-grid input:focus, .editor-field-grid textarea:focus, .form-stack input:focus, .settings-card input:focus, .quiz-settings-row input:focus, .question-editor textarea:focus, .question-editor input:focus { outline: 2px solid var(--purple); border-color: var(--purple); }
 .completion-window-field .completion-window-error { color: var(--danger); font-weight: 550; }
@@ -777,7 +777,6 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .lesson-details-grid textarea { min-height: 76px; line-height: 1.5; resize: vertical; }
 .lesson-transcript-field { grid-column: 1 / -1; }
 .lesson-transcript-field small { color: var(--muted); font-size: 11px; font-weight: 450; line-height: 1.5; }
-.lesson-details-grid .field-character-count { align-self: flex-end; color: var(--muted); font-size: 11px; font-weight: 450; line-height: 1.4; }
 .lesson-details-grid input:focus, .lesson-details-grid textarea:focus, .lesson-link-form input:focus { outline: 2px solid var(--purple); border-color: var(--purple); }
 .lesson-details-save { display: flex; justify-content: flex-end; margin-top: 10px; }
 .lesson-resource-editor { display: grid; gap: 13px; padding-top: 15px; border-top: 1px solid var(--line); }

@@ -147,7 +147,7 @@ function PathEditor({ existing, busy, onSave, onCancel, onDirtyChange }: {
     <div className="program-form-grid">
       <label>Path name<input ref={pathTitleInputRef} required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy} /></label>
       <div className="app-select-field"><span>Availability</span><AppSelect ariaLabel="Path availability" value={status} onChange={setStatus} options={[{ value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }]} disabled={busy} /></div>
-      <label className="program-full-field">Description<textarea rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={busy} /></label>
+      <label className="program-full-field">Description<textarea id="learning-path-description" aria-describedby="learning-path-description-count" rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={busy} /><small id="learning-path-description-count" className="field-character-count">{description.length} / 6,000 characters</small></label>
     </div>
     <label className="program-toggle"><input type="checkbox" checked={selfEnrollment} onChange={(event) => setSelfEnrollment(event.target.checked)} disabled={busy} /><span><strong>Allow learner self-enrollment</strong><small>Only public courses can be included in an open path.</small></span></label>
     <fieldset className="path-course-selector" disabled={busy}><legend>Courses in this path</legend>
