@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Mark quiz answers as required
+
+- **Reviewed:** The learner quiz requires every question to be answered and the API rejects incomplete submissions, but the radio groups did not expose that requirement through native form semantics.
+- **Improvement:** Mark each question's radio options as required so browsers and assistive technology identify every question as mandatory.
+- **Why it helps:** The form now communicates the same completion requirement through native controls as its progress message and submit behavior, improving accessible validation without changing the server contract.
+- **Checked:** The focused quiz accessibility tests passed (3/3), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed. Live form rendering was not replayed because all available local quizzes already have saved attempts; no quiz data was changed.
+
 ## 2026-10-11 — Cancel course-cover decoding after navigation
 
 - **Reviewed:** Course-cover preflight invalidated stale results when the editor route changed, but an in-flight browser image decode kept running and held its temporary Blob URL until completion.
