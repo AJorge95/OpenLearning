@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Show lesson description character usage
+
+- **Reviewed:** Lesson details editing and the lesson update route. Lesson descriptions already have a 2,000-character limit in the browser and server, but authors could not see their remaining space; the adjacent transcript field already shows a count.
+- **Improvement:** Add a per-lesson description count, link it to the textarea with `aria-describedby`, and align it with the lesson-details form styling.
+- **Why it helps:** Authors can judge whether a description fits before saving, while assistive technology receives the same limit context. The existing browser cap and server validation remain unchanged.
+- **Backend review:** The lesson update route continues to enforce the canonical 2,000-character description limit; no API or database change was needed.
+- **Checked:** The focused lesson-description test passed; the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. In a temporary local editor tab, the count changed from 0 to 23 and back to 0; the description was not saved.
+
 ## 2026-10-12 — Show course description character usage
 
 - **Reviewed:** Course-editor long-text fields and the create/update route. The course description already has a 6,000-character browser and server limit, but authors could not see how much text they had used; similar transcript and review-note fields show counts.
