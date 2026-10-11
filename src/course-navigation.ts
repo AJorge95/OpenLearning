@@ -10,6 +10,13 @@ export function completedCourseActionLabel(completed: boolean): string | null {
   return completed ? 'Review course' : null;
 }
 
+export function courseCardActionLabel({ completed, progress }: { completed: boolean; progress: number }): string {
+  // Completion is authoritative; displayed progress may round to 100 before every activity is done.
+  const reviewLabel = completedCourseActionLabel(completed);
+  if (reviewLabel) return reviewLabel;
+  return progress > 0 ? 'Continue course' : 'Start course';
+}
+
 export function courseActivityActionLabel({ starting, completed, nextActivity, progress }: {
   starting: boolean;
   completed: boolean;
