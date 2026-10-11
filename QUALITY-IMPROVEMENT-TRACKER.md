@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck quiz editor and save validation
+
+- **Reviewed:** Quiz editor prompt and choice validation, focus/error associations, question and choice limits, server-side payload checks, transactional quiz replacement, audit rollback, and learner submission completeness.
+- **Result:** No source change. The editor prevents blank question/choice text and focuses the first invalid field; the API validates shape, bounds, exactly one correct answer, and text limits before replacing saved content. Draft quizzes may remain empty, while course publication rejects quizzes without questions.
+- **Why no change:** The current editor, server, and publish readiness rules agree, and existing tests cover malformed saves, rollback, empty drafts, and complete attempt submission. I found no reproducible gap.
+- **Checked:** `node --test --test-name-pattern="quiz" tests/client/quiz-validation.test.js tests/server/quiz-attempt-results.test.js tests/server/course-analytics.test.js` passed (9/9); expected injected audit/response failures were logged by rollback tests. `git diff --check` passed.
+- **Needed to continue:** A reproduced quiz editor/save mismatch or workload evidence identifying a specific quiz-query bottleneck.
+
 ## 2026-10-11 — Recheck platform-reset and session recovery paths
 
 - **Reviewed:** Reset request draining and gating, backup-path validation, media backup and quarantine recovery, transaction rollback, session parsing and expiry, cleanup-timer failures, and store callback behavior.
