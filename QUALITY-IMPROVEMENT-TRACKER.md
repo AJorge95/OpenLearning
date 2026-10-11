@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Confirm account disable before revoking sessions
+
+- **Reviewed:** The user list and account detail controls both disable accounts with a direct request. The server invalidates all of the account's active sessions as part of that change, but neither control explained that effect or asked for confirmation.
+- **Improvement:** Confirm before either control disables an account. The message names the account and explains that its holder will be signed out and must wait for an administrator to re-enable access before signing in. Enabling accounts and changing roles remain direct actions.
+- **Why it helps:** A mistaken click cannot immediately remove an account holder's access, and administrators see the session and recovery consequences before confirming the change.
+- **Backend review:** The server already revokes sessions only when disabling an account and enforces last-active-administrator protection. No API or session semantics needed to change.
+- **Checked:** The focused confirmation helper and both admin-screen call-site tests passed (3/3); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict TypeScript checking and Vite bundling; and `git diff --check` passed. The local Chrome user-list control opened the confirmation, but the browser bridge stopped responding before I could dismiss it. The account remained Active in the last verified list state; live cancel behavior still needs a browser interaction after the dialog is dismissed.
+
 ## 2026-10-11 — Reuse deadline formatting in My Learning
 
 - **Reviewed:** My Learning constructs an `Intl.DateTimeFormat` and parses each due date inside the course-card render. The page appends 24 courses at a time, so later updates repeat that work for every deadline already loaded.
