@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Cover administrator audit-log route access and paging
+
+- **Reviewed:** The administrator audit endpoint, its dynamic action filter and counts in the log page, the filtered newest-first query index, and the audit store's 10,000-row retention bound.
+- **Improvement:** Add an isolated server integration regression proving anonymous requests receive 401, moderators receive 403, and administrators receive stable filtered page results plus global action counts.
+- **Why it helps:** Changes to the audit route can no longer silently expose sensitive log data to non-administrators or break the page/filter contract. No query rewrite was indicated because retained history is bounded and the action-filtered result query already uses its index.
+- **Checked:** The focused route regression passed (1/1), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, and `npm run build` passed, and `node --check tests/server/admin-logs.test.js` plus `git diff --check` passed.
+
 ## 2026-10-11 — Stream learner course memberships into My learning pages
 
 - **Reviewed:** My learning's course membership query, visibility checks, course activity ordering, page clamping, and the existing learner-side 24-course load-more flow.
