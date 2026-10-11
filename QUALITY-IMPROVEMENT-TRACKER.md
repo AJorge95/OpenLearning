@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Explain filter recovery request and focus behavior
+
+- **Reviewed:** The course and administrator account empty-state recovery handlers added in the latest UI cycles.
+- **Improvement:** Add short comments explaining why those handlers restore focus to the persistent search field and why the account-list reset only issues a direct request when role and approval filters are already unchanged.
+- **Why it helps:** Future edits can preserve keyboard continuity and avoid duplicate list requests when filter changes already trigger the loading effect.
+- **Checked:** No runtime behavior changed. The focused course/account recovery tests passed (3/3), `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed.
+
 ## 2026-10-11 — Recheck administrator user-list API filters
 
 - **Reviewed:** `/api/admin/users` search length validation, role and registration-status enums, parameterized SQL filters, ordering, paging, matching indexes, and existing route coverage.
