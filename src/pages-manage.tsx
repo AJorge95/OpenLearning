@@ -31,7 +31,7 @@ import type { Competency, Course, CourseAccessUser, CourseAnalytics, CourseModul
 
 type CourseListResponse = { courses: Course[]; total: number; page: number; pageSize: number };
 type FailedCourseListRequest = { page: number; query: string; status: string };
-type CourseVersionHistoryPage = { versions: CourseVersion[]; total: number; page: number; pageSize: number; hasMore: boolean; currentVersionNumber: number | null };
+type CourseVersionHistoryPage = { currentVersion: CourseVersion | null; versions: CourseVersion[]; total: number; page: number; pageSize: number; hasMore: boolean };
 
 const courseDateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 const logTimestampFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -46,7 +46,7 @@ function CourseVersionPagination({ page, pageSize, total, versions, loading, onC
   const firstVersion = versions[versions.length - 1]?.version_number ?? 0;
   const lastVersion = versions[0]?.version_number ?? 0;
   return <nav className="course-version-pagination" aria-label="Course version history pages">
-    <span role="status" aria-live="polite">Showing versions {lastVersion}–{firstVersion} of {total}</span>
+    <span role="status" aria-live="polite">Showing previous versions {lastVersion}–{firstVersion} of {total}</span>
     <div>
       <Button variant="secondary" disabled={loading || page <= 1} onClick={() => onChange(page - 1)}>Newer</Button>
       <span>Page {page} of {pageCount}</span>
@@ -810,7 +810,7 @@ export function CourseEditorPage() {
   const [requiresRecompletion, setRequiresRecompletion] = useState(false);
   const [changeNote, setChangeNote] = useState('');
   const [versions, setVersions] = useState<CourseVersion[]>([]);
-  const [currentVersionNumber, setCurrentVersionNumber] = useState<number | null>(null);
+  const [currentVersion, setCurrentVersion] = useState<CourseVersion | null>(null);
   const [versionPage, setVersionPage] = useState(1);
   const [versionPageSize, setVersionPageSize] = useState(20);
   const [versionTotal, setVersionTotal] = useState(0);
@@ -959,7 +959,7 @@ export function CourseEditorPage() {
       createCourseRequestRef.current = null;
       setCourseId(route.courseId);
       setCourse(null);
-      setVersions([]); setCurrentVersionNumber(null); setVersionPage(1); setVersionPageSize(20); setVersionTotal(0); setVersionHistoryLoading(false); setVersionHistoryError('');
+      setVersions([]); setCurrentVersion(null); setVersionPage(1); setVersionPageSize(20); setVersionTotal(0); setVersionHistoryLoading(false); setVersionHistoryError('');
       setReview(null); setCompetencies([]); setSelectedCompetencies([]);
       setShowChangeRequestForm(false); setChangeRequestNote('');
       abortGovernanceLoad();
@@ -1064,7 +1064,7 @@ export function CourseEditorPage() {
         api.get<{ competencies: Competency[]; selected: string[]; selectionLimit: number }>(`/api/manage/courses/${id}/competencies`, { signal: controller.signal }),
       ]);
       if (!isCurrentRequest()) return;
-      setVersions(history.versions); setCurrentVersionNumber(history.currentVersionNumber); setReview(history.revision);
+      setVersions(history.versions); setCurrentVersion(history.currentVersion); setReview(history.revision);
       setVersionPage(history.page); setVersionPageSize(history.pageSize); setVersionTotal(history.total);
       setCompetencies(mapping.competencies); setSelectedCompetencies(mapping.selected); setCompetencySelectionLimit(mapping.selectionLimit);
       setGovernanceCourseId(id);
@@ -1092,7 +1092,8 @@ export function CourseEditorPage() {
     try {
       const result = await api.get<CourseVersionHistoryPage>(`/api/manage/courses/${id}/versions?page=${requestedPage}`, { signal: controller.signal });
       if (!controller.signal.aborted && versionHistoryLoadControllerRef.current === controller && routeCourseIdRef.current === id) {
-        setVersions(result.versions); setCurrentVersionNumber(result.currentVersionNumber); setVersionPage(result.page); setVersionPageSize(result.pageSize); setVersionTotal(result.total);
+        setVersions(result.versions);
+        setCurrentVersion(result.currentVersion); setVersionPage(result.page); setVersionPageSize(result.pageSize); setVersionTotal(result.total);
       }
     } catch (cause) {
       if (!controller.signal.aborted && versionHistoryLoadControllerRef.current === controller && routeCourseIdRef.current === id) {
@@ -1464,17 +1465,23 @@ export function CourseEditorPage() {
         const addBlocked = !selected && selectedCompetencies.length >= competencySelectionLimit;
         return <label key={competency.id} className={addBlocked ? 'competency-selection-disabled' : undefined}><input type="checkbox" checked={selected} disabled={addBlocked} onChange={(event) => { setCompetencyMappingError(''); setCompetencyMappingNotice(''); setSelectedCompetencies((current) => updateCourseCompetencySelection(current, competency.id, event.target.checked, competencySelectionLimit)); }} /><span>{competency.title}{!competency.active && <small>Inactive · hidden from learners</small>}</span></label>;
       })}</div>{visibleCompetencies.length === 0 && <p className="course-competency-no-results" role="status">No competencies match your search.</p>}{competencyMappingError && <div className="inline-notice" role="alert">{competencyMappingError}</div>}{competencyMappingNotice && <div className="inline-notice inline-notice-success" role="status">{competencyMappingNotice}</div>}<p className="course-competency-selection-status" role="status" aria-live="polite">{selectedCompetencies.length} of {competencySelectionLimit} competencies selected.{competencyMappingOverLimit ? ` Remove at least ${selectedCompetencies.length - competencySelectionLimit} before saving.` : selectedCompetencies.length === competencySelectionLimit ? ' Remove one before adding another.' : ''}</p><Button type="button" variant="secondary" onClick={() => void saveCompetencyMapping()} disabled={savingCompetencyMapping || competencyMappingOverLimit}>{savingCompetencyMapping ? 'Saving mapping…' : 'Save competency mapping'}</Button></fieldset>}
-      {governanceReady && versionTotal > 0 && <div className="course-version-history"><h3>Published version history</h3>
+      {governanceReady && (versionTotal > 0 || currentVersion) && <div className="course-version-history"><h3>Published version history</h3>
         {versionHistoryError && <div className="error-notice-actionable" role="alert"><span>{versionHistoryError}</span><Button variant="secondary" disabled={versionHistoryLoading} onClick={() => void loadVersionHistory(versionPage)}>Retry version history</Button></div>}
         {versionHistoryLoading && <p role="status">Loading course versions…</p>}
-        <ol>{versions.map((version) => {
+        {currentVersion && <ol className="course-version-current"><li key={currentVersion.id}>
+          <div><strong>Version {currentVersion.version_number}<span className="current-version-label">Current</span></strong><small>{currentVersion.title} · Published {logTimestampFormatter.format(new Date(currentVersion.published_at))}{currentVersion.publisher ? ` by ${currentVersion.publisher}` : ''}</small>{currentVersion.change_note && <p>{currentVersion.change_note}</p>}</div>
+        </li></ol>}
+        {versionTotal > 0 && <details className="course-version-history-disclosure">
+          <summary>Previous versions <span>{versionTotal}</span></summary>
+          <ol>{versions.map((version) => {
           const restoring = restoringVersionRequests.has(`${courseId}:${version.id}`);
           return <li key={version.id}>
-        <div><strong>Version {version.version_number}{version.version_number === currentVersionNumber && <span className="current-version-label">Current</span>}</strong><small>{version.title} · Published {logTimestampFormatter.format(new Date(version.published_at))}{version.publisher ? ` by ${version.publisher}` : ''}</small>{version.change_note && <p>{version.change_note}</p>}</div>
-        {version.version_number !== currentVersionNumber && <Button type="button" variant="secondary" aria-label={`Restore version ${version.version_number} as a new course version`} disabled={restoring} aria-busy={restoring} onClick={() => void restoreVersion(version)}>{restoring ? 'Restoring version…' : 'Restore as new version'}</Button>}
+        <div><strong>Version {version.version_number}</strong><small>{version.title} · Published {logTimestampFormatter.format(new Date(version.published_at))}{version.publisher ? ` by ${version.publisher}` : ''}</small>{version.change_note && <p>{version.change_note}</p>}</div>
+        <Button type="button" variant="secondary" aria-label={`Restore version ${version.version_number} as a new course version`} disabled={restoring} aria-busy={restoring} onClick={() => void restoreVersion(version)}>{restoring ? 'Restoring version…' : 'Restore as new version'}</Button>
       </li>;
-        })}</ol>
-        <CourseVersionPagination page={versionPage} pageSize={versionPageSize} total={versionTotal} versions={versions} loading={versionHistoryLoading} onChange={(nextPage) => void loadVersionHistory(nextPage)} />
+          })}</ol>
+          <CourseVersionPagination page={versionPage} pageSize={versionPageSize} total={versionTotal} versions={versions} loading={versionHistoryLoading} onChange={(nextPage) => void loadVersionHistory(nextPage)} />
+        </details>}
       </div>}
     </section>
     <section className="editor-section curriculum-editor-section">

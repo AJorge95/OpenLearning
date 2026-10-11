@@ -1371,6 +1371,20 @@ courseRouter.delete('/lessons/:lessonId/completion', (req, res) => {
   res.json({ completed: false });
 });
 
+function summarizeQuizAttempt(attempt, snapshot) {
+  const questions = Array.isArray(snapshot) ? snapshot : [];
+  return {
+    id: attempt.id,
+    score: attempt.score,
+    correctCount: questions.reduce((count, question) => count + Number(Boolean(
+      question.correctChoiceId && question.selectedChoiceId === question.correctChoiceId,
+    )), 0),
+    questionCount: questions.length,
+    passed: Boolean(attempt.passed),
+    ...(attempt.submitted_at ? { submittedAt: attempt.submitted_at } : {}),
+  };
+}
+
 courseRouter.post('/quizzes/:quizId/attempts', quizAttemptLimiter, (req, res) => {
   const submitAttempt = db.transaction(() => {
     const quiz = quizCourse(req.params.quizId);
@@ -1422,7 +1436,13 @@ courseRouter.post('/quizzes/:quizId/attempts', quizAttemptLimiter, (req, res) =>
       .run(attemptId, quiz.quiz_id, req.currentUser.id, score, passed ? 1 : 0, JSON.stringify(answers), JSON.stringify(snapshot));
     if (passed) syncLearnerPathsForCourse(quiz.id, req.currentUser.id);
     const certificate = issueCertificateIfComplete(quiz.id, req.currentUser);
-    return { attempt: { id: attemptId, score, passed, passMark, questions: snapshot }, certificate };
+    const attempt = summarizeQuizAttempt({
+      id: attemptId,
+      score,
+      passed,
+      submitted_at: db.prepare('SELECT submitted_at FROM quiz_attempts WHERE id = ?').get(attemptId).submitted_at,
+    }, snapshot);
+    return { attempt, certificate };
   });
   res.status(201).json(submitAttempt.immediate());
 });
@@ -1434,11 +1454,5 @@ courseRouter.get('/quizzes/:quizId/attempts/:attemptId', (req, res) => {
   const attempt = db.prepare('SELECT * FROM quiz_attempts WHERE id = ? AND quiz_id = ? AND user_id = ?')
     .get(req.params.attemptId, req.params.quizId, req.currentUser.id);
   if (!attempt) fail(404, 'Quiz result not found.', 'not_found');
-  res.json({ attempt: {
-    id: attempt.id,
-    score: attempt.score,
-    passed: Boolean(attempt.passed),
-    submittedAt: attempt.submitted_at,
-    questions: JSON.parse(attempt.question_snapshot_json),
-  } });
+  res.json({ attempt: summarizeQuizAttempt(attempt, JSON.parse(attempt.question_snapshot_json)) });
 });

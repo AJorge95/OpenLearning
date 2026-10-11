@@ -98,6 +98,7 @@ before(async () => {
       .get(req.get('x-test-user'));
     next();
   });
+  app.use(express.json());
   app.use('/api', courseRouter);
   app.use(errorHandler);
   server = createServer(app);
@@ -139,14 +140,67 @@ test('course payload points to the learner latest attempt and its detail remains
   const resultResponse = await fetch(`${baseUrl}/quizzes/quiz-1/attempts/attempt-1`, { headers });
   assert.equal(resultResponse.status, 200);
   const { attempt } = await resultResponse.json();
-  assert.equal(attempt.id, 'attempt-1');
-  assert.equal(attempt.passed, false);
-  assert.equal(attempt.questions[0].selectedChoiceId, 'choice-2');
-  assert.equal(attempt.questions[0].correctChoiceId, 'choice-1');
+  assert.deepEqual(attempt, {
+    id: 'attempt-1',
+    score: 0,
+    correctCount: 0,
+    questionCount: 1,
+    passed: false,
+    submittedAt: course.modules[0].quiz.latestAttempt.submittedAt,
+  });
 
   const otherUserResponse = await fetch(`${baseUrl}/quizzes/quiz-1/attempts/attempt-1`, {
     headers: { 'x-test-user': 'learner-2', connection: 'close' },
   });
   assert.equal(otherUserResponse.status, 404);
   assert.deepEqual(await otherUserResponse.json(), { error: 'Quiz result not found.', code: 'not_found' });
+});
+
+test('quiz submission returns aggregate results only and requires an answer for every question', async () => {
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const baseUrl = `http://127.0.0.1:${address.port}/api`;
+  const headers = { 'x-test-user': 'learner-2', connection: 'close', 'content-type': 'application/json' };
+
+  const incompleteResponse = await fetch(`${baseUrl}/quizzes/quiz-1/attempts`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ answers: {} }),
+  });
+  assert.equal(incompleteResponse.status, 400);
+
+  const submitResponse = await fetch(`${baseUrl}/quizzes/quiz-1/attempts`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ answers: { 'question-1': 'choice-2' } }),
+  });
+  assert.equal(submitResponse.status, 201);
+  const { attempt: submittedAttempt } = await submitResponse.json();
+  assert.equal(submittedAttempt.score, 0);
+  assert.equal(submittedAttempt.correctCount, 0);
+  assert.equal(submittedAttempt.questionCount, 1);
+  assert.equal(submittedAttempt.passed, false);
+  assert.equal(typeof submittedAttempt.id, 'string');
+  assert.equal(typeof submittedAttempt.submittedAt, 'string');
+  assert.equal(Object.hasOwn(submittedAttempt, 'questions'), false);
+
+  const resultResponse = await fetch(`${baseUrl}/quizzes/quiz-1/attempts/${submittedAttempt.id}`, { headers });
+  assert.equal(resultResponse.status, 200);
+  const { attempt: reloadedAttempt } = await resultResponse.json();
+  assert.deepEqual(reloadedAttempt, submittedAttempt);
+  assert.equal(JSON.stringify(reloadedAttempt).includes('correctChoiceId'), false);
+  assert.equal(JSON.stringify(reloadedAttempt).includes('selectedChoiceId'), false);
+
+  const passedResponse = await fetch(`${baseUrl}/quizzes/quiz-1/attempts`, {
+    method: 'POST',
+    headers: { ...headers, 'x-test-user': 'learner-1' },
+    body: JSON.stringify({ answers: { 'question-1': 'choice-1' } }),
+  });
+  assert.equal(passedResponse.status, 201);
+  const { attempt: passedAttempt } = await passedResponse.json();
+  assert.equal(passedAttempt.score, 100);
+  assert.equal(passedAttempt.correctCount, 1);
+  assert.equal(passedAttempt.questionCount, 1);
+  assert.equal(passedAttempt.passed, true);
+  assert.equal(Object.hasOwn(passedAttempt, 'questions'), false);
 });

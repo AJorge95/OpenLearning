@@ -48,10 +48,17 @@ export interface QuizQuestion {
 export interface QuizAttempt {
   id: string;
   score: number;
+  correctCount: number;
+  questionCount: number;
   passed: boolean;
-  passMark?: number;
   submittedAt?: string;
-  questions?: Array<QuizQuestion & { correctChoiceId: string; selectedChoiceId: string }>;
+}
+
+export interface QuizAttemptPreview {
+  id: string;
+  score: number;
+  passed: boolean;
+  submittedAt?: string;
 }
 
 export interface Quiz {
@@ -59,7 +66,7 @@ export interface Quiz {
   title: string;
   passMark: number;
   questions: QuizQuestion[];
-  latestAttempt: QuizAttempt | null;
+  latestAttempt: QuizAttemptPreview | null;
   passed: boolean;
 }
 
