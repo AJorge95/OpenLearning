@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck registration-field administration
+
+- **Reviewed:** The registration-field editor's load/retry lifecycle, edit and remove controls, client validation and focus recovery, save state, plus the administrative GET/PUT routes and audit-backed transaction.
+- **Result:** No runtime change. Field counts, labels, and select options are bounded and validated on both client and server; loading is abortable; save locks the editor; identical saves avoid writes; failed audit persistence rolls back the setting.
+- **Why no change:** Existing behavior covers the reviewed validation, recovery, and consistency boundaries. A further change needs a reproducible user-facing failure or a defined new registration workflow.
+- **Checked:** Focused client and server registration-field tests passed (40/40), and `git diff --check` passed.
+
 ## 2026-10-11 — Refresh the registered-account count on demand
 
 - **Reviewed:** The settings page's registered-count request, abort/revision guards, save response, and count error recovery. After the initial load, the count stayed fixed until settings were saved or the page was reloaded, even if another administrator or a learner added accounts.
