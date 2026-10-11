@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Batch sequential MP4 header reads
+
+- **Reviewed:** The MP4 duration parser's 200,000-box safety bound and its excessive-box regression, which took about 6.1 seconds because every top-level header triggered a separate filesystem read.
+- **Improvement:** Read ahead in 4 KiB chunks while scanning top-level box headers. Keep the existing box-count, metadata-size, fragment-size, and duration limits; refill at the current offset when a header crosses a chunk boundary.
+- **Why it helps:** Large fragmented files and malformed files reach the existing safety bound with far fewer filesystem reads. The excessive-box regression fell from about 6.1 seconds to 309 ms without reducing the accepted box limit, while the smaller read-ahead limits unnecessary video-payload reads.
+- **Interface review:** Video playback still receives the same verified duration or the existing actionable unavailable-duration error; no UI or API response changed.
+- **Checked:** The focused MP4 parser suite passed (9/9), including the new extended-size header boundary case; the 200,000-box fixture still returns no duration and now completes in 309 ms (about 6.1 seconds before batching). `npm run build` passed strict TypeScript checking and Vite bundling; `node --check` passed for the parser and test; and `git diff --check` passed. An initial full-suite run concurrent with the build reported one failure; two sequential reruns passed all 529 tests. The cause of the first run's failure was not captured.
+
 ## 2026-10-11 — Confirm the role-selector fix is served locally
 
 - **Reviewed:** The repeated right-edge click report against the current account-details markup, pointer-event boundary, trigger and popup sizing, and the Vite process serving `127.0.0.1:5173`.

@@ -123,6 +123,21 @@ test('reads version-one duration from an extended-size movie box', async () => {
   assert.equal(duration, 90.25);
 });
 
+test('reads an extended-size top-level header across a buffered read boundary', async () => {
+  const boxReadAheadBytes = 4 * 1024;
+  const fillerBox = makeBox('free', Buffer.alloc(0));
+  const prefix = Buffer.alloc(boxReadAheadBytes - fillerBox.length);
+  for (let offset = 0; offset < prefix.length; offset += fillerBox.length) fillerBox.copy(prefix, offset);
+
+  const duration = await readFixture('header-read-boundary.mp4', [
+    prefix,
+    makeBox('free', Buffer.alloc(8), true),
+    makeBox('moov', movieHeaderV0(1_000, 4_250)),
+  ]);
+
+  assert.equal(duration, 4.25);
+});
+
 test('returns no duration for missing or malformed movie metadata', async () => {
   const malformedBox = Buffer.alloc(8);
   malformedBox.writeUInt32BE(128, 0);
