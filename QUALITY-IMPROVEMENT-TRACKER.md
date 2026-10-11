@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Confirm learning-path assignment removal
+
+- **Reviewed:** The assignment panel's Remove assignment button sent a DELETE request immediately. The server transaction removes path enrollment and audit-logs the change; existing route coverage verifies that this revokes private course access while retaining course progress.
+- **Improvement:** Confirm before removing an assigned learner. Name the learner and path, explain that they leave the path and may lose access to its private courses, and state that course progress is retained.
+- **Why it helps:** Staff see the access impact and retained data before changing a learner's course access, reducing accidental removals without implying that progress is deleted.
+- **Backend review:** Existing server behavior already keeps assignment removal and its audit event transactional. No API or enrollment semantics changed.
+- **Checked:** Focused confirmation, assignment-panel, accessibility, and course-selection tests passed (10/10); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict TypeScript checking and Vite bundling; and `git diff --check` passed. The live confirmation could not be checked because the Chrome browser bridge remains blocked by a separate pending account-disable confirmation.
+
 ## 2026-10-11 — Review public course deadlines after path removal
 
 - **Reviewed:** The admin removal route deletes the assigned path enrollment but preserves per-course progress and deadlines. My Learning is assembled from direct enrollments, grants, and published-path membership; Calendar reads saved deadline state and includes public courses that remain accessible after removal.

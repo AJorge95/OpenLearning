@@ -3,6 +3,7 @@ import { Archive, ArrowDown, ArrowUp, BookOpen, CalendarDays, Check, ChevronLeft
 import { Link } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { calendarMonthRequestRange, groupCalendarDeadlines, localDateKey, shouldShowCalendarEmptyState } from './calendar-dates';
+import { pathAssignmentRemovalConfirmation } from './path-assignment-confirmation';
 import { AppSelect, Button, EmptyState, PageHeading, ProgressBar } from './components';
 import type { Competency, Course, CourseDeadline, LearningPath } from './types';
 import { appendPublishedCourseOptions, hasMorePublishedCourseOptions, publishedCourseOptionsPageUrl, type PublishedCoursePage } from './path-course-options';
@@ -400,9 +401,10 @@ export function LearningPathsPage() {
     }
   }
 
-  async function removeAssignment(pathId: string, learnerId: string) {
+  async function removeAssignment(pathId: string, learnerId: string, learnerUsername: string, pathTitle: string) {
     const requestSequence = assignmentRequestSequenceRef.current;
     if (assignmentBusy || assignmentLoading || assignmentPathRef.current !== pathId) return;
+    if (!window.confirm(pathAssignmentRemovalConfirmation(learnerUsername, pathTitle))) return;
     setAssignmentAction('remove'); setRemovingLearnerId(learnerId); setError(''); setNotice('');
     try {
       await api.delete(`/api/manage/learning-paths/${pathId}/assignments/${learnerId}`);
@@ -463,7 +465,7 @@ export function LearningPathsPage() {
           {!assignmentLoading && !assignmentLoadError && assignmentTotal === 0 && <p className="path-assignment-status" role="status">{assignmentAppliedSearch ? 'No active learners match this search.' : 'There are no active learner accounts yet.'}</p>}
           {!assignmentLoading && !assignmentLoadError && assignmentTotal > 0 && assignableLearners.length === 0 && <p className="path-assignment-status" role="status">All learners on this page are already enrolled. Search or move to another page to find someone else.</p>}
           {!assignmentLoading && !assignmentLoadError && assignmentTotal > 0 && <div className="log-pagination path-learner-pagination"><p role="status" aria-live="polite" aria-atomic="true">Showing {(assignmentPage - 1) * assignmentPageSize + 1}–{Math.min(assignmentPage * assignmentPageSize, assignmentTotal)} of {assignmentTotal} learners</p><div><Button variant="secondary" disabled={assignmentPage <= 1 || assignmentBusy} onClick={() => changeAssignmentPage(path.id, assignmentPage - 1)}>Previous</Button><span>Page {assignmentPage} of {Math.max(1, Math.ceil(assignmentTotal / assignmentPageSize))}</span><Button variant="secondary" disabled={!assignmentHasMore || assignmentBusy} onClick={() => changeAssignmentPage(path.id, assignmentPage + 1)}>Next</Button></div></div>}
-          {enrolledLearners.length > 0 && <><h4 className="path-assigned-heading">Enrollments on this page</h4><ul className="path-assigned-learners">{enrolledLearners.map((learner) => <li key={learner.id}><span>{learner.username}{learner.email && <small>{learner.email}</small>}<small>{learner.source === 'self' ? 'Self-enrolled' : 'Assigned'}</small></span>{learner.source === 'assigned' && <button type="button" className="text-action" aria-label={`${removingLearnerId === learner.id ? 'Removing assignment for' : 'Remove assignment for'} ${learner.username} from ${path.title}`} disabled={assignmentBusy || assignmentLoading} aria-busy={removingLearnerId === learner.id} onClick={() => void removeAssignment(path.id, learner.id)}>{removingLearnerId === learner.id ? 'Removing…' : 'Remove assignment'}</button>}</li>)}</ul></>}
+          {enrolledLearners.length > 0 && <><h4 className="path-assigned-heading">Enrollments on this page</h4><ul className="path-assigned-learners">{enrolledLearners.map((learner) => <li key={learner.id}><span>{learner.username}{learner.email && <small>{learner.email}</small>}<small>{learner.source === 'self' ? 'Self-enrolled' : 'Assigned'}</small></span>{learner.source === 'assigned' && <button type="button" className="text-action" aria-label={`${removingLearnerId === learner.id ? 'Removing assignment for' : 'Remove assignment for'} ${learner.username} from ${path.title}`} disabled={assignmentBusy || assignmentLoading} aria-busy={removingLearnerId === learner.id} onClick={() => void removeAssignment(path.id, learner.id, learner.username, path.title)}>{removingLearnerId === learner.id ? 'Removing…' : 'Remove assignment'}</button>}</li>)}</ul></>}
         </div>}
       </article>)}
       </div>
