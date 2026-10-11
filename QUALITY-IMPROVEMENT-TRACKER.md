@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Expose named search landmarks
+
+- **Reviewed:** The learner course catalog, staff course list, user list, audit and system logs, path-assignment learner search, and competency search forms.
+- **Improvement:** Expose each search form as a `role="search"` landmark with a concise accessible name; leave each input label and search behavior unchanged.
+- **Why it helps:** Keyboard and screen-reader users can discover each search region through landmark navigation and distinguish it by its purpose.
+- **Backend review:** The corresponding course, user, log, path-learner, and competency routes already bound search text and use parameterized predicates; no backend change was needed.
+- **Checked:** The dedicated search-landmark regression passed, the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and rendered accessibility trees exposed “Search courses” on both `/manage/courses` and `/courses`.
+
 ## 2026-10-11 — Recheck API transport and session recovery
 
 - **Reviewed:** Shared API response parsing and transport failures, concurrent CSRF refresh and retry behavior, request cancellation, SQLite session expiry, malformed-session cleanup, and store error callbacks.
