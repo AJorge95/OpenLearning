@@ -114,7 +114,8 @@ before(async () => {
   app.use(express.json());
   app.use(session({ secret: isolatedConfig.SESSION_SECRET, resave: false, saveUninitialized: false }));
   app.use('/api', (req, _res, next) => {
-    req.currentUser = database.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?').get('registration-fields-admin');
+    req.currentUser = database.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?')
+      .get(req.get('x-test-user') || 'registration-fields-admin');
     next();
   });
   app.use('/api', authRouter);
@@ -741,6 +742,64 @@ test('account profiles require valid first and last names and return the saved p
   assert.deepEqual(database.prepare('SELECT first_name, last_name FROM users WHERE id = ?').get('registration-fields-admin'), {
     first_name: 'Ana María', last_name: 'García',
   });
+});
+
+test('self-service profile and certificate updates roll back together and can be retried', async () => {
+  const userId = 'registration-fields-self-profile-certificate';
+  const courseId = 'registration-fields-self-profile-course';
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role)
+    VALUES (?, ?, ?, ?, 'learner')`).run(userId, 'registration_fields_self_profile', 'self-profile@example.invalid', 'not-used');
+  database.prepare(`INSERT INTO courses (id, title, status, visibility, created_by, updated_by)
+    VALUES (?, 'Self-service Certificate', 'published', 'public', 'registration-fields-admin', 'registration-fields-admin')`).run(courseId);
+  database.prepare(`INSERT INTO course_modules (id, course_id, title, position)
+    VALUES ('registration-fields-self-profile-module', ?, 'Module', 0)`).run(courseId);
+  database.prepare(`INSERT INTO lessons (id, module_id, title, position)
+    VALUES ('registration-fields-self-profile-lesson', 'registration-fields-self-profile-module', 'Lesson', 0)`).run();
+  database.prepare('INSERT INTO enrollments (id, course_id, user_id) VALUES (?, ?, ?)')
+    .run('registration-fields-self-profile-enrollment', courseId, userId);
+  database.prepare('INSERT INTO lesson_progress (user_id, lesson_id) VALUES (?, ?)')
+    .run(userId, 'registration-fields-self-profile-lesson');
+  const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'account.profile_updated' AND entity_id = ?`).get(userId).count;
+  database.exec(`CREATE TRIGGER fail_self_profile_certificate_insert
+    BEFORE INSERT ON course_certificates WHEN NEW.user_id = '${userId}'
+    BEGIN SELECT RAISE(ABORT, 'certificate storage unavailable'); END`);
+
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  try {
+    const failedResponse = await fetch(apiUrl('/auth/profile'), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-test-user': userId, connection: 'close' },
+      body: JSON.stringify({ firstName: 'Jordan', lastName: 'Rivera' }),
+    });
+    assert.equal(failedResponse.status, 500);
+    assert.equal((await failedResponse.json()).code, 'internal_error');
+    assert.deepEqual(database.prepare('SELECT first_name, last_name FROM users WHERE id = ?').get(userId), {
+      first_name: '', last_name: '',
+    });
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+      WHERE action = 'account.profile_updated' AND entity_id = ?`).get(userId).count, originalAuditCount);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_certificates WHERE user_id = ?').get(userId).count, 0);
+  } finally {
+    console.error = originalConsoleError;
+    database.exec('DROP TRIGGER IF EXISTS fail_self_profile_certificate_insert');
+  }
+
+  const retryResponse = await fetch(apiUrl('/auth/profile'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-test-user': userId, connection: 'close' },
+    body: JSON.stringify({ firstName: 'Jordan', lastName: 'Rivera' }),
+  });
+  assert.equal(retryResponse.status, 200);
+  const result = await retryResponse.json();
+  assert.equal(result.certificatesIssued, 1);
+  assert.deepEqual(database.prepare('SELECT first_name, last_name FROM users WHERE id = ?').get(userId), {
+    first_name: 'Jordan', last_name: 'Rivera',
+  });
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'account.profile_updated' AND entity_id = ?`).get(userId).count, originalAuditCount + 1);
+  assert.equal(database.prepare('SELECT recipient_name FROM course_certificates WHERE user_id = ?').get(userId).recipient_name, 'Jordan Rivera');
 });
 
 test('registration answers enforce required, date, choice, checkbox, and field-version rules', () => {

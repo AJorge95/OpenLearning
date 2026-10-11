@@ -412,11 +412,12 @@ authRouter.put('/auth/profile', requireAuth, (req, res) => {
         summary: `${user.username} updated their profile name`, details: { firstName, lastName } });
       if (!auditId) fail(500, 'Profile could not be updated because the audit log is unavailable.', 'audit_unavailable');
     }
-    return db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(user.id);
+    const updatedUser = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(user.id);
+    const certificates = issueCompletedCertificatesForUser(user.id);
+    return { user: updatedUser, certificatesIssued: certificates.length };
   });
-  const user = updateProfile.immediate();
-  const certificates = issueCompletedCertificatesForUser(user.id);
-  res.json({ user: publicUser(user), certificatesIssued: certificates.length });
+  const { user, certificatesIssued } = updateProfile.immediate();
+  res.json({ user: publicUser(user), certificatesIssued });
 });
 
 authRouter.put('/auth/password', requireAuth, passwordChangeLimiter, async (req, res) => {
