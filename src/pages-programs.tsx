@@ -7,6 +7,8 @@ import { COMPETENCY_PROGRESS_BATCH_SIZE, nextVisibleCompetencyCount } from './co
 import { AppSelect, Button, EmptyState, PageHeading, ProgressBar } from './components';
 import type { Competency, Course, CourseDeadline, LearningPath } from './types';
 import { appendPublishedCourseOptions, hasMorePublishedCourseOptions, publishedCourseOptionsPageUrl, type PublishedCoursePage } from './path-course-options';
+import { MAX_LEARNING_PATH_COURSES } from '../shared/learning-path-limits.js';
+import { isPathCourseCheckboxDisabled, togglePathCourseSelection } from './path-course-selection';
 import { useAuth } from './auth-context';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
 
@@ -84,6 +86,8 @@ function PathEditor({ existing, busy, onSave, onCancel }: {
   }, [loadCoursePage]);
   const courseById = useMemo(() => new Map([...courses, ...(existing?.courses || [])].map((course) => [course.id, course])), [courses, existing]);
   const selectedIds = useMemo(() => new Set(selected.map((item) => item.courseId)), [selected]);
+  const selectionOverLimit = selected.length > MAX_LEARNING_PATH_COURSES;
+  const selectionAtLimit = selected.length >= MAX_LEARNING_PATH_COURSES;
   const available = [...courseById.values()].filter((course) =>
     (course.status === 'published' && (!selfEnrollment || course.visibility === 'public')) || selectedIds.has(course.id));
   const hasUnavailableSelection = selected.some((item) => {
@@ -91,9 +95,7 @@ function PathEditor({ existing, busy, onSave, onCancel }: {
     return !course || course.status !== 'published' || (selfEnrollment && course.visibility !== 'public');
   });
   function toggle(courseId: string, checked: boolean) {
-    setSelected((current) => checked
-      ? [...current, { courseId, requiresPrevious: current.length > 0 }]
-      : current.filter((item) => item.courseId !== courseId));
+    setSelected((current) => togglePathCourseSelection(current, courseId, checked));
   }
   function move(index: number, direction: -1 | 1) {
     setSelected((current) => {
@@ -119,7 +121,18 @@ function PathEditor({ existing, busy, onSave, onCancel }: {
     </div>
     <label className="program-toggle"><input type="checkbox" checked={selfEnrollment} onChange={(event) => setSelfEnrollment(event.target.checked)} disabled={busy} /><span><strong>Allow learner self-enrollment</strong><small>Only public courses can be included in an open path.</small></span></label>
     <fieldset className="path-course-selector" disabled={busy}><legend>Courses in this path</legend>
-      {available.length ? <div className="path-course-checklist">{available.map((course) => <label key={course.id} className="path-course-check"><input type="checkbox" checked={selectedIds.has(course.id)} onChange={(event) => toggle(course.id, event.target.checked)} /><span><strong>{course.title}</strong><small>{course.category} · {course.visibility}{course.status !== 'published' ? ` · ${course.status}` : ''}</small></span></label>)}</div>
+      <p className={`path-course-selection-count${selectionOverLimit ? ' over-limit' : selectionAtLimit ? ' at-limit' : ''}`} role={selectionAtLimit ? 'status' : undefined} aria-live={selectionAtLimit ? 'polite' : undefined} aria-atomic={selectionAtLimit || undefined}>
+        {selectionOverLimit
+          ? `This path has ${selected.length} courses. Remove ${selected.length - MAX_LEARNING_PATH_COURSES} before saving.`
+          : selectionAtLimit
+            ? `Maximum of ${MAX_LEARNING_PATH_COURSES} courses selected. Remove a course before adding another.`
+            : `${selected.length} of ${MAX_LEARNING_PATH_COURSES} courses selected.`}
+      </p>
+      {available.length ? <div className="path-course-checklist">{available.map((course) => {
+        const isSelected = selectedIds.has(course.id);
+        const selectionDisabled = isPathCourseCheckboxDisabled(selected.length, isSelected);
+        return <label key={course.id} className={`path-course-check${selectionDisabled ? ' path-course-check-disabled' : ''}`}><input type="checkbox" checked={isSelected} disabled={selectionDisabled} onChange={(event) => toggle(course.id, event.target.checked)} /><span><strong>{course.title}</strong><small>{course.category} · {course.visibility}{course.status !== 'published' ? ` · ${course.status}` : ''}</small></span></label>;
+      })}</div>
         : courseLoading && coursePage === 0 ? <p className="muted" role="status">Loading published courses…</p>
           : courseLoadError && coursePage === 0 ? null
             : selfEnrollment && courses.length ? <p className="muted">No public courses are available in the loaded results.</p>
@@ -133,7 +146,7 @@ function PathEditor({ existing, busy, onSave, onCancel }: {
       return <li key={item.courseId}><span className="path-course-number">{index + 1}</span><div><strong>{course?.title || 'Course'}</strong>{index > 0 && <label className="path-prerequisite"><input type="checkbox" checked={item.requiresPrevious} onChange={(event) => setSelected((current) => current.map((step) => step.courseId === item.courseId ? { ...step, requiresPrevious: event.target.checked } : step))} disabled={busy} />Require all earlier courses first</label>}</div><div className="path-reorder-buttons"><button type="button" aria-label={`Move ${course?.title} earlier`} disabled={busy || index === 0} onClick={() => move(index, -1)}><ArrowUp size={16} /></button><button type="button" aria-label={`Move ${course?.title} later`} disabled={busy || index === selected.length - 1} onClick={() => move(index, 1)}><ArrowDown size={16} /></button></div></li>;
     })}</ol>}
     {status === 'published' && selected.length === 0 && <p className="path-selection-warning" role="status">Add at least one published course before making this path available.</p>}
-    <div className="program-form-actions"><Button type="submit" disabled={busy || !title.trim() || hasUnavailableSelection || (status === 'published' && selected.length === 0)}>{busy ? 'Saving…' : existing ? 'Save path' : 'Create path'}</Button></div>
+    <div className="program-form-actions"><Button type="submit" disabled={busy || !title.trim() || hasUnavailableSelection || selectionOverLimit || (status === 'published' && selected.length === 0)}>{busy ? 'Saving…' : existing ? 'Save path' : 'Create path'}</Button></div>
   </form>;
 }
 

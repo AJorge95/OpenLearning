@@ -6,6 +6,7 @@ import { courseSummaries, courseSummary, ensureCourseLearningStateWithStatus } f
 import { courseVersionHistoryPage, logicalCourseId, publishRevision, restoreCourseVersion } from './course-versioning.js';
 import { writeAuditLog } from './log-store.js';
 import { textSearchPredicate } from './sql.js';
+import { MAX_LEARNING_PATH_COURSES } from '../shared/learning-path-limits.js';
 
 export const programsRouter = Router();
 programsRouter.use(requireAuth);
@@ -228,7 +229,9 @@ programsRouter.get('/manage/learning-paths', requireStaff, (req, res) => {
 });
 
 function normalizePathCourses(courseInput, selfEnrollment) {
-  if (!Array.isArray(courseInput) || courseInput.length > 200) fail(400, 'Provide an ordered list of up to 200 courses.', 'validation_error');
+  if (!Array.isArray(courseInput) || courseInput.length > MAX_LEARNING_PATH_COURSES) {
+    fail(400, `Provide an ordered list of up to ${MAX_LEARNING_PATH_COURSES} courses.`, 'validation_error');
+  }
   const inputIds = courseInput.map((item) => typeof item?.courseId === 'string' ? item.courseId : '');
   const distinctInputIds = [...new Set(inputIds)];
   const courseIdByInputId = new Map();

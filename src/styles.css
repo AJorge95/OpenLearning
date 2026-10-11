@@ -561,12 +561,17 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .program-toggle small, .path-course-check small { color: var(--muted); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
 .path-course-selector { min-width: 0; margin: 0; padding: 13px; border: 1px solid var(--line); border-radius: 6px; }
 .path-course-selector legend { padding: 0 5px; color: #303443; font-size: 12px; font-weight: 700; }
+.path-course-selection-count { margin: 0 0 9px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.path-course-selection-count.at-limit { color: var(--purple-dark); font-weight: 650; }
+.path-course-selection-count.over-limit { color: #8d2d3b; font-weight: 650; }
 .path-course-checklist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 260px; overflow-y: auto; }
 .path-course-options-footer, .path-course-page-error { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 9px; margin-top: 10px; }
 .path-course-options-footer .muted, .path-course-page-error p { margin: 0; }
 .path-course-page-error p { flex: 1 1 15rem; color: #8d2d3b; font-size: 12px; line-height: 1.45; }
 .path-course-check { display: flex; align-items: flex-start; gap: 9px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
 .path-course-check:hover { border-color: var(--purple-border-strong); background: var(--purple-hover-bg); }
+.path-course-check-disabled { color: var(--muted); cursor: not-allowed; }
+.path-course-check-disabled:hover { border-color: var(--line); background: #fff; }
 .path-course-check:focus-within, .program-toggle:focus-within, .path-prerequisite:focus-within { outline: 2px solid var(--purple); outline-offset: 2px; }
 .path-selection-warning { margin: -8px 0 0; padding: 10px 12px; border: 1px solid #f0c6cd; border-radius: 6px; color: #8d2d3b; background: var(--danger-soft); font-size: 12px; line-height: 1.45; }
 .path-course-order { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }

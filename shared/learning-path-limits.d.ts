@@ -1,0 +1,1 @@
+export const MAX_LEARNING_PATH_COURSES: 200;

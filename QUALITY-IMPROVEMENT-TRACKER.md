@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Enforce the learning-path course limit in the editor
+
+- **Reviewed:** Path editing allows staff to select courses from paginated results, while the API already rejects more than 200 ordered courses. The checkbox list had no count or guard, so an oversized selection failed only after submission.
+- **Improvement:** Define the 200-course limit once for the React editor and API. Show the current count, disable unchecked choices at the limit while keeping selected courses removable, and prevent saving an over-limit legacy path with a count of how many courses to remove.
+- **Why it helps:** Staff can see and correct the constraint as they build a path instead of discovering it through a rejected save; the server remains the enforcing boundary.
+- **Checked:** Client boundary and editor-contract tests passed (5/5). An isolated API regression confirmed a 201-course request returns `400 validation_error` without creating a path (1/1). Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The in-app browser is signed out at `/login`, so the authenticated editor could not be replayed live.
+
 ## 2026-10-11 — Recheck authentication limit recovery
 
 - **Reviewed:** The sign-in, registration, and setup POST limiter mounts, the 12-attempt/15-minute response, successful-login counter behavior, and how the sign-in form presents API errors.
