@@ -31,3 +31,11 @@ test('switching away from a dirty path editor requires confirmation', () => {
   assert.match(pageSource, /pendingPathEdit && <ConfirmationDialog title="Discard unsaved path changes\?"[\s\S]*?confirmLabel="Discard and edit"/);
   assert.match(pageSource, /function confirmPathEdit\(\) \{[\s\S]*?pathEditorDirtyRef\.current = false;\s*setEditing\(path\);/);
 });
+
+test('a successful path create clears the reusable form while failures preserve entered values', () => {
+  assert.match(editorSource, /const saved = await onSave\(/);
+  assert.match(editorSource, /if \(!saved \|\| existing\) return;/);
+  assert.match(editorSource, /setTitle\(''\); setDescription\(''\); setStatus\('draft'\); setSelfEnrollment\(false\); setSelected\(\[\]\);/);
+  assert.match(editorSource, /onDirtyChange\(false\);\s*pathTitleInputRef\.current\?\.focus\(\);/);
+  assert.match(pageSource, /catch \(cause\) \{ setError\(requestMessage\(cause, 'Learning path could not be saved\.'\)\); return false; \}/);
+});

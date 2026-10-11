@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reset the path form after successful creation
+
+- **Reviewed:** The create form's mounted key, save success/error path, the server's insert behavior, and the learning-path title schema. A successful create left the same populated form mounted, and the schema permits another row with the same title.
+- **Improvement:** After a successful create, clear the path name, description, availability, self-enrollment, and course selection, then focus the blank name field. Failed creates retain entered values; editing an existing path keeps its current behavior.
+- **Why it helps:** The next submit cannot accidentally create a duplicate path from values that were already saved, and staff can start the next path immediately.
+- **Backend review:** The route and schema remain unchanged; duplicate-title capability is retained for intentional use.
+- **Checked:** Learning-path editor, dirty-state, assignment, and course-option tests passed (17/17). `npm run build` passed TypeScript checking and Vite bundling; `git diff --check` passed. No browser interaction was run; form reset/failure wiring is covered by focused source regressions.
+
 ## 2026-10-11 — Protect unsaved learning-path edits when switching editors
 
 - **Reviewed:** The learning-path editor's keyed local state, all editable fields, and every row action that can replace the currently displayed form.
