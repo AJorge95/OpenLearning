@@ -243,22 +243,30 @@ adminRouter.post('/users', async (req, res) => {
 adminRouter.get('/users/:userId', (req, res) => {
   const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, created_at, updated_at, last_login_at FROM users WHERE id = ?').get(req.params.userId);
   if (!user) fail(404, 'User not found.', 'not_found');
-  const userCourseIds = `SELECT course_id FROM enrollments WHERE user_id = ?
-       UNION SELECT course_id FROM course_grants WHERE user_id = ?`;
-  const total = db.prepare(`SELECT COUNT(*) AS count FROM (${userCourseIds}) AS user_courses`).get(user.id, user.id).count;
+  const userCourseSources = `SELECT course_id, 0 AS learning_path_enrolled FROM enrollments WHERE user_id = ?
+       UNION ALL SELECT course_id, 0 FROM course_grants WHERE user_id = ?
+       UNION ALL SELECT pc.course_id, 1 FROM learning_path_enrollments e
+         CROSS JOIN learning_paths lp ON lp.id = e.path_id
+         JOIN learning_path_courses pc ON pc.path_id = e.path_id
+         WHERE e.user_id = ? AND lp.status = 'published'`;
+  const total = db.prepare(`SELECT COUNT(DISTINCT course_id) AS count FROM (${userCourseSources}) AS course_sources`)
+    .get(user.id, user.id, user.id).count;
   const pageSize = 50;
   const requestedPage = pageQuery(req.query.page);
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
   const courses = db.prepare(`
-    WITH user_courses(course_id) AS (${userCourseIds})
-    SELECT c.*,
+    WITH course_sources(course_id, learning_path_enrolled) AS (${userCourseSources}),
+    user_courses(course_id, learning_path_enrolled) AS (
+      SELECT course_id, MAX(learning_path_enrolled) FROM course_sources GROUP BY course_id
+    )
+    SELECT c.*, uc.learning_path_enrolled,
       (SELECT COUNT(*) FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = c.id) AS quiz_count,
       (SELECT enrolled_at FROM enrollments e WHERE e.course_id = c.id AND e.user_id = ? LIMIT 1) AS enrolled_at,
       (SELECT granted_at FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ? LIMIT 1) AS granted_at
     FROM user_courses uc JOIN courses c ON c.id = uc.course_id
     ORDER BY c.updated_at DESC, c.title COLLATE NOCASE, c.id ASC
     LIMIT ? OFFSET ?
-  `).all(user.id, user.id, user.id, user.id, pageSize, (page - 1) * pageSize);
+  `).all(user.id, user.id, user.id, user.id, user.id, pageSize, (page - 1) * pageSize);
   const summaries = new Map(courseSummaries(courses, user).map((course) => [course.id, course]));
   const registrationFields = db.prepare(`SELECT field_id, field_label, field_type, field_value
     FROM user_registration_field_values WHERE user_id = ? ORDER BY position, field_id`).all(user.id)
@@ -274,6 +282,7 @@ adminRouter.get('/users/:userId', (req, res) => {
       quizCount: course.quiz_count,
       enrolledAt: course.enrolled_at,
       grantedAt: course.granted_at,
+      learningPathEnrolled: Boolean(course.learning_path_enrolled),
     })),
     total,
     page,

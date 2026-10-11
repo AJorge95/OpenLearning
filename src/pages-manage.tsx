@@ -6,6 +6,7 @@ import { Link, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
 import { AppSelect, Button, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
 import { formatCountLabel } from './count-label';
+import { accountCourseAssignmentLabel } from './account-course-activity';
 import { courseRowActionStatus } from './course-row-action-status';
 import { getAppSelectVerticalPosition } from './app-select-position';
 import { filterCourseCompetencies, updateCourseCompetencySelection } from './course-competency-selection';
@@ -1741,7 +1742,12 @@ export function AdminUserCreatePage() {
   </div>;
 }
 
-type AdminAccountCourse = Course & { quizCount: number; enrolledAt: string | null; grantedAt: string | null };
+type AdminAccountCourse = Course & {
+  quizCount: number;
+  enrolledAt: string | null;
+  grantedAt: string | null;
+  learningPathEnrolled: boolean;
+};
 type AdminAccountDetails = {
   user: User & { createdAt: string; updatedAt: string; lastLoginAt: string | null; isCurrentUser: boolean };
   courses: AdminAccountCourse[];
@@ -1889,7 +1895,7 @@ export function AdminUserDetailsPage() {
       <article className="account-detail-card"><div className="account-detail-card-heading"><div><h2>Reset password</h2><p>Set a new password and sign out existing sessions.</p></div></div><form className="form-stack account-password-form" onSubmit={resetPassword} aria-busy={savingAction === 'password'}><div className="account-password-field"><label htmlFor={passwordInputId}>New password</label><input id={passwordInputId} aria-describedby={passwordHintId} required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} /><small id={passwordHintId}>Use at least 12 characters.</small></div><label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} /></label><Button type="submit" disabled={saving} aria-busy={savingAction === 'password'}>{savingAction === 'password' ? 'Saving…' : 'Reset password'}</Button></form></article>
     </section>
     <section className="analytics-section account-courses-section"><div className="analytics-section-heading"><div><h2>Course activity</h2><p>Courses this account has enrolled in or been assigned.</p></div><span>{formatCountLabel(account.total, 'course', 'courses')}</span></div>
-      {courses.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable course activity" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Account course activity</caption><thead><tr><th scope="col">Course</th><th scope="col">Assignment</th><th scope="col">Progress</th><th scope="col">Lessons</th><th scope="col">Quizzes</th><th scope="col">Completion</th><th scope="col">Dashboard</th></tr></thead><tbody>{courses.map((course) => <tr key={course.id}><td><strong>{course.title}</strong><small><CourseStatus status={course.status} /></small></td><td>{course.grantedAt ? 'Assigned' : course.visibility === 'private' ? 'Access revoked' : course.enrolledAt ? 'Enrolled' : '—'}</td><td>{course.progress}%</td><td>{course.completedLessons} / {course.lessonCount}</td><td>{course.quizCount}</td><td>{course.completed ? 'Completed' : course.progress ? 'In progress' : 'Not started'}</td><td><Link className="text-action" to={`/manage/courses/${course.id}/analytics`} aria-label={`Open dashboard for ${course.title}`}>Open dashboard</Link></td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No course activity" detail="This account has not enrolled in or been assigned a course." />}
+      {courses.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable course activity" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Account course activity</caption><thead><tr><th scope="col">Course</th><th scope="col">Assignment</th><th scope="col">Progress</th><th scope="col">Lessons</th><th scope="col">Quizzes</th><th scope="col">Completion</th><th scope="col">Dashboard</th></tr></thead><tbody>{courses.map((course) => <tr key={course.id}><td><strong>{course.title}</strong><small><CourseStatus status={course.status} /></small></td><td>{accountCourseAssignmentLabel(course)}</td><td>{course.progress}%</td><td>{course.completedLessons} / {course.lessonCount}</td><td>{course.quizCount}</td><td>{course.completed ? 'Completed' : course.progress ? 'In progress' : 'Not started'}</td><td><Link className="text-action" to={`/manage/courses/${course.id}/analytics`} aria-label={`Open dashboard for ${course.title}`}>Open dashboard</Link></td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No course activity" detail="This account has not enrolled in or been assigned a course." />}
       {account.total > 0 && <LogPagination page={account.page} pageSize={account.pageSize} total={account.total} loading={loading} onChange={setPage} />}
     </section>
   </div>;

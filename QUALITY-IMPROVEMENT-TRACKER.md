@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Include learning-path courses in account activity
+
+- **Reviewed:** The learner's My learning query includes courses from published learning paths, while the administrator account-detail endpoint counted only direct course enrollments and grants. A learner who was assigned a path could therefore see course activity that staff could not see on the account page.
+- **Improvement:** Include courses from published paths in the account activity count and page query, deduplicate them against direct enrollments and grants, and identify path-derived rows as **Learning path**. Exclude courses reached only through draft paths.
+- **Why it helps:** Staff can review the same path-related course activity represented in learners' My learning list, with the assignment source made clear and no duplicate rows when a course has multiple access sources.
+- **Checked:** Focused account API and assignment-label tests passed (17/17), including path-only, overlapping membership, draft-path exclusion, and indexed query-plan coverage. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, test-file syntax checks, and `git diff --check` passed. The in-app browser is signed out at `/login`, so the protected account-details rendering could not be replayed.
+
 ## 2026-10-11 — Search mapped competencies in the course editor
 
 - **Reviewed:** Administrators can add competencies without a catalog cap, and the course editor rendered every available competency as a checkbox. Large skill maps made finding a specific mapping harder and increased the visible editor list.

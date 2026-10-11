@@ -707,15 +707,19 @@ test('admin user list returns the final page and clamps requests beyond the sear
   }
 });
 
-test('admin account course activity starts from memberships and deduplicates overlapping access', async () => {
+test('admin account course activity includes published paths and deduplicates overlapping access', async () => {
   const adminId = database.prepare("SELECT id FROM users WHERE username = 'admin_last_login'").get().id;
-  const courseIds = ['account-activity-enrolled', 'account-activity-overlap', 'account-activity-granted'];
+  const courseIds = ['account-activity-enrolled', 'account-activity-overlap', 'account-activity-granted',
+    'account-activity-path', 'account-activity-draft-path'];
+  const pathIds = ['account-activity-published-path', 'account-activity-draft'];
   const addCourse = database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by, updated_at)
     VALUES (?, ?, 'published', ?, ?, ?)`);
   const addCourses = database.transaction(() => {
     addCourse.run(courseIds[0], 'Enrolled only', adminId, adminId, '2026-10-01 10:00:00');
     addCourse.run(courseIds[1], 'Enrolled and granted', adminId, adminId, '2026-10-03 10:00:00');
     addCourse.run(courseIds[2], 'Granted only', adminId, adminId, '2026-10-02 10:00:00');
+    addCourse.run(courseIds[3], 'Published path only', adminId, adminId, '2026-10-04 10:00:00');
+    addCourse.run(courseIds[4], 'Draft path only', adminId, adminId, '2026-10-05 10:00:00');
     database.prepare('INSERT INTO enrollments (id, course_id, user_id) VALUES (?, ?, ?)')
       .run('account-activity-enrollment-1', courseIds[0], adminId);
     database.prepare('INSERT INTO enrollments (id, course_id, user_id) VALUES (?, ?, ?)')
@@ -724,26 +728,51 @@ test('admin account course activity starts from memberships and deduplicates ove
       .run('account-activity-grant-1', courseIds[1], adminId, adminId);
     database.prepare('INSERT INTO course_grants (id, course_id, user_id, granted_by) VALUES (?, ?, ?, ?)')
       .run('account-activity-grant-2', courseIds[2], adminId, adminId);
+    database.prepare(`INSERT INTO learning_paths (id, title, status, created_by, updated_by)
+      VALUES (?, 'Account activity path', 'published', ?, ?), (?, 'Inactive account path', 'draft', ?, ?)`)
+      .run(pathIds[0], adminId, adminId, pathIds[1], adminId, adminId);
+    database.prepare(`INSERT INTO learning_path_courses (id, path_id, course_id, position)
+      VALUES (?, ?, ?, 0), (?, ?, ?, 1), (?, ?, ?, 0)`)
+      .run('account-activity-path-overlap', pathIds[0], courseIds[1],
+        'account-activity-path-course', pathIds[0], courseIds[3],
+        'account-activity-draft-course', pathIds[1], courseIds[4]);
+    database.prepare(`INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by)
+      VALUES (?, ?, ?, 'assigned', ?), (?, ?, ?, 'assigned', ?)`)
+      .run('account-activity-published-enrollment', pathIds[0], adminId, adminId,
+        'account-activity-draft-enrollment', pathIds[1], adminId, adminId);
   });
   addCourses();
 
   try {
-    const membershipQueryPlan = database.prepare(`EXPLAIN QUERY PLAN WITH user_courses(course_id) AS (
-      SELECT course_id FROM enrollments WHERE user_id = ?
-      UNION SELECT course_id FROM course_grants WHERE user_id = ?
+    const membershipQueryPlan = database.prepare(`EXPLAIN QUERY PLAN WITH course_sources(course_id, learning_path_enrolled) AS (
+      SELECT course_id, 0 FROM enrollments WHERE user_id = ?
+      UNION ALL SELECT course_id, 0 FROM course_grants WHERE user_id = ?
+      UNION ALL SELECT pc.course_id, 1 FROM learning_path_enrollments e
+        CROSS JOIN learning_paths lp ON lp.id = e.path_id
+        JOIN learning_path_courses pc ON pc.path_id = e.path_id WHERE e.user_id = ? AND lp.status = 'published'
+    ), user_courses(course_id, learning_path_enrolled) AS (
+      SELECT course_id, MAX(learning_path_enrolled) FROM course_sources GROUP BY course_id
     ) SELECT c.* FROM user_courses uc JOIN courses c ON c.id = uc.course_id
       ORDER BY c.updated_at DESC, c.title COLLATE NOCASE, c.id ASC LIMIT ? OFFSET ?`)
-      .all(adminId, adminId, 50, 0).map((step) => step.detail).join('\n');
+      .all(adminId, adminId, adminId, 50, 0).map((step) => step.detail).join('\n');
     assert.match(membershipQueryPlan, /SEARCH enrollments USING INDEX enrollments_user \(user_id=\?\)/);
     assert.match(membershipQueryPlan, /SEARCH course_grants USING INDEX grants_user \(user_id=\?\)/);
-    assert.doesNotMatch(membershipQueryPlan, /SCAN c/);
+    assert.match(membershipQueryPlan, /SEARCH e USING INDEX learning_path_enrollments_user \(user_id=\?\)/);
+    assert.match(membershipQueryPlan, /SEARCH lp USING INDEX sqlite_autoindex_learning_paths_1 \(id=\?\)/);
+    assert.match(membershipQueryPlan, /SEARCH pc USING (?:COVERING )?INDEX .*learning_path_courses.*\(path_id=\?\)/);
+    assert.doesNotMatch(membershipQueryPlan, /\bSCAN c\b/);
 
     const response = await fetch(apiUrl(`/admin/users/${adminId}`), { headers: { connection: 'close' } });
     assert.equal(response.status, 200);
     const details = await response.json();
-    assert.equal(details.total, 3);
-    assert.deepEqual(details.courses.map((course) => course.id), [courseIds[1], courseIds[2], courseIds[0]]);
+    assert.equal(details.total, 4);
+    assert.deepEqual(details.courses.map((course) => course.id), [courseIds[3], courseIds[1], courseIds[2], courseIds[0]]);
+    assert.equal(details.courses.find((course) => course.id === courseIds[3]).learningPathEnrolled, true);
+    assert.equal(details.courses.find((course) => course.id === courseIds[1]).learningPathEnrolled, true);
+    assert.equal(details.courses.find((course) => course.id === courseIds[0]).learningPathEnrolled, false);
+    assert.equal(details.courses.some((course) => course.id === courseIds[4]), false);
   } finally {
+    database.prepare(`DELETE FROM learning_paths WHERE id IN (${pathIds.map(() => '?').join(', ')})`).run(...pathIds);
     database.prepare(`DELETE FROM courses WHERE id IN (${courseIds.map(() => '?').join(', ')})`).run(...courseIds);
   }
 });
