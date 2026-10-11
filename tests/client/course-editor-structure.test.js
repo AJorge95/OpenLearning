@@ -31,6 +31,13 @@ test('course details form is exposed as a named region', () => {
   assert.equal(jsxAttribute(sections[0], 'aria-label'), 'Course details');
 });
 
+test('the empty-course action distinguishes adding the first module', () => {
+  const source = fs.readFileSync(editorPath, 'utf8');
+
+  assert.match(source, /title="Start with a module"[\s\S]*?Add first module<\/Button>/);
+  assert.match(source, /className="curriculum-editor-actions"[\s\S]*?aria-expanded=\{addingModule\}[\s\S]*?Add module<\/Button>/);
+});
+
 test('quiz editor actions include quiz and question context in accessible names', () => {
   const source = fs.readFileSync(editorPath, 'utf8');
   const sourceFile = ts.createSourceFile(editorPath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
