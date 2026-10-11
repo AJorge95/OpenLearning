@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Refresh the registered-account count on demand
+
+- **Reviewed:** The settings page's registered-count request, abort/revision guards, save response, and count error recovery. After the initial load, the count stayed fixed until settings were saved or the page was reloaded, even if another administrator or a learner added accounts.
+- **Improvement:** Add a “Refresh account count” action that reloads only the count, disables itself during the request, and uses the existing cancellation and stale-response protections.
+- **Why it helps:** Administrators can update the capacity meter and full-cap warning without reloading the page or saving unrelated settings.
+- **Backend review:** The existing `GET /api/admin/settings` response already returns the current registered count. No server change was needed.
+- **Checked:** Account-capacity client and registration-limit tests passed (4/4), full `npm test`, `npm run build`, and `git diff --check` passed. In the rendered settings page, the compact refresh control was available and responded without saving settings; the count stayed at 2 because no accounts changed during the check.
+
 ## 2026-10-11 — Explain when the account cap is full
 
 - **Reviewed:** The platform settings account-cap field, registered-count meter, and server-side capacity enforcement. At or above the selected cap, the meter showed 100% without explaining that the server would block account creation.
