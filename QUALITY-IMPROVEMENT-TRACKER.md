@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck global route announcements and access guards
+
+- **Reviewed:** Route-change focus and title announcements, loading and startup-error states, lazy management-page boundaries, signed-in/staff/admin route groups, and the matching API authentication/role middleware.
+- **Result:** No code change; the client waits for startup state before routing, focuses the main landmark on route changes, derives the document title from the active heading, and presents retryable startup/page errors. Server routes retain their own authentication and role checks.
+- **Why no change:** The navigation and permission layers align in the reviewed routes, and no missing title, focus target, fallback, or server guard was found.
+- **Checked:** Compared `src/App.tsx` and `src/auth-context.tsx` with `requireAuth`, `requireStaff`, `requireAdmin`, and their route mounts; `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. The in-app browser is signed out, so protected-route announcements were not replayed live.
+
 ## 2026-10-11 — Share lesson-resource URL validation across client and server
 
 - **Reviewed:** The lesson editor and API each implemented the same HTTP/HTTPS and no-embedded-credentials policy, with matching messages but separate URL parsing logic.
