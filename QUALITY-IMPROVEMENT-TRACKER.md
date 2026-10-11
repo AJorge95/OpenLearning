@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Expose the playback clock as a named timer
+
+- **Reviewed:** The lesson player's changing playback clock was a generic `<span>` with an `aria-label`, which does not provide a valid accessible name on that implicit role.
+- **Improvement:** Give the clock `role="timer"` while retaining its “Current video time” name and leaving out an `aria-live` override.
+- **Why it helps:** Assistive technology can identify the changing time readout as a timer, while the timer's default non-live behavior avoids announcing every playback tick.
+- **Backend review:** No backend change was indicated; this is player semantics only.
+- **Checked:** The focused caption and fullscreen client tests passed (13/13), `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. The browser rendered the named clock and `0:00 / 8:29`; its accessibility snapshot reported the clock as a container, so the mapped timer role could not be independently confirmed there.
+
 ## 2026-10-11 — Review palette and learning-path action semantics
 
 - **Reviewed:** Shared palette-picker button names and pressed state, learning-path course lookup and reorder labels, the course/path foreign-key cascade, and administrator account-role validation and last-admin protection.

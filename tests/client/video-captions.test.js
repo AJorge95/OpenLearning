@@ -45,6 +45,17 @@ test('turns all text tracks off and ignores unknown caption ids', () => {
   assert.doesNotThrow(() => selectVideoCaptionTrack(null, 'english-id'));
 });
 
+test('exposes the changing playback clock as a named timer without a live override', () => {
+  const sourcePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/pages-learner.tsx');
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const clockMarkup = source.match(/<span className="video-clock"[^>]*>/)?.[0];
+
+  assert.ok(clockMarkup, 'expected the playback clock markup');
+  assert.match(clockMarkup, /role="timer"/);
+  assert.match(clockMarkup, /aria-label="Current video time"/);
+  assert.doesNotMatch(clockMarkup, /aria-live=/);
+});
+
 test('watch-tracked lessons expose an accessible selector for available captions', () => {
   const sourcePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/pages-learner.tsx');
   const source = fs.readFileSync(sourcePath, 'utf8');
