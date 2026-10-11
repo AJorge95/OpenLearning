@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reset publication options when changing courses
+
+- **Reviewed:** The course editor keeps one component instance while its `courseId` route changes. The recompletion checkbox and publication note are local draft state, so they could carry into another course and affect its next publication.
+- **Improvement:** Reset both publication-only options whenever the editor route changes, including when moving between an existing course and a new course.
+- **Why it helps:** A decision made for one course cannot silently change the publication behavior or history note for another course.
+- **Interface review:** The reported account-role click area is already bounded to its 9rem visible trigger, and the popup matches that width in the current source. Its regression test passes. The open browser is signed out, so the admin page was not rechecked live.
+- **Checked:** The new route-state regression passed (1/1); the account-role/AppSelect label regression passed (5/5); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/course-editor-route-state.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Honor first-version recompletion for legacy courses
 
 - **Reviewed:** A published course without version history stores learner progress against its root lesson and quiz IDs. When its first published version required recompletion, the version reused those same IDs, so the exact-ID reset check still credited the prior work.

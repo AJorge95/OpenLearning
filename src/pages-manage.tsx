@@ -892,6 +892,8 @@ export function CourseEditorPage() {
 
   useEffect(() => {
     let active = true;
+    setRequiresRecompletion(false);
+    setChangeNote('');
     if (route.courseId) {
       uploadingLessonIdsRef.current = new Set(); setUploading({});
       coverUploadRef.current = false; setCoverProgress(null);
