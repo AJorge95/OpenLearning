@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { courseActivityActionLabel, nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from '../../src/course-navigation.ts';
+import { completedCourseActionLabel, courseActivityActionLabel, nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from '../../src/course-navigation.ts';
 
 const lesson = (id, completed) => ({ id, completed });
 const quiz = (id, passed) => ({ id, passed });
@@ -37,6 +37,11 @@ test('keeps lesson review available after all course activities are complete', (
 
   assert.deepEqual(nextCourseActivity(modules), { type: 'lesson', id: 'lesson-1' });
   assert.equal(courseActivityActionLabel({ starting: false, completed: true, nextActivity: nextCourseActivity(modules), progress: 100 }), 'Review course');
+});
+
+test('shows review on learning cards only for exactly completed courses', () => {
+  assert.equal(completedCourseActionLabel(true), 'Review course');
+  assert.equal(completedCourseActionLabel(false), null);
 });
 
 test('keeps the continuation label when rounded progress is 100 but an activity remains', () => {
