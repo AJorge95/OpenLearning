@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Test calendar grouping across local month boundaries
+
+- **Reviewed:** The calendar's UTC request buffer, local-month filtering and day buckets, loading states, navigation announcements, mobile layout, and the server's validated date range and deadline index.
+- **Improvement:** Extract the date-range and local-day grouping into a small helper and combine month filtering with bucket construction in one pass. Add client regressions for deadlines whose UTC date falls on the neighboring month in Los Angeles and Kiritimati.
+- **Why it helps:** Learners in widely separated time zones keep deadlines on the correct local month and day, and that boundary behavior is now automatically checked. The visible calendar layout and ordering remain the same.
+- **Backend review:** Existing route validation still caps requests at 62 days and uses the learner deadline index; no route change was indicated.
+- **Checked:** The focused timezone regression passed; full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, and `npm run build` passed. The test syntax check and `git diff --check` passed. The authenticated calendar could not be replayed in the browser because its current session redirects to `/login`; no visual markup or styling changed.
+
 ## 2026-10-11 — Cover administrator system-log filtering and paging
 
 - **Reviewed:** The admin system-event search and severity selector, the endpoint's query validation and pagination contract, and the severity-first log index.
