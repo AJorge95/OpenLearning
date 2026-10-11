@@ -554,15 +554,18 @@ authRouter.post('/setup', async (req, res) => {
     const auditId = writeAuditLog({ actor: { id: userId, username: normalizeUsername(username) }, action: 'platform.setup', entityType: 'platform',
       summary: 'Initial platform setup completed', details: { platformName: name, themePalette, connectionProtocol, registrationEnabled, userLimit } });
     if (!auditId) fail(500, 'Platform setup could not be completed because the audit log is unavailable.', 'audit_unavailable');
+    // Read the complete success payload before commit so a response-read failure rolls setup back.
+    const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(userId);
+    return { user: publicUser(user), ...getPlatformConfiguration(registeredUserCount()) };
   });
-  configure.immediate();
+  const response = configure.immediate();
   await establishCreatedAccountSession(req, userId, {
     event: 'Initial setup completed, but administrator sign-in could not be established',
     code: 'setup_session_unavailable',
     message: 'Platform setup completed, but automatic sign-in failed. Reload the page and sign in with the administrator account you created.',
   });
   writeSystemLog('info', 'setup', 'Initial platform setup completed');
-  res.status(201).json({ user: publicUser(db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(userId)), ...getPlatformConfiguration() });
+  res.status(201).json(response);
 });
 
 authRouter.post('/auth/register', async (req, res) => {
@@ -580,9 +583,9 @@ authRouter.post('/auth/register', async (req, res) => {
   const submittedRegistrationFieldValues = req.body?.registrationFieldValues;
   normalizeRegistrationFieldValues(submittedRegistrationFieldValues, getRegistrationFields());
   const passwordHash = await hashPassword(password);
-  let user;
+  let registrationResult;
   try {
-    user = db.transaction(() => {
+    registrationResult = db.transaction(() => {
       assertRegistrationAvailable();
       if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE LIMIT 1').get(normalized, email)) {
         registrationConflict();
@@ -595,18 +598,19 @@ authRouter.post('/auth/register', async (req, res) => {
       const auditId = writeAuditLog({ actor: createdUser, action: 'account.registered', entityType: 'user', entityId: createdUser.id,
         summary: `Learner account created: ${createdUser.username}` });
       if (!auditId) fail(500, 'Account could not be created because the audit log is unavailable.', 'audit_unavailable');
-      return createdUser;
+      // Registration availability includes the newly inserted learner and is part of the success response.
+      return { user: publicUser(createdUser), registrationAvailable: registrationAvailable(registeredUserCount()) };
     }).immediate();
   } catch (error) {
     if (isUserIdentifierUniqueConstraint(error)) registrationConflict();
     throw error;
   }
-  await establishCreatedAccountSession(req, user.id, {
+  await establishCreatedAccountSession(req, registrationResult.user.id, {
     event: 'Account registration completed, but learner sign-in could not be established',
     code: 'registration_session_unavailable',
     message: 'Your account was created, but automatic sign-in failed. Go to the sign-in page and use the credentials you just registered.',
   });
-  res.status(201).json({ user: publicUser(user), registrationAvailable: registrationAvailable() });
+  res.status(201).json(registrationResult);
 });
 
 authRouter.post('/auth/login', async (req, res) => {
