@@ -11,6 +11,7 @@ import { summarizeCourseProgress } from './course-progress';
 import { shuffleQuizChoices } from './quiz-choice-order';
 import { quizPriorPassNotice } from './quiz-prior-pass';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
+import { updatePendingReactionIds } from './lesson-reaction-state';
 import { lessonCommentRemovalConfirmation } from './lesson-comment-confirmation';
 import { tryToggleFullscreen } from './video-fullscreen';
 import { selectVideoCaptionTrack } from './video-captions';
@@ -584,7 +585,9 @@ export function CoursePlayerPage() {
   const [commentModerationNotice, setCommentModerationNotice] = useState<{ courseId: string; lessonId: string; message: string } | null>(null);
   const [commentRemovalIds, setCommentRemovalIds] = useState<Set<string>>(() => new Set());
   const [pendingCommentRemoval, setPendingCommentRemoval] = useState<PendingCommentRemoval | null>(null);
-  const [reactionSaving, setReactionSaving] = useState(false);
+  // Keep reaction writes locked to their lesson while the learner navigates.
+  const [pendingReactionLessonIds, setPendingReactionLessonIds] = useState<ReadonlySet<string>>(() => new Set());
+  const pendingReactionLessonIdsRef = useRef<ReadonlySet<string>>(new Set());
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [commentSavingLessonIds, setCommentSavingLessonIds] = useState<Set<string>>(() => new Set());
   const commentSavingLessonIdsRef = useRef(new Set<string>());
@@ -686,7 +689,7 @@ export function CoursePlayerPage() {
     const controller = new AbortController();
     commentPageSequenceRef.current += 1;
     let active = true;
-    setPendingCommentRemoval(null); setFeedback(null); setFeedbackError(null); setReactionSaving(false); setCommentsLoading(false);
+    setPendingCommentRemoval(null); setFeedback(null); setFeedbackError(null); setCommentsLoading(false);
     if (!canViewLessonFeedback) {
       setFeedbackLoading(false);
       return () => {
@@ -735,6 +738,7 @@ export function CoursePlayerPage() {
   const lessonCanBeCompleted = !watchRequired || current?.completed || watchedForCurrent;
   const commentDraft = commentDrafts[lessonId] ?? '';
   const commentSaving = commentSavingLessonIds.has(lessonId);
+  const reactionSaving = pendingReactionLessonIds.has(lessonId);
   const visibleFeedback = feedback?.lessonId === lessonId ? feedback : null;
   const visibleFeedbackError = feedbackError?.lessonId === lessonId ? feedbackError.message : '';
 
@@ -837,12 +841,20 @@ export function CoursePlayerPage() {
     }
   }
 
+  function markReactionSaving(requestedLessonId: string, saving: boolean) {
+    const current = pendingReactionLessonIdsRef.current;
+    const next = updatePendingReactionIds(current, requestedLessonId, saving);
+    if (next === current) return;
+    pendingReactionLessonIdsRef.current = next;
+    setPendingReactionLessonIds(next);
+  }
+
   async function chooseReaction(nextReaction: LessonReaction) {
-    if (!feedback || reactionSaving) return;
+    if (!feedback || pendingReactionLessonIdsRef.current.has(lessonId)) return;
     const requestedCourseId = courseId;
     const requestedLessonId = lessonId;
     const requestedReaction = feedback.reaction === nextReaction ? null : nextReaction;
-    setReactionSaving(true); setFeedbackError(null);
+    markReactionSaving(requestedLessonId, true); setFeedbackError(null);
     try {
       const response = await api.put<{ reaction: LessonReaction | null; counts: LessonFeedback['counts'] }>(
         `/api/lessons/${requestedLessonId}/reaction`, { reaction: requestedReaction },
@@ -854,9 +866,7 @@ export function CoursePlayerPage() {
       if (routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) {
         setFeedbackError({ lessonId: requestedLessonId, message: cause instanceof ApiError ? cause.message : 'Your reaction could not be saved.' });
       }
-    } finally {
-      if (routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId) setReactionSaving(false);
-    }
+    } finally { markReactionSaving(requestedLessonId, false); }
   }
 
   async function postComment(event: React.FormEvent) {
