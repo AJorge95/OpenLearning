@@ -141,12 +141,12 @@ export function currentPublishedCourseForVersion(logicalCourseIdValue, version) 
   return db.prepare('SELECT * FROM courses WHERE id = ?').get(version?.storage_course_id || logicalCourseIdValue) ?? null;
 }
 
-export function courseVersionHistory(courseId) {
+export function courseVersionHistoryPage(courseId, pageSize, offset) {
   const id = logicalCourseId(courseId) || courseId;
   return db.prepare(`SELECT v.*, u.username AS publisher, c.title
     FROM course_versions v LEFT JOIN users u ON u.id = v.published_by
     JOIN courses c ON c.id = v.storage_course_id
-    WHERE v.course_id = ? ORDER BY v.version_number DESC`).all(id);
+    WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT ? OFFSET ?`).all(id, pageSize, offset);
 }
 
 export function publishRevision(courseId, actor, { requiresRecompletion = false, changeNote = '' } = {}) {

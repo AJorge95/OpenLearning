@@ -157,6 +157,62 @@ function userHeaders(userId) {
   return { 'x-test-user': userId, connection: 'close' };
 }
 
+test('course version history pages are bounded, newest first, and clamp stale page requests', async () => {
+  const courseId = 'course-version-history-pagination';
+  const insertHistory = database.transaction(() => {
+    database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES (?, ?, 'published', 'admin-1', 'admin-1')`).run(courseId, 'Version history pagination');
+    const addStorageCourse = database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by, logical_course_id)
+      VALUES (?, ?, 'published', 'admin-1', 'admin-1', ?)`);
+    const addVersion = database.prepare(`INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+      VALUES (?, ?, ?, ?, 'admin-1')`);
+    for (let versionNumber = 1; versionNumber <= 42; versionNumber += 1) {
+      const storageCourseId = versionNumber === 1 ? courseId : `${courseId}-storage-${versionNumber}`;
+      if (versionNumber > 1) addStorageCourse.run(storageCourseId, `Version ${versionNumber}`, courseId);
+      addVersion.run(`${courseId}-version-${versionNumber}`, courseId, storageCourseId, versionNumber);
+    }
+  });
+
+  try {
+    insertHistory();
+    const fetchPage = async (page) => {
+      const response = await fetch(apiUrl(`/manage/courses/${courseId}/versions?page=${page}`), {
+        headers: userHeaders('admin-1'),
+      });
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+
+    const firstPage = await fetchPage(1);
+    assert.equal(firstPage.total, 42);
+    assert.equal(firstPage.pageSize, 20);
+    assert.equal(firstPage.page, 1);
+    assert.equal(firstPage.currentVersionNumber, 42);
+    assert.equal(firstPage.hasMore, true);
+    assert.deepEqual(firstPage.versions.map((version) => version.version_number), Array.from({ length: 20 }, (_, index) => 42 - index));
+
+    const secondPage = await fetchPage(2);
+    assert.equal(secondPage.page, 2);
+    assert.equal(secondPage.currentVersionNumber, 42);
+    assert.equal(secondPage.hasMore, true);
+    assert.deepEqual(secondPage.versions.map((version) => version.version_number), Array.from({ length: 20 }, (_, index) => 22 - index));
+
+    const lastPage = await fetchPage(99);
+    assert.equal(lastPage.page, 3);
+    assert.equal(lastPage.hasMore, false);
+    assert.deepEqual(lastPage.versions.map((version) => version.version_number), [2, 1]);
+
+    const plan = database.prepare(`EXPLAIN QUERY PLAN SELECT v.*, u.username AS publisher, c.title
+      FROM course_versions v LEFT JOIN users u ON u.id = v.published_by
+      JOIN courses c ON c.id = v.storage_course_id
+      WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT ? OFFSET ?`).all(courseId, 20, 20);
+    assert.ok(plan.some((entry) => entry.detail.includes('course_versions_course_order')), JSON.stringify(plan));
+    assert.ok(plan.every((entry) => !entry.detail.includes('USE TEMP B-TREE')), JSON.stringify(plan));
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('editing a versioned course clones caption references to shared media files', () => {
   const courseId = 'course-caption-version';
   try {
