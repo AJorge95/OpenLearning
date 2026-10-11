@@ -228,7 +228,7 @@ test('unhandled API errors still return a response when system logging fails', a
   }
 });
 
-test('migrations 16 to 34 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
+test('migrations 15 to 35 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
   const migrationDb = new Database(':memory:');
   try {
     migrationDb.pragma('foreign_keys = ON');
@@ -237,7 +237,7 @@ test('migrations 16 to 34 preserve account history, course versions, captions, c
       INSERT INTO schema_migrations (version) VALUES (15);
       CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       INSERT INTO app_settings (key, value) VALUES ('setup_complete', '1'), ('platform_name', 'Learning Space');
-      CREATE TABLE users (id TEXT PRIMARY KEY, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL COLLATE NOCASE DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE audit_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -319,9 +319,15 @@ test('migrations 16 to 34 preserve account history, course versions, captions, c
     `);
 
     migrateDatabase(migrationDb);
-    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 34);
+    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 35);
     assert.ok(migrationDb.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'competencies_admin_order'`).get());
     assert.ok(migrationDb.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'users_registration_status_created'`).get());
+    const pendingUserListPlan = migrationDb.prepare(`EXPLAIN QUERY PLAN
+      SELECT id, username, created_at FROM users
+      WHERE registration_status = ?
+      ORDER BY created_at ASC, username COLLATE NOCASE LIMIT ? OFFSET ?`).all('pending', 50, 0);
+    assert.ok(pendingUserListPlan.some((row) => row.detail.includes('users_registration_status_created')), JSON.stringify(pendingUserListPlan));
+    assert.ok(!pendingUserListPlan.some((row) => row.detail.includes('TEMP B-TREE')), JSON.stringify(pendingUserListPlan));
     assert.deepEqual(migrationDb.prepare('SELECT id, registration_status FROM users ORDER BY id').all(), [
       { id: 'user-history', registration_status: 'approved' },
       { id: 'user-never-signed-in', registration_status: 'approved' },
@@ -408,7 +414,7 @@ test('migration 31 backfills watch telemetry and can be rerun safely', () => {
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       INSERT INTO schema_migrations (version) VALUES (30);
       CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-      CREATE TABLE users (id TEXT PRIMARY KEY, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL COLLATE NOCASE DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE learning_path_courses (path_id TEXT NOT NULL, course_id TEXT NOT NULL);
       CREATE TABLE competencies (id TEXT PRIMARY KEY, title TEXT NOT NULL COLLATE NOCASE, active INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE lesson_watch_progress (
@@ -448,7 +454,7 @@ test('migration 31 preserves telemetry already present in a version-30 database'
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       INSERT INTO schema_migrations (version) VALUES (30);
       CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-      CREATE TABLE users (id TEXT PRIMARY KEY, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL COLLATE NOCASE DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE learning_path_courses (path_id TEXT NOT NULL, course_id TEXT NOT NULL);
       CREATE TABLE competencies (id TEXT PRIMARY KEY, title TEXT NOT NULL COLLATE NOCASE, active INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE lesson_watch_progress (

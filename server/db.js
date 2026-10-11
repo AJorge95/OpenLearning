@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 import { sessionUserIdFromJson } from './session-data.js';
 
-const latestSchemaVersion = 34;
+const latestSchemaVersion = 35;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -825,6 +825,19 @@ export function migrateDatabase(database = db) {
         CREATE INDEX users_registration_status_created ON users(registration_status, created_at, id);
         INSERT OR IGNORE INTO app_settings (key, value) VALUES ('registration_approval_required', '0');
         INSERT INTO schema_migrations (version) VALUES (34);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 35) {
+    const migration = database.transaction(() => {
+      // Include the username tie-break so pending account pages need no temporary sort.
+      database.exec(`
+        DROP INDEX IF EXISTS users_registration_status_created;
+        CREATE INDEX users_registration_status_created
+          ON users(registration_status, created_at, username COLLATE NOCASE);
+        INSERT INTO schema_migrations (version) VALUES (35);
       `);
     });
     migration();

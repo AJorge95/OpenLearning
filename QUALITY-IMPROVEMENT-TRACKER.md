@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Index pending account-list ordering
+
+- **Reviewed:** The administrator user-list query orders pending registrations by creation time and case-insensitive username; migration 34 indexed registration status, creation time, and ID.
+- **Improvement:** Add migration 35 to replace the registration-status index with one that ends in the username ordering key. Extend migration coverage with a query-plan assertion and keep the migration fixtures' user schema realistic.
+- **Why it helps:** SQLite can return pending account pages in the displayed order from the index without building a temporary B-tree to sort the username tie-break.
+- **Interface review:** The query and visible ordering stay unchanged; only the database access path changes.
+- **Checked:** The before/after SQLite query plans showed the temporary sort disappear. The complete `tests/server/last-login.test.js` file passed (16/16), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed.
+
 ## 2026-10-11 — Explain filter recovery request and focus behavior
 
 - **Reviewed:** The course and administrator account empty-state recovery handlers added in the latest UI cycles.
