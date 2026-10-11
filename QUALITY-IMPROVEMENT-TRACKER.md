@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Match learning-path assignment controls to publication status
+
+- **Reviewed:** Learning-path cards offered “Assign learners” for drafts, while the assignment API accepts only published paths. The assignment panel could therefore be opened for a draft and ended in a predictable 404 on submit.
+- **Improvement:** Show assignment controls and the learner panel only for published paths, explain that drafts must be published first, and close an open panel when a successful edit returns its path to draft status. Keep the API's published-only check as the enforcement boundary.
+- **Why it helps:** Staff see the required path state before selecting learners and no longer enter a workflow that the server will reject.
+- **Checked:** `node --test --test-reporter=dot tests/client/path-assignment-accessibility.test.js tests/server/course-analytics.test.js`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Playwright screenshot capture could not launch because its Chromium executable is missing; the in-app browser redirects the protected management route to `/login`.
+
 ## 2026-10-11 — Verify client handling of structured request-body errors
 
 - **Reviewed:** The server returns structured `400 invalid_json` and `413 payload_too_large` errors, while the shared API client decodes structured error responses into `ApiError` instances.
