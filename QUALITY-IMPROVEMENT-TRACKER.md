@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Describe a prepared reset accurately to other admins
+
+- **Reviewed:** The reset API reports separate `preparing` and `ready` phases to other administrators. The settings page showed the same “preparing” message for a ready reset, even though its backup was already verified and awaiting confirmation.
+- **Improvement:** The ready-state notice now says another administrator has prepared a verified backup and can confirm or cancel the reset; it explains that platform requests remain paused until their decision.
+- **Why it helps:** Administrators can distinguish an active backup from a completed backup awaiting approval and understand why the platform is paused.
+- **Backend review:** The existing reset status already returns the phase while withholding the other administrator's confirmation token and backup path; no server behavior change was needed.
+- **Checked:** The new UI regression passed (1/1); `node --test tests/server/platform-reset.test.js`, full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/platform-reset-status.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Keep admin user results current after role changes
 
 - **Reviewed:** Changing a user's role triggers a list reload after the API request. The reload used the page, search, and role filter captured before the request, which could replace a newer view if staff changed filters while the update was pending.

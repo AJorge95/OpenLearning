@@ -1967,7 +1967,7 @@ export function AdminSettingsPage() {
           {resetState.expiresAt && <small>This confirmation expires at {new Date(resetState.expiresAt).toLocaleTimeString()}.</small>}
           <div className="platform-reset-actions"><Button type="button" variant="secondary" onClick={cancelReset} disabled={resetBusy}>{resetBusy ? 'Please wait…' : 'Cancel reset'}</Button><Button type="button" variant="danger" onClick={confirmReset} disabled={resetBusy || resetPhrase !== 'RESET'}>{resetBusy ? 'Resetting…' : 'Reset platform'}</Button></div>
         </div>}
-        {resetState.pending && !resetState.confirmationId && resetState.phase !== 'preparing' && <div className="platform-reset-pending" role="status"><strong>Another administrator is preparing a platform reset.</strong><span>Platform requests are temporarily paused.</span></div>}
+        {resetState.pending && !resetState.confirmationId && resetState.phase !== 'preparing' && <div className="platform-reset-pending" role="status"><strong>Another administrator has prepared a verified backup and can now confirm or cancel the reset.</strong><span>Platform requests remain paused until they confirm or cancel the reset.</span></div>}
       </div>
     </section>
   </div>;
