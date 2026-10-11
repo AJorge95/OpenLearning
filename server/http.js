@@ -322,7 +322,9 @@ export function errorHandler(error, req, res, next) {
       : config.maxUploadBytes;
     const message = error.code === 'LIMIT_FILE_SIZE'
       ? `This file exceeds the configured upload limit of ${formatUploadLimit(uploadLimitBytes)}.`
-      : error.message;
+      : error.code === 'LIMIT_FIELD_VALUE'
+        ? 'A form field exceeds the maximum allowed size.'
+        : error.message;
     return res.status(tooLarge ? 413 : 400).json({ error: message, code: error.code });
   }
   if (error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {

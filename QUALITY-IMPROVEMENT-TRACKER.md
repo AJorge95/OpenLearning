@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Explain oversized multipart form fields
+
+- **Reviewed:** The media upload middleware's 8 KiB field-value bound, Multer error mapping, and the account-role selector's existing desktop/mobile boundary.
+- **Improvement:** Map `LIMIT_FIELD_VALUE` to a clear form-field size message while preserving its 413 status and existing error code. Add an integration case that submits an 8,193-byte field through the real upload middleware.
+- **Why it helps:** Users receive an understandable request error instead of Multer's raw “Field value too long” text, and the test protects the actual parser limit and response contract.
+- **Interface review:** The client already displays server-provided upload errors; the role selector remains a separate label and trigger-bounded control. No duplicate UI rule was needed.
+- **Checked:** The new regression reproduced the raw message before the fix and passed afterward. Focused media-route and HTTP-error tests passed (31/31); the full `npm test -- --test-reporter=dot`, `npm run build` (including strict TypeScript checking), changed-file syntax checks, and `git diff --check` passed.
+
 ## 2026-10-11 — Replay the reported account-role selector boundary
 
 - **Reviewed:** The repeated right-side click report, current account-detail markup and width rules, the rendered page, and the existing selector regressions.

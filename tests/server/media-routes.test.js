@@ -488,6 +488,23 @@ test('Multer upload-limit errors report the active configured size', async () =>
   });
 });
 
+test('multipart field-size errors use a clear client message', async () => {
+  const form = new FormData();
+  form.set('kind', 'x'.repeat(8 * 1024 + 1));
+
+  const response = await fetch(apiUrl('/manage/courses/course-caption-audit/media'), {
+    method: 'POST',
+    headers: { 'x-test-user': 'admin-media', connection: 'close' },
+    body: form,
+  });
+
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), {
+    error: 'A form field exceeds the maximum allowed size.',
+    code: 'LIMIT_FIELD_VALUE',
+  });
+});
+
 test('caption upload-size errors report the caption-specific limit and clean up partial files', async () => {
   const originalFiles = await fs.readdir(path.dirname(captionPath));
   const originalCaptionCount = database.prepare('SELECT COUNT(*) AS count FROM lesson_captions').get().count;
