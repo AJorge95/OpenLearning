@@ -4070,7 +4070,8 @@ test('resource link creation rolls back when its audit entry cannot be saved', a
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.resource_link_added' AND entity_id = 'lesson-resource-link-audit'").get().count, initialAuditCount + 1);
 });
 
-test('publication notes over the stored version-history limit are rejected before publishing', async () => {
+test('publication and review notes over their limits are rejected without state changes', async () => {
+  const reviewAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.review_changes_requested' AND entity_id = 'course-empty'").get().count;
   const publishResponse = await fetch(apiUrl('/manage/courses/course-empty'), {
     method: 'PATCH',
     headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
@@ -4094,6 +4095,19 @@ test('publication notes over the stored version-history limit are rejected befor
     assert.equal(reviewResponse.status, 400);
     assert.equal((await reviewResponse.json()).error, 'Publication note must be 500 characters or fewer.');
     assert.equal(database.prepare("SELECT review_status FROM course_revisions WHERE course_id = 'course-empty'").get().review_status, 'in_review');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM course_versions WHERE course_id = 'course-empty'").get().count, 0);
+
+    const changeRequestResponse = await fetch(apiUrl('/manage/courses/course-empty/review/decision'), {
+      method: 'POST',
+      headers: { ...userHeaders('reviewer-note-limit'), 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'changes_requested', note: 'n'.repeat(1001) }),
+    });
+    assert.equal(changeRequestResponse.status, 400);
+    assert.equal((await changeRequestResponse.json()).error, 'Review note must be 1000 characters or fewer.');
+    assert.deepEqual(database.prepare('SELECT review_status, review_note FROM course_revisions WHERE course_id = ?').get('course-empty'), {
+      review_status: 'in_review', review_note: '',
+    });
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.review_changes_requested' AND entity_id = 'course-empty'").get().count, reviewAuditCount);
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM course_versions WHERE course_id = 'course-empty'").get().count, 0);
   } finally {
     database.prepare("DELETE FROM course_revisions WHERE course_id = 'course-empty'").run();

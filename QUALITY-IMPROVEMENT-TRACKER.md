@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Cover review-note rejection boundaries
+
+- **Reviewed:** The “request changes” form and server route, the approval publication-note limit, and quiz text limits. The review form and server both cap change-request notes at 1,000 characters; the publication-note limit is 500 in both places.
+- **Improvement:** Extend the server regression test to reject a 1,001-character change-request note and assert that review status, stored note, audit history, and published versions remain unchanged.
+- **Why it helps:** The test protects the boundary between the review form and API and catches accidental state changes if request validation moves or is weakened.
+- **Backend review:** The route already validates the 1,000-character review-note limit transactionally, so no runtime change was needed.
+- **Checked:** The focused review-note boundary test and full `npm test -- --test-reporter=dot` suite passed; `git diff --check` passed. The focused test also retains coverage for over-limit publication notes and verifies neither rejection publishes a version.
+
 ## 2026-10-12 — Show character usage for custom registration text fields
 
 - **Reviewed:** Generated registration controls, their error descriptions, and server-side answer validation. Configurable text fields stop at 2,000 characters in the browser and server, but did not show the current answer length.
