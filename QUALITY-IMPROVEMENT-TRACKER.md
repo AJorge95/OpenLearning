@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reconcile the repeated administrator role selector report
+
+- **Reviewed:** The supplied screenshot's DOM path still targets the former wrapping `<label>`. The current account-details page uses a separately named custom combobox, bounds its desktop trigger to 9rem, disables pointer input on the surrounding field, and matches the popup to the trigger width.
+- **Result:** No duplicate control change. The Vite module served from this checkout contains the updated structure and no legacy role label. The in-app browser is signed out at `/login`, so the authenticated click could not be replayed; reload the current account-details page after signing in to confirm the live behavior, and capture a fresh state if an outside click still opens it.
+- **Why it helps:** It distinguishes the current selector behavior from the older screenshot markup and avoids adding another competing width or event rule without a reproduced defect.
+- **Checked:** `node --test tests/client/app-select-label.test.js tests/client/app-select-position.test.js` passed (10/10). The Vite module request returned HTTP 200 and contained the accessible-label and width-bound selector markers, with no legacy wrapped label. Rendered authenticated interaction remains unverified.
+
 ## 2026-10-11 — Reuse promise-based session destruction on sign-out
 
 - **Reviewed:** The logout handler duplicated callback-based session cleanup even though authentication routes already use a shared promise-based `destroySession` helper. Sign-out also needs to complete when its best-effort audit write cannot be persisted.
