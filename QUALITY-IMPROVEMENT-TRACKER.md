@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Share lesson-resource URL validation across client and server
+
+- **Reviewed:** The lesson editor and API each implemented the same HTTP/HTTPS and no-embedded-credentials policy, with matching messages but separate URL parsing logic.
+- **Improvement:** Move URL parsing and policy checks into one shared validator used by the editor helper and resource-creation route. The API still validates before opening its write transaction and stores the validator's canonical URL.
+- **Why it helps:** The browser and server cannot silently drift on which resource links are acceptable, while direct API requests continue to receive the same clear validation messages.
+- **Interface review:** Existing URL input guidance, inline error announcement, and focus behavior are unchanged; no layout change was needed.
+- **Checked:** Client URL cases passed (3/3), including HTTP/HTTPS, malformed URLs, disallowed schemes, credentials, and trimming. API regression cases passed (1/1), with no resource or audit writes for invalid URLs. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Enforce the learning-path course limit in the editor
 
 - **Reviewed:** Path editing allows staff to select courses from paginated results, while the API already rejects more than 200 ordered courses. The checkbox list had no count or guard, so an oversized selection failed only after submission.
