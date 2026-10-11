@@ -40,7 +40,7 @@ const calendarDateTimeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle
 function PathEditor({ existing, busy, onSave, onCancel, onDirtyChange }: {
   existing: LearningPath | null;
   busy: boolean;
-  onSave: (path: { title: string; description: string; status: 'draft' | 'published'; selfEnrollment: boolean; courses: Array<{ courseId: string; requiresPrevious: boolean }> }) => void;
+  onSave: (path: { title: string; description: string; status: 'draft' | 'published'; selfEnrollment: boolean; courses: Array<{ courseId: string; requiresPrevious: boolean }> }) => Promise<boolean>;
   onCancel: () => void;
   onDirtyChange: (hasChanges: boolean) => void;
 }) {
@@ -132,11 +132,16 @@ function PathEditor({ existing, busy, onSave, onCancel, onDirtyChange }: {
       return next;
     });
   }
-  return <form className="program-editor-card" onSubmit={(event) => {
+  return <form className="program-editor-card" onSubmit={async (event) => {
     event.preventDefault();
     if (busy) return;
-    onSave({ title: title.trim(), description: description.trim(), status, selfEnrollment,
+    const saved = await onSave({ title: title.trim(), description: description.trim(), status, selfEnrollment,
       courses: selected.map((item, index) => ({ ...item, requiresPrevious: index > 0 && item.requiresPrevious })) });
+    if (!saved || existing) return;
+    // A new path starts from a clean form after a successful create.
+    setTitle(''); setDescription(''); setStatus('draft'); setSelfEnrollment(false); setSelected([]);
+    onDirtyChange(false);
+    pathTitleInputRef.current?.focus();
   }} aria-busy={busy}>
     <div className="program-card-heading"><div><span className="program-icon"><BookOpen size={18} /></span><div><h2>{existing ? 'Edit learning path' : 'Create a learning path'}</h2><p>Arrange published courses into a guided sequence.</p></div></div>{existing && <Button variant="quiet" onClick={onCancel} disabled={busy}>Cancel</Button>}</div>
     <div className="program-form-grid">
@@ -336,8 +341,8 @@ export function LearningPathsPage() {
     void load(1, status);
   }
 
-  async function savePath(value: Parameters<NonNullable<React.ComponentProps<typeof PathEditor>['onSave']>>[0]) {
-    if (!acquireSubmissionLock(savePathSubmissionInFlightRef)) return;
+  async function savePath(value: Parameters<NonNullable<React.ComponentProps<typeof PathEditor>['onSave']>>[0]): Promise<boolean> {
+    if (!acquireSubmissionLock(savePathSubmissionInFlightRef)) return false;
     setSaving(true); setError(''); setNotice('');
     try {
       if (editing) await api.patch(`/api/manage/learning-paths/${editing.id}`, value);
@@ -345,7 +350,8 @@ export function LearningPathsPage() {
       if (editing && !canAssignLearningPathLearners(value.status) && assignmentPathRef.current === editing.id) clearAssignmentPanel();
       setEditing(null); setPathStatus('all'); setNotice(editing ? 'Learning path updated.' : 'Learning path created.'); await load(1, 'all');
       restorePathEditorFocus();
-    } catch (cause) { setError(requestMessage(cause, 'Learning path could not be saved.')); }
+      return true;
+    } catch (cause) { setError(requestMessage(cause, 'Learning path could not be saved.')); return false; }
     finally {
       releaseSubmissionLock(savePathSubmissionInFlightRef);
       setSaving(false);
