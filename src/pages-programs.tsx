@@ -3,7 +3,6 @@ import { Archive, ArrowDown, ArrowUp, BookOpen, CalendarDays, Check, ChevronLeft
 import { Link } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { calendarMonthRequestRange, groupCalendarDeadlines, localDateKey, shouldShowCalendarEmptyState } from './calendar-dates';
-import { COMPETENCY_PROGRESS_BATCH_SIZE, nextVisibleCompetencyCount } from './competency-progress-list';
 import { AppSelect, Button, EmptyState, PageHeading, ProgressBar } from './components';
 import type { Competency, Course, CourseDeadline, LearningPath } from './types';
 import { appendPublishedCourseOptions, hasMorePublishedCourseOptions, publishedCourseOptionsPageUrl, type PublishedCoursePage } from './path-course-options';
@@ -21,6 +20,7 @@ type PathLearner = { id: string; username: string; email: string | null; enrolle
 type PathLearnerPage = { learners: PathLearner[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type LearningPathListPage = { paths: LearningPath[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type CompetencyAdminPage = { competencies: Competency[]; total: number; page: number; pageSize: number; hasMore: boolean };
+type CompetencyProgressPage = { competencies: Competency[]; total: number; achievedTotal?: number; page: number; pageSize: number; hasMore: boolean };
 type LearningPathStatusFilter = 'all' | LearningPath['status'];
 const learningPathStatusFilters: Array<{ label: string; value: LearningPathStatusFilter }> = [
   { label: 'All paths', value: 'all' }, { label: 'Published', value: 'published' },
@@ -533,36 +533,89 @@ export function CalendarPage() {
 
 export function CompetenciesPage() {
   const competencyListStatusRef = useRef<HTMLParagraphElement>(null);
+  const competencyRequestRef = useRef(0);
+  const competencyControllerRef = useRef<AbortController | null>(null);
+  const loadingMoreCompetenciesRef = useRef(false);
   const [competencies, setCompetencies] = useState<Competency[]>([]);
-  const [visibleCompetencyCount, setVisibleCompetencyCount] = useState(COMPETENCY_PROGRESS_BATCH_SIZE);
+  const [competencyTotal, setCompetencyTotal] = useState(0);
+  const [achievedCompetencyTotal, setAchievedCompetencyTotal] = useState(0);
+  const [competencyPage, setCompetencyPage] = useState(0);
+  const [competencyPageSize, setCompetencyPageSize] = useState(12);
+  const [hasMoreCompetencies, setHasMoreCompetencies] = useState(false);
+  const [loadingMoreCompetencies, setLoadingMoreCompetencies] = useState(false);
+  const [loadMoreCompetenciesError, setLoadMoreCompetenciesError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadSequence, setReloadSequence] = useState(0);
   useEffect(() => {
     let active = true;
+    const requestId = ++competencyRequestRef.current;
     const controller = new AbortController();
-    setLoading(true); setError(''); setVisibleCompetencyCount(COMPETENCY_PROGRESS_BATCH_SIZE);
-    api.get<{ competencies: Competency[] }>('/api/competencies', { signal: controller.signal })
-      .then((result) => { if (active) setCompetencies(result.competencies); })
-      .catch((cause) => { if (active) setError(requestMessage(cause, 'Competency progress could not be loaded.')); })
+    competencyControllerRef.current = controller;
+    loadingMoreCompetenciesRef.current = false;
+    setLoading(true); setError(''); setLoadMoreCompetenciesError(''); setLoadingMoreCompetencies(false);
+    setCompetencies([]); setCompetencyTotal(0); setAchievedCompetencyTotal(0); setCompetencyPage(0); setHasMoreCompetencies(false);
+    api.get<CompetencyProgressPage>('/api/competencies?page=1', { signal: controller.signal })
+      .then((result) => {
+        if (!active || requestId !== competencyRequestRef.current) return;
+        setCompetencies(result.competencies); setCompetencyTotal(result.total); setAchievedCompetencyTotal(result.achievedTotal ?? 0);
+        setCompetencyPage(result.page); setCompetencyPageSize(result.pageSize); setHasMoreCompetencies(result.hasMore);
+      })
+      .catch((cause) => { if (active && requestId === competencyRequestRef.current) setError(requestMessage(cause, 'Competency progress could not be loaded.')); })
       .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; controller.abort(); };
+    return () => {
+      active = false;
+      competencyRequestRef.current += 1;
+      controller.abort();
+      if (competencyControllerRef.current === controller) competencyControllerRef.current = null;
+    };
   }, [reloadSequence]);
-  const achieved = competencies.filter((item) => item.achieved).length;
-  const visibleCompetencies = competencies.slice(0, visibleCompetencyCount);
-  const hasMoreCompetencies = visibleCompetencyCount < competencies.length;
-  function showMoreCompetencies() {
-    const nextCount = nextVisibleCompetencyCount(visibleCompetencyCount, competencies.length);
-    setVisibleCompetencyCount(nextCount);
-    if (nextCount === competencies.length) window.requestAnimationFrame(() => competencyListStatusRef.current?.focus());
+  async function loadMoreCompetencies() {
+    const controller = competencyControllerRef.current;
+    if (!hasMoreCompetencies || loadingMoreCompetenciesRef.current || !controller || controller.signal.aborted) return;
+    const requestId = competencyRequestRef.current;
+    const nextPage = competencyPage + 1;
+    loadingMoreCompetenciesRef.current = true;
+    setLoadingMoreCompetencies(true); setLoadMoreCompetenciesError('');
+    try {
+      const result = await api.get<CompetencyProgressPage>(`/api/competencies?page=${nextPage}`, { signal: controller.signal });
+      if (requestId !== competencyRequestRef.current || controller.signal.aborted) return;
+      setCompetencies((current) => [...current, ...result.competencies]);
+      setCompetencyTotal(result.total); setCompetencyPage(result.page); setCompetencyPageSize(result.pageSize); setHasMoreCompetencies(result.hasMore);
+      if (!result.hasMore) window.requestAnimationFrame(() => competencyListStatusRef.current?.focus());
+    } catch (cause) {
+      if (requestId === competencyRequestRef.current && !controller.signal.aborted) {
+        setLoadMoreCompetenciesError(requestMessage(cause, 'More competency progress could not be loaded.'));
+      }
+    } finally {
+      if (requestId === competencyRequestRef.current) {
+        loadingMoreCompetenciesRef.current = false;
+        setLoadingMoreCompetencies(false);
+      }
+    }
   }
   return <div className="management-page programs-page">
     <PageHeading title="Competencies" subtitle="See the skills you have demonstrated through completed courses." />
     {error && <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => setReloadSequence((current) => current + 1)}>Try again</Button></div>}
-    {loading ? <div className="page-loading" role="status">Loading competencies…</div> : error ? null : competencies.length ? <>
-      <div className="competency-summary"><span className="program-icon"><CircleHelp size={18} /></span><div><strong>{achieved} of {competencies.length} competencies achieved</strong><ProgressBar value={achieved / competencies.length * 100} label="Competencies achieved" /></div></div>
-      <div className="competency-grid">{visibleCompetencies.map((item) => <article className={`competency-card ${item.achieved ? 'achieved' : ''}`} key={item.id}><div className="competency-card-top"><span className="program-icon"><CircleHelp size={18} /></span><span className={`program-status ${item.achieved ? 'published' : 'draft'}`}>{item.achieved ? 'Achieved' : 'In progress'}</span></div><h2>{item.title}</h2><p>{item.description || 'Complete a mapped course to achieve this competency.'}</p><strong>{item.completedCourses} of {item.courseCount} mapped courses complete</strong>{item.courses?.length ? <ul>{item.courses.map((course) => <li key={course.id}>{course.completed ? <Check size={15} aria-hidden="true" /> : <BookOpen size={15} aria-hidden="true" />}<span>{course.title}<span className="sr-only">, {course.completed ? 'completed' : 'not completed'}</span></span></li>)}</ul> : <small>No courses are currently mapped.</small>}</article>)}</div>
-      {competencies.length > COMPETENCY_PROGRESS_BATCH_SIZE && <div className="catalog-pagination competency-progress-pagination"><p ref={competencyListStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {visibleCompetencies.length} of {competencies.length} competencies</p>{hasMoreCompetencies && <Button variant="secondary" onClick={showMoreCompetencies}>Show {Math.min(COMPETENCY_PROGRESS_BATCH_SIZE, competencies.length - visibleCompetencyCount)} more competencies</Button>}</div>}
+    {loading ? <div className="page-loading" role="status">Loading competencies…</div> : error ? null : competencyTotal ? <>
+      <div className="competency-summary"><span className="program-icon"><CircleHelp size={18} /></span><div><strong>{achievedCompetencyTotal} of {competencyTotal} competencies achieved</strong><ProgressBar value={achievedCompetencyTotal / competencyTotal * 100} label="Competencies achieved" /></div></div>
+      <div className="competency-grid">{competencies.map((item) => <article className={`competency-card ${item.achieved ? 'achieved' : ''}`} key={item.id}><div className="competency-card-top"><span className="program-icon"><CircleHelp size={18} /></span><span className={`program-status ${item.achieved ? 'published' : 'draft'}`}>{item.achieved ? 'Achieved' : 'In progress'}</span></div><h2>{item.title}</h2><p>{item.description || 'Complete a mapped course to achieve this competency.'}</p><strong>{item.completedCourses} of {item.courseCount} mapped courses complete</strong>{item.courses?.length ? <ul>{item.courses.map((course) => <li key={course.id}>{course.completed ? <Check size={15} aria-hidden="true" /> : <BookOpen size={15} aria-hidden="true" />}<span>{course.title}<span className="sr-only">, {course.completed ? 'completed' : 'not completed'}</span></span></li>)}</ul> : <small>No courses are currently mapped.</small>}</article>)}</div>
+      {competencyTotal > competencyPageSize && (
+        <div className="catalog-pagination competency-progress-pagination">
+          <div className="competency-progress-status">
+            <p ref={competencyListStatusRef} tabIndex={-1} role="status" aria-live="polite">
+              {loadingMoreCompetencies ? 'Loading more competencies. ' : ''}Showing {competencies.length} of {competencyTotal} competencies
+            </p>
+            {loadMoreCompetenciesError && <div className="error-notice error-notice-actionable competency-progress-load-error" role="alert">
+              <span>{loadMoreCompetenciesError}</span>
+              <Button variant="secondary" disabled={loadingMoreCompetencies} onClick={() => void loadMoreCompetencies()}>Try again</Button>
+            </div>}
+          </div>
+          {hasMoreCompetencies && <Button variant="secondary" disabled={loadingMoreCompetencies} aria-busy={loadingMoreCompetencies} onClick={() => void loadMoreCompetencies()}>
+            {loadingMoreCompetencies ? 'Loading…' : `Load ${Math.min(competencyPageSize, competencyTotal - competencies.length)} more competencies`}
+          </Button>}
+        </div>
+      )}
     </> : <>
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">No competencies have been added. Your organization’s skills map will appear here when competencies are configured.</p>
       <EmptyState title="No competencies have been added" detail="Your organization’s skills map will appear here when competencies are configured." />

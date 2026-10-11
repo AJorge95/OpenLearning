@@ -1,0 +1,1 @@
+export const COMPETENCY_PROGRESS_PAGE_SIZE = 12;

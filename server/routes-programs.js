@@ -7,6 +7,7 @@ import { courseVersionHistoryPage, logicalCourseId, publishRevision, restoreCour
 import { writeAuditLog } from './log-store.js';
 import { textSearchPredicate } from './sql.js';
 import { MAX_LEARNING_PATH_COURSES } from '../shared/learning-path-limits.js';
+import { COMPETENCY_PROGRESS_PAGE_SIZE } from '../shared/competency-progress.js';
 
 export const programsRouter = Router();
 programsRouter.use(requireAuth);
@@ -429,16 +430,25 @@ programsRouter.get('/calendar', (req, res) => {
 });
 
 programsRouter.get('/competencies', (req, res) => {
-  const rows = db.prepare('SELECT * FROM competencies WHERE active = 1 ORDER BY title COLLATE NOCASE').all();
-  const courses = db.prepare(`SELECT cc.competency_id, c.* FROM course_competencies cc
+  const allRows = db.prepare('SELECT * FROM competencies WHERE active = 1 ORDER BY title COLLATE NOCASE, id ASC').all();
+  const total = allRows.length;
+  const requestedPage = pageQuery(req.query.page);
+  const pageSize = COMPETENCY_PROGRESS_PAGE_SIZE;
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
+  const offset = (page - 1) * pageSize;
+  const pageRows = allRows.slice(offset, offset + pageSize);
+  const summaryRows = page === 1 ? allRows : pageRows;
+  const summaryIds = summaryRows.map((item) => item.id);
+  const competencyFilter = page === 1 ? '' : `AND cc.competency_id IN (${summaryIds.map(() => '?').join(', ')})`;
+  const courses = summaryIds.length ? db.prepare(`SELECT cc.competency_id, c.* FROM course_competencies cc
     JOIN competencies competency ON competency.id = cc.competency_id
     JOIN courses c ON c.id = cc.course_id
-    WHERE competency.active = 1 AND c.status = 'published'
-    ORDER BY cc.competency_id, c.title COLLATE NOCASE, c.id ASC`).all();
+    WHERE competency.active = 1 AND c.status = 'published' ${competencyFilter}
+    ORDER BY cc.competency_id, c.title COLLATE NOCASE, c.id ASC`).all(...(page === 1 ? [] : summaryIds)) : [];
   const canView = createCourseAccessChecker(req.currentUser);
   const visibleCourses = courses.filter((course) => course.visibility === 'public' || canView(course));
   const summaries = courseSummaries(visibleCourses, req.currentUser);
-  const coursesByCompetency = new Map(rows.map((item) => [item.id, []]));
+  const coursesByCompetency = new Map(summaryRows.map((item) => [item.id, []]));
   visibleCourses.forEach((course, index) => {
     coursesByCompetency.get(course.competency_id)?.push({
       id: course.id,
@@ -446,13 +456,20 @@ programsRouter.get('/competencies', (req, res) => {
       completed: summaries[index].completed,
     });
   });
-  const competencies = rows.map((item) => {
+  const mappedCompetencies = summaryRows.map((item) => {
     const mapped = coursesByCompetency.get(item.id);
     const completedCourses = mapped.filter((course) => course.completed).length;
     return { id: item.id, title: item.title, description: item.description, achieved: mapped.some((course) => course.completed),
       completedCourses, courseCount: mapped.length, courses: mapped };
   });
-  res.json({ competencies });
+  res.json({
+    competencies: page === 1 ? mappedCompetencies.slice(offset, offset + pageSize) : mappedCompetencies,
+    total,
+    ...(page === 1 ? { achievedTotal: mappedCompetencies.filter((item) => item.achieved).length } : {}),
+    page,
+    pageSize,
+    hasMore: page * pageSize < total,
+  });
 });
 
 programsRouter.get('/admin/competencies', requireAdmin, (_req, res) => {

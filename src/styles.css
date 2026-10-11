@@ -139,6 +139,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .course-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px 20px; }
 .catalog-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 22px; margin-top: 28px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 .catalog-pagination p { margin: 0; }
+.competency-progress-status { display: grid; flex: 1; gap: 12px; min-width: 0; }
+.competency-progress-load-error { margin: 0; }
 .course-card { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; background: #fff; transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
 .course-card:hover { border-color: var(--purple-border-strong); transform: translateY(-2px); box-shadow: 0 7px 18px rgba(30, 25, 55, .07); }
 .course-cover { width: 100%; aspect-ratio: 1.47 / 1; object-fit: cover; background: var(--purple-soft); }
