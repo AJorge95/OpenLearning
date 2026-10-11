@@ -7,6 +7,7 @@ import { api, ApiError, fetchAccess, fetchCourse } from './api';
 import { AppSelect, Button, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
 import { formatCountLabel } from './count-label';
 import { courseRowActionStatus } from './course-row-action-status';
+import { getAppSelectVerticalPosition } from './app-select-position';
 import { updateCourseCompetencySelection } from './course-competency-selection';
 import type { CourseRowAction } from './course-row-action-status';
 import { validateRegistrationFieldEditor } from './registration-fields';
@@ -68,7 +69,7 @@ function CourseRowMenu({ course, busyAction, onStatusChange, onDelete }: {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const focusMenuOnOpenRef = useRef(false);
-  const [position, setPosition] = useState({ top: 0, left: 0, width: 196 });
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 196, maxHeight: 280 });
   const itemCount = course.status === 'archived' ? 2 : 3;
   const isBusy = Boolean(busyAction);
 
@@ -76,15 +77,12 @@ function CourseRowMenu({ course, busyAction, onStatusChange, onDelete }: {
     const trigger = triggerRef.current;
     if (trigger) {
       const rect = trigger.getBoundingClientRect();
-      const margin = 12;
-      const width = Math.min(196, window.innerWidth - margin * 2);
-      const height = itemCount * 38 + 16;
-      const roomBelow = window.innerHeight - rect.bottom - margin;
-      const roomAbove = rect.top - margin;
-      const openAbove = roomBelow < height && roomAbove > roomBelow;
-      const top = openAbove ? Math.max(margin, rect.top - height - 6) : Math.min(rect.bottom + 6, window.innerHeight - height - margin);
-      const left = Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin));
-      setPosition({ top, left, width });
+      const viewportWidth = Math.max(1, window.innerWidth);
+      const margin = Math.min(12, Math.max(0, (viewportWidth - 1) / 2));
+      const width = Math.min(196, Math.max(1, viewportWidth - margin * 2));
+      const { top, maxHeight } = getAppSelectVerticalPosition(rect, window.innerHeight, itemCount);
+      const left = Math.max(margin, Math.min(rect.right - width, viewportWidth - width - margin));
+      setPosition({ top, left, width, maxHeight });
     }
     focusMenuOnOpenRef.current = focusFirst;
     setOpen(true);
