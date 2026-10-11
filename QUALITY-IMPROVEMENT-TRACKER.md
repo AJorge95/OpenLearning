@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Show character usage for custom registration text fields
+
+- **Reviewed:** Generated registration controls, their error descriptions, and server-side answer validation. Configurable text fields stop at 2,000 characters in the browser and server, but did not show the current answer length.
+- **Improvement:** Add a field-specific count for custom text inputs and include both that count and any form error in `aria-describedby`. Date, select, and checkbox behavior stays unchanged.
+- **Why it helps:** Applicants can see the remaining space while filling organization-specific registration details, and invalid fields retain their accessible error relationship.
+- **Backend review:** `registration-fields.js` remains authoritative at 2,000 characters; no API or database change was needed.
+- **Checked:** The focused registration-counter test and full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. The regression checks the input limit, per-field count ID, combined error description, and server limit.
+
 ## 2026-10-12 — Show competency description character usage
 
 - **Reviewed:** The competency creation form and its create/update route validation. Competency descriptions have a 2,000-character browser and server limit but no visible count, while other long-form editors now show the same guidance.
