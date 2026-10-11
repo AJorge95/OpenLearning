@@ -112,9 +112,10 @@ function storedSessionIds() {
   }));
 }
 
-test('JSON parser failures return structured client errors', async () => {
+test('request body parser failures return structured client errors', async () => {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: false, limit: '1mb', parameterLimit: 2 }));
   app.post('/api/request-body-test', (_req, res) => res.json({ accepted: true }));
   app.use(httpErrorHandler);
 
@@ -146,6 +147,28 @@ test('JSON parser failures return structured client errors', async () => {
     assert.deepEqual(await oversizedResponse.json(), {
       error: 'Request body is too large.',
       code: 'payload_too_large',
+    });
+
+    const tooManyFieldsResponse = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'first=1&second=2&third=3',
+    });
+    assert.equal(tooManyFieldsResponse.status, 413);
+    assert.deepEqual(await tooManyFieldsResponse.json(), {
+      error: 'Request body contains too many form fields.',
+      code: 'too_many_parameters',
+    });
+
+    const unsupportedCharsetResponse = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded; charset=shift_jis' },
+      body: 'value=test',
+    });
+    assert.equal(unsupportedCharsetResponse.status, 415);
+    assert.deepEqual(await unsupportedCharsetResponse.json(), {
+      error: 'Request body uses an unsupported character set.',
+      code: 'unsupported_charset',
     });
   } finally {
     const closed = once(parserServer, 'close');
