@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck administrator log filtering and pagination
+
+- **Reviewed:** Audit and system-log route access checks, text/severity/action filtering, bounded newest-first paging, and the client’s request cancellation, loading, empty, and retry states.
+- **Result:** No code change. Anonymous/moderator access is rejected, filters apply before paging, stale requests are canceled, and failed requests retain a retry path.
+- **Why no change:** Existing route coverage matches the filter and pagination contract, and no distinct UI or backend defect appeared in the reviewed paths.
+- **Interface review:** The tables remain named scroll regions with busy/loading status, announced page ranges, and detail disclosures; authenticated rendering is not available because the in-app browser is signed out.
+- **Checked:** `tests/server/admin-logs.test.js` passed (2/2), covering admin-only access, filtered paging/action counts, and system-log severity/text filtering. No production code changed.
+
 ## 2026-10-11 — Roll back path setup when assignment auditing fails
 
 - **Reviewed:** The assignment-create route writes the enrollment, synchronizes the learner’s unlocked course state, and records the assignment in one immediate transaction. Existing coverage did not verify rollback when audit persistence fails.
