@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import express from 'express';
 import test from 'node:test';
-import { adminPasswordResetLimiter, learnerCommentLimiter, passwordChangeLimiter } from '../../server/rate-limits.js';
+import { adminPasswordResetLimiter, learnerCommentLimiter, learnerReactionLimiter, passwordChangeLimiter, quizAttemptLimiter } from '../../server/rate-limits.js';
 
 test('administrator password reset throttling is bounded per authenticated admin', async () => {
   const primaryAdmin = `admin-password-limit-test-${randomUUID()}`;
@@ -156,5 +156,103 @@ test('learner comment throttling returns a retryable error and is isolated per u
     await closed;
     learnerCommentLimiter.resetKey(primaryKey);
     learnerCommentLimiter.resetKey(secondKey);
+  }
+});
+
+test('learner reaction throttling is bounded per user', async () => {
+  const primaryUser = `reaction-limit-test-${randomUUID()}`;
+  const secondUser = `reaction-limit-test-${randomUUID()}`;
+  const primaryKey = `user:${primaryUser}`;
+  const secondKey = `user:${secondUser}`;
+  learnerReactionLimiter.resetKey(primaryKey);
+  learnerReactionLimiter.resetKey(secondKey);
+
+  const app = express();
+  app.use((req, _res, next) => {
+    req.currentUser = { id: req.get('x-test-user') };
+    next();
+  });
+  app.put('/reactions', learnerReactionLimiter, (_req, res) => res.sendStatus(204));
+
+  const server = createServer(app);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const endpoint = `http://127.0.0.1:${address.port}/reactions`;
+  const updateReaction = (userId) => fetch(endpoint, {
+    method: 'PUT',
+    headers: { 'x-test-user': userId, connection: 'close' },
+  });
+
+  try {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      assert.equal((await updateReaction(primaryUser)).status, 204);
+    }
+
+    const limitedResponse = await updateReaction(primaryUser);
+    assert.equal(limitedResponse.status, 429);
+    assert.deepEqual(await limitedResponse.json(), {
+      error: 'You are changing reactions too quickly. Please wait a few minutes and try again.',
+      code: 'rate_limited',
+    });
+
+    assert.equal((await updateReaction(secondUser)).status, 204);
+  } finally {
+    const closed = once(server, 'close');
+    server.close();
+    server.closeAllConnections();
+    await closed;
+    learnerReactionLimiter.resetKey(primaryKey);
+    learnerReactionLimiter.resetKey(secondKey);
+  }
+});
+
+test('quiz attempt throttling is bounded per user', async () => {
+  const primaryUser = `quiz-attempt-limit-test-${randomUUID()}`;
+  const secondUser = `quiz-attempt-limit-test-${randomUUID()}`;
+  const primaryKey = `user:${primaryUser}`;
+  const secondKey = `user:${secondUser}`;
+  quizAttemptLimiter.resetKey(primaryKey);
+  quizAttemptLimiter.resetKey(secondKey);
+
+  const app = express();
+  app.use((req, _res, next) => {
+    req.currentUser = { id: req.get('x-test-user') };
+    next();
+  });
+  app.post('/attempts', quizAttemptLimiter, (_req, res) => res.sendStatus(204));
+
+  const server = createServer(app);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const endpoint = `http://127.0.0.1:${address.port}/attempts`;
+  const submitAttempt = (userId) => fetch(endpoint, {
+    method: 'POST',
+    headers: { 'x-test-user': userId, connection: 'close' },
+  });
+
+  try {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      assert.equal((await submitAttempt(primaryUser)).status, 204);
+    }
+
+    const limitedResponse = await submitAttempt(primaryUser);
+    assert.equal(limitedResponse.status, 429);
+    assert.deepEqual(await limitedResponse.json(), {
+      error: 'You have submitted too many quiz attempts. Please wait before trying again.',
+      code: 'rate_limited',
+    });
+
+    assert.equal((await submitAttempt(secondUser)).status, 204);
+  } finally {
+    const closed = once(server, 'close');
+    server.close();
+    server.closeAllConnections();
+    await closed;
+    quizAttemptLimiter.resetKey(primaryKey);
+    quizAttemptLimiter.resetKey(secondKey);
   }
 });
