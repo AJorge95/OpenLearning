@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Page learning-path learner rosters without a global sort
+
+- **Reviewed:** The staff path-assignment directory, assigned-first ordering, active-account and search filters, 50-row pagination, and responsive assignment controls. The combined list query ordered every matching learner by enrollment presence, forcing SQLite to sort the full directory for each page.
+- **Improvement:** Count enrolled learners separately, fetch that path-specific segment first, then fill remaining page slots from unassigned learners in username order. Add a query-plan assertion for the unassigned page query.
+- **Why it helps:** SQLite can use the learner username index to stream unassigned results, and the enrollment lookup and ordering work stays limited to learners enrolled in the selected path.
+- **Interface review:** The assignment panel keeps its labeled search, named learner selector, pending and empty states, and stacked narrow-screen controls; no markup or layout change was indicated.
+- **Checked:** The focused directory regression passed (1/1), including search, page boundaries, and 52 enrolled learners crossing the 50-row page boundary. Its query-plan assertion confirms the unassigned query uses `users_role_username` without a temporary B-tree; the prior combined query required one. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, both changed-file `node --check` commands, and `git diff --check` passed.
+
 ## 2026-10-11 — Keep lesson watch checkpoints and telemetry atomic
 
 - **Reviewed:** Starting tracked playback and recording accepted or rejected watch positions update both `lesson_watch_progress` and `lesson_watch_telemetry`. Those paired writes ran as separate statements, so a failed telemetry write could leave a partial checkpoint or omit its related telemetry.
