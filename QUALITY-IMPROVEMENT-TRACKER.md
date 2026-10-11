@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Guard native button form behavior
+
+- **Reviewed:** Scanned all TSX for native buttons and images. The current source has no native button missing a `type` and no image missing `alt`, but this form-submission invariant had no automated guard.
+- **Improvement:** Add a TypeScript-AST client test that checks every native JSX `<button>` declares its type, including self-closing forms.
+- **Why it helps:** A button added inside a form cannot silently inherit the browser's submit behavior and trigger an unintended save or navigation.
+- **Backend review:** No API or persistence change was indicated by this markup audit.
+- **Checked:** The focused AST regression passed (1/1), as did full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/button-type.test.js`, and `git diff --check`.
+
 ## 2026-10-11 — Measure learner competency catalog response scaling
 
 - **Reviewed:** The learner endpoint returns competency cards with their accessible mapped courses, and the page now renders those cards in batches while keeping an accurate full-map achievement summary.
