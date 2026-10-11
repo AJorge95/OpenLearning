@@ -109,6 +109,54 @@ function accessiblePublishedCourses(user, filters = {}) {
   return { courses, total, page, pageSize, hasMore };
 }
 
+function accessibleLearningCoursePage(user, requestedPageValue) {
+  const requestedPage = pageQuery(requestedPageValue, MAX_COURSE_PAGE);
+  const requestedOffset = (requestedPage - 1) * COURSE_PAGE_SIZE;
+  const requestedEnd = requestedOffset + COURSE_PAGE_SIZE;
+  const pageCandidates = [];
+  const trailingCandidates = [];
+  let total = 0;
+  const canViewCourse = createCourseAccessChecker(user);
+  const candidates = db.prepare(`WITH course_activity(course_id, activity_at, precedence) AS (
+      SELECT e.course_id, e.enrolled_at, 0 FROM enrollments e WHERE e.user_id = ?
+      UNION ALL
+      SELECT g.course_id, g.granted_at, 1 FROM course_grants g WHERE g.user_id = ?
+      UNION ALL
+      SELECT pc.course_id, e.enrolled_at, 2 FROM learning_path_enrollments e
+        JOIN learning_paths lp ON lp.id = e.path_id AND lp.status = 'published'
+        JOIN learning_path_courses pc ON pc.path_id = e.path_id
+        WHERE e.user_id = ?
+    ), activity_by_course AS (
+      SELECT course_id, COALESCE(
+        MAX(CASE precedence WHEN 0 THEN activity_at END),
+        MAX(CASE precedence WHEN 1 THEN activity_at END),
+        MAX(CASE precedence WHEN 2 THEN activity_at END)
+      ) AS activity_at
+      FROM course_activity GROUP BY course_id
+    )
+    SELECT c.* FROM activity_by_course a JOIN courses c ON c.id = a.course_id
+    WHERE c.status = 'published'
+    ORDER BY a.activity_at DESC, c.id ASC`).iterate(user.id, user.id, user.id);
+
+  for (const course of candidates) {
+    if (!canViewCourse(course)) continue;
+    if (total >= requestedOffset && total < requestedEnd) pageCandidates.push(course);
+    if (trailingCandidates.length === COURSE_PAGE_SIZE) trailingCandidates.shift();
+    trailingCandidates.push(course);
+    total += 1;
+  }
+
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / COURSE_PAGE_SIZE)));
+  const lastPageSize = total === 0 ? 0 : (total - 1) % COURSE_PAGE_SIZE + 1;
+  return {
+    courses: page === requestedPage ? pageCandidates : trailingCandidates.slice(-lastPageSize),
+    total,
+    page,
+    pageSize: COURSE_PAGE_SIZE,
+    hasMore: page * COURSE_PAGE_SIZE < total,
+  };
+}
+
 function requireLearnerLesson(lessonId, user) {
   const lesson = courseFromLesson(lessonId);
   if (!lesson) fail(404, 'Lesson not found.', 'not_found');
@@ -182,27 +230,10 @@ courseRouter.get('/courses', (req, res) => {
 });
 
 courseRouter.get('/my-learning', (req, res) => {
-  const canViewLearnerCourse = createCourseAccessChecker(req.currentUser);
-  const candidates = db.prepare(`
-    SELECT c.* FROM courses c WHERE c.status = 'published'
-      AND (EXISTS (SELECT 1 FROM enrollments e WHERE e.course_id = c.id AND e.user_id = ?)
-        OR EXISTS (SELECT 1 FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?)
-        OR EXISTS (SELECT 1 FROM learning_path_enrollments e JOIN learning_path_courses pc ON pc.path_id = e.path_id
-          JOIN learning_paths lp ON lp.id = e.path_id WHERE e.user_id = ? AND pc.course_id = c.id AND lp.status = 'published'))
-    ORDER BY COALESCE(
-      (SELECT e.enrolled_at FROM enrollments e WHERE e.course_id = c.id AND e.user_id = ?),
-      (SELECT g.granted_at FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ?),
-      (SELECT MAX(e.enrolled_at) FROM learning_path_enrollments e JOIN learning_path_courses pc ON pc.path_id = e.path_id
-        JOIN learning_paths lp ON lp.id = e.path_id WHERE e.user_id = ? AND pc.course_id = c.id AND lp.status = 'published')
-    ) DESC, c.id ASC
-  `).all(req.currentUser.id, req.currentUser.id, req.currentUser.id, req.currentUser.id, req.currentUser.id, req.currentUser.id)
-    .filter(canViewLearnerCourse);
-  const total = candidates.length;
-  const { page, pageSize, offset, hasMore } = paginationWindow(total, req.query.page);
-  const rows = candidates.slice(offset, offset + pageSize);
+  const { courses, total, page, pageSize, hasMore } = accessibleLearningCoursePage(req.currentUser, req.query.page);
   const includeCertificates = enumQuery(req.query.includeCertificates, 'certificate option', ['0', '1'], '1');
   const certificateData = includeCertificates === '0' ? {} : learnerCertificatePage(req.currentUser.id, req.query.certificatesPage);
-  res.json({ courses: courseSummaries(rows, req.currentUser), total, page, pageSize, hasMore, ...certificateData });
+  res.json({ courses: courseSummaries(courses, req.currentUser), total, page, pageSize, hasMore, ...certificateData });
 });
 
 function learnerCertificatePage(userId, requestedPage) {
