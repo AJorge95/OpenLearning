@@ -8,6 +8,14 @@
 - **Backend review:** Existing admin-only endpoints continue to apply validated filters before paging; no API or persistence changes were needed.
 - **Checked:** The focused client regressions passed (3/3), the full `npm test -- --test-reporter=dot` suite and `npm run build` passed, and `git diff --check` passed. In the authenticated local browser, an unmatched query showed the clear action on both pages; clearing restored system-log rows (50 of 697) and audit-log rows (50 of 75). Both pages reported no console warnings or errors. The standalone Browser plugin was unavailable; rendered checks used the connected in-app browser through CUA.
 
+## 2026-10-11 — Clear no-match learner searches in path assignments
+
+- **Reviewed:** The learning-path assignment panel showed a no-match status after a learner search but required staff to replace and resubmit the query manually.
+- **Improvement:** Add a “Clear search” action to filtered empty results. It resets draft and applied search, clears the selected learner, reloads page one without a query, and returns keyboard focus to the persistent search field.
+- **Why it helps:** Staff can recover from an overly restrictive learner search in one action and continue assigning the right learner without losing keyboard focus.
+- **Backend review:** The existing authenticated learner-list endpoint continues to handle filtering and pagination; no API or persistence changes were needed.
+- **Checked:** The focused client regression passed (1/1), the full `npm test -- --test-reporter=dot` suite and `npm run build` passed, and `git diff --check` passed. The authenticated local `/manage/learning-paths` page has no paths, so the assignment panel could not be opened without creating test content; no test content was created. The page reported no console warnings or errors. The standalone Browser plugin was unavailable; the connected in-app browser was used through CUA.
+
 ## 2026-10-11 — Explain reset-status polling guards
 
 - **Reviewed:** The Settings page polls for status changes initiated by other administrators, and several lifecycle guards control when those requests run.

@@ -626,6 +626,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .path-assignment-panel { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--subtle); }
 .path-assignment-panel h3 { margin: 0; font-size: 13px; }
 .path-assignment-status { margin: 0; color: var(--muted); font-size: 12px; }
+.path-assignment-empty { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.path-assignment-empty .button { min-height: 34px; }
 .path-assignment-search { max-width: none; height: 42px; margin: 0; background: #fff; }
 .path-assignment-search .button { min-height: 32px; padding: 0 8px; }
 .path-assignment-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 9px; }
