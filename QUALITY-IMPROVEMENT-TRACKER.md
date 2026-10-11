@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep administrator user search and filters in sync
+
+- **Reviewed:** The user-list search draft and applied query, role and registration filter reloads, retry snapshots, pagination, and the `/api/admin/users` route. Changing either select reloaded with the old applied search while leaving newer draft text visible.
+- **Improvement:** Apply the trimmed visible search draft when role or registration changes, reset to page one, and reload directly when a select emits its current value but the draft has changed.
+- **Why it helps:** Administrators see account results that match both the visible search and selected filters, with retries and pagination continuing from the same applied query.
+- **Backend review:** The endpoint already validates role and registration values, binds search terms, and combines all filters before sorting and paging. No server change was needed.
+- **Checked:** The account-filter regression tests, full `npm test`, `npm run build`, and `git diff --check` passed. In the rendered user list, choosing Learners while an unmatched search draft was visible applied both and displayed the matching empty state.
+
 ## 2026-10-11 — Keep visible catalog search text in sync with category and sort
 
 - **Reviewed:** Catalog search draft and applied state, category/sort-triggered reloads, retry snapshots, pagination, and the visibility-aware `/api/courses` filters. Changing category or sort reloaded with the old applied query while leaving newer draft text visible in the search field.
