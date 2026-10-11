@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Serialize platform reset confirmation
+
+- **Reviewed:** The reset confirmation checked for a prepared state, then awaited media filesystem work before changing that state. Concurrent confirmation requests could therefore both pass the check; cancellation could also clear the state after a confirmation had already begun.
+- **Improvement:** Transition the reset state to `resetting` synchronously before the first await. Reject repeat confirmation and cancellation once it starts, show other administrators an in-progress status, and add isolated server and client regressions.
+- **Why it helps:** Only one request can perform the destructive database and media reset, and administrators reopening settings see that the operation is underway rather than being told they can still confirm or cancel.
+- **Interface review:** The reported role selector is already a separate label plus a 9rem trigger with a trigger-width popup; its hit-area and positioning regressions pass. The supplied screenshot targets a wrapping `<label>` absent from this checkout. The in-app browser currently redirects the protected page to `/login`, and Playwright is not installed, so the authenticated click could not be replayed live.
+- **Checked:** Focused reset tests passed (9/9), and AppSelect label/position tests passed (11/11). Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, changed JavaScript syntax checks, and `git diff --check` passed.
+
 ## 2026-10-11 — Batch retained-log cleanup after oversized backlogs
 
 - **Reviewed:** Audit and system log retention when an existing database contains more than the configured row cap; normal writes at the cap; and the current administrator selector markup after the reported hit-area issue.

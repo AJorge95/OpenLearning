@@ -1974,7 +1974,7 @@ export function AdminSettingsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
-  const [resetState, setResetState] = useState<{ pending: boolean; phase?: 'preparing' | 'ready'; confirmationId?: string; backupLocation?: string; expiresAt?: number }>({ pending: false });
+  const [resetState, setResetState] = useState<{ pending: boolean; phase?: 'preparing' | 'ready' | 'resetting'; confirmationId?: string; backupLocation?: string; expiresAt?: number }>({ pending: false });
   const [resetPhrase, setResetPhrase] = useState('');
   const [resetError, setResetError] = useState('');
   const [resetSuccess, setResetSuccess] = useState('');
@@ -1999,7 +1999,7 @@ export function AdminSettingsPage() {
   }, [registeredUserCountRetryVersion]);
   useEffect(() => {
     let active = true;
-    api.get<{ pending: boolean; phase?: 'preparing' | 'ready'; confirmationId?: string; backupLocation?: string; expiresAt?: number }>('/api/admin/platform-reset')
+    api.get<{ pending: boolean; phase?: 'preparing' | 'ready' | 'resetting'; confirmationId?: string; backupLocation?: string; expiresAt?: number }>('/api/admin/platform-reset')
       .then((result) => { if (active) setResetState(result); })
       .catch((cause) => { if (active) setResetError(cause instanceof ApiError ? cause.message : 'Reset status could not be loaded.'); })
       .finally(() => { if (active) setResetStatusLoaded(true); });
@@ -2117,7 +2117,8 @@ export function AdminSettingsPage() {
           {resetState.expiresAt && <small>This confirmation expires at {new Date(resetState.expiresAt).toLocaleTimeString()}.</small>}
           <div className="platform-reset-actions"><Button type="button" variant="secondary" onClick={cancelReset} disabled={resetBusy}>{resetBusy ? 'Please wait…' : 'Cancel reset'}</Button><Button type="button" variant="danger" onClick={confirmReset} disabled={resetBusy || resetPhrase !== 'RESET'}>{resetBusy ? 'Resetting…' : 'Reset platform'}</Button></div>
         </div>}
-        {resetState.pending && !resetState.confirmationId && resetState.phase !== 'preparing' && <div className="platform-reset-pending" role="status"><strong>Another administrator has prepared a verified backup and can now confirm or cancel the reset.</strong><span>Platform requests remain paused until they confirm or cancel the reset.</span></div>}
+        {resetState.pending && resetState.phase === 'resetting' && <div className="platform-reset-pending" role="status" aria-live="polite"><strong>Platform reset in progress…</strong><span>Platform requests remain paused until the reset completes.</span></div>}
+        {resetState.pending && resetState.phase === 'ready' && !resetState.confirmationId && <div className="platform-reset-pending" role="status"><strong>Another administrator has prepared a verified backup and can now confirm or cancel the reset.</strong><span>Platform requests remain paused until they confirm or cancel the reset.</span></div>}
       </div>
     </section>
   </div>;

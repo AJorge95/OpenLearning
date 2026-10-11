@@ -216,6 +216,29 @@ test('reset confirmation requires the exact phrase and retains only the administ
   assert.equal(reset.isPlatformResetActive(), false);
 });
 
+test('only one administrator confirmation can reset a prepared platform', async () => {
+  const prepared = await reset.preparePlatformReset(actor);
+  const confirmation = reset.confirmPlatformReset(actor, prepared.confirmationId, 'RESET');
+
+  assert.equal(reset.getPlatformResetStatus(actor.id).phase, 'resetting');
+  await assertApiErrorAsync(
+    () => reset.confirmPlatformReset(actor, prepared.confirmationId, 'RESET'),
+    409,
+    'platform_reset_confirmation_invalid',
+  );
+  assertApiError(
+    () => reset.cancelPlatformReset(actor, prepared.confirmationId),
+    409,
+    'platform_reset_confirmation_invalid',
+  );
+
+  const result = await confirmation;
+  assert.equal(result.reset, true);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM courses').get().count, 0);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, 1);
+  reset.finishPlatformReset();
+});
+
 test('a reset transaction failure restores the original media and leaves database rows intact', async () => {
   const prepared = await reset.preparePlatformReset(actor);
   database.exec(`CREATE TRIGGER fail_platform_reset_audit BEFORE INSERT ON audit_logs
