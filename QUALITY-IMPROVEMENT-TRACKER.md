@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck the administrator role selector boundary
+
+- **Reviewed:** The browser comment's account-details route and saved selector path against the live page, the bounded role control, and clicks beside an enabled selector.
+- **Result:** No runtime change. The reported account is protected as the only active administrator, and its role control is disabled. An enabled learner account renders the wrapper, selector, and trigger at the same 144px width with no wrapping `<label>`; a click 6px to the right leaves the menu closed, the trigger opens it, and the same outside click closes it without changing the selected role.
+- **Why no change:** The screenshot path describes stale label markup. Current source already restricts pointer input to the visible trigger and bounds the desktop selector; changing its width again would repeat the existing fix.
+- **Checked:** The live `antjorge` account route and `abjorge95` enabled account route rendered without browser warnings or errors. Desktop measurements confirmed a 144px wrapper and trigger. The menu opened from the trigger and closed from the adjacent blank area with the role still set to Learner. Focused source regressions and `git diff --check` were run for this recheck.
+
 ## 2026-10-11 — Explain carried-forward quiz passes
 
 - **Reviewed:** Versioned course progress retains earlier quiz passes by stable ID when publication does not require recompletion, while a new version has no attempt preview under its new quiz ID. The learner quiz page previously showed a fresh answer form without explaining why course progress already counted the quiz as passed.
