@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Distinguish the first-module action
+
+- **Reviewed:** The course editor's persistent curriculum action and empty-state call to action both rendered as “Add module” in the accessibility tree.
+- **Improvement:** Label the empty-state action “Add first module” while keeping the persistent action and existing module-creation handler unchanged.
+- **Why it helps:** Authors can distinguish the initial setup action from the general add action, and screen-reader users no longer encounter two identical button names.
+- **Backend review:** The existing module creation endpoint and validation are unchanged.
+- **Checked:** The focused course-editor structure tests passed (4/4), `npm run build` passed TypeScript checking and Vite bundling, and the rendered page exposed distinct button names. Clicking “Add first module” opened the module-title field; Cancel closed it without creating data. The browser console had no warnings or errors.
+
 ## 2026-10-11 — Report idempotent enrollment retries accurately
 
 - **Reviewed:** Course and learning-path enrollment transactions, their `INSERT OR IGNORE` behavior, audit event boundaries, and learner API response handling.
