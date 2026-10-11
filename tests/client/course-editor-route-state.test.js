@@ -41,3 +41,25 @@ test('changing course routes resets publication-only options', () => {
     ['setChangeNote', "''"],
   ]);
 });
+
+test('course publishing keeps save failures distinct from settings refresh failures', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const saveCourseFunctions = [];
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === 'saveCourse') saveCourseFunctions.push(node);
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+
+  assert.equal(saveCourseFunctions.length, 1, 'expected one course save handler');
+  const saveCourse = saveCourseFunctions[0].getText(sourceFile);
+  const saveRequestIndex = saveCourse.indexOf('await api.patch');
+  const savedStateIndex = saveCourse.indexOf('courseSaved = true;');
+  const settingsRefreshIndex = saveCourse.indexOf('await loadGovernance(requestedCourseId)');
+
+  assert.match(saveCourse, /let courseSaved = false;/);
+  assert.ok(saveRequestIndex >= 0 && saveRequestIndex < savedStateIndex, 'only mark the course saved after the save request resolves');
+  assert.ok(savedStateIndex < settingsRefreshIndex, 'track save success before refreshing editor settings');
+  assert.match(saveCourse, /setError\(courseSaved\s*\?[\s\S]*?Course was saved, but the editor settings could not be refreshed\.[\s\S]*?: cause instanceof ApiError \? cause\.message : 'Course could not be saved\.'/);
+});

@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve course-publish success when settings refresh fails
+
+- **Reviewed:** Course publishing saves the course first, then reloads publication and competency settings. The shared catch used the same failure message for both steps, so a refresh failure could say the course was not saved.
+- **Improvement:** Track whether the course save request completed and use separate feedback if the later editor-settings refresh fails. Add a client regression for the save/refresh ordering and both message paths.
+- **Why it helps:** Authors see that learners can access the published course and are told the editor settings need a refresh, instead of being prompted to repeat a successful publish.
+- **Checked:** Focused course-editor and version-history client tests passed (6/6), including the save/refresh error distinction. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, the changed test-file syntax check, and `git diff --check` passed. Rendered publish-error interaction was not replayed because the in-app browser is signed out and Playwright is not installed.
+
 ## 2026-10-11 — Keep administrator profile saves atomic with certificate backfill
 
 - **Reviewed:** The repeated account-role screenshot, the currently served role-selector markup and sizing, and the account profile update transaction that backfills certificates after a name change.
