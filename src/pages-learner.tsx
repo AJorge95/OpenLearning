@@ -5,6 +5,7 @@ import { api, ApiError, fetchCourse } from './api';
 import { AppSelect, Button, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
 import { formatCountLabel } from './count-label';
 import { courseCatalogCategoryOptions, courseCatalogParams, hasCourseCatalogFilters } from './course-catalog-filters';
+import { formatLearningDeadlineDate, getLearningDeadlineStatus } from './learning-deadline';
 import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from './course-navigation';
 import { summarizeCourseProgress } from './course-progress';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
@@ -28,6 +29,12 @@ function coursePageHasDrift(currentCourses: Course[], response: CourseListRespon
 const certificateHistoryDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' });
 const certificateIssueDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeZone: 'UTC' });
 const lessonCommentDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+
+function LearningDeadlineLink({ deadlineAt, completed }: { deadlineAt: string; completed: boolean }) {
+  const status = getLearningDeadlineStatus(deadlineAt, completed);
+  const label = status === 'completed' ? 'Completed' : status === 'overdue' ? 'Overdue' : 'Due';
+  return <Link className={`learning-deadline ${status}`} to="/calendar"><CalendarDays size={15} /><span><strong>{label}</strong><small>{formatLearningDeadlineDate(deadlineAt)}</small></span></Link>;
+}
 
 type LessonWatchProgress = {
   lessonId: string;
@@ -337,7 +344,7 @@ export function MyLearningPage() {
     <PageHeading title="My learning" subtitle="Pick up where you left off." />
     {error && <ErrorNotice message={error} onRetry={courseLoadMoreFailed ? loadMore : load} />}
     {hasEmptyLearning && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{learningEmptyState.title}. {learningEmptyState.detail}</p>}
-    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading your courses…</div> : courses.length ? <div className="course-grid">{courses.map((course, index) => <div className="my-learning-card" key={course.id}><CourseCard course={course} continueLabel coverLoading={index === 0 ? 'eager' : 'lazy'} />{user?.role === 'learner' && course.deadlineAt && <Link className={`learning-deadline ${course.completed ? 'completed' : new Date(course.deadlineAt).getTime() < Date.now() ? 'overdue' : 'upcoming'}`} to="/calendar"><CalendarDays size={15} /><span><strong>{course.completed ? 'Completed' : new Date(course.deadlineAt).getTime() < Date.now() ? 'Overdue' : 'Due'}</strong><small>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(course.deadlineAt))}</small></span></Link>}{user?.role === 'learner' && course.completed && (user.firstName?.trim() && user.lastName?.trim() ? <Link className="certificate-card-link" to={`/my-learning/certificates/${course.id}`}><Award size={16} />View certificate</Link> : <Link className="certificate-card-link" to="/account/security"><Award size={16} />Add your name for certificate</Link>)}</div>)}</div> : hasEmptyCourses && !certificates.length && <EmptyState title={learningEmptyState.title} detail={learningEmptyState.detail} action={<Link className="button button-primary" to="/courses">Browse courses</Link>} />}
+    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading your courses…</div> : courses.length ? <div className="course-grid">{courses.map((course, index) => <div className="my-learning-card" key={course.id}><CourseCard course={course} continueLabel coverLoading={index === 0 ? 'eager' : 'lazy'} />{user?.role === 'learner' && course.deadlineAt && <LearningDeadlineLink deadlineAt={course.deadlineAt} completed={course.completed} />}{user?.role === 'learner' && course.completed && (user.firstName?.trim() && user.lastName?.trim() ? <Link className="certificate-card-link" to={`/my-learning/certificates/${course.id}`}><Award size={16} />View certificate</Link> : <Link className="certificate-card-link" to="/account/security"><Award size={16} />Add your name for certificate</Link>)}</div>)}</div> : hasEmptyCourses && !certificates.length && <EmptyState title={learningEmptyState.title} detail={learningEmptyState.detail} action={<Link className="button button-primary" to="/courses">Browse courses</Link>} />}
     {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {formatCountLabel(total, 'course', 'courses')}</p><p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{loadingMore ? 'Loading more courses…' : ''}</p>{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
     {(loadingCertificates || certificateError || certificates.length > 0) && <section className="certificate-history"><div className="certificate-history-heading"><h2>Your certificates</h2><p>Certificates remain available in your learning history.</p></div>
       {loadingCertificates && <p className="page-loading" role="status" aria-live="polite">Loading certificates…</p>}

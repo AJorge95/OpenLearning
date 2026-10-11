@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Reuse deadline formatting in My Learning
+
+- **Reviewed:** My Learning constructs an `Intl.DateTimeFormat` and parses each due date inside the course-card render. The page appends 24 courses at a time, so later updates repeat that work for every deadline already loaded.
+- **Improvement:** Share a module-level date formatter, calculate each deadline's status once, and render the status/date through a small component. Keep the existing locale-aware date output, overdue/completed labels, and calendar link.
+- **Why it helps:** Loading more courses no longer creates a separate locale formatter for every dated course on each render, and the status class and label use one consistent time comparison.
+- **Backend review:** The My Learning endpoint already returns a bounded, paginated course list with deadline timestamps; its contract and 24-course page size do not need to change.
+- **Checked:** `node --test tests/client/learning-deadline.test.js` passed (3/3), including overdue/equal/future boundaries, completed-status precedence, localized date formatting, and the shared formatter contract. The full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict TypeScript checking and Vite bundling; `node --check tests/client/learning-deadline.test.js` and `git diff --check` passed. Chrome rendered `/my-learning` at 1718 × 1270 with no console warnings or errors. The available signed-in account is an administrator, so deadline-card rendering was covered by the focused helper and component-wiring tests rather than learner data in the browser.
+
 ## 2026-10-11 — Give the account overview card a semantic heading
 
 - **Reviewed:** The account-details page rendered “Account overview” as plain small text inside an article, so the card had no named heading and its “Certificate name” subsection began at H3 after the page H1.
