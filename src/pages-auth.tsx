@@ -232,14 +232,16 @@ export function LoginPage() {
       <Button type="submit" disabled={saving}>{saving ? 'Signing in…' : 'Sign in'}</Button>
     </form>
     {registrationEnabled && registrationAvailable
-      ? <p className="auth-footer">New to this platform? <Link to="/register">Create an account</Link></p>
+      ? <p className="auth-footer">New to this platform? <Link to="/register" state={{ from: postLoginPath }}>Create an account</Link></p>
       : <p className="auth-footer">{registrationEnabled ? 'The registered-account limit has been reached.' : 'New account registration is currently disabled.'}</p>}
   </AuthPanel>;
 }
 
 export function RegisterPage() {
   const { signUp, user, configured, registrationEnabled, registrationAvailable } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
+  const postLoginPath = getPostLoginPath(location.state?.from);
   const [email, setEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -274,7 +276,7 @@ export function RegisterPage() {
       .finally(() => { if (active) setRegistrationFieldsLoading(false); });
     return () => { active = false; controller.abort(); };
   }, [registrationFieldsRetryVersion]);
-  if (configured && user) return <Navigate to="/courses" replace />;
+  if (configured && user) return <Navigate to={postLoginPath} replace />;
   if (!configured) return <Navigate to="/setup" replace />;
   if (!registrationEnabled) return <AuthPanel><h1>Registration is closed</h1><p className="auth-description">An administrator has disabled new account registrations.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
   if (!registrationAvailable) return <AuthPanel><h1>Registration is closed</h1><p className="auth-description">The platform has reached its registered-account limit.</p><p className="auth-footer"><Link to="/login">Back to sign in</Link></p></AuthPanel>;
@@ -297,7 +299,7 @@ export function RegisterPage() {
     }
     if (!acquireSubmissionLock(submissionInFlightRef)) return;
     setSaving(true);
-    try { await signUp(email, firstName, lastName, username, password, confirmPassword, registrationFieldValues); navigate('/courses'); }
+    try { await signUp(email, firstName, lastName, username, password, confirmPassword, registrationFieldValues); navigate(postLoginPath, { replace: true }); }
     catch (cause) {
       if (cause instanceof ApiError && cause.code === 'registration_fields_changed') {
         setRegistrationFieldsChanged(true);

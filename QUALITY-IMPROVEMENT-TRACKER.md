@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve requested routes through registration
+
+- **Reviewed:** The sign-in route preserves protected destinations, but the “Create an account” link dropped that destination and registration still navigated to `/courses`.
+- **Improvement:** Carry the validated internal destination into registration and return there after sign-up, with the same safe fallback for direct registration visits.
+- **Why it helps:** New learners who register after requesting a protected learning page can continue to that page without restarting navigation.
+- **Checked:** The focused destination flow tests passed (5/5); full `npm test` passed (383/383), `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-11 — Return signed-in users to their requested page
 
 - **Reviewed:** The signed-in route guard redirected visitors to `/login` without preserving their location, and successful sign-in always sent them to `/courses`.
