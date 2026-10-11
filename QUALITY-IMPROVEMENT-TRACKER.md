@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Review remaining staff search and assignment workflows
+
+- **Reviewed:** Learning-path assignment learner search, clear/retry/page state, its directory route, and competency administration search, pagination, and active-status updates.
+- **Result:** No runtime change. Assignment search normalizes and applies its query on submit, preserves it through paging and retry, and ignores stale requests. Competency search is validated and combined before pagination, and the applied query is preserved through status changes.
+- **Why no change:** Neither surface combines a visible search draft with a separate list filter, and the existing API and UI checks cover the reviewed paging and recovery behavior. No distinct mismatch or reliability gap was demonstrated.
+- **Checked:** Focused client tests passed (2/2), focused learning-path and competency route tests passed (2/2), and `git diff --check` passed.
+
 ## 2026-10-11 — Keep staff course search and status in sync
 
 - **Reviewed:** Course-list search draft and applied state, status-tab reloads, pagination, retry snapshots, and the `/api/manage/courses` route. Changing a tab reloaded with the old applied search while leaving newer draft text visible.
