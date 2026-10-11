@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck the administrator role selector click boundary
+
+- **Reviewed:** The new screenshot's target path, current account-detail JSX and CSS, Vite's transformed module, and the selector width and positioning regressions.
+- **Result:** No additional source change. The supplied target path still names a wrapping `<label>`, while the current component uses a separate label span and a 9rem desktop selector; pointer events are limited to the visible trigger and the popup matches that trigger's width.
+- **Why no change:** The selector-width and hit-area fix is already present in the current checkout and served module. A fresh load of the protected account URL redirected to sign-in, so the authenticated right-side click could not be replayed in this browser.
+- **Checked:** AppSelect label and positioning tests passed (13/13), the Vite-transformed account component and CSS were checked, and `git diff --check` passed. The screenshot's old label target does not match the current JSX.
+
 ## 2026-10-11 — Keep signup focus at the page context
 
 - **Reviewed:** Registration-page autofocus, route-change focus management, the multi-field public signup form, and the sign-in page's username shortcut.
