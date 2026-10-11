@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Report unknown quiz question IDs accurately
+
+- **Reviewed:** The learner quiz form's required-answer state, submission validation order, and the API's aggregate-only result transaction.
+- **Improvement:** Reject answer-map keys that do not match a quiz question before checking for missing answers. Use a `Set` for the key check and remove the redundant post-validation scan.
+- **Why it helps:** A submission containing all required answers plus an unknown question now receives the specific `invalid_answer` response instead of a misleading missing-answer message; incomplete submissions still receive `answers_required`, and validation exits before any attempt is written.
+- **Interface review:** The learner form already uses question fieldsets, required radio choices, and a disabled submit button until every question is answered; no client change was needed.
+- **Checked:** The quiz-result integration suite passed (2/2), including incomplete and unknown-question requests and a no-attempt persistence assertion; the full suite passed (528/528); `npm run build` passed strict TypeScript checking and Vite bundling; JavaScript syntax checks and `git diff --check` passed.
+
 ## 2026-10-11 — Reject public duplicate registrations before password hashing
 
 - **Reviewed:** Public registration validation, the users table's case-insensitive username and email constraints, scrypt hashing, the generic conflict response, and the transactional collision check.
