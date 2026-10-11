@@ -864,6 +864,7 @@ export function CourseEditorPage() {
   const [coverValidating, setCoverValidating] = useState(false);
   const coverUploadRef = useRef(false);
   const coverValidationSequenceRef = useRef(0);
+  const coverValidationControllerRef = useRef<AbortController | null>(null);
   const uploadControllersRef = useRef(new Map<string, { controller: AbortController; input: HTMLInputElement; cancelledByUser: boolean }>());
   const governanceReady = Boolean(route.courseId && governanceCourseId === route.courseId);
   const selectedCompetencyIds = new Set(selectedCompetencies);
@@ -880,6 +881,11 @@ export function CourseEditorPage() {
   function abortActiveUploads() {
     for (const upload of uploadControllersRef.current.values()) upload.controller.abort();
     uploadControllersRef.current.clear();
+  }
+
+  function abortCoverValidation() {
+    coverValidationControllerRef.current?.abort();
+    coverValidationControllerRef.current = null;
   }
 
   function abortGovernanceLoad() {
@@ -940,6 +946,7 @@ export function CourseEditorPage() {
   useEffect(() => {
     let active = true;
     coverValidationSequenceRef.current += 1;
+    abortCoverValidation();
     coverUploadRef.current = false;
     setCoverValidating(false);
     setCoverProgress(null);
@@ -962,6 +969,7 @@ export function CourseEditorPage() {
       return () => {
         active = false;
         coverValidationSequenceRef.current += 1;
+        abortCoverValidation();
         courseLoadSequenceRef.current += 1;
         abortGovernanceLoad();
         courseLoadControllerRef.current?.abort();
@@ -1346,6 +1354,8 @@ export function CourseEditorPage() {
     if (coverUploadRef.current) return;
     const requestedCourseId = courseId;
     const validationSequence = ++coverValidationSequenceRef.current;
+    const validationController = new AbortController();
+    coverValidationControllerRef.current = validationController;
     const isCurrentRequest = () => validationSequence === coverValidationSequenceRef.current
       && routeCourseIdRef.current === requestedCourseId;
     coverUploadRef.current = true;
@@ -1353,7 +1363,8 @@ export function CourseEditorPage() {
     setError(''); setNotice('');
     let upload: { controller: AbortController; input: HTMLInputElement; cancelledByUser: boolean } | null = null;
     try {
-      const dimensions = await readImageDimensions(file);
+      const dimensions = await readImageDimensions(file, validationController.signal);
+      if (coverValidationControllerRef.current === validationController) coverValidationControllerRef.current = null;
       if (!isCurrentRequest()) return;
       if (!isCourseCoverDimensionAllowed(dimensions.width, dimensions.height)) {
         setError(`Course cover must be ${MAX_COURSE_COVER_DIMENSION} × ${MAX_COURSE_COVER_DIMENSION} pixels or smaller.`);
@@ -1381,6 +1392,7 @@ export function CourseEditorPage() {
       }
     }
     finally {
+      if (coverValidationControllerRef.current === validationController) coverValidationControllerRef.current = null;
       if (upload && uploadControllersRef.current.get('cover') === upload) uploadControllersRef.current.delete('cover');
       if (isCurrentRequest()) {
         coverUploadRef.current = false;

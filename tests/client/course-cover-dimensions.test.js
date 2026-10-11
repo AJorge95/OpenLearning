@@ -33,7 +33,7 @@ test('course cover dimensions are checked before saving details or uploading the
   const uploadCover = findFunction(sourceFile, 'uploadCover');
   assert.ok(uploadCover, 'CourseEditorPage should define uploadCover');
   const body = uploadCover.getText(sourceFile);
-  const decode = body.indexOf('await readImageDimensions(file)');
+  const decode = body.indexOf('await readImageDimensions(file, validationController.signal)');
   const check = body.indexOf('isCourseCoverDimensionAllowed(dimensions.width, dimensions.height)');
   const invalidReturn = body.indexOf('return;', check);
   const saveDetails = body.indexOf('await saveCourseDetailsIfChanged()');
@@ -44,6 +44,7 @@ test('course cover dimensions are checked before saving details or uploading the
   assert.ok(invalidReturn > check && invalidReturn < saveDetails, 'oversized covers should return before saving course details');
   assert.ok(saveDetails > check && saveDetails < upload, 'course details should be saved before a valid cover upload');
   assert.match(body, /Course cover could not be displayed\. Choose a different image\./);
+  assert.match(body, /coverValidationControllerRef\.current = validationController/);
   assert.match(source, /disabled=\{coverValidating \|\| coverProgress !== null \|\| saving\}/);
   assert.match(source, /Checking cover dimensions…/);
 });
