@@ -2609,6 +2609,8 @@ export function AdminSettingsPage() {
   }
   const parsedAccountLimit = Number(userLimitValue);
   const accountLimit = Number.isFinite(parsedAccountLimit) && parsedAccountLimit > 0 ? Math.floor(parsedAccountLimit) : 0;
+  // The server blocks every new account at or above the configured cap.
+  const accountLimitReached = accountLimit > 0 && registeredUserCount !== null && registeredUserCount >= accountLimit;
   const accountUsagePercent = accountLimit > 0 && registeredUserCount !== null
     ? Math.min(100, Math.round((registeredUserCount / accountLimit) * 100))
     : 0;
@@ -2635,6 +2637,7 @@ export function AdminSettingsPage() {
           {accountLimit > 0 && registeredUserCount !== null && <div className="account-usage-track" role="progressbar" aria-label="Registered account limit usage" aria-valuemin={0} aria-valuemax={accountLimit} aria-valuenow={Math.min(registeredUserCount, accountLimit)} aria-valuetext={`${registeredUserCount} of ${accountLimit} accounts registered`}>
             <span style={{ width: `${accountUsagePercent}%` }} />
           </div>}
+          {accountLimitReached && <p className="registered-count-limit-warning">The cap has no room for additional accounts. Increase it to create more.</p>}
         </div>}
       <div className="settings-card-footer"><span>Database and media paths remain managed through the server environment.</span><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</Button></div>
       </fieldset>

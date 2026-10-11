@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Explain when the account cap is full
+
+- **Reviewed:** The platform settings account-cap field, registered-count meter, and server-side capacity enforcement. At or above the selected cap, the meter showed 100% without explaining that the server would block account creation.
+- **Improvement:** Show a short amber status message whenever the selected cap is positive and the registered account count meets or exceeds it. The message updates as the administrator edits the unsaved cap.
+- **Why it helps:** Administrators can see the effect of a full or lower cap before saving and understand why additional accounts cannot be created.
+- **Backend review:** The server already enforces the cap for account creation and registration, including concurrent requests. No server change was needed.
+- **Checked:** The account-capacity client and registration-limit tests passed (3/3), full `npm test`, `npm run build`, and `git diff --check` passed. In the rendered settings page, changing the unsaved cap to the current count showed the warning and a 100% meter; restoring the draft removed the warning. No settings were saved.
+
 ## 2026-10-11 — Review remaining staff search and assignment workflows
 
 - **Reviewed:** Learning-path assignment learner search, clear/retry/page state, its directory route, and competency administration search, pagination, and active-status updates.
