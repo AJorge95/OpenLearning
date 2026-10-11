@@ -18,6 +18,25 @@ export function findMissingRequiredRegistrationField(fields: RegistrationField[]
   });
 }
 
+export function refreshRegistrationFieldValues(
+  previousFields: RegistrationField[],
+  currentFields: RegistrationField[],
+  values: RegistrationFieldValues,
+): RegistrationFieldValues {
+  const previousById = new Map(previousFields.map((field) => [field.id, field]));
+  return Object.fromEntries(currentFields.map((field) => {
+    const previous = previousById.get(field.id);
+    const value = values[field.id];
+    const emptyValue = field.type === 'checkbox' ? false : '';
+    if (!previous || previous.type !== field.type) return [field.id, emptyValue];
+    if (field.type === 'checkbox') return [field.id, typeof value === 'boolean' ? value : false];
+    if (typeof value !== 'string') return [field.id, ''];
+    if (field.type === 'select' && value && !field.options.includes(value)) return [field.id, ''];
+    if (field.type === 'text' && value.length > 2000) return [field.id, ''];
+    return [field.id, value];
+  }));
+}
+
 export function validateRegistrationFieldEditor(fields: RegistrationField[]): RegistrationFieldEditorIssue | null {
   const labels = new Set<string>();
   for (const [index, field] of fields.entries()) {

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recover signup when registration fields change
+
+- **Reviewed:** Public signup fetches configurable fields when the form opens. The server correctly returns `409 registration_fields_changed` if an administrator changes those fields before submission, but the client only displayed the conflict message; resolving it required a full page reload and discarded the learner's entered answers.
+- **Improvement:** On that specific conflict, reload the latest field definitions and preserve answers whose field ID and type still match. Clear answers for removed or retyped fields and select values that are no longer offered. Keep core account details, announce the refresh, and ask the learner to review the updated fields before submitting again.
+- **Why it helps:** The server continues to validate against the latest schema, while learners recover from concurrent configuration changes without losing compatible form work or accidentally submitting stale choices.
+- **Backend review:** Existing signup validation rejects stale field IDs before password hashing and again inside the account-creation transaction. Added route coverage to verify the 409 response creates no account; no server behavior change was indicated.
+- **Checked:** All 11 focused registration-field client tests passed, including answer compatibility across schema changes. The stale-schema route regression passed (1/1), as did full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, changed test-file syntax checks, and `git diff --check`. The local browser has no active registration-field fixture, so the stale-form recovery was verified through the client helper and API contract rather than a live signup.
+
 ## 2026-10-11 — Paginate published course options in learning paths
 
 - **Reviewed:** The reported account role selector issue is already addressed in the current source: its desktop trigger is 9rem wide, its surrounding control does not receive pointer input, and the combobox is not nested in a clickable label. The supplied browser selector still identifies the old label wrapper; the current in-app browser session is signed out, so that account page could not be replayed live. The learning-path editor requested only the first page of the already-paginated published-course endpoint.

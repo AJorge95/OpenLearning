@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
 import { AppSelect, Button, ImageWithFallback, PalettePicker, PlatformBrand, PlatformIconPicker } from './components';
-import { findMissingRequiredRegistrationField } from './registration-fields';
+import { findMissingRequiredRegistrationField, refreshRegistrationFieldValues } from './registration-fields';
 import { clearPasswordConfirmationError, getPasswordConfirmationError } from './password-confirmation';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
@@ -244,10 +244,12 @@ export function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [registrationFields, setRegistrationFields] = useState<RegistrationField[]>([]);
+  const registrationFieldsRef = useRef<RegistrationField[]>([]);
   const [registrationFieldValues, setRegistrationFieldValues] = useState<RegistrationFieldValues>({});
   const [registrationFieldsLoading, setRegistrationFieldsLoading] = useState(true);
   const [registrationFieldsError, setRegistrationFieldsError] = useState('');
   const [registrationFieldsRetryVersion, setRegistrationFieldsRetryVersion] = useState(0);
+  const [registrationFieldsChanged, setRegistrationFieldsChanged] = useState(false);
   const [invalidRegistrationFieldId, setInvalidRegistrationFieldId] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -260,8 +262,10 @@ export function RegisterPage() {
     api.get<{ fields: RegistrationField[] }>('/api/registration-fields', { signal: controller.signal })
       .then((result) => {
         if (!active) return;
+        const previousFields = registrationFieldsRef.current;
+        registrationFieldsRef.current = result.fields;
         setRegistrationFields(result.fields);
-        setRegistrationFieldValues(Object.fromEntries(result.fields.map((field) => [field.id, field.type === 'checkbox' ? false : ''])));
+        setRegistrationFieldValues((current) => refreshRegistrationFieldValues(previousFields, result.fields, current));
       })
       .catch((cause) => { if (active) setRegistrationFieldsError(cause instanceof ApiError ? cause.message : 'Registration details could not be loaded.'); })
       .finally(() => { if (active) setRegistrationFieldsLoading(false); });
@@ -275,6 +279,7 @@ export function RegisterPage() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(''); setInvalidRegistrationFieldId('');
+    setRegistrationFieldsChanged(false);
     const missingField = findMissingRequiredRegistrationField(registrationFields, registrationFieldValues);
     if (missingField) {
       setError(`${missingField.label} is required.`);
@@ -290,7 +295,13 @@ export function RegisterPage() {
     if (!acquireSubmissionLock(submissionInFlightRef)) return;
     setSaving(true);
     try { await signUp(email, firstName, lastName, username, password, confirmPassword, registrationFieldValues); navigate('/courses'); }
-    catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Registration failed. Try again.'); }
+    catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'registration_fields_changed') {
+        setRegistrationFieldsChanged(true);
+        setRegistrationFieldsLoading(true);
+        setRegistrationFieldsRetryVersion((version) => version + 1);
+      } else setError(cause instanceof ApiError ? cause.message : 'Registration failed. Try again.');
+    }
     finally { releaseSubmissionLock(submissionInFlightRef); setSaving(false); }
   }
 
@@ -301,7 +312,8 @@ export function RegisterPage() {
       <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>Letters, numbers, dots, underscores, and hyphens.</small></label>
       {registrationFieldsLoading ? <p className="registration-fields-loading" role="status">Loading registration details…</p> : registrationFieldsError
         ? <div className="registration-fields-load-error"><p className="form-error" role="alert">{registrationFieldsError}</p><Button type="button" variant="secondary" onClick={() => setRegistrationFieldsRetryVersion((version) => version + 1)}>Retry</Button></div>
-        : <RegistrationFieldsForm fields={registrationFields} values={registrationFieldValues} disabled={saving} invalidFieldId={invalidRegistrationFieldId} onChange={(id, value) => { setRegistrationFieldValues((current) => ({ ...current, [id]: value })); if (id === invalidRegistrationFieldId) { setInvalidRegistrationFieldId(''); setError(''); } }} />}
+        : <RegistrationFieldsForm fields={registrationFields} values={registrationFieldValues} disabled={saving} invalidFieldId={invalidRegistrationFieldId} onChange={(id, value) => { setRegistrationFieldValues((current) => ({ ...current, [id]: value })); setRegistrationFieldsChanged(false); if (id === invalidRegistrationFieldId) { setInvalidRegistrationFieldId(''); setError(''); } }} />}
+      {registrationFieldsChanged && <p className="registration-fields-changed" role="status" aria-live="polite">{registrationFieldsLoading ? 'Registration details changed. Refreshing the latest fields…' : registrationFieldsError ? 'Registration details changed. Retry loading the latest fields before continuing.' : 'Registration details changed. Answers that still match were kept; review the updated fields and submit again.'}</p>}
       <label>Password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} /><small>Use at least 12 characters.</small></label>
       <label>Confirm password<input required minLength={12} maxLength={256} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} /></label>
       {error && <p id="registration-form-error" className="form-error" role="alert">{error}</p>}
