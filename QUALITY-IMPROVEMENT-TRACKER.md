@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Search mapped competencies in the course editor
+
+- **Reviewed:** Administrators can add competencies without a catalog cap, and the course editor rendered every available competency as a checkbox. Large skill maps made finding a specific mapping harder and increased the visible editor list.
+- **Improvement:** Add a labeled search field that filters competency titles case-insensitively and across canonically equivalent accents. Keep the full selected-ID list independent of the filter, reset search when switching courses, and show a clear empty-match state.
+- **Why it helps:** Staff can find mappings quickly in large skill maps without losing selections hidden by the current search or changing the server's 200-item selection contract.
+- **Checked:** Focused course-competency tests passed (4/4); full `npm test`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/course-competency-selection.test.js`, and `git diff --check` passed. Rendered editor interaction was not replayed because the in-app browser is signed out at `/login` and Playwright is not installed.
+
 ## 2026-10-11 — Keep calendar load errors distinct from empty months
 
 - **Reviewed:** The calendar clears its items on month load and offers a retry alert on request failure, but its empty-month message also appeared whenever the failed request left the item list empty.
