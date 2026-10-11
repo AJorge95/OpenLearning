@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Protect certificate route ownership and completion rules
+
+- **Reviewed:** Certificate-service tests covered version-specific issuance and persistence, but the learner HTTP route had no integration coverage for saved-certificate ownership, access roles, or its completion and profile-name responses.
+- **Improvement:** Add isolated route tests for issuing and reloading a completed learner's certificate, denying saved-certificate lookup to other users and staff, rejecting unauthenticated requests, and returning distinct conflicts for incomplete courses and learners without a certificate name.
+- **Why it helps:** The learner-facing certificate flow and personal certificate privacy are now guarded at the HTTP boundary, so refactors cannot accidentally bypass the service rules or expose another learner's saved certificate.
+- **Interface review:** Rechecked the administrator role selector markup and hit-area regression. Its visible trigger remains the only pointer target and the certificate request tests require no interface change; the authenticated browser remains signed out at `/login`.
+- **Checked:** `node --test tests/server/certificate-routes.test.js` passed (3/3). Full `npm test`, `npx tsc --noEmit`, `npm run build`, changed-test syntax validation, and `git diff --check` are recorded after completion of this cycle.
+
 ## 2026-10-11 — Refresh reset status after a concurrent preparation conflict
 
 - **Reviewed:** An administrator can leave Settings open while another administrator begins reset preparation. The server correctly rejects the stale page's preparation request, but the client only showed the conflict message and left its reset controls in the idle state.
