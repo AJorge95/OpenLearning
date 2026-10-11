@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Identify learners in path removal actions
+
+- **Reviewed:** Repeated learner-removal buttons in expanded learning-path assignment panels, their pending labels, and the staff-only route that removes assigned enrollment records and audits successful changes.
+- **Improvement:** Include the learner username and learning-path title in each button's accessible name while preserving the visible “Remove assignment” and “Removing…” labels.
+- **Why it helps:** Staff navigating by controls can distinguish which learner will be removed and from which path, including while the request is pending.
+- **Backend review:** The route remains staff-authorized, scoped to the selected path, and limited to assigned enrollments; successful deletions continue to create an audit event. No server change was needed.
+- **Checked:** The focused regression passed (1/1), full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/path-assignment-accessibility.test.js`, and `git diff --check` passed. The browser is signed out, so the staff-only control could not be reviewed live.
+
 ## 2026-10-11 — Make path enrollment lists heading-navigable
 
 - **Reviewed:** The expanded learning-path assignment panel, its “Assign a learner” heading, the enrolled-learner list label, responsive list styles, and the staff-only assignment routes.
