@@ -7,6 +7,14 @@
 - **Why no duplicate fix:** The current rendered interaction matches the intended boundary, and the trigger-width and outside-click fixes are already in source. A new width or pointer rule would not change this reproduced behavior.
 - **Checked:** Signed-in local Chrome at 1718 × 1214, account-details accessibility tree and screenshot, trigger and outside-area interactions, and `node --test tests/client/app-select-label.test.js tests/client/app-select-position.test.js` (14/14). No account setting was changed.
 
+## 2026-10-11 — Cover multipart field ordering for course images
+
+- **Reviewed:** The media upload file filter, which runs while Multer parses multipart parts, and the route-level WebP cover regression, which previously placed `kind` before `file`.
+- **Improvement:** Send the WebP file part before the `kind=cover` part in the integration test and assert that the validated image is stored as a course cover.
+- **Why it helps:** Multipart field order is controlled by the client. The regression protects the route from rejecting valid images before the later kind field has been parsed.
+- **Interface review:** The editor already sends the cover type and displays upload errors; no client behavior or upload policy changed.
+- **Checked:** `node --test tests/server/media-routes.test.js` passed (17/17), including file-before-kind parsing, file signature validation, metadata persistence, and stored bytes. The full `npm test -- --test-reporter=dot`, `node --check tests/server/media-routes.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Reproduce the account-role selector's right-side boundary
 
 - **Reviewed:** The supplied target path and screenshot against the current JSX, selector root/trigger dimensions, pointer-event rules, and outside-click handling.
