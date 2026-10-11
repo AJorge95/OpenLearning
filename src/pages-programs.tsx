@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { calendarMonthRequestRange, groupCalendarDeadlines, localDateKey, shouldShowCalendarEmptyState } from './calendar-dates';
 import { pathAssignmentRemovalConfirmation } from './path-assignment-confirmation';
+import { pathArchiveConfirmation } from './path-archive-confirmation';
 import { AppSelect, Button, ConfirmationDialog, EmptyState, PageHeading, ProgressBar } from './components';
 import type { Competency, Course, CourseDeadline, LearningPath } from './types';
 import { appendPublishedCourseOptions, hasMorePublishedCourseOptions, publishedCourseOptionsPageUrl, type PublishedCoursePage } from './path-course-options';
@@ -19,6 +20,7 @@ function requestMessage(error: unknown, fallback: string) {
 
 type PathLearner = { id: string; username: string; email: string | null; enrolled: boolean; source: 'assigned' | 'self' | null };
 type PendingAssignmentRemoval = { pathId: string; pathTitle: string; learnerId: string; learnerUsername: string };
+type PendingPathArchive = { id: string; title: string };
 type PathLearnerPage = { learners: PathLearner[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type LearningPathListPage = { paths: LearningPath[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type CompetencyAdminPage = { competencies: Competency[]; total: number; page: number; pageSize: number; hasMore: boolean };
@@ -188,6 +190,7 @@ export function LearningPathsPage() {
   const [assignmentAction, setAssignmentAction] = useState<'assign' | 'remove' | null>(null);
   const [removingLearnerId, setRemovingLearnerId] = useState('');
   const [pendingAssignmentRemoval, setPendingAssignmentRemoval] = useState<PendingAssignmentRemoval | null>(null);
+  const [pendingPathArchive, setPendingPathArchive] = useState<PendingPathArchive | null>(null);
   const assignmentBusy = assignmentAction !== null;
   const assignmentRequestSequenceRef = useRef(0);
   const assignmentRequestControllerRef = useRef<AbortController | null>(null);
@@ -250,12 +253,14 @@ export function LearningPathsPage() {
 
   function changePathPage(page: number) {
     if (loading || assignmentBusy || page < 1) return;
+    setPendingPathArchive(null);
     clearAssignmentPanel();
     void load(page);
   }
 
   function changePathStatus(status: LearningPathStatusFilter) {
     if (loading || saving || assignmentBusy || status === pathStatus) return;
+    setPendingPathArchive(null);
     clearAssignmentPanel();
     setPaths([]);
     setPathPage(1);
@@ -292,8 +297,6 @@ export function LearningPathsPage() {
 
   async function archivePath(path: LearningPath) {
     if (saving || assignmentBusy || path.status === 'archived') return;
-    const confirmed = window.confirm(`Archive “${path.title}”? It will be removed from active learning path lists. Existing learner enrollments and course progress will be kept.`);
-    if (!confirmed) return;
     if (assignmentPathRef.current === path.id) clearAssignmentPanel();
     setSaving(true); setChangingPathStatusId(path.id); setError(''); setNotice('');
     try {
@@ -303,6 +306,19 @@ export function LearningPathsPage() {
       setPathStatus('archived'); await load(1, 'archived');
     } catch (cause) { setError(requestMessage(cause, 'Learning path could not be archived.')); }
     finally { setChangingPathStatusId(null); setSaving(false); }
+  }
+
+  function requestPathArchive(path: LearningPath) {
+    if (saving || assignmentBusy || path.status === 'archived') return;
+    setPendingPathArchive({ id: path.id, title: path.title });
+  }
+
+  function confirmPathArchive() {
+    const pending = pendingPathArchive;
+    setPendingPathArchive(null);
+    if (!pending || saving || assignmentBusy) return;
+    const path = paths.find((item) => item.id === pending.id && item.title === pending.title && item.status !== 'archived');
+    if (path) void archivePath(path);
   }
 
   async function restorePath(path: LearningPath) {
@@ -470,7 +486,7 @@ export function LearningPathsPage() {
             {canAssignLearningPathLearners(path.status)
               ? <Button variant="secondary" aria-label={assignmentPath === path.id ? `Close assignments for ${path.title}` : `Assign learners to ${path.title}`} aria-expanded={assignmentPath === path.id} aria-controls={assignmentPath === path.id ? `path-assignments-${path.id}` : undefined} disabled={saving || assignmentBusy} onClick={() => void toggleAssignments(path)}><UsersRound size={15} />{assignmentPath === path.id ? 'Close assignments' : 'Assign learners'}</Button>
               : <span className="muted">Publish this path to assign learners.</span>}
-            <Button variant="secondary" aria-label={`Archive ${path.title}`} disabled={saving || assignmentBusy} aria-busy={changingPathStatusId === path.id} onClick={() => void archivePath(path)}><Archive size={15} />{changingPathStatusId === path.id ? 'Archiving…' : 'Archive'}</Button></>
+            <Button variant="secondary" aria-label={`Archive ${path.title}`} disabled={saving || assignmentBusy} aria-busy={changingPathStatusId === path.id} onClick={() => requestPathArchive(path)}><Archive size={15} />{changingPathStatusId === path.id ? 'Archiving…' : 'Archive'}</Button></>
             : !path.enrolled && path.selfEnrollment ? <Button aria-label={joiningPathId === path.id ? `Joining ${path.title}` : `Join path: ${path.title}`} disabled={joiningPathId !== null} aria-busy={joiningPathId === path.id} onClick={() => void selfEnroll(path)}>{joiningPathId === path.id ? 'Joining…' : 'Join path'}</Button> : path.enrolled ? <span className="program-enrolled"><Check size={15} />Enrolled</span> : null}
         </div>
         {staff && canAssignLearningPathLearners(path.status) && assignmentPath === path.id && <div id={`path-assignments-${path.id}`} className="path-assignment-panel" aria-busy={assignmentLoading || assignmentBusy}><h3>Assign a learner</h3>
@@ -493,6 +509,7 @@ export function LearningPathsPage() {
       </nav>}
     </> : loadFailed ? null : <EmptyState title={emptyPathState.title} detail={emptyPathState.detail} />}
     {pendingAssignmentRemoval && assignmentPath === pendingAssignmentRemoval.pathId && pendingRemovalPath && pendingRemovalLearner && <ConfirmationDialog {...pathAssignmentRemovalConfirmation(pendingAssignmentRemoval.learnerUsername, pendingAssignmentRemoval.pathTitle)} confirmLabel="Remove assignment" onCancel={() => setPendingAssignmentRemoval(null)} onConfirm={() => void confirmAssignmentRemoval()} />}
+    {pendingPathArchive && paths.some((path) => path.id === pendingPathArchive.id && path.title === pendingPathArchive.title && path.status !== 'archived') && <ConfirmationDialog {...pathArchiveConfirmation(pendingPathArchive.title)} confirmLabel="Archive path" onCancel={() => setPendingPathArchive(null)} onConfirm={confirmPathArchive} />}
   </div>;
 }
 
