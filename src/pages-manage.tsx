@@ -6,6 +6,8 @@ import { Link, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
 import { AppSelect, Button, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
 import { formatCountLabel } from './count-label';
+import { courseRowActionStatus } from './course-row-action-status';
+import type { CourseRowAction } from './course-row-action-status';
 import { validateRegistrationFieldEditor } from './registration-fields';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import { useAuth } from './auth-context';
@@ -19,7 +21,6 @@ import type { UserRoleFilter } from './user-list-empty-state';
 import type { Competency, Course, CourseAccessUser, CourseAnalytics, CourseModule, CourseVersion, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
 
 type CourseListResponse = { courses: Course[]; total: number; page: number; pageSize: number };
-type CourseRowAction = 'publish' | 'unpublish' | 'archive' | 'delete';
 type FailedCourseListRequest = { page: number; query: string; status: string };
 
 const courseDateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -265,7 +266,7 @@ export function CourseManagementPage() {
         <td><div className="table-course"><span className="table-thumb"><ImageWithFallback src={course.coverUrl} className="table-cover-image" alt="" loading="lazy" decoding="async" fallback={<BookOpen size={20} />} /></span><div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category}</small></div></div></td>
         <td><span className="owner-cell"><UserInitial username={course.owner || ''} />{course.owner}</span></td>
         <td><VisibilityLabel visibility={course.visibility} /></td>
-        <td><div className="course-list-status"><CourseStatus status={course.status} />{course.hasUnpublishedChanges && <CourseRevisionBadge status={course.reviewStatus} />}</div></td>
+        <td><div className="course-list-status"><CourseStatus status={course.status} />{course.hasUnpublishedChanges && <CourseRevisionBadge status={course.reviewStatus} />}{busyAction && <span className="course-list-action-status" role="status" aria-live="polite" aria-atomic="true">{courseRowActionStatus(busyAction)}</span>}</div></td>
         <td><DateText value={course.updatedAt} /></td>
         <td><div className="table-actions"><Link className="text-action" to={`/manage/courses/${course.id}/edit`}>Edit</Link><Link className="text-action" to={`/manage/courses/${course.id}/analytics`}>Analytics</Link><CourseRowMenu course={course} busyAction={busyAction} onStatusChange={changeStatus} onDelete={deleteCourse} /></div></td>
         </tr>;
