@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Preserve startup configuration validation
+
+- **Reviewed:** `server/config.js` validates environment values that control the listener, upload ceiling, request timeout, setup bootstrap credential, proxy trust, and production session security. README documents those contracts, but they had only one-off validation records and no dedicated committed config test.
+- **Improvement:** Add isolated child-process tests for defaults and derived paths, documented upper bounds, accepted production settings, and invalid environment values. Each import runs with a temporary working directory so the repository's `.env` and the host's config variables cannot affect results.
+- **Why it helps:** Configuration regressions fail before the server accepts traffic and can weaken session security or disrupt uploads; the startup contract now stays covered by the normal test suite.
+- **Interface review:** Rechecked the account-role selector structure and bounded trigger; existing interaction coverage already addresses the reported click boundary, so no UI change was needed.
+- **Checked:** `node --test tests/server/config.test.js` passed (6/6); `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check server/config.js`, `node --check tests/server/config.test.js`, and `git diff --check` all passed.
+
 ## 2026-10-11 — Require an enabled administrator for readiness
 
 - **Reviewed:** The readiness predicate checked that setup was complete and an administrator row existed, while authentication rejects disabled accounts and the account-management route protects the last enabled administrator.
