@@ -38,4 +38,6 @@ test('archived course details stage deletion and discard pending confirmation wh
   assert.match(courseEditorSource, /setPendingDeleteCourseId\(null\);[\s\S]*?\}, \[route\.courseId\]\);/);
   assert.match(courseEditorSource, /pendingDeleteCourseId === course\.id && routeCourseIdRef\.current === course\.id/);
   assert.match(courseEditorSource, /requestedCourseId === course\.id && routeCourseIdRef\.current === course\.id\) void deleteArchivedCourse\(true\)/);
+  assert.match(deleteSource, /await api\.delete\(`\/api\/manage\/courses\/\$\{requestedCourseId\}`\);\s*if \(routeCourseIdRef\.current === requestedCourseId\) navigate\('\/manage\/courses'\)/);
+  assert.match(deleteSource, /catch \(cause\) \{\s*if \(routeCourseIdRef\.current === requestedCourseId\) setError\(/);
 });

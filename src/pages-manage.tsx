@@ -1391,9 +1391,9 @@ export function CourseEditorPage() {
     setError('');
     try {
       await api.delete(`/api/manage/courses/${requestedCourseId}`);
-      navigate('/manage/courses');
+      if (routeCourseIdRef.current === requestedCourseId) navigate('/manage/courses');
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Course could not be deleted.');
+      if (routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Course could not be deleted.');
     } finally {
       deleteCourseRequestRef.current = false;
       setDeletingCourse(false);
