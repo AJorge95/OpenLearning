@@ -6,6 +6,7 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import express from 'express';
 import { after, before, test } from 'node:test';
+import { MAX_LEARNING_PATH_COURSES } from '../../shared/learning-path-limits.js';
 
 const isolatedConfig = {
   NODE_ENV: 'test',
@@ -2031,6 +2032,25 @@ test('course competency mappings can remove legacy inactive competencies', async
   assert.equal(overLimitResponse.status, 400);
   assert.equal((await overLimitResponse.json()).code, 'validation_error');
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_competencies WHERE course_id = ?').get('course-competency-mapping').count, 0);
+});
+
+test('learning-path course selection rejects requests over the shared limit', async () => {
+  const title = 'Over-limit path regression';
+  const response = await fetch(apiUrl('/manage/learning-paths'), {
+    method: 'POST',
+    headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+    body: JSON.stringify({
+      title,
+      courses: Array.from({ length: MAX_LEARNING_PATH_COURSES + 1 }, (_, index) => ({ courseId: `missing-course-${index}` })),
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: `Provide an ordered list of up to ${MAX_LEARNING_PATH_COURSES} courses.`,
+    code: 'validation_error',
+  });
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_paths WHERE title = ?').get(title).count, 0);
 });
 
 test('program boolean request fields reject strings without changing access settings', async () => {
