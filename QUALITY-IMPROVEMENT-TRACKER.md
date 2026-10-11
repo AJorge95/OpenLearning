@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Document batched course-summary reads
+
+- **Reviewed:** `courseSummaryDetails`, its catalog/My Learning/staff-list callers, and the existing one-course versus two-course prepared-query regression.
+- **Improvement:** Add a short comment explaining that related summary reads are batched across the requested page to avoid per-course queries.
+- **Why it helps:** Maintainers can see why the grouped queries and maps are intentional and avoid reintroducing an N+1 pattern during future summary changes.
+- **Backend review:** Query shape, progress calculations, list bounds, and response data are unchanged.
+- **Checked:** The focused course-summary batching regression passed (1/1), and `node --check server/course-service.js` passed.
+
 ## 2026-10-11 — Expose named search landmarks
 
 - **Reviewed:** The learner course catalog, staff course list, user list, audit and system logs, path-assignment learner search, and competency search forms.
