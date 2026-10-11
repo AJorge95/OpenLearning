@@ -102,6 +102,12 @@ before(async () => {
 
   const app = express();
   app.use(express.json());
+  app.post('/api/upload-limit-test', (_req, _res, next) => {
+    const error = new Error('File too large');
+    error.name = 'MulterError';
+    error.code = 'LIMIT_FILE_SIZE';
+    next(error);
+  });
   app.use((req, _res, next) => {
     req.currentUser = database.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?')
       .get(req.get('x-test-user'));
@@ -470,6 +476,40 @@ test('bounds course cover dimensions for PNG, JPEG, and each supported WebP enco
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM media_files').get().count, originalMediaIds.size);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.cover_uploaded' AND entity_id = ?").get(courseId).count, originalCoverAuditIds.size);
   assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
+});
+
+test('Multer upload-limit errors report the active configured size', async () => {
+  const response = await fetch(apiUrl('/upload-limit-test'), { method: 'POST' });
+
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), {
+    error: 'This file exceeds the configured upload limit of 2 GiB (2,147,483,648 bytes).',
+    code: 'LIMIT_FILE_SIZE',
+  });
+});
+
+test('caption upload-size errors report the caption-specific limit and clean up partial files', async () => {
+  const originalFiles = await fs.readdir(path.dirname(captionPath));
+  const originalCaptionCount = database.prepare('SELECT COUNT(*) AS count FROM lesson_captions').get().count;
+  const form = new FormData();
+  form.set('lessonId', 'lesson-caption-audit');
+  form.set('language', 'en');
+  form.set('label', 'English');
+  form.set('file', new File([Buffer.alloc(5 * 1024 * 1024 + 1)], 'oversized.vtt', { type: 'text/vtt' }));
+
+  const response = await fetch(apiUrl('/manage/courses/course-caption-audit/lesson-captions'), {
+    method: 'POST',
+    headers: { 'x-test-user': 'admin-media', connection: 'close' },
+    body: form,
+  });
+
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), {
+    error: 'This file exceeds the configured upload limit of 5 MiB (5,242,880 bytes).',
+    code: 'LIMIT_FILE_SIZE',
+  });
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM lesson_captions').get().count, originalCaptionCount);
+  assert.deepEqual(await fs.readdir(path.dirname(captionPath)), originalFiles);
 });
 
 test('cover replacement preserves the old image when its audit event cannot be saved', async () => {

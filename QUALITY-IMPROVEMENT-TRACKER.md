@@ -15,6 +15,21 @@
 - **Backend review:** The server's 4096 px and file-size validation remains authoritative; no endpoint or upload contract changed.
 - **Checked:** Focused role-selector, cover, and image-dimension tests passed (22/22); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict type checking and Vite bundling; and `git diff --check` passed. Authenticated Chrome rendered the course editor at 1718 × 1214 and displayed the shared 4096 px limit. I did not select a file in the browser; validation and decode-error paths are covered by unit and source regressions. The console contained earlier `AuthRoutes` errors from route transitions before this render, with no newer entries.
 
+## 2026-10-11 — Review course-cover byte limits
+
+- **Reviewed:** The shared Multer limit for videos, covers, and documents; the `MAX_UPLOAD_BYTES` configuration and its 2 GiB default; the separate 5 MiB caption limit; and the course editor's cover guidance.
+- **Result:** No per-cover byte cap was added. Covers use the configurable shared upload limit, while 5 MiB applies only to captions.
+- **Why no change:** Adding a fixed limit to covers would create a new product rule that the current configuration and UI do not establish.
+- **Checked:** Read `server/config.js`, `server/routes-media.js`, and the editor guidance. No source behavior changed in this review.
+
+## 2026-10-11 — Show the configured limit for rejected uploads
+
+- **Reviewed:** Multer's `LIMIT_FILE_SIZE` mapping, `MAX_UPLOAD_BYTES`, and the existing client handling that displays server error messages.
+- **Improvement:** Include the configured limit as a readable binary unit and exact byte count in the `413` response, while retaining the existing status and error code.
+- **Why it helps:** Learners and staff can tell how far over the limit a file is and choose a smaller file or request the right configuration change.
+- **Interface review:** The editor already announces the server-provided message through its alert notice; no duplicate client-side limit or policy was added.
+- **Checked:** The focused media-route suite passed (17/17), including the configured 2 GiB general limit, the caption-specific 5 MiB limit, `413` responses, unchanged error codes, and cleanup of the rejected partial caption file. Full `npm test -- --test-reporter=dot`, `npm run build` (strict typecheck and Vite), and `git diff --check` passed.
+
 ## 2026-10-11 — Check platform icon dimensions before staging
 
 - **Reviewed:** The platform-icon picker’s MIME and file-size checks, displayed dimension limit, decoded preview path, and matching server-side bounds.
