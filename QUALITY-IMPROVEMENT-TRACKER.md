@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Refresh registration availability after a rejected sign-up
+
+- **Reviewed:** The registration page uses platform availability loaded at app startup. If an administrator closes registration or another learner takes the final slot while the form is open, the server rejects sign-up correctly but the shared UI state stayed stale and left the form active.
+- **Improvement:** Recognize the `registration_disabled` and `user_limit_reached` responses in the auth provider, refresh platform status, then preserve the original registration error if the refresh fails.
+- **Why it helps:** A stale open form now changes to the correct closed-registration state after the server rejects it; when status cannot be refreshed, the user still sees the original actionable error.
+- **Backend review:** Registration enforcement remains transactional. The preceding cycle added isolated concurrency coverage for the final account slot; no endpoint change was needed.
+- **Checked:** Added `tests/client/registration-availability.test.js` (2/2). In an isolated local instance, opened `/register` with one remaining slot, consumed that slot through a second test registration, then submitted the stale form; the page refreshed and rendered “Registration is closed.” `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, both new-file syntax checks, and `git diff --check` passed.
+
 ## 2026-10-11 — Keep registration limits accurate under concurrent sign-up
 
 - **Reviewed:** Public sign-up checked account availability before password hashing and again inside an immediate SQLite transaction, but no endpoint regression covered the limit boundary or concurrent requests that both pass the first check.
