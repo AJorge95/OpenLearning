@@ -909,6 +909,11 @@ export function CourseEditorPage() {
   const addingModuleRequestRef = useRef(false);
   const addModuleButtonRef = useRef<HTMLButtonElement>(null);
   const addModuleInvokerRef = useRef<HTMLButtonElement | null>(null);
+  const [editingModuleTitle, setEditingModuleTitle] = useState<{ courseId: string; moduleId: string; title: string } | null>(null);
+  const [savingModuleTitleId, setSavingModuleTitleId] = useState('');
+  const moduleTitleSaveRequestRef = useRef(false);
+  const moduleTitleButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingModuleTitleFocusRef = useRef('');
   const [addingLessonModuleIds, setAddingLessonModuleIds] = useState<Set<string>>(() => new Set());
   const addingLessonModuleIdsRef = useRef(addingLessonModuleIds);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -1003,6 +1008,7 @@ export function CourseEditorPage() {
     setPendingDeleteCourseId(null);
     setPendingDeleteModule(null);
     setPendingDeleteLesson(null);
+    setEditingModuleTitle(null); setSavingModuleTitleId(''); pendingModuleTitleFocusRef.current = '';
     coverValidationSequenceRef.current += 1;
     abortCoverValidation();
     coverUploadRef.current = false;
@@ -1053,6 +1059,15 @@ export function CourseEditorPage() {
       });
     return () => { active = false; courseLoadSequenceRef.current += 1; abortGovernanceLoad(); courseLoadControllerRef.current?.abort(); abortActiveUploads(); };
   }, [route.courseId]);
+
+  // Preserve the rename trigger as a focus target while the successful save reloads the course.
+  useEffect(() => {
+    if (editingModuleTitle || !pendingModuleTitleFocusRef.current) return;
+    const button = moduleTitleButtonRefs.current.get(pendingModuleTitleFocusRef.current);
+    if (!button) return;
+    pendingModuleTitleFocusRef.current = '';
+    button.focus();
+  }, [editingModuleTitle, course, loading]);
 
   async function saveCourse(status: 'draft' | 'published') {
     if (!courseId) return;
@@ -1331,14 +1346,51 @@ export function CourseEditorPage() {
     }
   }
 
-  async function editModule(module: CourseModule) {
-    const nextTitle = window.prompt('Module title', module.title);
-    const normalizedTitle = nextTitle?.trim();
-    if (!normalizedTitle || normalizedTitle === module.title) return;
-    setError('');
+  function startModuleTitleEdit(module: CourseModule) {
+    if (!course || loading || saving || deletingCourse || addingModule || addingModuleBusy || isMovingCurriculum
+      || deleteCurriculumItemRef.current || moduleTitleSaveRequestRef.current) return;
+    pendingModuleTitleFocusRef.current = module.id;
+    setEditingModuleTitle({ courseId: course.id, moduleId: module.id, title: module.title });
+  }
+
+  function cancelModuleTitleEdit() {
+    if (!editingModuleTitle) return;
+    pendingModuleTitleFocusRef.current = editingModuleTitle.moduleId;
+    setEditingModuleTitle(null);
+  }
+
+  async function saveModuleTitle(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const pending = editingModuleTitle;
+    if (!pending || !course || moduleTitleSaveRequestRef.current || saving || deletingCourse
+      || pending.courseId !== course.id || routeCourseIdRef.current !== pending.courseId) return;
+    const module = course.modules?.find((item) => item.id === pending.moduleId);
+    if (!module) { setEditingModuleTitle(null); return; }
+    const normalizedTitle = pending.title.trim();
+    if (!normalizedTitle) { setError('Enter a module title.'); return; }
     if (normalizedTitle.length > 160) { setError('Module title must be 160 characters or fewer.'); return; }
-    try { await saveCourseDetailsIfChanged(); await api.patch(`/api/manage/modules/${module.id}`, { title: normalizedTitle }); await load(); }
-    catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Module could not be updated.'); }
+    if (normalizedTitle === module.title) { cancelModuleTitleEdit(); return; }
+
+    moduleTitleSaveRequestRef.current = true;
+    setSavingModuleTitleId(module.id); setError('');
+    try {
+      await saveCourseDetailsIfChanged();
+      if (routeCourseIdRef.current !== pending.courseId) return;
+      await api.patch(`/api/manage/modules/${module.id}`, { title: normalizedTitle });
+      if (routeCourseIdRef.current !== pending.courseId) return;
+      setCourse((current) => current?.id === pending.courseId ? {
+        ...current,
+        modules: current.modules?.map((item) => item.id === module.id ? { ...item, title: normalizedTitle } : item),
+      } : current);
+      pendingModuleTitleFocusRef.current = module.id;
+      setEditingModuleTitle(null);
+      await load();
+    } catch (cause) {
+      if (routeCourseIdRef.current === pending.courseId) setError(cause instanceof ApiError ? cause.message : 'Module could not be updated.');
+    } finally {
+      moduleTitleSaveRequestRef.current = false;
+      setSavingModuleTitleId('');
+    }
   }
 
   async function deleteModule(module: CourseModule, confirmed = false) {
@@ -1563,11 +1615,23 @@ export function CourseEditorPage() {
       </div>}
     </section>
     <section className="editor-section curriculum-editor-section">
-      <div className="curriculum-editor-title"><div><h2>Course curriculum</h2><p>Organize lessons into modules and add a quiz when you are ready.</p></div><div className="curriculum-editor-actions"><Button ref={addModuleButtonRef} variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} onClick={(event) => { if (addingModule) setAddingModule(false); else { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); } }}><Plus size={17} />Add module</Button></div></div>
+      <div className="curriculum-editor-title"><div><h2>Course curriculum</h2><p>Organize lessons into modules and add a quiz when you are ready.</p></div><div className="curriculum-editor-actions"><Button ref={addModuleButtonRef} variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} disabled={Boolean(editingModuleTitle) || saving || deletingCourse} onClick={(event) => { if (addingModule) setAddingModule(false); else { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); } }}><Plus size={17} />Add module</Button></div></div>
       {addingModule && <form id="add-module-form" className="inline-add-form" onSubmit={addModule}><input autoFocus value={moduleTitle} onChange={(event) => setModuleTitle(event.target.value)} placeholder="Module title" aria-label="Module title" maxLength={160} disabled={addingModuleBusy} /><Button type="submit" disabled={!moduleTitle.trim() || addingModuleBusy}>{addingModuleBusy ? 'Adding module…' : 'Add module'}</Button><button type="button" className="text-action" disabled={addingModuleBusy} onClick={() => { setAddingModule(false); addModuleInvokerRef.current?.focus(); }}>Cancel</button></form>}
       <div className="module-editor-list">
         {course.modules?.map((module, moduleIndex) => <div className="module-editor" key={module.id}>
-          <div className="module-editor-heading"><button type="button" className="module-disclosure" onClick={() => setExpanded({ ...expanded, [module.id]: !(expanded[module.id] ?? true) })} aria-label={`${expanded[module.id] ?? true ? 'Collapse' : 'Expand'} ${module.title}`} aria-expanded={expanded[module.id] ?? true}><ChevronDown className={(expanded[module.id] ?? true) ? '' : 'chevron-collapsed'} size={18} /></button><BookOpen size={18} /><h3 className="module-name-heading"><button type="button" className="module-name-button" onClick={() => editModule(module)}>{module.title}</button></h3><span className="module-item-count">{formatCountLabel(module.lessons.length + (module.quiz ? 1 : 0), 'item', 'items')}</span><div className="module-tools"><button type="button" title={movingCurriculumItems.has(`module:${module.id}`) ? 'Moving module…' : 'Move module up'} aria-label={movingCurriculumItems.has(`module:${module.id}`) ? `Moving ${module.title}` : `Move ${module.title} up`} aria-busy={movingCurriculumItems.has(`module:${module.id}`)} disabled={moduleIndex === 0 || isMovingCurriculum} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'up', `module:${module.id}`)}><ArrowUp size={16} /></button><button type="button" title={movingCurriculumItems.has(`module:${module.id}`) ? 'Moving module…' : 'Move module down'} aria-label={movingCurriculumItems.has(`module:${module.id}`) ? `Moving ${module.title}` : `Move ${module.title} down`} aria-busy={movingCurriculumItems.has(`module:${module.id}`)} disabled={moduleIndex === (course.modules?.length || 0) - 1 || isMovingCurriculum} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'down', `module:${module.id}`)}><ArrowDown size={16} /></button><button type="button" title={deletingCurriculumItem === `module:${module.id}` ? 'Removing module…' : 'Remove module'} aria-label={deletingCurriculumItem === `module:${module.id}` ? `Removing module ${module.title}` : `Remove module ${module.title}`} aria-busy={deletingCurriculumItem === `module:${module.id}`} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} className="danger-icon" onClick={() => deleteModule(module)}><Trash2 size={16} /></button></div></div>
+          <div className={`module-editor-heading${editingModuleTitle?.courseId === course.id && editingModuleTitle.moduleId === module.id ? ' module-editor-heading-editing' : ''}`}>
+            <button type="button" className="module-disclosure" disabled={Boolean(editingModuleTitle)} onClick={() => setExpanded({ ...expanded, [module.id]: !(expanded[module.id] ?? true) })} aria-label={`${expanded[module.id] ?? true ? 'Collapse' : 'Expand'} ${module.title}`} aria-expanded={expanded[module.id] ?? true}><ChevronDown className={(expanded[module.id] ?? true) ? '' : 'chevron-collapsed'} size={18} /></button>
+            <BookOpen size={18} />
+            {editingModuleTitle?.courseId === course.id && editingModuleTitle.moduleId === module.id
+              ? <form className="module-title-edit-form" aria-busy={savingModuleTitleId === module.id} aria-label={`Rename module ${module.title}`} onSubmit={saveModuleTitle} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); cancelModuleTitleEdit(); } }}>
+                <input type="text" autoFocus required maxLength={160} aria-label={`Module title for ${module.title}`} value={editingModuleTitle.title} disabled={savingModuleTitleId === module.id} onChange={(event) => setEditingModuleTitle((current) => current?.moduleId === module.id ? { ...current, title: event.target.value } : current)} />
+                <Button type="submit" variant="secondary" disabled={savingModuleTitleId === module.id}>{savingModuleTitleId === module.id ? 'Saving…' : 'Save title'}</Button>
+                <Button type="button" variant="quiet" disabled={savingModuleTitleId === module.id} onClick={cancelModuleTitleEdit}>Cancel</Button>
+              </form>
+              : <h3 className="module-name-heading"><button ref={(button) => { if (button) moduleTitleButtonRefs.current.set(module.id, button); else moduleTitleButtonRefs.current.delete(module.id); }} type="button" className="module-name-button" aria-label={`Rename module ${module.title}`} disabled={Boolean(editingModuleTitle) || saving || deletingCourse || isMovingCurriculum || Boolean(deletingCurriculumItem)} onClick={() => startModuleTitleEdit(module)}>{module.title}</button></h3>}
+            <span className="module-item-count">{formatCountLabel(module.lessons.length + (module.quiz ? 1 : 0), 'item', 'items')}</span>
+            <div className="module-tools"><button type="button" title={movingCurriculumItems.has(`module:${module.id}`) ? 'Moving module…' : 'Move module up'} aria-label={movingCurriculumItems.has(`module:${module.id}`) ? `Moving ${module.title}` : `Move ${module.title} up`} aria-busy={movingCurriculumItems.has(`module:${module.id}`)} disabled={moduleIndex === 0 || isMovingCurriculum || Boolean(editingModuleTitle)} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'up', `module:${module.id}`)}><ArrowUp size={16} /></button><button type="button" title={movingCurriculumItems.has(`module:${module.id}`) ? 'Moving module…' : 'Move module down'} aria-label={movingCurriculumItems.has(`module:${module.id}`) ? `Moving ${module.title}` : `Move ${module.title} down`} aria-busy={movingCurriculumItems.has(`module:${module.id}`)} disabled={moduleIndex === (course.modules?.length || 0) - 1 || isMovingCurriculum || Boolean(editingModuleTitle)} onClick={() => moveItem(`/api/manage/modules/${module.id}/move`, 'down', `module:${module.id}`)}><ArrowDown size={16} /></button><button type="button" title={deletingCurriculumItem === `module:${module.id}` ? 'Removing module…' : 'Remove module'} aria-label={deletingCurriculumItem === `module:${module.id}` ? `Removing module ${module.title}` : `Remove module ${module.title}`} aria-busy={deletingCurriculumItem === `module:${module.id}`} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem) || Boolean(editingModuleTitle)} className="danger-icon" onClick={() => deleteModule(module)}><Trash2 size={16} /></button></div>
+          </div>
           {(expanded[module.id] ?? true) && <div className="module-editor-content">
             {module.lessons.map((lesson, lessonIndex) => <div className="lesson-editor-item" key={lesson.id}>
               <div className="lesson-editor-row">

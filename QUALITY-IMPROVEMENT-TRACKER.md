@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Replace the module-title browser prompt with inline editing
+
+- **Reviewed:** Module renaming used a native browser prompt. The existing module PATCH endpoint validates titles up to 160 characters and writes its audit record in the same transaction.
+- **Improvement:** Edit the title in the curriculum row with a labeled input, Save and Cancel actions, Enter to save, and Escape to cancel. Recheck the current course and module before submitting, and restore focus to the module after cancellation or a successful refresh. The controls reflow on narrow screens.
+- **Why it helps:** Editors can rename modules without leaving the curriculum context, and keyboard users can complete or cancel the action without a browser popup.
+- **Backend review:** The existing validated, transactional rename endpoint is unchanged.
+- **Checked:** Both focused client checks passed; the module-rename audit-rollback and unchanged-title regression passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. Chrome rendered the field with focus, and Cancel and Escape restored the module title and focus. No rename was submitted.
+
 ## 2026-10-11 — Confirm learning-path archiving with clear recovery details
 
 - **Reviewed:** Archiving removes a path from active lists but keeps learner enrollments and progress; the existing restore action returns it as a draft. The page used a blocking browser prompt.
