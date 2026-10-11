@@ -563,6 +563,45 @@ test('initial setup rolls back its administrator and settings when the audit ent
   }
 });
 
+test('initial setup rolls back when its success payload cannot be read', async () => {
+  const originalPrepare = database.prepare;
+  const originalConsoleError = console.error;
+  let payloadReadFailed = false;
+  database.prepare = function prepareWithUnavailableSetupPayload(sql, ...args) {
+    if (sql === 'SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?') {
+      payloadReadFailed = true;
+      throw new Error('setup response user unavailable');
+    }
+    return originalPrepare.call(this, sql, ...args);
+  };
+  console.error = () => {};
+
+  try {
+    const response = await fetch(apiUrl('/setup'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        setupToken: isolatedConfig.SETUP_TOKEN,
+        platformName: 'Setup Payload Failure',
+        username: 'setup_payload_failure',
+        email: 'setup.payload.failure@example.invalid',
+        firstName: 'Setup',
+        lastName: 'Payload',
+        password: 'SetupPayloadPassphrase-2026',
+        confirmPassword: 'SetupPayloadPassphrase-2026',
+      }),
+    });
+    assert.equal(response.status, 500);
+    assert.equal(payloadReadFailed, true);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get('setup_payload_failure').count, 0);
+    assert.notEqual(database.prepare("SELECT value FROM app_settings WHERE key = 'setup_complete'").get()?.value, '1');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'platform.setup'").get().count, 0);
+  } finally {
+    console.error = originalConsoleError;
+    database.prepare = originalPrepare;
+  }
+});
+
 test('setup, registration, and successful sign-in record last login for admin details', async () => {
   const setupResponse = await fetch(apiUrl('/setup'), {
     method: 'POST',
@@ -580,6 +619,8 @@ test('setup, registration, and successful sign-in record last login for admin de
   });
   assert.equal(setupResponse.status, 201);
   const setup = await setupResponse.json();
+  assert.equal(setup.platformName, 'Last Login Test');
+  assert.equal(setup.registrationAvailable, true);
   const adminId = setup.user.id;
   const setupLastLogin = database.prepare('SELECT last_login_at FROM users WHERE id = ?').get(adminId).last_login_at;
   assert.match(setupLastLogin, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
@@ -623,6 +664,7 @@ test('setup, registration, and successful sign-in record last login for admin de
   });
   assert.equal(registrationResponse.status, 201);
   const registration = await registrationResponse.json();
+  assert.equal(registration.registrationAvailable, true);
   const learnerLastLogin = database.prepare('SELECT last_login_at FROM users WHERE id = ?').get(registration.user.id).last_login_at;
   assert.match(learnerLastLogin, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
 
@@ -658,6 +700,51 @@ test('setup, registration, and successful sign-in record last login for admin de
   assert.equal(detailsResponse.status, 200);
   const details = await detailsResponse.json();
   assert.equal(details.user.lastLoginAt, lastLoginAt);
+});
+
+test('registration rolls back when availability for its success payload cannot be read', async () => {
+  const originalPrepare = database.prepare;
+  const originalConsoleError = console.error;
+  const targetUsername = 'registration_payload_failure';
+  const targetUserExists = originalPrepare.call(database, 'SELECT 1 FROM users WHERE username = ?');
+  const originalUserLimit = originalPrepare.call(database, 'SELECT value FROM app_settings WHERE key = ?').get('user_limit')?.value;
+  let availabilityReadFailed = false;
+  originalPrepare.call(database, `INSERT INTO app_settings (key, value) VALUES ('user_limit', '100')
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+  database.prepare = function prepareWithUnavailableAvailability(sql, ...args) {
+    if (sql === 'SELECT COUNT(*) AS count FROM users' && targetUserExists.get(targetUsername)) {
+      availabilityReadFailed = true;
+      throw new Error('registration availability unavailable');
+    }
+    return originalPrepare.call(this, sql, ...args);
+  };
+  console.error = () => {};
+
+  try {
+    const response = await fetch(apiUrl('/auth/register'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        username: targetUsername,
+        email: 'registration.payload.failure@example.invalid',
+        firstName: 'Registration',
+        lastName: 'Payload',
+        password: 'RegistrationPayloadPassphrase-2026',
+        confirmPassword: 'RegistrationPayloadPassphrase-2026',
+      }),
+    });
+    assert.equal(response.status, 500);
+    assert.equal(availabilityReadFailed, true);
+    assert.equal(targetUserExists.get(targetUsername), undefined);
+    assert.equal(originalPrepare.call(database, "SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.registered' AND actor_username = ?")
+      .get(targetUsername).count, 0);
+  } finally {
+    console.error = originalConsoleError;
+    database.prepare = originalPrepare;
+    if (originalUserLimit === undefined) originalPrepare.call(database, "DELETE FROM app_settings WHERE key = 'user_limit'").run();
+    else originalPrepare.call(database, `INSERT INTO app_settings (key, value) VALUES ('user_limit', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(originalUserLimit);
+  }
 });
 
 test('admin user list returns the final page and clamps requests beyond the search results', async () => {

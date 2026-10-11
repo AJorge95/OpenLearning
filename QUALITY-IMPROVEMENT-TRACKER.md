@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep setup and registration response reads transactional
+
+- **Reviewed:** Initial setup committed the administrator and platform settings before reading the returned account and configuration. Learner registration committed the new account and audit entry before reading registration availability for its response. A database read failure therefore returned HTTP 500 after either account had been created.
+- **Improvement:** Build both success payloads inside their immediate transactions, including the current registered-account count. Comments identify why those response reads belong before commit.
+- **Why it helps:** Setup and registration now either return their account/configuration payload or roll back the account and audit changes together, avoiding misleading failures and duplicate retries.
+- **Interface review:** The account-details role selector has a separate accessible label, a 144px desktop width, trigger-only pointer events, and a full-width narrow-screen rule. The source and current regression coverage support the requested click boundary; no UI change was warranted.
+- **Checked:** Injected setup user-read and registration-availability failures both return HTTP 500 with the account and audit writes rolled back. Focused auth tests passed (15/15); the full suite passed (503/503); `npm run build` passed strict TypeScript checking and Vite bundling; JavaScript syntax checks and `git diff --check` passed.
+
 ## 2026-10-11 — Keep learning-path save responses transactional
 
 - **Reviewed:** Learning-path create and update routes committed their path changes and audit events before assembling course summaries for the response. A summary-read failure therefore returned HTTP 500 after the mutation had succeeded. The patch no-op path also built its response after the transaction.
