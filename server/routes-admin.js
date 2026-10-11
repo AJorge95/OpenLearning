@@ -225,13 +225,14 @@ adminRouter.post('/users', async (req, res) => {
   if (password !== confirmPassword) fail(400, 'Passwords do not match.', 'password_mismatch');
   if (!['admin', 'moderator', 'learner'].includes(role)) fail(400, 'Choose a valid role.', 'validation_error');
   assertAccountCapacity();
-  if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) fail(409, 'That username is already in use.', 'username_taken');
+  // Match the case-insensitive unique constraint before hashing and again under the write lock.
+  if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) fail(409, 'That username is already in use.', 'username_taken');
   if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) fail(409, 'That email address is already in use.', 'email_taken');
   const passwordHash = await hashPassword(password);
   const id = randomUUID();
   const createAccount = db.transaction(() => {
     assertAccountCapacity();
-    if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) fail(409, 'That username is already in use.', 'username_taken');
+    if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) fail(409, 'That username is already in use.', 'username_taken');
     if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) fail(409, 'That email address is already in use.', 'email_taken');
     db.prepare('INSERT INTO users (id, username, email, first_name, last_name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(id, username, email, firstName, lastName, passwordHash, role);

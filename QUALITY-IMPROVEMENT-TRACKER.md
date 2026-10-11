@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Check duplicate account names before password hashing
+
+- **Reviewed:** The users table's case-insensitive unique username constraint and the administrator account-creation checks before and inside its write transaction.
+- **Improvement:** Use the same `NOCASE` comparison as the database constraint during both duplicate checks, rejecting case-only username conflicts before the expensive password hash and closing the race again under the write lock.
+- **Why it helps:** A duplicate account attempt fails without unnecessary password-hashing work, while the transactional check and unique constraint still protect concurrent creation.
+- **Interface review:** The existing create-account form already presents a clear conflict error; its visible validation and labels need no change.
+- **Checked:** The focused registration and account-creation suite passed (29/29); the full suite passed (528/528); `npm run build` passed strict TypeScript checking and Vite bundling; `node --check tests/server/registration-fields.test.js` and `git diff --check` passed. The regression forces a write failure if case-insensitive duplicate detection does not happen first.
+
 ## 2026-10-11 — Preserve account-update confirmation when list refresh fails
 
 - **Reviewed:** The administrator role and admin-status update flow, the server-confirmed PATCH response, and the follow-up reload of the current user-list page and filters.
