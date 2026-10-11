@@ -18,6 +18,29 @@ function restoreFetch(t) {
   });
 }
 
+function installFakeXhr(t, onSend) {
+  const originalXhr = globalThis.XMLHttpRequest;
+  const requests = [];
+  globalThis.XMLHttpRequest = class {
+    upload = {};
+    requestHeaders = new Map();
+    responseContentType = '';
+    open(method, url) { this.method = method; this.url = url; }
+    setRequestHeader(name, value) { this.requestHeaders.set(name, value); }
+    getResponseHeader(name) { return name.toLowerCase() === 'content-type' ? this.responseContentType : null; }
+    send(body) {
+      this.body = body;
+      requests.push(this);
+      onSend(this, requests.length);
+    }
+  };
+  t.after(() => {
+    if (originalXhr === undefined) delete globalThis.XMLHttpRequest;
+    else globalThis.XMLHttpRequest = originalXhr;
+  });
+  return requests;
+}
+
 test('coalesces CSRF refreshes and retries concurrent writes once with the fresh token', async (t) => {
   restoreFetch(t);
   let csrfRequests = 0;
@@ -351,4 +374,81 @@ test('aborts an active XHR upload and suppresses progress after cancellation', a
   assert.equal(outcome.fulfilled, false);
   assert.equal(outcome.error.name, 'AbortError');
   assert.deepEqual(progress, [25]);
+});
+
+test('retries a multipart upload once after a CSRF rejection and resets progress', async (t) => {
+  restoreFetch(t);
+  let csrfRequests = 0;
+  globalThis.fetch = async (input) => {
+    assert.equal(String(input), '/api/csrf');
+    csrfRequests += 1;
+    return jsonResponse({ token: csrfRequests === 1 ? 'stale-upload-token' : 'fresh-upload-token' });
+  };
+  const requests = installFakeXhr(t, (xhr, attempt) => {
+    queueMicrotask(() => {
+      xhr.upload.onprogress({ lengthComputable: true, loaded: attempt === 1 ? 50 : 25, total: 100 });
+      xhr.status = attempt === 1 ? 403 : 201;
+      xhr.responseContentType = 'application/json; charset=utf-8';
+      xhr.responseText = JSON.stringify(attempt === 1
+        ? { code: 'csrf_invalid', error: 'Refresh the page.' }
+        : { media: { id: 'media-1' } });
+      xhr.onload();
+    });
+  });
+  const progress = [];
+
+  const result = await api.upload(
+    '/api/manage/courses/course-1/media',
+    { kind: 'video', lessonId: 'lesson-1' },
+    new Blob(['video bytes'], { type: 'video/mp4' }),
+    (value) => progress.push(value),
+  );
+
+  assert.deepEqual(result, { media: { id: 'media-1' } });
+  assert.equal(csrfRequests, 2);
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests.map((xhr) => xhr.requestHeaders.get('X-CSRF-Token')), [
+    'stale-upload-token',
+    'fresh-upload-token',
+  ]);
+  assert.equal(requests[0].method, 'POST');
+  assert.equal(requests[0].url, '/api/manage/courses/course-1/media');
+  assert.equal(requests[0].withCredentials, true);
+  assert.equal(requests[0].body, requests[1].body);
+  assert.equal(requests[0].body.get('kind'), 'video');
+  assert.equal(requests[0].body.get('lessonId'), 'lesson-1');
+  assert.ok(requests[0].body.get('file') instanceof Blob);
+  assert.deepEqual(progress, [50, 0, 25]);
+});
+
+test('returns structured upload validation errors without retrying the file', async (t) => {
+  restoreFetch(t);
+  let csrfRequests = 0;
+  globalThis.fetch = async (input) => {
+    assert.equal(String(input), '/api/csrf');
+    csrfRequests += 1;
+    return jsonResponse({ token: 'upload-token' });
+  };
+  const requests = installFakeXhr(t, (xhr) => {
+    queueMicrotask(() => {
+      xhr.status = 413;
+      xhr.responseContentType = 'application/json';
+      xhr.responseText = JSON.stringify({
+        code: 'payload_too_large',
+        error: 'File exceeds the upload size limit.',
+      });
+      xhr.onload();
+    });
+  });
+
+  await assert.rejects(
+    api.upload('/api/manage/courses/course-1/media', {}, new Blob(['too large']), () => {}),
+    (error) => error instanceof ApiError
+      && error.status === 413
+      && error.code === 'payload_too_large'
+      && error.message === 'File exceeds the upload size limit.',
+  );
+
+  assert.equal(csrfRequests, 1);
+  assert.equal(requests.length, 1);
 });

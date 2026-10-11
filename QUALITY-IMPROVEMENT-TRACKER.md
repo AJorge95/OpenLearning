@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Protect multipart upload retry and error handling
+
+- **Reviewed:** Shared API multipart upload transport, its abort and progress behavior, server CSRF middleware ordering, and media upload error responses.
+- **Improvement:** Add client regressions for one retry after a stale CSRF token, reuse of the same multipart body with a fresh token, progress reset, and structured 413 handling without a retry. Document why the single retry is safe: the global CSRF guard rejects the request before Multer can store the file.
+- **Why it helps:** Course authors can recover from a rotated session token without reselecting large media, while validation errors stay specific and cannot trigger an unnecessary duplicate upload.
+- **Backend review:** `csrfMiddleware` runs before the media upload router and Multer; upload validation returns structured API errors. No server behavior changed.
+- **Checked:** `node --test tests/client/api.test.js` passed (16/16); the API-focused coverage run reported 89.31% line coverage; full `npm test -- --test-reporter=dot` passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed.
+
 ## 2026-10-12 — Recheck remaining quiz and review text limits
 
 - **Reviewed:** Quiz question, explanation, and answer-choice limits against their server validators; publication-note and change-request limits against their route validators; and the learner comment field.
