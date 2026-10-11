@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep focus in newly created module quizzes
+
+- **Reviewed:** The course editor's add-quiz trigger, quiz editor mount, course reload, and the server's transactional upsert. The trigger stayed focused when it became disabled as “Quiz added,” and it had no client-side guard against repeated clicks during the reload.
+- **Improvement:** Prevent overlapping add-quiz requests per module, show a busy label and `aria-busy` while saving, focus the new quiz title after the course refresh, and return focus to the trigger when creation fails. A route change cancels stale follow-up UI work.
+- **Why it helps:** Staff can name a quiz immediately with the keyboard, errors leave a usable focus target, and rapid clicks do not send redundant requests.
+- **Backend review:** The endpoint validates and saves inside a transaction. An identical retry is already treated as unchanged without replacing questions or writing another audit entry; the server contract needed no change.
+- **Checked:** Focused course-editor tests passed (8/8), the existing unchanged-quiz transaction test passed (1/1), the full `npm test` suite passed (593/593), `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. Rendered interaction was not run: Playwright is not installed in this checkout, and exercising quiz creation in the open admin session would persist course data.
+
 ## 2026-10-11 — Restore focus after competency creation
 
 - **Reviewed:** The competency-create submit button's enabled state, success reset, reload, and existing accessibility tests. Clearing the required title disabled the button that had focus, with no return target.
