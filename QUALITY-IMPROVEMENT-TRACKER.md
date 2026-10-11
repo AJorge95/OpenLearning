@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Review the public sign-in surface and account-list flow
+
+- **Reviewed:** The sign-in page's heading, field names, return guidance, responsive shell, the administrator account list's filter/loading/error states, and its paginated API.
+- **Result:** No source change. The live sign-in DOM exposes the expected heading, Username and Password fields, sign-in action, account-creation link, and protected-page return guidance. Account-list pagination now has focused boundary coverage.
+- **Why no code change:** This review found no reproducible interface or backend defect beyond the selector issue already fixed and the pagination test gap already covered; further changes would be speculative.
+- **Checked:** Read the current `/login` DOM snapshot and reviewed `LoginPage`, its CSS, `AdminUsersPage`, and the relevant tests. The in-app browser is signed out, so the authenticated account-detail selector could not be replayed.
+
 ## 2026-10-11 — Cover administrator user-list page boundaries
 
 - **Reviewed:** The administrator account endpoint's 50-row page size, role/name ordering, matching-search count, and last-page clamping.
