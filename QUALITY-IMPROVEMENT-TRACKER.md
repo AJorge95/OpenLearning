@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Resolve storage links before platform reset path checks
+
+- **Reviewed:** Reset preparation compared configured paths lexically. A media-root or database path reached through a symlink/junction could therefore bypass overlap checks. Reset confirmation also renamed the configured media path itself, which would move a symlink rather than its target.
+- **Improvement:** Resolve the media root, database file, and backup parent to their physical paths before checking overlap. Reset confirmation now moves the resolved media directory, preserving a configured link to the newly cleared directory.
+- **Why it helps:** Backup preparation cannot recursively copy its own destination through a media-root alias, database files inside media remain protected from reset, and symlinked media storage is cleared without leaving old files behind.
+- **Interface review:** The current role selector uses a non-clickable visible label, limits pointer events to the trigger, and sizes its popup to that trigger. Its targeted source and positioning regressions passed (10/10). The in-app admin URL redirected to sign-in, so the reported control could not be rechecked live in this browser session.
+- **Checked:** `node --test tests/server/platform-reset.test.js` passed (7/7); `node --test tests/client/app-select-label.test.js tests/client/app-select-position.test.js` passed (10/10); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/server/platform-reset.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Describe a prepared reset accurately to other admins
 
 - **Reviewed:** The reset API reports separate `preparing` and `ready` phases to other administrators. The settings page showed the same “preparing” message for a ready reset, even though its backup was already verified and awaiting confirmation.
