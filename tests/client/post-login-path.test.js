@@ -47,3 +47,10 @@ test('login copy explains when sign-in will return to a requested page', () => {
   assert.match(authSource, /const hasRequestedDestination = postLoginPath !== '\/courses';/);
   assert.match(authSource, /hasRequestedDestination \? 'Sign in to return to the page you requested\.' : 'Sign in to continue learning\.'/);
 });
+
+test('login guidance is associated with the autofocus username field', () => {
+  const authSource = fs.readFileSync(path.join(sourceDirectory, 'pages-auth.tsx'), 'utf8');
+
+  assert.match(authSource, /<p id="login-description" className="auth-description">/);
+  assert.match(authSource, /<input aria-describedby="login-description" required maxLength=\{32\} autoComplete="username" autoFocus/);
+});

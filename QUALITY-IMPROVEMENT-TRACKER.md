@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Announce sign-in guidance with the username field
+
+- **Reviewed:** The login screen autofocuses Username, while its standard or return-specific explanation was not associated with that field.
+- **Improvement:** Give the sign-in guidance an ID and reference it from the autofocus username input with `aria-describedby`.
+- **Why it helps:** Assistive-technology users hear why sign-in is needed as focus lands on the first field, including when returning to a protected page.
+- **Checked:** Focused destination/accessibility tests passed (7/7); full `npm test` passed (385/385), `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Live browser DOM confirmed Username references `login-description` containing the return guidance, with no console errors.
+
 ## 2026-10-11 — Explain the sign-in return destination
 
 - **Reviewed:** When sign-in preserved a requested admin or staff route, the login page still described the action as continuing learning.
