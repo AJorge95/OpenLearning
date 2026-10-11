@@ -21,8 +21,9 @@ test('confirmation dialog uses the browser modal layer and names its title and d
 test('confirmation dialog cancels on Escape or backdrop click and focuses Cancel by default', () => {
   assert.match(dialogSource, /onCancel=\{\(event\) => \{ event\.preventDefault\(\); onCancel\(\); \}\}/);
   assert.match(dialogSource, /onClick=\{\(event\) => \{ if \(event\.target === event\.currentTarget\) onCancel\(\); \}\}/);
-  assert.match(dialogSource, /variant="secondary" autoFocus onClick=\{onCancel\}>Cancel/);
-  assert.match(dialogSource, /variant="danger" onClick=\{onConfirm\}>\{confirmLabel\}/);
+  assert.match(dialogSource, /cancelLabel = 'Cancel'/);
+  assert.match(dialogSource, /variant="secondary" autoFocus onClick=\{onCancel\}>\{cancelLabel\}/);
+  assert.match(dialogSource, /variant=\{confirmVariant\} disabled=\{confirmDisabled\} onClick=\{onConfirm\}>\{confirmLabel\}/);
 });
 
 test('confirmation dialog stays within narrow viewports and preserves app styling', () => {

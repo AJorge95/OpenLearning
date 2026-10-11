@@ -322,10 +322,13 @@ export function Button({ children, variant = 'primary', className = '', type = '
   return <button ref={ref} type={type} className={`button button-${variant} ${className}`.trim()} {...props}>{children}</button>;
 }
 
-export function ConfirmationDialog({ title, description, confirmLabel, onCancel, onConfirm }: {
+export function ConfirmationDialog({ title, description, confirmLabel, cancelLabel = 'Cancel', confirmVariant = 'danger', confirmDisabled = false, onCancel, onConfirm }: {
   title: string;
   description: string;
   confirmLabel: string;
+  cancelLabel?: string;
+  confirmVariant?: 'primary' | 'secondary' | 'quiet' | 'danger';
+  confirmDisabled?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -342,7 +345,7 @@ export function ConfirmationDialog({ title, description, confirmLabel, onCancel,
   return <dialog ref={dialogRef} className="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby={`${dialogId}-title`} aria-describedby={`${dialogId}-description`} onCancel={(event) => { event.preventDefault(); onCancel(); }} onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
     <h2 id={`${dialogId}-title`}>{title}</h2>
     <p id={`${dialogId}-description`}>{description}</p>
-    <div className="confirmation-dialog-actions"><Button variant="secondary" autoFocus onClick={onCancel}>Cancel</Button><Button variant="danger" onClick={onConfirm}>{confirmLabel}</Button></div>
+    <div className="confirmation-dialog-actions"><Button variant="secondary" autoFocus onClick={onCancel}>{cancelLabel}</Button><Button variant={confirmVariant} disabled={confirmDisabled} onClick={onConfirm}>{confirmLabel}</Button></div>
   </dialog>;
 }
 

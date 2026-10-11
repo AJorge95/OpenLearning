@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Activity, AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, Filter, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload, UsersRound } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { Link, NavLink, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, NavLink, useBeforeUnload, useBlocker, useLocation, useNavigate, useParams } from 'react-router-dom';
+import type { BlockerFunction } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
 import { requestPendingRegistrationCountRefresh } from './admin-navigation-events';
 import { AppSelect, Button, ConfirmationDialog, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PasswordField, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
@@ -984,6 +985,26 @@ export function CourseEditorPage() {
     || visibility !== course.visibility
     || (completionWindowDays ? Number(completionWindowDays) : null) !== (course.completionWindowDays ?? null)
   ));
+  const skipCourseNavigationPromptRef = useRef(false);
+  const shouldBlockCourseNavigation = useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => {
+    const locationChanged = currentLocation.pathname !== nextLocation.pathname
+      || currentLocation.search !== nextLocation.search
+      || currentLocation.hash !== nextLocation.hash;
+    return locationChanged && !skipCourseNavigationPromptRef.current && (courseDetailsChanged || saving);
+  }, [courseDetailsChanged, saving]);
+  const navigationBlocker = useBlocker(shouldBlockCourseNavigation);
+
+  const preventUnsavedCourseExit = useCallback((event: BeforeUnloadEvent) => {
+    if (!courseDetailsChanged && !saving) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }, [courseDetailsChanged, saving]);
+  useBeforeUnload(preventUnsavedCourseExit);
+
+  useEffect(() => {
+    // A save can finish while navigation is waiting; follow that route once no edits remain.
+    if (navigationBlocker.state === 'blocked' && !courseDetailsChanged && !saving) navigationBlocker.proceed();
+  }, [navigationBlocker, courseDetailsChanged, saving]);
 
   function abortActiveUploads() {
     for (const upload of uploadControllersRef.current.values()) upload.controller.abort();
@@ -1404,7 +1425,10 @@ export function CourseEditorPage() {
     setError('');
     try {
       await api.delete(`/api/manage/courses/${requestedCourseId}`);
-      if (routeCourseIdRef.current === requestedCourseId) navigate('/manage/courses');
+      if (routeCourseIdRef.current === requestedCourseId) {
+        skipCourseNavigationPromptRef.current = true;
+        navigate('/manage/courses');
+      }
     } catch (cause) {
       if (routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Course could not be deleted.');
     } finally {
@@ -1694,6 +1718,16 @@ export function CourseEditorPage() {
   return <div className="editor-page">
     <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>{isNewCourseDraft ? 'Create course' : 'Edit course'}</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving || (review?.status === 'in_review' && review.submittedBy === editorUser?.id)} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
     {error && error !== COMPLETION_WINDOW_ERROR && <Notice>{error}</Notice>}{notice && <Notice kind="success">{notice}</Notice>}
+    {navigationBlocker.state === 'blocked' && <ConfirmationDialog
+      title={saving ? 'Course save in progress' : 'Discard unsaved course details?'}
+      description={saving ? 'Wait for the current save to finish before leaving this page.' : 'Your unsaved course details will be lost if you leave this page.'}
+      cancelLabel={saving ? 'Stay on page' : 'Keep editing'}
+      confirmLabel={saving ? 'Saving…' : 'Discard changes'}
+      confirmVariant={saving ? 'secondary' : 'danger'}
+      confirmDisabled={saving}
+      onCancel={navigationBlocker.reset}
+      onConfirm={navigationBlocker.proceed}
+    />}
     <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{movingCurriculumItems.size ? 'Updating course content order…' : ''}</p>
     <p className="course-editing-note">{courseEditingNote(course.status, course.visibility)}</p>
     <section className="editor-section course-details-form" aria-label="Course details">
