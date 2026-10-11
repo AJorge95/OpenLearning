@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Explain reset-status polling guards
+
+- **Reviewed:** The Settings page polls for status changes initiated by other administrators, and several lifecycle guards control when those requests run.
+- **Improvement:** Add concise comments explaining the shared-state refresh and the guard against overlapping focus, visibility, and timer events.
+- **Why it helps:** Future changes can preserve the cross-administrator freshness and request-lifecycle behavior without inferring intent from the hook implementation.
+- **Checked:** No runtime behavior changed. The focused reset-status tests, production build, and `git diff --check` passed.
+
 ## 2026-10-11 — Keep platform-reset status current across administrators
 
 - **Reviewed:** The settings page loaded reset status once on mount and only refreshed after a conflicting start attempt. If another administrator prepared or finished a reset while this page stayed open, the displayed action could be stale until the local administrator clicked it.

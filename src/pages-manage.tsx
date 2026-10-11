@@ -2328,12 +2328,14 @@ export function AdminSettingsPage() {
       if (registeredUserCountControllerRef.current === controller) registeredUserCountControllerRef.current = null;
     };
   }, [registeredUserCountRetryVersion]);
+  // Another administrator can change reset state while this page is open; refresh it only in visible, idle pages.
   useEffect(() => {
     if (resetBusy) return;
     let active = true;
     let requestInFlight = false;
     let controller: AbortController | null = null;
     async function refreshResetStatus() {
+      // Focus and visibility events can coincide with an interval tick.
       if (!active || requestInFlight || document.visibilityState === 'hidden') return;
       requestInFlight = true;
       const requestController = new AbortController();
