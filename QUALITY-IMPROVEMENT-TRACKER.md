@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Recheck sign-in access and session refresh
+
+- **Reviewed:** The rendered sign-in page, username/password labels and autocomplete, requested-destination guidance, post-login routing, and auth-provider sequencing for concurrent session refreshes.
+- **Result:** No code change. The visible fields have accessible names, the requested destination is described in the page and username field, and stale `getMe`/setup refreshes cannot overwrite a newer authentication state.
+- **Why no change:** The inspected sign-in and session paths already provide a usable recovery route and reject stale refresh results; no separate interface or middleware defect appeared.
+- **Interface review:** The local 1999×1244 sign-in view is centered and unclipped. A mobile viewport and signed-in protected pages were not available in this browser session.
+- **Checked:** Focused post-login, session sign-out, and current-user middleware tests passed (10/10). Browser accessibility inspection exposed the expected heading, labeled fields, submit action, and registration link.
+
 ## 2026-10-11 — Verify the role selector against the served component
 
 - **Reviewed:** The repeated right-side click report, the Vite-served account-detail component and CSS, and the current selector label and hit-area regressions.
