@@ -878,7 +878,7 @@ export function CoursePlayerPage() {
       const response = await api.get<LessonFeedback>(`/api/lessons/${requestedLessonId}/feedback?page=${nextPage}`, { signal: controller.signal });
       if (isCurrentRequest()) {
         const newComments = getNewLessonComments(feedback.comments, response.comments);
-        if (response.page < nextPage || response.total !== feedback.total || (!newComments.length && feedback.comments.length < response.total)) {
+        if (response.page < nextPage || response.total !== feedback.total || newComments.length !== response.comments.length || (!newComments.length && feedback.comments.length < response.total)) {
           commentPageSequenceRef.current += 1;
           setCommentsLoading(false);
           setFeedbackRefreshVersion((version) => version + 1);
