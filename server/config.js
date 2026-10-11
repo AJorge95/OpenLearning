@@ -12,7 +12,7 @@ if (rawTrustProxy && !['true', 'false'].includes(rawTrustProxy)) {
   throw new Error('TRUST_PROXY must be true or false.');
 }
 const rawPort = process.env.PORT?.trim() || '';
-const port = rawPort ? Number(rawPort) : 3000;
+const port = rawPort ? Number(rawPort) : 6173;
 if (rawPort && (!/^\d+$/.test(rawPort) || !Number.isSafeInteger(port) || port < 1 || port > 65_535)) {
   throw new Error('PORT must be a whole-number TCP port between 1 and 65535.');
 }
