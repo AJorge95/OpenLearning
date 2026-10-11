@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Show competency description character usage
+
+- **Reviewed:** The competency creation form and its create/update route validation. Competency descriptions have a 2,000-character browser and server limit but no visible count, while other long-form editors now show the same guidance.
+- **Improvement:** Add a count associated with the description textarea through `aria-describedby`, using the shared counter style.
+- **Why it helps:** Administrators can see how much space remains before adding a competency and avoid an unexpected validation response.
+- **Backend review:** Create and update still enforce the canonical 2,000-character competency-description limit; no API or database change was needed.
+- **Checked:** The focused competency-description test and full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. In the local browser, a temporary value changed the count from 0 to 32 and back to 0; no competency was saved.
+
 ## 2026-10-12 — Show learning-path description character usage
 
 - **Reviewed:** Path authoring limits, the create/update routes, and the path form layout. Learning-path descriptions have a 6,000-character client and server limit, but no visible count; course and lesson description counters already establish the same editing pattern.
