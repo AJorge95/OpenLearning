@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Review the current course editor and API boundaries
+
+- **Reviewed:** The clean current branch and project guidance, the rendered empty-course editor, course publication prerequisites, the shared API transport/error handling, session expiry cleanup, and the reported account-role selector.
+- **Result:** No new runtime defect surfaced. The editor communicates draft/saved state, server publication checks return specific missing-content guidance, API failures are normalized, and session cleanup failures are reported without preventing startup.
+- **Why no change:** Reimplementing server publication rules in the client would duplicate the source of truth; the inspected interaction and backend paths already have focused regression coverage, and there was no current-build mismatch to fix.
+- **Checked:** Read-only accessibility-tree and screenshot review of the local editor; no fields or course data were changed. Focused editor, selector, API, session-store, and account-route tests passed (54/54). `git diff --check` passed.
+- **Needed to continue:** A reproducible current-build interaction or responsive/accessibility mismatch, or a specific backend failure or representative workload that identifies behavior outside existing coverage.
+
 ## 2026-10-12 — Recheck the reported account-role selector width
 
 - **Reviewed:** The supplied account screenshot and target path against the current role-control markup, desktop sizing, popup width, and pointer hit area.
