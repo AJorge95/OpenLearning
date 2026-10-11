@@ -46,3 +46,10 @@ test('certificate-name save is disabled when normalized names are unchanged', ()
   assert.match(source, /normalizeAccountNameDraft\(profileFirstName\).*user\.firstName/);
   assert.match(source, /normalizeAccountNameDraft\(profileLastName\).*user\.lastName/);
 });
+
+test('account course activity renders the explicit assignment source', () => {
+  const source = fs.readFileSync(pagePath, 'utf8');
+
+  assert.match(source, /type AdminAccountCourse = Course & \{[^}]*learningPathEnrolled: boolean/s);
+  assert.match(source, /accountCourseAssignmentLabel\(course\)/);
+});
