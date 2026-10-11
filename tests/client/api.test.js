@@ -98,6 +98,30 @@ test('returns a repeated CSRF rejection after one retry instead of looping', asy
   assert.equal(writeRequests, 2);
 });
 
+test('preserves structured request-body errors from the server', async (t) => {
+  restoreFetch(t);
+  const failures = [
+    { status: 400, code: 'invalid_json', error: 'Request body contains invalid JSON.' },
+    { status: 413, code: 'payload_too_large', error: 'Request body is too large.' },
+  ];
+  let writeRequests = 0;
+  globalThis.fetch = async (input) => {
+    if (String(input) === '/api/csrf') return jsonResponse({ token: 'request-body-token' });
+    const failure = failures[writeRequests++];
+    return jsonResponse(failure, failure.status);
+  };
+
+  for (const failure of failures) {
+    await assert.rejects(api.post('/api/action', { value: 1 }), (error) => (
+      error instanceof ApiError
+      && error.status === failure.status
+      && error.code === failure.code
+      && error.message === failure.error
+    ));
+  }
+  assert.equal(writeRequests, failures.length);
+});
+
 test('accepts empty 204 responses for delete requests', async (t) => {
   restoreFetch(t);
   const requests = [];

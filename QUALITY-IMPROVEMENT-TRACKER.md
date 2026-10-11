@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Verify client handling of structured request-body errors
+
+- **Reviewed:** The server returns structured `400 invalid_json` and `413 payload_too_large` errors, while the shared API client decodes structured error responses into `ApiError` instances.
+- **Improvement:** Add client API regression coverage that checks both request-body errors retain their HTTP status, stable code, and user-facing message.
+- **Why it helps:** Client forms continue to receive actionable parser and size-limit messages if API response handling changes, keeping the server/client error contract explicit.
+- **Checked:** `node --test --test-reporter=dot tests/server/last-login.test.js tests/client/api.test.js` passed; `git diff --check` passed.
+
 ## 2026-10-11 — Recheck global route announcements and access guards
 
 - **Reviewed:** Route-change focus and title announcements, loading and startup-error states, lazy management-page boundaries, signed-in/staff/admin route groups, and the matching API authentication/role middleware.
