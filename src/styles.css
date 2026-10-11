@@ -491,6 +491,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .staff-sidebar nav a, .staff-back-link { display: flex; align-items: center; gap: 13px; min-height: 45px; padding: 0 14px; border-radius: 4px; color: #424758; font-size: 14px; font-weight: 550; }
 .staff-sidebar nav a:hover, .staff-sidebar nav a.active { color: var(--purple); background: var(--purple-soft); }
 .staff-nav-count { display: inline-flex; align-items: center; justify-content: center; min-width: 21px; height: 21px; margin-left: auto; padding: 0 6px; border-radius: 999px; color: var(--purple-dark); background: var(--purple-soft); font-size: 11px; font-weight: 700; line-height: 1; }
+.staff-nav-count-unavailable { color: #8b5700; background: #fff5df; }
 .staff-back-link { margin-top: auto; margin-bottom: 15px; color: #656b7a; }
 .staff-back-link svg { transform: rotate(180deg); }
 .staff-account { display: flex; align-items: center; gap: 10px; min-height: 60px; border-top: 1px solid var(--line); padding: 14px 4px 0; }

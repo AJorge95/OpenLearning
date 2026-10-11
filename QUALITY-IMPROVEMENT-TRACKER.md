@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Distinguish an unavailable pending count from zero
+
+- **Reviewed:** The administrator Users badge's loading, valid-count, request-failure, malformed-response, and cancellation paths after the previous navigation improvement.
+- **Improvement:** Show an amber `!` marker and a descriptive accessible label when the pending-count request fails or returns an invalid count. Clear the warning on a valid response, including a valid zero; keep cancelled requests quiet.
+- **Why it helps:** Administrators can tell when the sidebar cannot verify pending work instead of interpreting a missing count as confirmation that nobody is waiting.
+- **Backend review:** The existing count endpoint and admin authorization remain sufficient; no backend change was needed.
+- **Checked:** The focused navigation regressions passed (2/2), covering the warning label, invalid counts, cancellation handling, and badge styling. The full suite passed (525/525); `npm run build` passed strict TypeScript checking and Vite bundling; the changed test syntax check and `git diff --check` passed. A live endpoint outage was not injected into the signed-in browser, so that error presentation was verified through client source regressions rather than a rendered outage state.
+
 ## 2026-10-11 — Show pending registrations in admin navigation
 
 - **Reviewed:** The administrator sidebar, registration approval actions, the indexed registration-status column, the in-flight server route change, and the repeated report about the account-role selector's right-side click boundary.

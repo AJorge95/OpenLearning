@@ -228,6 +228,7 @@ export function StaffFrame() {
   const { pathname } = useLocation();
   const staffNavigationRef = useRef<HTMLElement>(null);
   const [pendingRegistrationCount, setPendingRegistrationCount] = useState<number | null>(null);
+  const [pendingRegistrationCountUnavailable, setPendingRegistrationCountUnavailable] = useState(false);
   const { submit: handleSignOut, signingOut, error: signOutError } = useSignOutAction();
   useEffect(() => {
     const revealActiveLink = () => {
@@ -245,6 +246,7 @@ export function StaffFrame() {
   useEffect(() => {
     if (user?.role !== 'admin') {
       setPendingRegistrationCount(null);
+      setPendingRegistrationCountUnavailable(false);
       return;
     }
 
@@ -257,10 +259,15 @@ export function StaffFrame() {
       try {
         const result = await api.get<{ count: number }>('/api/admin/users/pending-count', { signal: controller.signal });
         if (!controller.signal.aborted) {
-          setPendingRegistrationCount(Number.isSafeInteger(result.count) && result.count >= 0 ? result.count : null);
+          const countIsValid = Number.isSafeInteger(result.count) && result.count >= 0;
+          setPendingRegistrationCount(countIsValid ? result.count : null);
+          setPendingRegistrationCountUnavailable(!countIsValid);
         }
       } catch {
-        if (!controller.signal.aborted) setPendingRegistrationCount(null);
+        if (!controller.signal.aborted) {
+          setPendingRegistrationCount(null);
+          setPendingRegistrationCountUnavailable(true);
+        }
       }
     }
 
@@ -274,6 +281,16 @@ export function StaffFrame() {
       window.removeEventListener(pendingRegistrationCountChangedEvent, refresh);
     };
   }, [pathname, user?.role]);
+  const pendingRegistrationCountLabel = pendingRegistrationCountUnavailable
+    ? 'Users, pending registration count unavailable'
+    : pendingRegistrationCount !== null && pendingRegistrationCount > 0
+      ? `Users, ${formatCountLabel(pendingRegistrationCount, 'pending registration', 'pending registrations')}`
+      : undefined;
+  const pendingRegistrationCountBadge = pendingRegistrationCountUnavailable
+    ? <span className="staff-nav-count staff-nav-count-unavailable" aria-hidden="true" title="Pending registration count unavailable">!</span>
+    : pendingRegistrationCount !== null && pendingRegistrationCount > 0
+      ? <span className="staff-nav-count" aria-hidden="true">{pendingRegistrationCount > 99 ? '99+' : pendingRegistrationCount}</span>
+      : null;
   return (
     <div className="staff-layout">
       <a className="skip-link" href="#main-content">Skip to main content</a>
@@ -281,7 +298,7 @@ export function StaffFrame() {
         <PlatformBrand className="staff-brand" />
         <nav ref={staffNavigationRef} aria-label="Management navigation">
           <NavLink to="/manage/courses"><BookOpen size={18} />Courses</NavLink>
-          {user?.role === 'admin' && <NavLink to="/admin/users" aria-label={pendingRegistrationCount !== null && pendingRegistrationCount > 0 ? `Users, ${formatCountLabel(pendingRegistrationCount, 'pending registration', 'pending registrations')}` : undefined}><UsersRound size={18} />Users{pendingRegistrationCount !== null && pendingRegistrationCount > 0 && <span className="staff-nav-count" aria-hidden="true">{pendingRegistrationCount > 99 ? '99+' : pendingRegistrationCount}</span>}</NavLink>}
+          {user?.role === 'admin' && <NavLink to="/admin/users" aria-label={pendingRegistrationCountLabel}><UsersRound size={18} />Users{pendingRegistrationCountBadge}</NavLink>}
           <NavLink to="/manage/learning-paths"><Route size={18} />Learning paths</NavLink>
           {user?.role === 'admin' && <NavLink to="/admin/competencies"><Award size={18} />Competencies</NavLink>}
           {user?.role === 'admin' && <NavLink to="/admin/audit-log"><ClipboardList size={18} />Audit log</NavLink>}

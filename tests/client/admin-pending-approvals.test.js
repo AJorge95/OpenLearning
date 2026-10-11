@@ -21,12 +21,19 @@ test('admin navigation loads and refreshes the pending registration count', () =
   assert.ok(staffShellSource.includes('window.addEventListener(pendingRegistrationCountChangedEvent, refresh)'));
   assert.ok(staffShellSource.includes('requestController?.abort()'));
   assert.ok(staffShellSource.includes('Number.isSafeInteger(result.count)'));
+  assert.ok(staffShellSource.includes('setPendingRegistrationCountUnavailable(true)'));
+  assert.ok(staffShellSource.includes('setPendingRegistrationCountUnavailable(!countIsValid)'));
+  assert.match(staffShellSource, /if \(!controller\.signal\.aborted\) \{\s*setPendingRegistrationCount\(null\);\s*setPendingRegistrationCountUnavailable\(true\);\s*\}/);
 });
 
 test('pending approvals badge is accessible and both approval flows refresh it', () => {
-  assert.ok(staffShellSource.includes("pendingRegistrationCount !== null && pendingRegistrationCount > 0 ? `Users, ${formatCountLabel(pendingRegistrationCount, 'pending registration', 'pending registrations')}`"));
+  assert.ok(staffShellSource.includes("'Users, pending registration count unavailable'"));
+  assert.ok(staffShellSource.includes('aria-label={pendingRegistrationCountLabel}'));
+  assert.ok(staffShellSource.includes('staff-nav-count-unavailable'));
+  assert.ok(staffShellSource.includes("`Users, ${formatCountLabel(pendingRegistrationCount, 'pending registration', 'pending registrations')}`"));
   assert.ok(staffShellSource.includes("{pendingRegistrationCount > 99 ? '99+' : pendingRegistrationCount}"));
   assert.equal((managementSource.match(/notifyPendingRegistrationCountChanged\(\)/g) || []).length, 2);
   assert.match(navigationEventsSource, /window\.dispatchEvent\(new Event\(pendingRegistrationCountChangedEvent\)\)/);
   assert.match(styles, /\.staff-nav-count\s*\{[^}]*margin-left:\s*auto;[^}]*border-radius:\s*999px;[^}]*color:\s*var\(--purple-dark\);[^}]*background:\s*var\(--purple-soft\);/);
+  assert.match(styles, /\.staff-nav-count-unavailable\s*\{\s*color: #8b5700; background: #fff5df;\s*\}/);
 });
