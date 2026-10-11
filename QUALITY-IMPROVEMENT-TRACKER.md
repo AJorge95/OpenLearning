@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep admin user results current after role changes
+
+- **Reviewed:** Changing a user's role triggers a list reload after the API request. The reload used the page, search, and role filter captured before the request, which could replace a newer view if staff changed filters while the update was pending.
+- **Improvement:** Record the latest requested user-list page and filters when loading; role updates now refresh that current view.
+- **Why it helps:** A delayed role update no longer switches administrators back to stale search results or an earlier role filter.
+- **Interface review:** The account list retains its semantic table, scoped column headers, caption, accessible row actions, and named role selectors. No markup or layout change was indicated.
+- **Checked:** The new client regression passed (1/1); full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check tests/client/admin-user-list-refresh.test.js`, and `git diff --check` passed.
+
 ## 2026-10-11 — Preserve current learner filters after access changes
 
 - **Reviewed:** Course access mutations can take time while staff continue using search or pagination. The mutation callback captured the query and page from its original render, then refreshed that stale view after the assignment completed.

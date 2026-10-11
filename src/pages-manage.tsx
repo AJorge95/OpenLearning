@@ -1421,6 +1421,8 @@ export function AdminUsersPage() {
   const [appliedQuery, setAppliedQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<UserRoleFilter>('all');
   const [page, setPage] = useState(1);
+  const userListStateRef = useRef({ query: appliedQuery, roleFilter, page });
+  userListStateRef.current = { query: appliedQuery, roleFilter, page };
   const [pageSize, setPageSize] = useState(50);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
@@ -1465,6 +1467,7 @@ export function AdminUsersPage() {
   }
 
   async function load(requestedPage = page, requestedQuery = appliedQuery, requestedRoleFilter = roleFilter): Promise<boolean> {
+    userListStateRef.current = { query: requestedQuery, roleFilter: requestedRoleFilter, page: requestedPage };
     const requestSequence = ++loadSequenceRef.current;
     loadControllerRef.current?.abort();
     const controller = new AbortController();
@@ -1552,7 +1555,8 @@ export function AdminUsersPage() {
           return;
         }
       } else if (changes.role !== undefined) {
-        if (!(await load(page))) return;
+        const currentListState = userListStateRef.current;
+        if (!(await load(currentListState.page, currentListState.query, currentListState.roleFilter))) return;
       } else {
         setUsers((current) => current.map((row) => row.id === user.id ? { ...row, ...response.user } : row));
       }
