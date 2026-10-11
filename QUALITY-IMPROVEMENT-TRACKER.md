@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Require an enabled administrator for readiness
+
+- **Reviewed:** The readiness predicate checked that setup was complete and an administrator row existed, while authentication rejects disabled accounts and the account-management route protects the last enabled administrator.
+- **Improvement:** Report the service as ready only when at least one enabled administrator exists; cover a disabled-only administrator state in the readiness regression and update the documented `/readyz` contract.
+- **Why it helps:** Service monitors will detect a platform that has completed setup but has no administrator able to sign in and restore management access.
+- **Interface review:** The account page prevents normal users from disabling the last enabled administrator; no UI change was needed.
+- **Checked:** `node --test tests/server/readiness.test.js` passed (3/3); `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, `node --check server/readiness.js`, and `git diff --check` all passed.
+
 ## 2026-10-11 — Show verified watched coverage in the lesson player
 
 - **Reviewed:** The lesson player labeled its progressbar as watched video but drove it from the local playhead. The server separately tracks `watchedUntilSeconds` and preserves that high-water mark when the learner rewinds.
