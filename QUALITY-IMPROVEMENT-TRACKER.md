@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-11 — Keep administrator profile saves atomic with certificate backfill
+
+- **Reviewed:** The repeated account-role screenshot, the currently served role-selector markup and sizing, and the account profile update transaction that backfills certificates after a name change.
+- **Interface review:** The current page serves a separate, bounded AppSelect with a trigger-width popup; the annotated screenshot targets an older wrapping label. The focused selector regressions pass, but the available in-app browser is signed out, so the protected click could not be replayed. No duplicate width rule was added.
+- **Improvement:** Issue completed certificates inside the same immediate transaction as a changed account name and its audit entry. Add a route regression that forces certificate insertion to fail, verifies the profile and audit roll back, then retries successfully.
+- **Why it helps:** A failed certificate backfill no longer returns an error after silently saving the new name and leaving the learner's certificates stale; staff can retry the unchanged name after the storage issue is fixed.
+- **Checked:** The focused account/profile and role-selector suites passed (33/33). The new route regression confirmed rollback of the name and audit on certificate failure and successful certificate issuance on retry. Full `npm test -- --test-reporter=dot`, `npx tsc --noEmit`, `npm run build`, both changed-file syntax checks, and `git diff --check` passed.
+
 ## 2026-10-11 — Protect quiz-save validation boundaries
 
 - **Reviewed:** The quiz editor and server agree on text limits, the 50-question cap, two-to-six answer choices, and exactly one correct answer. Existing server coverage tested audit-failure rollback but did not protect malformed quiz-save requests or the client helper used to find the first blank field.

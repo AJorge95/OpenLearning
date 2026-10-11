@@ -325,10 +325,10 @@ adminRouter.patch('/users/:userId', (req, res) => {
     }
     if (nextDisabled) invalidateUserSessions(db, user.id);
     const updated = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, created_at, updated_at FROM users WHERE id = ?').get(user.id);
-    return { updated, profileChanged };
+    const certificatesIssued = profileChanged ? issueCompletedCertificatesForUser(updated.id).length : 0;
+    return { updated, certificatesIssued };
   });
-  const { updated, profileChanged } = updateUser.immediate();
-  const certificatesIssued = profileChanged ? issueCompletedCertificatesForUser(updated.id).length : 0;
+  const { updated, certificatesIssued } = updateUser.immediate();
   res.json({ user: {
     id: updated.id, username: updated.username, email: updated.email,
     firstName: updated.first_name, lastName: updated.last_name, role: updated.role,
