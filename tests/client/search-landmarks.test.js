@@ -46,9 +46,33 @@ function courseAndManagementSearchForms() {
 test('course and management search forms are named search landmarks', () => {
   const forms = courseAndManagementSearchForms();
 
-  assert.equal(forms.length, 8, 'expected to review every course and management search form');
+  assert.equal(forms.length, 9, 'expected to review every course and management search form');
   for (const form of forms) {
     assert.equal(form.role, 'search', `${form.fileName} ${form.className} should expose the search landmark`);
     assert.ok(form.label?.trim(), `${form.fileName} ${form.className} should name its search landmark`);
+  }
+});
+
+test('course and management search landmarks use native search inputs', () => {
+  for (const fileName of pageFiles) {
+    const filePath = path.join(sourceDirectory, fileName);
+    const source = fs.readFileSync(filePath, 'utf8');
+    const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+
+    function visit(node) {
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(sourceFile) === 'form') {
+        const className = jsxStringAttribute(node.openingElement, 'className', sourceFile) || '';
+        const role = jsxStringAttribute(node.openingElement, 'role', sourceFile);
+        if (role === 'search' || /\b(?:management-search|search-field)\b/.test(className)) {
+          const input = node.children.find((child) => ts.isJsxSelfClosingElement(child)
+            && child.tagName.getText(sourceFile) === 'input');
+          assert.ok(input, `${fileName} ${className} should contain a search input`);
+          assert.equal(jsxStringAttribute(input, 'type', sourceFile), 'search', `${fileName} ${className} should use type=search`);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
   }
 });

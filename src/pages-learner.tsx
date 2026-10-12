@@ -218,7 +218,7 @@ export function CatalogPage() {
         <div className="select-wrap catalog-filter-control catalog-filter-control--sort"><span className="catalog-filter-label">Sort by</span><AppSelect className="app-select--filter" ariaLabel="Sort by" leadingIcon={<ArrowDownUp size={16} />} value={sort} onChange={(nextSort) => applyCatalogControlChange(category, nextSort)} options={COURSE_CATALOG_SORT_OPTIONS} /></div>
       </div>
       <form role="search" aria-label="Search courses" className="search-field" onSubmit={(event) => { event.preventDefault(); load({ query: query.trim(), category, sort }); }}>
-        <Search size={19} /><input ref={searchInputRef} aria-label="Search courses" placeholder="Search courses" maxLength={120} value={query} onChange={(event) => setQuery(event.target.value)} />
+        <Search size={19} /><input ref={searchInputRef} type="search" aria-label="Search courses" placeholder="Search courses" maxLength={120} value={query} onChange={(event) => setQuery(event.target.value)} />
         {hasAppliedFilters && <button type="button" className="clear-catalog-filters" aria-label="Clear search and filters" title="Clear search and filters" onClick={clearCatalogFilters}><X size={17} /></button>}
         <button type="submit" aria-label="Submit search"><ArrowRight size={17} /></button>
       </form>
