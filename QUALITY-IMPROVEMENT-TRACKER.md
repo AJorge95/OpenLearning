@@ -1,12 +1,11 @@
 # Quality Improvement Tracker
 
-## 2026-10-12 — Recheck course-detail reads and enrollment actions
+## 2026-10-12 — Restrict course enrollment to learners
 
-- **Reviewed:** The learner course-overview request, `requireCourseViewer` and payload construction, the explicit enrollment route and its transaction, the Start learning action, and the existing regression for course/path detail reads.
-- **Result:** No runtime change. Course-detail `GET` reads course and progress data without creating an enrollment or learning-state row. Learner navigation enrolls through `POST /courses/:courseId/enroll`, which creates enrollment and initial state together and returns 200 on a retry.
-- **Why no change:** Commit `94e6b02` already removed the GET side effect and added route coverage; the current source and regression still agree. Another patch would repeat the existing implementation.
-- **Checked:** `node --test --test-name-pattern="course and learning-path detail GETs are read-only" tests/server/course-analytics.test.js` passed (1/1). The integration fixture verified unchanged enrollment and course-state counts after GET, plus transactional enrollment on POST. No application data changed.
-- **Needed to continue:** A regression where an overview read writes enrollment or learning state, or a learner-flow issue showing explicit enrollment fails before lesson or quiz navigation.
+- **Reviewed:** The read-only course-detail GET, the learner Start learning flow, the transactional enrollment endpoint, and the mismatch between the client role check and server authorization.
+- **Improvement:** Require `role === 'learner'` for `POST /courses/:courseId/enroll`; return a clear 403 for administrators and moderators before creating enrollment or course-learning state. Keep learner eligibility checks and transactional retries unchanged.
+- **Why it helps:** Staff can still preview published content, but cannot create learner activity through a direct API request or distort the records used by learner-facing flows.
+- **Checked:** The new route regression first reproduced an administrator receiving 201; after the guard, administrator and moderator requests both return 403 with no enrollment or state rows. Existing detail-GET and learner enrollment checks still verify GET is read-only, first enrollment returns 201, and retry returns 200. The focused regressions passed (3/3), the complete `tests/server/course-analytics.test.js` suite passed (112/112), `node --check` passed for the route and test files, and `git diff --check` passed.
 
 ## 2026-10-12 — Review learner course-overview content and wrapping
 
