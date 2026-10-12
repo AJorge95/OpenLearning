@@ -423,6 +423,22 @@ test('platform setting changes roll back when their required audit entry cannot 
     WHERE action = 'platform.settings_updated'`).get().count, originalAuditCount + 1);
 });
 
+test('platform settings reject a whitespace-only name without changing the saved platform identity', async () => {
+  const originalName = database.prepare('SELECT value FROM app_settings WHERE key = ?').get('platform_name')?.value ?? null;
+  const response = await fetch(apiUrl('/admin/settings'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ platformName: '   ' }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: 'Platform name must be between 2 and 80 characters.',
+    code: 'invalid_platform_name',
+  });
+  assert.equal(database.prepare('SELECT value FROM app_settings WHERE key = ?').get('platform_name')?.value ?? null, originalName);
+});
+
 test('platform settings validate registration approval before attempting database writes', async () => {
   const originalName = database.prepare('SELECT value FROM app_settings WHERE key = ?').get('platform_name')?.value ?? null;
   database.exec(`CREATE TRIGGER reject_invalid_policy_write

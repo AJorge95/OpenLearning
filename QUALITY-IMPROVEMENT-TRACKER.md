@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Share platform-name validation in setup and settings
+
+- **Reviewed:** The first-run setup name field, administrator platform-identity field, server parsing for setup and settings, and the existing error/field accessibility patterns.
+- **Improvement:** Share trimming and the 2–80 character rule between the server and client. Keep invalid names on the visible field, mark and describe the input, focus it, and handle a server `invalid_platform_name` response the same way.
+- **Why it helps:** Whitespace-only names pass native `required` and were rejected after the user continued or submitted. The correction now appears beside the name field, and both client flows and server persistence follow one rule.
+- **Backend:** `routes-auth.js` uses the shared helper for both setup and settings while preserving the existing status, message, and error code.
+- **Checked:** Platform-name helper and client-flow tests plus the settings-route regression passed; full `npm test -- --test-reporter=dot`, `npm run build`, and `git diff --check` passed. The connected browser is signed out, so authenticated settings could not be replayed there.
+
 ## 2026-10-12 — Validate self-service certificate-name updates
 
 - **Reviewed:** The account-security profile form, shared account-name rules, certificate backfill response, and the self-service profile route's `invalid_name` contract.
