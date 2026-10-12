@@ -178,7 +178,14 @@ export function courseSummary(course, user, preloadedVersionsByCourse) {
   return courseSummaryDetails([course], user, preloadedVersionsByCourse)[0].summary;
 }
 
-export function getCoursePayload(course, user, { includeAnswers = false, includeQuizQuestions = true, includeLatestAttempts = true, quizId = null, storageCourseId } = {}) {
+export function getCoursePayload(course, user, {
+  includeAnswers = false,
+  includeQuizQuestions = true,
+  // Editor payloads expose answer keys but do not display the current user's attempt details.
+  includeLatestAttempts = !includeAnswers,
+  quizId = null,
+  storageCourseId,
+} = {}) {
   const logicalId = course.logical_course_id || course.id;
   const editingCopy = Boolean(course.logical_course_id && includeAnswers);
   const version = publishedVersionForLogicalCourse(logicalId);
