@@ -3696,6 +3696,51 @@ test('quiz-save validation rejects malformed questions without replacing saved q
   }
 });
 
+test('quiz saves prepare question and choice insert statements once per batch', async () => {
+  const courseId = 'course-quiz-prepared-inserts';
+  const moduleId = 'module-quiz-prepared-inserts';
+  const originalPrepare = database.prepare;
+  let questionInsertPreparations = 0;
+  let choiceInsertPreparations = 0;
+  database.prepare = (sql) => {
+    const normalizedSql = sql.replace(/\s+/g, ' ').trim();
+    if (normalizedSql.startsWith('INSERT INTO quiz_questions ')) questionInsertPreparations += 1;
+    if (normalizedSql.startsWith('INSERT INTO quiz_choices ')) choiceInsertPreparations += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    originalPrepare.call(database, `INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES (?, 'Quiz insert preparation fixture', 'draft', 'admin-1', 'admin-1')`).run(courseId);
+    originalPrepare.call(database, 'INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, 0)')
+      .run(moduleId, courseId, 'Preparation module');
+    const questions = Array.from({ length: 3 }, (_, questionIndex) => ({
+      prompt: `Question ${questionIndex + 1}?`,
+      explanation: '',
+      choices: Array.from({ length: 6 }, (_, choiceIndex) => ({
+        text: `Answer ${choiceIndex + 1}`,
+        isCorrect: choiceIndex === 0,
+      })),
+    }));
+    const response = await fetch(apiUrl(`/manage/modules/${moduleId}/quiz`), {
+      method: 'PUT',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Prepared inserts quiz', passMark: 70, questions }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(questionInsertPreparations, 1);
+    assert.equal(choiceInsertPreparations, 1);
+    const quizId = originalPrepare.call(database, 'SELECT id FROM quizzes WHERE module_id = ?').get(moduleId).id;
+    assert.equal(originalPrepare.call(database, 'SELECT COUNT(*) AS count FROM quiz_questions WHERE quiz_id = ?').get(quizId).count, 3);
+    assert.equal(originalPrepare.call(database, `SELECT COUNT(*) AS count FROM quiz_choices qc
+      JOIN quiz_questions qq ON qq.id = qc.question_id WHERE qq.quiz_id = ?`).get(quizId).count, 18);
+  } finally {
+    database.prepare = originalPrepare;
+    originalPrepare.call(database, 'DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('quiz saves roll back when their audit entry cannot be saved', async () => {
   const originalQuiz = database.prepare("SELECT id, title, pass_mark FROM quizzes WHERE module_id = 'module-analytics'").get();
   const initialQuestionCount = database.prepare('SELECT COUNT(*) AS count FROM quiz_questions WHERE quiz_id = ?').get(originalQuiz.id).count;

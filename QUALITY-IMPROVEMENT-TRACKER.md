@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse quiz child-insert statements during saves
+
+- **Reviewed:** Quiz editor question/choice limits and accessible actions, server-side quiz validation, unchanged-save handling, the immediate write transaction, and nested question/choice persistence.
+- **Improvement:** Prepare the question and answer-choice insert statements once per changed quiz save and reuse them across their bounded loops.
+- **Why it helps:** A maximum-size quiz no longer recompiles these two SQL statements for every question and choice; the question/choice inserts now need two statement preparations instead of up to 350.
+- **Interface review:** The editor already caps quizzes at 50 questions and each question at six choices, with contextual accessible names and inline text validation; no markup change was indicated.
+- **Checked:** A regression first observed 3 question-statement and 18 choice-statement preparations for a 3-question save, then passed with one of each and verified all 3 questions/18 choices persisted. `node --test tests/server/course-analytics.test.js` passed (117/117), focused course-editor/quiz client tests passed (9/9), `npm run build` passed TypeScript and Vite, and `git diff --check` passed.
+
 ## 2026-10-12 — Stack registration field controls before tablet overflow
 
 - **Reviewed:** The registration editor's three minimum column widths, admin sidebar/content padding across breakpoints, field-level errors and required controls, plus the signup route's server-side answer validation and transaction behavior.

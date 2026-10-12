@@ -1200,13 +1200,14 @@ courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
       ON CONFLICT(module_id) DO UPDATE SET title = excluded.title, pass_mark = excluded.pass_mark, updated_at = CURRENT_TIMESTAMP`)
       .run(quizId, currentModule.module_id, title, passMark);
     db.prepare('DELETE FROM quiz_questions WHERE quiz_id = ?').run(quizId);
+    // Prepare each child insert once, then reuse it for the bounded question and choice batches.
+    const insertQuestion = db.prepare('INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position) VALUES (?, ?, ?, ?, ?)');
+    const insertChoice = db.prepare('INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES (?, ?, ?, ?, ?)');
     normalizedQuestions.forEach((question, qIndex) => {
       const questionId = randomUUID();
-      db.prepare('INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position) VALUES (?, ?, ?, ?, ?)')
-        .run(questionId, quizId, question.prompt, question.explanation, qIndex);
+      insertQuestion.run(questionId, quizId, question.prompt, question.explanation, qIndex);
       question.choices.forEach((choice, cIndex) => {
-        db.prepare('INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES (?, ?, ?, ?, ?)')
-          .run(randomUUID(), questionId, choice.text, choice.isCorrect ? 1 : 0, cIndex);
+        insertChoice.run(randomUUID(), questionId, choice.text, choice.isCorrect ? 1 : 0, cIndex);
       });
     });
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, currentModule.id);
