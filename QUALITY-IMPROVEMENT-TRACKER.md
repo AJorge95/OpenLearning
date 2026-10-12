@@ -8,6 +8,14 @@
 - **Backend:** `routes-courses.js` already trims and validates required course titles; it remains authoritative and its response contract is unchanged.
 - **Checked:** Added helper and editor-wiring regressions under `tests/client/`. Full `npm test -- --test-reporter=dot` passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. Playwright is not installed, and the connected browser is signed out, so the authenticated editor interaction could not be replayed.
 
+## 2026-10-12 — Sync normalized course values after saves
+
+- **Reviewed:** Server trimming and parsing for course details, the editor's `courseDetailsChanged` comparison, and both the toolbar and curriculum-action save paths.
+- **Improvement:** Apply normalized title, description, category, visibility, and completion-window values from the server response when the editor field still matches the request snapshot. Keep any value changed while a nested save is in flight as an unsaved draft.
+- **Why it helps:** Trailing spaces and equivalent numeric input no longer leave the editor showing a false unsaved state after a successful save; edits made during a request are not overwritten by its response.
+- **Backend:** Existing `textField` trimming and completion-window validation remain the source of truth; no API or database change was needed.
+- **Checked:** Added an editor regression under `tests/client/`; focused course-editor tests passed (7/7), full `npm test -- --test-reporter=dot` passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. Playwright is unavailable, and the connected browser is signed out, so the protected editor was not replayed.
+
 ## 2026-10-12 — Share platform-name validation in setup and settings
 
 - **Reviewed:** The first-run setup name field, administrator platform-identity field, server parsing for setup and settings, and the existing error/field accessibility patterns.

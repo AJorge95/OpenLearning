@@ -1221,6 +1221,23 @@ export function CourseEditorPage() {
     return validation.value;
   }
 
+  function syncCourseDetailsAfterSave(savedCourse: Course, submitted: {
+    title: string;
+    description: string;
+    category: string;
+    visibility: Course['visibility'];
+    completionWindowDays: string;
+  }) {
+    setCourse(savedCourse);
+    // Apply server-normalized values only when the author has not changed that field during the request.
+    setTitle((current) => current === submitted.title ? savedCourse.title : current);
+    setDescription((current) => current === submitted.description ? savedCourse.description : current);
+    setCategory((current) => current === submitted.category ? savedCourse.category : current);
+    setVisibility((current) => current === submitted.visibility ? savedCourse.visibility : current);
+    const savedCompletionWindowDays = savedCourse.completionWindowDays ? String(savedCourse.completionWindowDays) : '';
+    setCompletionWindowDays((current) => current === submitted.completionWindowDays ? savedCompletionWindowDays : current);
+  }
+
   function showCourseTitleApiError(cause: unknown) {
     if (!(cause instanceof ApiError) || cause.code !== 'validation_error'
       || ![COURSE_TITLE_REQUIRED_ERROR, COURSE_TITLE_TOO_LONG_ERROR].includes(cause.message)) return;
@@ -1241,6 +1258,7 @@ export function CourseEditorPage() {
         completionWindowInputRef.current?.focus();
         throw new ApiError(400, completionWindow.error, 'validation_error');
       }
+      const submittedDetails = { title, description, category, visibility, completionWindowDays };
       const response = await api.patch<{ course: Course }>(`/api/manage/courses/${requestedCourseId}`, {
         title: validatedTitle, description, category, visibility,
         completionWindowDays: completionWindow.value,
@@ -1249,7 +1267,8 @@ export function CourseEditorPage() {
       });
       if (routeCourseIdRef.current !== requestedCourseId || requestSequence !== courseLoadSequenceRef.current) return;
       courseSaved = true;
-      setCourse(response.course); setTitle(response.course.title); setNotice(status === 'published' ? 'Course published for learners.' : status === 'draft' ? 'Draft saved.' : 'Course details saved.');
+      syncCourseDetailsAfterSave(response.course, submittedDetails);
+      setNotice(status === 'published' ? 'Course published for learners.' : status === 'draft' ? 'Draft saved.' : 'Course details saved.');
       if (status === 'published') { setRequiresRecompletion(false); setChangeNote(''); await loadGovernance(requestedCourseId); }
     } catch (cause) {
       showCourseTitleApiError(cause);
@@ -1270,9 +1289,10 @@ export function CourseEditorPage() {
       completionWindowInputRef.current?.focus();
       throw new ApiError(400, completionWindow.error, 'validation_error');
     }
+    const submittedDetails = { title, description, category, visibility, completionWindowDays };
     if (validatedTitle === course.title && description === course.description && category === course.category && visibility === course.visibility
       && (completionWindowDays ? Number(completionWindowDays) : null) === (course.completionWindowDays ?? null)) {
-      setTitle(course.title);
+      syncCourseDetailsAfterSave(course, submittedDetails);
       return;
     }
     try {
@@ -1280,8 +1300,7 @@ export function CourseEditorPage() {
         title: validatedTitle, description, category, visibility,
         completionWindowDays: completionWindow.value,
       });
-      setCourse(response.course);
-      setTitle(response.course.title);
+      syncCourseDetailsAfterSave(response.course, submittedDetails);
     } catch (cause) {
       showCourseTitleApiError(cause);
       throw cause;
