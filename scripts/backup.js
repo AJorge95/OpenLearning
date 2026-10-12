@@ -15,6 +15,18 @@ function pathsOverlap(firstPath, secondPath) {
   return isWithin(firstPath, secondPath) || isWithin(secondPath, firstPath);
 }
 
+async function resolveCanonicalPath(filePath) {
+  const absolutePath = path.resolve(filePath);
+  try {
+    return await fs.realpath(absolutePath);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    const parentPath = path.dirname(absolutePath);
+    if (parentPath === absolutePath) throw error;
+    return path.join(await resolveCanonicalPath(parentPath), path.basename(absolutePath));
+  }
+}
+
 function timestampedDirectoryName(date) {
   return `${date.toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`;
 }
@@ -26,14 +38,14 @@ export async function createBackup({
   copyMedia = fs.cp,
   now = new Date(),
 } = {}) {
-  const databasePath = path.resolve(appConfig.dbPath);
-  const mediaRoot = path.resolve(appConfig.mediaRoot);
-  const backupRoot = path.resolve(destinationRoot);
+  const databasePath = await fs.realpath(path.resolve(appConfig.dbPath));
+  const mediaRoot = await fs.realpath(path.resolve(appConfig.mediaRoot));
+  const backupRoot = await resolveCanonicalPath(destinationRoot);
   const backupDirectory = path.join(backupRoot, timestampedDirectoryName(now));
   const databaseBackupPath = path.join(backupDirectory, 'openlearning.sqlite');
   const mediaBackupPath = path.join(backupDirectory, 'course-media');
 
-  // Prevent copying a directory into itself when BACKUP_DIR points into course media.
+  // Canonical paths ensure symlinked backup roots cannot bypass the recursive-copy guard.
   if (pathsOverlap(mediaRoot, backupDirectory)) {
     throw new Error('BACKUP_DIR must resolve outside the configured media root.');
   }
@@ -53,6 +65,11 @@ export async function createBackup({
     await fs.mkdir(backupRoot, { recursive: true });
     await fs.mkdir(backupDirectory);
     backupDirectoryCreated = true;
+
+    const createdBackupDirectory = await fs.realpath(backupDirectory);
+    if (pathsOverlap(mediaRoot, createdBackupDirectory) || pathsOverlap(databasePath, createdBackupDirectory)) {
+      throw new Error('Backup output paths must remain separate from the configured storage paths.');
+    }
 
     await sourceDatabase.backup(databaseBackupPath);
     sourceDatabase.close();
