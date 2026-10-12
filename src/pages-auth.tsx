@@ -1,10 +1,10 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError } from './api';
 import { useAuth } from './auth-context';
 import { AppSelect, Button, ImageWithFallback, PalettePicker, PasswordField, PlatformBrand, PlatformIconPicker } from './components';
 import { getPostLoginPath } from './post-login-path';
-import { findMissingRequiredRegistrationField, refreshRegistrationFieldValues } from './registration-fields';
+import { buildRegistrationFieldSelectOptions, findMissingRequiredRegistrationField, refreshRegistrationFieldValues } from './registration-fields';
 import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordConfirmationFieldProps } from './password-confirmation';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
 import { validateEmail } from './email-validation';
@@ -12,6 +12,8 @@ import { accountNameError, MAX_ACCOUNT_NAME_LENGTH, normalizeAccountName } from 
 import { MAX_PLATFORM_NAME_LENGTH, MIN_PLATFORM_NAME_LENGTH, normalizePlatformName, platformNameValidationError } from './platform-name-validation';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import type { RegistrationField, RegistrationFieldValues } from './types';
+
+const EMPTY_REGISTRATION_SELECT_OPTIONS: { value: string; label: string }[] = [];
 
 function AuthPanel({ children, eyebrow }: { children: React.ReactNode; eyebrow?: string }) {
   return (
@@ -32,6 +34,8 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
   invalidFieldId: string;
   onChange: (id: string, value: string | boolean) => void;
 }) {
+  // Keep AppSelect's options stable while answers change; its validation effect depends on this reference.
+  const selectOptionsByFieldId = useMemo(() => buildRegistrationFieldSelectOptions(fields), [fields]);
   if (!fields.length) return null;
   return <div className="registration-form-fields">
     <div className="registration-form-fields-heading"><h2>About you</h2><span>Share the details requested by this learning space.</span></div>
@@ -60,7 +64,7 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
           value={typeof values[field.id] === 'string' ? values[field.id] as string : ''}
           onChange={(value) => onChange(field.id, value)}
           disabled={disabled}
-          options={[{ value: '', label: 'Choose an option' }, ...field.options.map((option) => ({ value: option, label: option }))]}
+          options={selectOptionsByFieldId.get(field.id) ?? EMPTY_REGISTRATION_SELECT_OPTIONS}
         />
       </div>;
       const isInvalid = invalidFieldId === field.id;

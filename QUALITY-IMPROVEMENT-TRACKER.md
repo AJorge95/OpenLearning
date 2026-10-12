@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse registration select options while learners edit
+
+- **Reviewed:** Public registration's custom-field renderer, the 30-field and 30-choice limits, and `AppSelect`'s validation effect, which depends on the options array reference.
+- **Improvement:** Build select options once per field schema, index them by field ID, and memoize that map until the schema changes. Added a brief code comment explaining why the reference stays stable.
+- **Why it helps:** Typing in another registration field no longer rebuilds every select's option objects or reruns each select's active-option validation. The improvement remains bounded by the existing registration limits.
+- **Checked:** Added option-content and schema-memoization regression coverage; focused registration tests passed (12/12), the full test suite passed, `npm run build` passed TypeScript and Vite, and `git diff --check` passed. Reloaded the local sign-up page, verified its accessible form, typed and cleared a test email, and captured the desktop render. This local instance has no custom fields configured, so the populated select interaction was not available in-browser.
+
 ## 2026-10-12 — Bound certificate backfill candidate loading
 
 - **Reviewed:** Profile-triggered and administrator-triggered certificate backfill, the existing 200-course summary batches, and the query that selected courses with learner activity.
