@@ -213,7 +213,7 @@ export function Header() {
         <NavLink to="/calendar">Calendar</NavLink>
       </nav>
       <details ref={userMenuRef} className="user-menu" onToggle={(event) => setUserMenuOpen(event.currentTarget.open)}>
-        <summary role="button" aria-label={user?.username ? `Open account menu for ${user.username}` : 'Open account menu'} aria-expanded={userMenuOpen} aria-controls="user-menu-popover"><span className="avatar">{user?.username.slice(0, 1).toUpperCase()}</span><span className="account-name">{user?.username}</span><ChevronDown size={16} /></summary>
+        <summary role="button" aria-label={user?.username ? `Open account menu for ${user.username}` : 'Open account menu'} aria-expanded={userMenuOpen} aria-controls="user-menu-popover"><span className="avatar">{user?.username.slice(0, 1).toUpperCase()}</span><span className="account-name">{user?.username}</span><ChevronDown size={16} aria-hidden="true" /></summary>
         <div id="user-menu-popover" className="user-menu-popover">
           <div className="user-menu-identity"><strong>{user?.username}</strong><span className="muted">{user?.role}</span></div>
           <Link to="/account/security">Account settings</Link>
@@ -317,7 +317,7 @@ export function StaffFrame() {
           {user?.role === 'admin' && <NavLink to="/admin/settings"><Settings2 size={18} />Settings</NavLink>}
         </nav>
         <Link className="staff-back-link" to="/courses"><ChevronRight size={16} />Back to learning</Link>
-        <div className="staff-account"><span className="avatar" aria-hidden="true">{user?.username.slice(0, 1).toUpperCase()}</span><span><strong>{user?.username}</strong><small>{user?.role}</small>{signOutError && <small className="staff-signout-error" role="alert">{signOutError}</small>}</span><button type="button" disabled={signingOut} aria-busy={signingOut} aria-label={signingOut ? 'Signing out' : 'Sign out'} title={signingOut ? 'Signing out' : 'Sign out'} onClick={handleSignOut}><LogOut size={17} /></button></div>
+        <div className="staff-account"><span className="avatar" aria-hidden="true">{user?.username.slice(0, 1).toUpperCase()}</span><span><strong>{user?.username}</strong><small>{user?.role}</small>{signOutError && <small className="staff-signout-error" role="alert">{signOutError}</small>}</span><button type="button" disabled={signingOut} aria-busy={signingOut} aria-label={signingOut ? 'Signing out' : 'Sign out'} title={signingOut ? 'Signing out' : 'Sign out'} onClick={handleSignOut}><LogOut size={17} aria-hidden="true" /></button></div>
       </aside>
       <main id="main-content" tabIndex={-1} className="staff-content"><Outlet /></main>
     </div>

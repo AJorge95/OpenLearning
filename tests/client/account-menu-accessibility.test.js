@@ -15,8 +15,12 @@ test('account disclosure exposes its native open state to assistive technology',
 
   assert.match(headerSource, /const \[userMenuOpen, setUserMenuOpen\] = useState\(false\);/);
   assert.match(headerSource, /<details ref=\{userMenuRef\} className="user-menu" onToggle=\{\(event\) => setUserMenuOpen\(event\.currentTarget\.open\)\}>/);
-  assert.match(headerSource, /<summary role="button" aria-label=\{user\?\.username \? `Open account menu for \$\{user\.username\}` : 'Open account menu'\} aria-expanded=\{userMenuOpen\} aria-controls="user-menu-popover">/);
+  assert.match(headerSource, /<summary role="button" aria-label=\{user\?\.username \? `Open account menu for \$\{user\.username\}` : 'Open account menu'\} aria-expanded=\{userMenuOpen\} aria-controls="user-menu-popover">[\s\S]*<ChevronDown size=\{16\} aria-hidden="true" \/>/);
   assert.match(headerSource, /<div id="user-menu-popover" className="user-menu-popover">/);
+});
+
+test('shared labelled controls hide their decorative icons', () => {
+  assert.match(source, /<button type="button" disabled=\{signingOut\} aria-busy=\{signingOut\} aria-label=\{signingOut \? 'Signing out' : 'Sign out'\} title=\{signingOut \? 'Signing out' : 'Sign out'\} onClick=\{handleSignOut\}><LogOut size=\{17\} aria-hidden="true" \/><\/button>/);
 });
 
 test('route changes reset the account disclosure state', () => {
