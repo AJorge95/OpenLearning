@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck mobile registration and lesson-completion boundaries
+
+- **Reviewed:** Public registration layout at narrow widths, the reported account-role selector boundary, learner enrollment and lesson-completion transactions, and the dependent-path behavior when a prerequisite completion is undone.
+- **Result:** No runtime change. Registration fits at 390px and 320px without document overflow; role activation remains bounded to the visible trigger; enrollment checks role and course access inside an immediate transaction; completion verifies watch progress and unlock state before atomically saving progress and certification; undoing a prerequisite re-locks later private path courses.
+- **Why no change:** Rendered mobile measurements and the focused selector/completion regressions match the intended behavior. The protected administrator page could not be replayed because the available browser session is signed out.
+- **Checked:** Browser DOM measurements at 390px and 320px; `node --test tests/server/lesson-completion.test.js tests/client/app-select-activation.test.js tests/client/account-role-hitbox.test.js` passed (7/7); `git diff --check` passed.
+- **Needed to continue:** A current-build signed-in account page where clicking outside the visible trigger still opens the selector, or a reproduced enrollment/completion mismatch beyond the covered private-path undo case.
+
 ## 2026-10-12 — Name authentication and account autofill fields
 
 - **Reviewed:** The rendered registration form, its `autocomplete` controls, setup and sign-in forms, account profile and password updates, administrator-created accounts, password resets, and the reported role-selector hit area.
