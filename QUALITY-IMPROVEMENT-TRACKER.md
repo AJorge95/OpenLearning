@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Preserve quiz answer cues in forced-colors mode
+
+- **Reviewed:** Native radio markup, selected-card and keyboard-focus styling, and forced-color overrides to author colors.
+- **Improvement:** Restore the native radio controls in forced-colors mode, use system highlight colors for the selected answer and focus ring, and avoid dimming disabled answer cards.
+- **Why it helps:** Learners who use a high-contrast palette retain a visible checked control and clear selected and focused states even when the browser replaces the quiz's custom colors.
+- **Checked:** The focused quiz accessibility tests passed (6/6), `npm run build` passed TypeScript and Vite, and `git diff --check` passed. Rendered forced-colors QA was not available in this browser session.
+
 ## 2026-10-12 — Review per-lesson detail loading in the player
 
 - **Reviewed:** Lesson-player payload fields, the course rail and navigation helpers, the player request lifecycle, and the 50,000-character transcript limit.

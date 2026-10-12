@@ -475,6 +475,15 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .choice-selected { color: var(--purple-contrast); border-color: var(--purple-border); background: var(--purple-hover-bg); }
 .choice-selected .choice-letter { color: #fff; background: var(--purple); }
 .quiz-choice:has(input:focus-visible) { outline: 3px solid var(--purple); outline-offset: 2px; }
+/* Keep answer selection visible when a forced palette replaces the quiz colors. */
+@media (forced-colors: active) {
+  .quiz-choice { border-color: CanvasText; }
+  .quiz-choice input { position: static; flex: 0 0 auto; width: 16px; height: 16px; margin: 0; opacity: 1; }
+  .choice-selected { color: HighlightText; border-color: Highlight; background: Highlight; }
+  .choice-selected .choice-letter { color: HighlightText; border: 1px solid HighlightText; background: Highlight; }
+  .quiz-choice:has(input:focus-visible) { outline-color: Highlight; }
+  .question-block:disabled .quiz-choice { opacity: 1; }
+}
 .quiz-aside { position: sticky; top: 100px; padding: 24px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
 .quiz-aside-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 10px; }
 .quiz-aside strong { display: block; font-size: 34px; letter-spacing: -.04em; margin-bottom: 12px; }
