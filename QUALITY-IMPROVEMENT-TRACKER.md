@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Let staff revoke course access from disabled learners
+
+- **Reviewed:** Disabled learner rows in course access management, the UI's grant/revoke actions, and the existing course-grant API and audit transaction.
+- **Improvement:** Keep assignment unavailable for disabled unassigned learners, but retain an accessible **Unassign** action when a disabled learner still has a grant. Show the disabled-account status beside that action.
+- **Why it helps:** Staff can remove a course grant without temporarily enabling an account. Re-enabling the account later will not silently restore a grant they intended to revoke; learner progress remains intact.
+- **Backend review:** The existing DELETE route already allows staff to revoke a grant for a disabled learner and records the change transactionally. The API and progress rows are unchanged.
+- **Checked:** Course-access client tests passed (5/5); focused access search, disabled-learner revocation, and audit-rollback route tests passed (3/3). `npm run build` passed TypeScript and Vite; `git diff --check` passed. The signed-in staff page was not rendered because the available browser is signed out.
+
 ## 2026-10-12 — Recheck course-list actions and reload recovery
 
 - **Reviewed:** Course search and status filters, paged list loading, per-row action status, status-change and deletion handlers, failed-read retry state, and the publication transaction's response-read rollback.
