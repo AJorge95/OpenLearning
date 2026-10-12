@@ -9906,3 +9906,10 @@
 - **Why it helps:** Learners can discover the remaining days on narrow screens and at constrained desktop widths without changing the readable seven-column calendar layout.
 - **Backend review:** The calendar API limits requests to the configured date span, validates real calendar dates, filters deadlines against current course access, and uses the indexed deadline range query. No backend change was needed.
 - **Checked:** Focused calendar UI/date tests passed (11/11), including the new scroll-cue regression. The full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed. Rendered calendar QA remains unavailable because the connected browser is signed out.
+
+## 2026-10-12 — Recheck responsive navigation overflow
+
+- **Reviewed:** The learner top navigation, staff sidebar navigation, status-filter groups, active-link reveal behavior after route changes and resizes, and the pending-registration count endpoint used by the staff navigation badge.
+- **Result:** No code change. The active learner and staff links are brought into view when navigation overflows; filters remain native, keyboard-reachable pressed-state buttons. The pending-count route is protected by the admin router and returns a database count without exposing account details.
+- **Why no change:** The reviewed controls already expose and reveal the active navigation item, and the badge only contains a count. No reproducible clipped-control or backend consistency issue surfaced.
+- **Checked:** `node --test tests/client/navigation-scroll.test.js tests/client/responsive-viewport.test.js` passed (8/8), and `git diff --check` passed. A signed-in responsive browser check remains unavailable in the current browser session.
