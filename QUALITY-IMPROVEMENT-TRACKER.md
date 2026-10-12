@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Prevent touch-browser focus zoom in form fields
+
+- **Reviewed:** Text input and textarea font sizes across registration, account settings, lesson comments, and management forms, including the existing mobile breakpoints and native checkbox, radio, file, and range controls.
+- **Improvement:** On coarse-pointer screens up to 720px wide, set editable inputs, textareas, and native selects to 16px. Leave non-text inputs and desktop sizing unchanged; document the browser zoom intent beside the CSS rule.
+- **Why it helps:** Touch users can focus and edit fields without browsers such as iOS Safari automatically zooming the page for undersized text.
+- **Backend review:** Registration still normalizes and validates email, credentials, and configured required fields before inserting the account; this typography change does not alter the request contract or server validation.
+- **Checked:** The new mobile text-size regression plus responsive-viewport and accessible-name suites passed (14/14). `npm run build` passed strict TypeScript checking and Vite bundling. The temporary browser tab initially showed the `/register` DOM; refreshing it followed the signed-in learner session to `/courses`. Mobile rendered verification was unavailable: the connected browser API does not expose viewport resizing (`setViewportSize` is unavailable) or screenshots, and Playwright is not installed. No server code changed.
+
 ## 2026-10-12 — Review rendering of user-supplied content
 
 - **Reviewed:** The client and server source for raw HTML insertion and HTML-string rendering paths that could bypass React's text escaping.
