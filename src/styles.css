@@ -299,6 +299,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .account-role-select-control { width: 8.5rem; max-width: 100%; pointer-events: none; }
 .account-role-select-control .app-select { width: 100%; max-width: none; pointer-events: none; }
 .account-role-select-control .app-select-trigger { pointer-events: auto; }
+/* Keep an already-mounted label-wrapped account selector bounded during a stylesheet hot update. */
+.account-control-row > label { display: flex; flex: 0 0 8.5rem; flex-direction: column; align-items: flex-start; width: 8.5rem; max-width: min(240px, 100%); min-width: 0; gap: 6px; pointer-events: none; color: #303443; font-size: 11px; font-weight: 650; }
+.account-control-row > label > .app-select { width: 100%; max-width: none; pointer-events: none; }
+.account-control-row > label .app-select-trigger { pointer-events: auto; }
 .account-admin-protection { margin: 9px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .account-password-form { gap: 12px; }
 .account-password-form label { font-size: 11px; }
@@ -1487,6 +1491,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .account-control-row { align-items: stretch; flex-direction: column; }
   .account-control-row .account-role-control { flex-basis: auto; width: 100%; max-width: none; }
   .account-control-row .account-role-select-control, .account-control-row .account-role-select-control .app-select { width: 100%; max-width: none; }
+  .account-control-row > label { flex-basis: auto; width: 100%; max-width: none; }
   .account-control-row > .button { width: 100%; }
   .confirmation-dialog { padding: 20px; }
   .confirmation-dialog-actions { flex-direction: column; align-items: stretch; }
