@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep public registration checkboxes native
+
+- **Reviewed:** Learner signup checkbox markup inside the `.form-stack`, the shared text-field input rule, the full-card label layout, and the existing server validation for required checkbox answers.
+- **Improvement:** Explicitly retain native 18px checkbox dimensions and remove inherited text-field padding. Extended the focused registration checkbox regression in `tests/client`.
+- **Why it helps:** Native checkbox sizing no longer depends on browser-specific handling of text-field padding, while the surrounding signup label remains easy to activate.
+- **Backend review:** The existing registration route rejects a missing required checkbox answer before creating an account; no backend behavior changed.
+- **Checked:** Related registration client tests passed (16/16), registration server tests passed (32/32), `npm run build` passed TypeScript and Vite, and `git diff --check` passed. Failure-path server tests printed expected simulated audit/count errors while passing. The built `/register` page rendered at 1265×714 in an isolated local session; clicking the policy label changed the accessible checkbox value from 0 to 1 and back without submitting. The Browser plugin and Playwright are unavailable, so rendered validation used the in-app computer-use browser. The temporary server, database, and browser tab were stopped and removed.
+
 ## 2026-10-12 — Keep registration requirement checkbox native
 
 - **Reviewed:** Registration-field editor checkbox markup, shared `.settings-card input` text-field styles, the required toggle row, and server validation for checkbox definitions and answers.

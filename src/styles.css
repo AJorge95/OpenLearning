@@ -1167,7 +1167,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .registration-custom-field input[aria-invalid="true"], .registration-custom-field .app-select-trigger[aria-invalid="true"] { border-color: var(--danger); }
 .registration-custom-field .app-select, .registration-custom-field .app-select-trigger { width: 100%; min-width: 0; }
 .auth-panel .registration-checkbox-field { display: flex; flex-direction: row; align-items: center; gap: 10px; margin: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 4px; color: #303443; background: #fff; font-size: 13px; font-weight: 550; }
-.registration-checkbox-field input { width: 18px; min-height: 18px; flex: 0 0 auto; margin: 0; accent-color: var(--purple); }
+/* Keep learner registration checkboxes native after shared form-stack text-field styles. */
+.registration-checkbox-field input { appearance: auto; width: 18px; height: 18px; min-height: 18px; padding: 0; flex: 0 0 auto; margin: 0; accent-color: var(--purple); }
 .registration-checkbox-field span { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .account-registration-fields { padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--line); }
 .account-registration-fields h3 { margin: 0 0 11px; color: var(--ink); font-size: 13px; }
