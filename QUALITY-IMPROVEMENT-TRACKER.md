@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Batch quiz-choice reads when cloning course revisions
+
+- **Reviewed:** Versioned-course editing and the copy of quizzes, questions, and answer choices into a new revision.
+- **Improvement:** Load all choices for each quiz in one ordered query, group them by question, and reuse the result while copying the questions.
+- **Why it helps:** Revision creation no longer makes one database round trip per question to fetch answer choices; quizzes with no questions also skip the choice query.
+- **Interface review:** The editor continues to show the same ordered quiz content and review flow; no interface change was needed.
+- **Checked:** A regression verifies one choice query per quiz and exact cloned question/choice content and ordering. `node --test tests/server/course-analytics.test.js` passed (119/119), related course-version/editor client tests passed (17/17), `npm run build` passed TypeScript and Vite, and `git diff --check` passed.
+
 ## 2026-10-12 — Recheck learning-path list batching and assignment controls
 
 - **Reviewed:** Path payload query batches and page bounds, staff learner-directory search/pagination, assignment and removal status labels, confirmation copy, and the panel's narrow-screen control layout.

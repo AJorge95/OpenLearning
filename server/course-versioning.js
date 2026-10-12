@@ -65,13 +65,14 @@ function copyPublishedContent(sourceId, targetId, logicalId, actorId) {
   const getCaptions = db.prepare('SELECT * FROM lesson_captions WHERE lesson_id = ?');
   const getQuiz = db.prepare('SELECT * FROM quizzes WHERE module_id = ?');
   const getQuestions = db.prepare('SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY position, id');
-  const getChoices = db.prepare('SELECT * FROM quiz_choices WHERE question_id = ? ORDER BY position, id');
   const addResource = db.prepare(`INSERT INTO lesson_resources (id, lesson_id, resource_type, title, href, file_name, original_name, mime_type, byte_size, position, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const addCaption = db.prepare(`INSERT INTO lesson_captions (id, lesson_id, language, label, file_name, original_name, byte_size, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   const addQuestion = db.prepare('INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position) VALUES (?, ?, ?, ?, ?)');
   const addChoice = db.prepare('INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES (?, ?, ?, ?, ?)');
+  // Load all choices for a quiz together instead of querying once for every question.
+  let getQuizChoices;
   for (const module of modules) {
     const nextModuleId = cloneId();
     moduleIds.set(module.id, nextModuleId);
@@ -94,11 +95,23 @@ function copyPublishedContent(sourceId, targetId, logicalId, actorId) {
     const nextQuizId = cloneId();
     quizIds.set(quiz.id, nextQuizId);
     addQuiz.run(nextQuizId, nextModuleId, quiz.title, quiz.pass_mark, quiz.created_at, quiz.updated_at, quiz.stable_id || quiz.id);
-    for (const question of getQuestions.all(quiz.id)) {
+    const questions = getQuestions.all(quiz.id);
+    const choicesByQuestion = new Map();
+    if (questions.length) {
+      getQuizChoices ??= db.prepare(`SELECT qc.* FROM quiz_choices qc
+        JOIN quiz_questions qq ON qq.id = qc.question_id
+        WHERE qq.quiz_id = ? ORDER BY qq.position, qq.id, qc.position, qc.id`);
+      for (const choice of getQuizChoices.all(quiz.id)) {
+        const choices = choicesByQuestion.get(choice.question_id) ?? [];
+        choices.push(choice);
+        choicesByQuestion.set(choice.question_id, choices);
+      }
+    }
+    for (const question of questions) {
       const nextQuestionId = cloneId();
       questionIds.set(question.id, nextQuestionId);
       addQuestion.run(nextQuestionId, nextQuizId, question.prompt, question.explanation, question.position);
-      for (const choice of getChoices.all(question.id)) {
+      for (const choice of choicesByQuestion.get(question.id) ?? []) {
         addChoice.run(cloneId(), nextQuestionId, choice.choice_text, choice.is_correct, choice.position);
       }
     }
