@@ -105,8 +105,10 @@ export function SetupPage() {
   const setupPlatformNameErrorId = useId();
   const setupUsernameInputId = useId();
   const setupUsernameHelpId = `${setupUsernameInputId}-help`;
+  const setupUsernameErrorId = `${setupUsernameInputId}-error`;
   const setupPlatformNameInputRef = useRef<HTMLInputElement>(null);
   const setupEmailInputRef = useRef<HTMLInputElement>(null);
+  const setupUsernameInputRef = useRef<HTMLInputElement>(null);
   const setupFirstNameInputRef = useRef<HTMLInputElement>(null);
   const setupLastNameInputRef = useRef<HTMLInputElement>(null);
   const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
@@ -129,6 +131,7 @@ export function SetupPage() {
   const [error, setError] = useState('');
   const [platformNameError, setPlatformNameError] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [setupUsernameError, setSetupUsernameError] = useState('');
   const [invalidNameField, setInvalidNameField] = useState<'firstName' | 'lastName' | null>(null);
   const [saving, setSaving] = useState(false);
   const setupSubmissionInFlightRef = useRef(false);
@@ -152,6 +155,7 @@ export function SetupPage() {
     event.preventDefault();
     setError('');
     setPlatformNameError('');
+    setSetupUsernameError('');
     setInvalidNameField(null);
     const currentPlatformNameError = platformNameValidationError(platformName);
     if (currentPlatformNameError) {
@@ -211,10 +215,14 @@ export function SetupPage() {
         setPlatformNameError(cause.message);
         setStep(1);
         window.requestAnimationFrame(() => setupPlatformNameInputRef.current?.focus());
-      } else if (cause instanceof ApiError && cause.code === 'invalid_email') {
+      } else if (cause instanceof ApiError && (cause.code === 'invalid_email' || cause.code === 'email_taken')) {
         setEmailError(cause.message);
         setStep(1);
         window.requestAnimationFrame(() => setupEmailInputRef.current?.focus());
+      } else if (cause instanceof ApiError && cause.code === 'username_taken') {
+        setSetupUsernameError(cause.message);
+        setStep(1);
+        window.requestAnimationFrame(() => setupUsernameInputRef.current?.focus());
       } else if (cause instanceof ApiError && cause.code === 'invalid_name') {
         const invalidField = cause.message.startsWith('Last name') ? 'lastName' : 'firstName';
         setInvalidNameField(invalidField);
@@ -249,7 +257,27 @@ export function SetupPage() {
             <label>Admin email<input ref={setupEmailInputRef} name="email" required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? setupEmailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} /></label>
             {emailError && <p id={setupEmailErrorId} className="form-error" role="alert">{emailError}</p>}
             <div className="account-name-fields"><label>First name<input ref={setupFirstNameInputRef} name="firstName" required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="given-name" aria-invalid={invalidNameField === 'firstName' || undefined} aria-describedby={invalidNameField === 'firstName' ? setupErrorId : undefined} value={firstName} onChange={(event) => { setFirstName(event.target.value); if (invalidNameField === 'firstName') { setInvalidNameField(null); setError(''); } }} /></label><label>Last name<input ref={setupLastNameInputRef} name="lastName" required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="family-name" aria-invalid={invalidNameField === 'lastName' || undefined} aria-describedby={invalidNameField === 'lastName' ? setupErrorId : undefined} value={lastName} onChange={(event) => { setLastName(event.target.value); if (invalidNameField === 'lastName') { setInvalidNameField(null); setError(''); } }} /></label></div>
-            <div className="form-stack-username-field"><label htmlFor={setupUsernameInputId}>Admin username</label><input id={setupUsernameInputId} name="username" aria-describedby={setupUsernameHelpId} required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} /><small id={setupUsernameHelpId}>Letters, numbers, dots, underscores, and hyphens.</small></div>
+            <div className="form-stack-username-field">
+              <label htmlFor={setupUsernameInputId}>Admin username</label>
+              <input
+                ref={setupUsernameInputRef}
+                id={setupUsernameInputId}
+                name="username"
+                aria-invalid={setupUsernameError ? true : undefined}
+                aria-describedby={setupUsernameError ? `${setupUsernameHelpId} ${setupUsernameErrorId}` : setupUsernameHelpId}
+                required
+                minLength={3}
+                maxLength={32}
+                pattern="[A-Za-z0-9_.-]+"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={username}
+                onChange={(event) => { setUsername(event.target.value); setSetupUsernameError(''); }}
+              />
+              <small id={setupUsernameHelpId}>Letters, numbers, dots, underscores, and hyphens.</small>
+              {setupUsernameError && <p id={setupUsernameErrorId} className="form-error" role="alert">{setupUsernameError}</p>}
+            </div>
             <PasswordField label="Password" name="password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} hint="Use at least 12 characters." />
             <PasswordField label="Confirm password" name="confirmPassword" inputRef={confirmPasswordInputRef} {...passwordConfirmationFieldProps(error, setupErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} />
             <label>One-time setup token<input name="setupToken" required minLength={32} maxLength={256} type="password" autoComplete="off" value={setupToken} onChange={(event) => setSetupToken(event.target.value)} /><small>Enter the private bootstrap credential configured by the server operator.</small></label>
