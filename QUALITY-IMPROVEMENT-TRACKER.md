@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck course-detail reads and enrollment actions
+
+- **Reviewed:** The learner course-overview request, `requireCourseViewer` and payload construction, the explicit enrollment route and its transaction, the Start learning action, and the existing regression for course/path detail reads.
+- **Result:** No runtime change. Course-detail `GET` reads course and progress data without creating an enrollment or learning-state row. Learner navigation enrolls through `POST /courses/:courseId/enroll`, which creates enrollment and initial state together and returns 200 on a retry.
+- **Why no change:** Commit `94e6b02` already removed the GET side effect and added route coverage; the current source and regression still agree. Another patch would repeat the existing implementation.
+- **Checked:** `node --test --test-name-pattern="course and learning-path detail GETs are read-only" tests/server/course-analytics.test.js` passed (1/1). The integration fixture verified unchanged enrollment and course-state counts after GET, plus transactional enrollment on POST. No application data changed.
+- **Needed to continue:** A regression where an overview read writes enrollment or learning state, or a learner-flow issue showing explicit enrollment fails before lesson or quiz navigation.
+
 ## 2026-10-12 — Review learner course-overview content and wrapping
 
 - **Reviewed:** The course hero and “About this course” description, the hero description's accessible-tree treatment, course title wrapping, course-cover alternatives, and the desktop/mobile overview layouts.
