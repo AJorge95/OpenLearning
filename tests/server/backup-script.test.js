@@ -148,3 +148,44 @@ test('backup command removes partial output if the media copy fails', async () =
   }), /media copy failed/);
   assert.deepEqual(await fs.readdir(failedBackupRoot), []);
 });
+
+test('backup command rejects and removes a database snapshot that fails SQLite quick_check', async () => {
+  const failedBackupRoot = path.join(fixtureDirectory, 'failed-database-verification');
+  let openedDatabaseCount = 0;
+  let verificationClosed = false;
+  let mediaCopyAttempted = false;
+
+  class FailingVerificationDatabase {
+    constructor() {
+      this.open = true;
+      this.isBackup = openedDatabaseCount > 0;
+      openedDatabaseCount += 1;
+    }
+
+    pragma(statement) {
+      if (statement === 'busy_timeout = 5000') return undefined;
+      assert.equal(statement, 'quick_check');
+      return [{ quick_check: 'database disk image is malformed' }];
+    }
+
+    async backup(destination) {
+      await fs.writeFile(destination, 'invalid database snapshot');
+    }
+
+    close() {
+      this.open = false;
+      if (this.isBackup) verificationClosed = true;
+    }
+  }
+
+  await assert.rejects(createBackup({
+    appConfig: { dbPath: databasePath, mediaRoot },
+    destinationRoot: failedBackupRoot,
+    DatabaseClass: FailingVerificationDatabase,
+    copyMedia: async () => { mediaCopyAttempted = true; },
+  }), /SQLite backup verification failed/);
+
+  assert.equal(verificationClosed, true);
+  assert.equal(mediaCopyAttempted, false);
+  assert.deepEqual(await fs.readdir(failedBackupRoot), []);
+});
