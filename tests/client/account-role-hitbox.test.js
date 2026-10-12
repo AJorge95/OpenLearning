@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const styles = fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
+const accountPage = fs.readFileSync(new URL('../../src/pages-manage.tsx', import.meta.url), 'utf8');
 
 function rulesFor(selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -21,4 +22,13 @@ test('account role hit area stays bounded by its visible trigger', () => {
   assert.ok(appSelectRules.some((rule) => /width:\s*100%/.test(rule) && /max-width:\s*none/.test(rule) && /pointer-events:\s*none/.test(rule)));
   assert.ok(triggerRules.some((rule) => /pointer-events:\s*auto/.test(rule)));
   assert.match(styles, /@media \(max-width: 460px\) \{[\s\S]*?\.account-control-row \.account-role-select-control,\s*\.account-control-row \.account-role-select-control \.app-select \{ width: 100%; max-width: none; \}/);
+});
+
+test('account role caption stays separate from the clickable custom selector', () => {
+  const roleField = accountPage.match(/<div className="account-role-control">[\s\S]*?<\/div><\/div>/)?.[0];
+
+  assert.ok(roleField, 'expected a bounded account role field');
+  assert.match(roleField, /<span id="account-platform-role-label">Platform role<\/span>/);
+  assert.match(roleField, /<div className="account-role-select-control"><AppSelect<Role>[\s\S]*ariaLabelledBy="account-platform-role-label"[\s\S]*matchTriggerWidth/);
+  assert.doesNotMatch(roleField, /<label\b/, 'the caption must not forward clicks from blank space into the selector');
 });

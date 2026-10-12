@@ -46,13 +46,14 @@
 - **Why it helps:** Keyboard focus stays visibly distinct in high-contrast palettes even when the interface's regular color palette is unavailable or remapped.
 - **Checked:** `node --test tests/client/search-forced-colors.test.js` passed; `npm run build` passed TypeScript and Vite; `git diff --check` passed. Rendered forced-colors QA was not available because the browser session is signed out and local Playwright packages are not installed.
 
-## 2026-10-12 — Recheck the supplied account-role selector screenshot
+## 2026-10-12 — Recheck the account-role boundary and admin list filters
 
-- **Reviewed:** The screenshot's selected DOM path, the current account-details selector markup and hit-area rules, and the shared `AppSelect` activation guard.
-- **Result:** No runtime change. The screenshot identifies the older wrapping `<label>`; current source uses a separate control container, bounds the desktop selector to 8.5rem, and only enables pointer input on the visible trigger. The supplied browser session is now signed out at `/register`, so its authenticated account page could not be reloaded here.
-- **Why no change:** The current source already prevents a click outside the trigger from opening the menu, and the existing regression tests exercise both the bounded hit area and label-forwarded clicks. The screenshot does not match the current markup.
-- **Checked:** Re-ran the focused account-role, AppSelect label, activation, layout, and positioning suites (26/26 passed), including outside-trigger coordinates and trigger-matched popup width. The earlier isolated-build browser check recorded below measured matching 134px trigger/menu widths at 1265×713 and confirmed a click 10px to the right left the menu closed. The current browser session is signed out, so I could not repeat that authenticated-page check or select a role.
-- **Needed to continue:** Hard-reload the authenticated account page to load the current markup. If a click outside the visible trigger still opens the menu, provide the clicked position and viewport from that reloaded page.
+- **Reviewed:** The reported selector screenshot and target DOM path, the role-control markup served by Vite, pointer boundaries and popup sizing, plus the admin user-list role and registration-status query filters.
+- **Improvement:** Add a client regression that keeps the role caption outside the clickable custom selector and a route regression requiring unknown and repeated role/approval filters to return structured validation errors.
+- **Why it helps:** The selector test protects against restoring the wide wrapping label shown in the screenshot; the API test protects the staff list from silently accepting malformed or ambiguous filter URLs.
+- **UI finding:** The local Vite source serves the separate caption and bounded selector already present in the current code. The screenshot still shows the older label-wrapped markup. The available browser session is signed out at `/register`, so the authenticated page could not be reloaded to confirm which version it displays.
+- **Checked:** The role-boundary, activation, label-accessibility, and admin-list route regressions passed (36/36); `npm run build` passed TypeScript and Vite; `git diff --check` passed. Rendered interaction could not be repeated: the available browser is signed out at `/register`, the Browser plugin is unavailable, and Playwright is not installed. The Vite-served module at port 5173 contains the current separate caption and selector markup.
+- **Needed to continue:** Hard-reload the authenticated account page and retry the click beside the visible control. If it still opens, capture the click position and viewport from that refreshed page.
 
 ## 2026-10-12 — Guard staff-page code splitting
 
