@@ -8,6 +8,14 @@
 - **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js tests/client/app-select-activation.test.js tests/client/app-select-position.test.js` passed (21/21); the live Vite module and styles were inspected; `git diff --check` passed. Available browser tabs were signed out, so the protected account page could not be freshly rendered in this check.
 - **Needed to continue:** Reload the signed-in account page and confirm whether a click beyond the visible trigger still opens the menu; if it does, capture the current DOM target and trigger bounds.
 
+## 2026-10-12 — Review session retention and catalog-query tuning evidence
+
+- **Reviewed:** SQLite session expiry reads and cleanup, the 12-hour session-cookie lifetime, the indexed 24-hour cleanup sweep, published-course search/category/visibility filters, catalog pagination and ordering indexes, and the dedicated test-file layout.
+- **Result:** No runtime change. Expired sessions are discarded when read and removed by an indexed daily sweep. The learner catalog applies bounded pagination and the existing status, category, title-order, updated-order, and grant indexes are available to its filters.
+- **Why no change:** The existing tracker calls for session-backlog or query-latency evidence before tuning cleanup cadence or catalog indexes. Source inspection alone does not show a user-visible delay or a useful index change.
+- **Checked:** Reviewed `server/session-store.js`, `server/index.js`, `server/routes-courses.js`, the relevant schema indexes in `server/db.js`, and `tests/server/session-store.test.js`; all discovered test files are organized under `tests/client` or `tests/server`. No runtime tests were run because source behavior did not change; `git diff --check` passed.
+- **Needed to continue:** Representative session-backlog or catalog-latency measurements that point to a specific cleanup or query bottleneck. Add any resulting regression under `tests/server` or `tests/client`.
+
 ## 2026-10-12 — Recheck public registration controls and signup handling
 
 - **Reviewed:** The current rendered `/register` form, field names and descriptions, password visibility interaction, registration validation, account-cap enforcement, and approval/session behavior.
