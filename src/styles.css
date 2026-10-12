@@ -224,10 +224,11 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .analytics-learners-table-wrap { container-type: inline-size; container-name: learner-table; }
 .analytics-table { width: 100%; min-width: 780px; border-collapse: collapse; text-align: left; }
 .analytics-table th { height: 43px; padding: 0 12px; border-bottom: 1px solid var(--line); color: #5d6372; background: #f9f9fc; font-size: 11px; font-weight: 650; white-space: nowrap; }
-.analytics-table td { padding: 13px 12px; border-bottom: 1px solid var(--line); color: #454a59; font-size: 12px; vertical-align: top; }
-.analytics-table tbody tr:last-child td { border-bottom: 0; }
-.analytics-table td strong { display: block; color: #282c39; font-size: 12px; font-weight: 650; }
-.analytics-table td small { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.analytics-table td, .analytics-table tbody th { padding: 13px 12px; border-bottom: 1px solid var(--line); color: #454a59; font-size: 12px; vertical-align: top; }
+.analytics-table tbody th { background: transparent; font-weight: 400; text-align: left; }
+.analytics-table tbody tr:last-child td, .analytics-table tbody tr:last-child th { border-bottom: 0; }
+.analytics-table td strong, .analytics-table tbody th strong { display: block; color: #282c39; font-size: 12px; font-weight: 650; }
+.analytics-table td small, .analytics-table tbody th small { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .analytics-rate-cell { display: flex; align-items: center; gap: 10px; min-width: 150px; }
 .analytics-rate-cell .progress-line { width: min(100%, 125px); flex: 1; }
 .analytics-percentage { min-width: 34px; color: #383d4a; font-size: 11px; font-weight: 650; text-align: right; }

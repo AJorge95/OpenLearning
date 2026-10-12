@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Expose course names as account activity row headers
+
+- **Reviewed:** The administrator's per-account course activity table, its course/status cell and responsive styling, and the `/api/admin/users/:userId` course summary query and pagination tests.
+- **Improvement:** Mark each course-name cell as `<th scope="row">` and preserve its current typography, spacing, status label, and bottom-border behavior.
+- **Why it helps:** Assistive technology now announces the course while an administrator navigates its assignment source, progress, lessons, quizzes, completion, and dashboard action.
+- **Backend review:** The existing endpoint already returns stable course IDs and titles with the activity metrics, deduplicates overlapping enrollment/grant/path sources, and caps pages at 50; no API change was needed.
+- **Checked:** The client row-header/style regression passed (1/1); the account activity and auth route tests passed (16/16); course and user table identity tests passed (4/4); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict typechecking and Vite bundling; and `git diff --check` passed. The current browser remains at `/login`, so the protected account page could not be rendered; no credentials or account data were changed.
+
 ## 2026-10-12 — Expose course titles as row headers in the admin list
 
 - **Reviewed:** The management course table's caption, scoped column headers, first-column course identity, responsive spacing, hover and bottom-border rules, and the paginated `/api/manage/courses` response.
