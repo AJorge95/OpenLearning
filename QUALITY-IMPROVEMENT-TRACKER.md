@@ -9982,3 +9982,12 @@
 - **Why no change:** On an enabled learner account, clicking the 13px gap to the right of the selector left a closed menu closed; the same click closed an open menu without changing the selected role. The reported account's selector is disabled by the last-active-administrator safeguard.
 - **Backend review:** Role values remain allow-listed and updates run transactionally with audit logging; the last active administrator cannot be demoted or disabled. No backend change was indicated.
 - **Checked:** The signed-in local account page rendered at 1264×710 with no console warnings or errors. Trigger and popup widths matched at 136px; trigger activation opened the menu, while the adjacent-gap click did not activate it. Focused account-role and AppSelect suites passed (24/24), and `git diff --check` passed. Reload the reported page to pick up the current markup.
+
+## 2026-10-12 — Recheck request failures and server shutdown
+
+- **Reviewed:** The shared API client's network, abort, malformed-response, CSRF-retry, and upload-timeout handling; server request-timeout configuration, structured HTTP errors, and graceful shutdown.
+- **Result:** No runtime change. The client preserves aborts, distinguishes connection loss from invalid JSON, limits CSRF retries, and explains uncertain upload completion. The server returns structured body and upload errors, stops accepting connections on shutdown, and closes active connections after the grace period before closing the session store and database.
+- **Why no change:** Existing behavior covers the reviewed failure paths without a reproduced stalled request, misleading error, unsafe retry, or shutdown leak.
+- **Backend review:** The default request timeout is five minutes and is configurable within Node's timer range; shutdown has a 30-second drain deadline. No missing server behavior surfaced in the inspected paths.
+- **Checked:** `node --test tests/client/api.test.js tests/server/config.test.js` passed (25/25); `node --test tests/server/last-login.test.js tests/server/media-routes.test.js` passed (43/43), including structured request errors and interrupted uploads. `git diff --check` passed.
+- **Needed to continue:** A reproducible request that stays pending or reports the wrong recovery action, an unsafe duplicate after retry, or a shutdown trace showing open resources after the grace period.
