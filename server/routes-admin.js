@@ -337,12 +337,22 @@ adminRouter.get('/users/:userId', (req, res) => {
 adminRouter.patch('/users/:userId', (req, res) => {
   const body = requireObjectBody(req.body, 'Account changes');
   const updateUser = db.transaction(() => {
-    const user = db.prepare('SELECT id, username, role, disabled, registration_status, first_name, last_name FROM users WHERE id = ?').get(req.params.userId);
+    const user = db.prepare('SELECT id, username, email, role, disabled, registration_status, first_name, last_name FROM users WHERE id = ?').get(req.params.userId);
     if (!user) fail(404, 'User not found.', 'not_found');
     const nextRole = body.role === undefined ? user.role : body.role;
     const hasNameChanges = body.firstName !== undefined || body.lastName !== undefined;
     const nextFirstName = hasNameChanges ? accountName(body.firstName ?? user.first_name, 'First name') : user.first_name;
     const nextLastName = hasNameChanges ? accountName(body.lastName ?? user.last_name, 'Last name') : user.last_name;
+    let nextEmail = user.email;
+    if (body.email !== undefined) {
+      const emailError = validateEmail(body.email);
+      if (emailError) fail(400, emailError, 'invalid_email');
+      nextEmail = normalizeEmail(body.email);
+      // Check the case-insensitive unique index under the same write lock as the update.
+      if (nextEmail !== user.email && db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE AND id != ?').get(nextEmail, user.id)) {
+        fail(409, 'That email address is already in use.', 'email_taken');
+      }
+    }
     if (body.disabled !== undefined && typeof body.disabled !== 'boolean') {
       fail(400, 'Account disabled must be true or false.', 'validation_error');
     }
@@ -354,13 +364,15 @@ adminRouter.patch('/users/:userId', (req, res) => {
     }
     const profileChanged = user.first_name !== nextFirstName || user.last_name !== nextLastName;
     const accountChanged = user.role !== nextRole || Boolean(user.disabled) !== nextDisabled;
-    const changed = accountChanged || profileChanged;
+    const emailChanged = user.email !== nextEmail;
+    const changed = accountChanged || profileChanged || emailChanged;
     if (changed) {
-      db.prepare('UPDATE users SET role = ?, disabled = ?, first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run(nextRole, nextDisabled ? 1 : 0, nextFirstName, nextLastName, user.id);
+      db.prepare('UPDATE users SET email = ?, role = ?, disabled = ?, first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(nextEmail, nextRole, nextDisabled ? 1 : 0, nextFirstName, nextLastName, user.id);
       const auditId = writeAuditLog({ actor: req.currentUser, action: 'account.updated', entityType: 'user', entityId: user.id,
         summary: `Updated account for ${user.username}`, details: {
           username: user.username,
+          ...(emailChanged ? { email: { from: user.email, to: nextEmail } } : {}),
           ...(user.role !== nextRole ? { role: { from: user.role, to: nextRole } } : {}),
           ...(Boolean(user.disabled) !== nextDisabled ? { disabled: { from: Boolean(user.disabled), to: nextDisabled } } : {}),
           ...(profileChanged ? { firstName: { from: user.first_name, to: nextFirstName }, lastName: { from: user.last_name, to: nextLastName } } : {}),

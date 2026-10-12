@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Add administrator email editing to account details
+
+- **Reviewed:** Learner profile settings direct people to an administrator for email changes, while the admin account page displayed email as read-only and its account update route ignored email fields.
+- **Improvement:** Add an accessible, validated email editor to the account overview. The API trims addresses, validates the shared email rules, checks the existing case-insensitive uniqueness constraint inside the immediate transaction, includes changes in the atomic account audit, and refreshes auth state when an administrator changes their own email.
+- **Why it helps:** Administrators can correct addresses for existing accounts without rebuilding them; invalid or duplicate addresses stay attached to the email field, and audit failures roll the entire change back.
+- **Selector follow-up:** The supplied browser comment still identifies the legacy label-wrapped selector in its DOM path. Current source separates the caption from the bounded trigger, and the existing fix is already pushed in `3bee80b`. The available local browser redirected this protected route to sign-in, so a signed-in hard-refresh interaction could not be repeated in this turn.
+- **Checked:** The registration/account server suite passed (32/32), the new email editor client checks passed (2/2), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript and Vite, and `git diff --check` passed. Rendered interaction on the protected account page remains unverified in this session.
+
 ## 2026-10-12 — Recheck shared search behavior across course and admin views
 
 - **Reviewed:** Shared SQL search predicates, ASCII wildcard escaping, Unicode normalization/case matching, course catalog filters, learning-path and account search, and administrator audit/system log filters.
@@ -43,7 +51,7 @@
 - **Result:** No additional selector code change. The current build renders a separate caption and a 136px trigger; the popup also measures 136px. Clicking the gap to its right leaves the closed selector closed, and the same outside click closes it when open.
 - **Why no change:** The screenshot still points to legacy label-wrapped markup, while the current build uses the bounded selector and pointer guard. The check used a disposable signed-in account because the regular local browser session redirects protected pages to sign-in.
 - **Checked:** Account detail route rendered at 1280×720 without a framework overlay. The trigger opened the three expected role options at the same width; an outside click closed it without changing the selected role. The disposable server was stopped; cleanup of its temporary database/log directory was rejected by the local command review, so those files remain in the system temp folder.
-- **Needed to revisit:** A hard-refreshed signed-in browser page that still opens the selector from a point outside its visible 136px trigger, or evidence that the affected page is served by another build.
+- **Needed to revisit:** The latest supplied screenshot still points to the legacy label-wrapped DOM. The current local browser redirects the protected route to sign-in; recheck after a signed-in hard refresh if the visible-trigger bounds still reproduce.
 
 ## 2026-10-12 — Prevent label-forwarded clicks on nested actions
 

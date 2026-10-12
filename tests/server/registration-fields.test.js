@@ -801,10 +801,55 @@ test('an administrator can be disabled while another active administrator remain
   }
 });
 
+test('administrator email changes validate addresses, reject case-insensitive duplicates, and record the change', async () => {
+  const userId = 'registration-fields-email-target';
+  const oldEmail = 'email-target@example.invalid';
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role)
+    VALUES (?, ?, ?, ?, 'learner')`).run(userId, 'registration_fields_email_target', oldEmail, 'not-used');
+  const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'account.updated' AND entity_id = ?`).get(userId).count;
+
+  try {
+    const invalidResponse = await fetch(apiUrl(`/admin/users/${userId}`), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ email: 'not-an-email' }),
+    });
+    assert.equal(invalidResponse.status, 400);
+    assert.equal((await invalidResponse.json()).code, 'invalid_email');
+
+    const duplicateResponse = await fetch(apiUrl(`/admin/users/${userId}`), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ email: 'ADMIN.registration@EXAMPLE.invalid' }),
+    });
+    assert.equal(duplicateResponse.status, 409);
+    assert.equal((await duplicateResponse.json()).code, 'email_taken');
+    assert.equal(database.prepare('SELECT email FROM users WHERE id = ?').get(userId).email, oldEmail);
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+      WHERE action = 'account.updated' AND entity_id = ?`).get(userId).count, originalAuditCount);
+
+    const savedResponse = await fetch(apiUrl(`/admin/users/${userId}`), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ email: '  new.address@example.invalid  ' }),
+    });
+    assert.equal(savedResponse.status, 200);
+    assert.equal((await savedResponse.json()).user.email, 'new.address@example.invalid');
+    assert.equal(database.prepare('SELECT email FROM users WHERE id = ?').get(userId).email, 'new.address@example.invalid');
+    const audit = database.prepare(`SELECT details_json FROM audit_logs
+      WHERE action = 'account.updated' AND entity_id = ? ORDER BY id DESC LIMIT 1`).get(userId);
+    assert.deepEqual(JSON.parse(audit.details_json).email, { from: oldEmail, to: 'new.address@example.invalid' });
+  } finally {
+    database.prepare("DELETE FROM audit_logs WHERE action = 'account.updated' AND entity_id = ?").run(userId);
+    database.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  }
+});
+
 test('account changes and session revocations roll back when their required audit entry cannot be written', async () => {
   database.prepare(`INSERT INTO sessions (sid, session_data, expires_at, user_id) VALUES (?, ?, ?, ?)`)
     .run('account-update-session', JSON.stringify({ userId: 'registration-fields-role-target' }), Date.now() + 60_000, 'registration-fields-role-target');
-  const originalUser = database.prepare('SELECT role, disabled, updated_at FROM users WHERE id = ?')
+  const originalUser = database.prepare('SELECT role, disabled, email, updated_at FROM users WHERE id = ?')
     .get('registration-fields-role-target');
   const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
     WHERE action = 'account.updated' AND entity_id = 'registration-fields-role-target'`).get().count;
@@ -817,11 +862,11 @@ test('account changes and session revocations roll back when their required audi
     const response = await fetch(apiUrl('/admin/users/registration-fields-role-target'), {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', connection: 'close' },
-      body: JSON.stringify({ disabled: true }),
+      body: JSON.stringify({ disabled: true, email: 'changed@example.invalid' }),
     });
     assert.equal(response.status, 500);
     assert.equal((await response.json()).code, 'audit_unavailable');
-    assert.deepEqual(database.prepare('SELECT role, disabled, updated_at FROM users WHERE id = ?')
+    assert.deepEqual(database.prepare('SELECT role, disabled, email, updated_at FROM users WHERE id = ?')
       .get('registration-fields-role-target'), originalUser);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get('account-update-session').count, 1);
     assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
