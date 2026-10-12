@@ -177,6 +177,15 @@ test('review actions keep successful decisions visible when editor refreshes fai
   assert.match(decideReview, /setError\(reviewDecisionSaved[\s\S]*?Review decision was saved, but the course editor could not be refreshed\./);
 });
 
+test('blank change-request feedback is announced and associated with its textarea', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+
+  assert.match(source, /setChangeRequestNoteError\('Describe the changes the editor should make\.'\);\s*setError\(''\);\s*changeRequestNoteInputRef\.current\?\.focus\(\)/);
+  assert.match(source, /<textarea ref=\{changeRequestNoteInputRef\}[\s\S]*?aria-invalid=\{changeRequestNoteError \? true : undefined\}/);
+  assert.match(source, /aria-describedby=\{changeRequestNoteError \? `review-change-note-help-\$\{courseId\} review-change-note-error-\$\{courseId\}`/);
+  assert.match(source, /\{changeRequestNoteError && <p id=\{`review-change-note-error-\$\{courseId\}`\} className="form-error" role="alert"/);
+});
+
 test('course-version restore confirmation validates its route and keeps feedback scoped to the source course', () => {
   const source = fs.readFileSync(sourcePath, 'utf8');
   const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

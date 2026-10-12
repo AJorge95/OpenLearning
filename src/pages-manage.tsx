@@ -980,8 +980,10 @@ export function CourseEditorPage() {
   const [review, setReview] = useState<{ status: string; author: string | null; submittedBy: string | null; submittedAt: string | null; reviewedBy: string | null; reviewNote: string } | null>(null);
   const [showChangeRequestForm, setShowChangeRequestForm] = useState(false);
   const [changeRequestNote, setChangeRequestNote] = useState('');
+  const [changeRequestNoteError, setChangeRequestNoteError] = useState('');
   const [savingReviewDecision, setSavingReviewDecision] = useState(false);
   const reviewDecisionRequestRef = useRef(false);
+  const changeRequestNoteInputRef = useRef<HTMLTextAreaElement>(null);
   const restoreVersionRequestsRef = useRef(new Set<string>());
   const [restoringVersionRequests, setRestoringVersionRequests] = useState<Set<string>>(() => new Set());
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -1165,7 +1167,7 @@ export function CourseEditorPage() {
       setCourse(null);
       setVersions([]); setCurrentVersion(null); setVersionPage(1); setVersionPageSize(20); setVersionTotal(0); setVersionHistoryLoading(false); setVersionHistoryError('');
       setReview(null); setCompetencies([]); setSelectedCompetencies([]);
-      setShowChangeRequestForm(false); setChangeRequestNote('');
+      setShowChangeRequestForm(false); setChangeRequestNote(''); setChangeRequestNoteError('');
       abortGovernanceLoad();
       setGovernanceCourseId(''); setGovernanceLoading(false); setGovernanceError('');
       setError(''); setNotice(''); setSavingStatus(null);
@@ -1455,9 +1457,13 @@ export function CourseEditorPage() {
     const isCurrentRequest = () => routeCourseIdRef.current === requestedCourseId;
     const note = decision === 'changes_requested' ? reviewNote.trim() : reviewNote;
     if (decision === 'changes_requested' && !note) {
-      setError('Describe the changes the editor should make.');
+      // Native required validation accepts whitespace, so connect this error to the note field.
+      setChangeRequestNoteError('Describe the changes the editor should make.');
+      setError('');
+      changeRequestNoteInputRef.current?.focus();
       return;
     }
+    setChangeRequestNoteError('');
     reviewDecisionRequestRef.current = true;
     setSavingReviewDecision(true);
     setError(''); setNotice('');
@@ -1469,7 +1475,7 @@ export function CourseEditorPage() {
       if (!isCurrentRequest()) return;
       reviewDecisionSaved = true;
       setNotice(decision === 'approve' ? 'Revision approved and published.' : 'Changes requested from the editor.');
-      if (decision === 'changes_requested') { setShowChangeRequestForm(false); setChangeRequestNote(''); }
+      if (decision === 'changes_requested') { setShowChangeRequestForm(false); setChangeRequestNote(''); setChangeRequestNoteError(''); }
       try {
         await loadGovernance(requestedCourseId);
       } finally {
@@ -1918,15 +1924,16 @@ export function CourseEditorPage() {
         {review?.status !== 'in_review' && <div className="review-submit-actions">{review?.status === 'changes_requested' && <div className="review-state"><span className="program-status draft">Changes requested</span>{review.reviewNote && <small>{review.reviewNote}</small>}</div>}<Button type="button" variant="secondary" onClick={() => void submitForReview()} disabled={saving || submittingReview || savingReviewDecision} aria-busy={submittingReview}>{submittingReview ? 'Submitting revision…' : 'Submit revision for review'}</Button></div>}
         {review?.status === 'in_review' && review.submittedBy !== editorUser?.id && <>
           <div className="review-decision-actions">
-            <Button ref={requestChangesButtonRef} type="button" variant="secondary" aria-expanded={showChangeRequestForm} aria-controls={showChangeRequestForm ? `review-change-request-${courseId}` : undefined} onClick={() => setShowChangeRequestForm(true)} disabled={savingReviewDecision}>Request changes</Button>
+            <Button ref={requestChangesButtonRef} type="button" variant="secondary" aria-expanded={showChangeRequestForm} aria-controls={showChangeRequestForm ? `review-change-request-${courseId}` : undefined} onClick={() => { setChangeRequestNoteError(''); setShowChangeRequestForm(true); }} disabled={savingReviewDecision}>Request changes</Button>
             <Button type="button" onClick={() => void decideReview('approve')} disabled={saving || savingReviewDecision} aria-busy={savingReviewDecision}>{savingReviewDecision ? 'Saving review…' : 'Approve and publish'}</Button>
           </div>
           {showChangeRequestForm && <form id={`review-change-request-${courseId}`} className="review-request-form" onSubmit={(event) => { event.preventDefault(); void decideReview('changes_requested', changeRequestNote); }} aria-busy={savingReviewDecision}>
             <label htmlFor={`review-change-note-${courseId}`}>Changes requested (up to 1,000 characters)
-              <textarea id={`review-change-note-${courseId}`} value={changeRequestNote} onChange={(event) => setChangeRequestNote(event.target.value)} maxLength={1000} rows={4} required autoFocus aria-describedby={`review-change-note-help-${courseId}`} placeholder="Describe what the editor should update before this revision can be published." />
+              <textarea ref={changeRequestNoteInputRef} id={`review-change-note-${courseId}`} value={changeRequestNote} onChange={(event) => { setChangeRequestNote(event.target.value); if (event.target.value.trim()) setChangeRequestNoteError(''); }} maxLength={1000} rows={4} required autoFocus aria-invalid={changeRequestNoteError ? true : undefined} aria-describedby={changeRequestNoteError ? `review-change-note-help-${courseId} review-change-note-error-${courseId}` : `review-change-note-help-${courseId}`} placeholder="Describe what the editor should update before this revision can be published." />
             </label>
+            {changeRequestNoteError && <p id={`review-change-note-error-${courseId}`} className="form-error" role="alert">{changeRequestNoteError}</p>}
             <div className="review-request-form-footer"><small id={`review-change-note-help-${courseId}`}>The course editor will see this feedback. {changeRequestNote.length}/1,000 characters.</small><div className="review-request-form-actions">
-              <Button type="button" variant="secondary" disabled={savingReviewDecision} onClick={() => { setShowChangeRequestForm(false); setChangeRequestNote(''); setError(''); requestChangesButtonRef.current?.focus(); }}>Cancel</Button>
+              <Button type="button" variant="secondary" disabled={savingReviewDecision} onClick={() => { setShowChangeRequestForm(false); setChangeRequestNote(''); setChangeRequestNoteError(''); setError(''); requestChangesButtonRef.current?.focus(); }}>Cancel</Button>
               <Button type="submit" disabled={savingReviewDecision}>{savingReviewDecision ? 'Sending…' : 'Send request'}</Button>
             </div></div>
           </form>}
