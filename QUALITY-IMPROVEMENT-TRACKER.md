@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep catalog filters easy to clear
+
+- **Reviewed:** The learner catalog search, category and sort controls, the filter state used for paging, and the existing recovery action. The one-click reset was only available in the no-results message, so matching results left learners to clear a combined search and category manually.
+- **Improvement:** Add an accessible clear-search-and-filters control to the catalog search bar whenever a search or category is active. Reuse the existing reset handler to clear the draft and applied filters, restore the default sort, reload from page one, and return focus to search. Remove the duplicate reset action from the empty state.
+- **Why it helps:** Learners can recover from a restrictive filter without first losing all results or editing each control individually. The same reset remains available when no courses match.
+- **Backend review:** The catalog API already combines query, category, sort, visibility, and pagination. Its contract and queries remain unchanged.
+- **Checked:** Catalog filter and empty-state client regressions passed (8/8); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict TypeScript checking and Vite bundling; and `git diff --check` passed. The local browser is signed out at `/login`, so authenticated rendered catalog interaction was not verified.
+
 ## 2026-10-12 — Search learning paths by name or description
 
 - **Reviewed:** Staff and learner learning-path lists, existing status filters and pagination, the path visibility rules in the API, and the shared management-search form and SQL search helper.
