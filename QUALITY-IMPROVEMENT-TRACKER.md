@@ -167,6 +167,13 @@
 - **Checked:** The backup command, README contract, and existing restore suites passed (6/6), covering custom independent database/media paths, WAL data, database integrity, media contents, unsafe destinations, partial-output cleanup, and no-write help. The full `npm test -- --test-reporter=dot` suite and `npm run build` passed; `node --check` passed for the script and its integration test; `git diff --check` passed. `npm run backup -- --help` printed usage without creating output.
 - **Operational note:** Pause course edits and uploads during the media-tree copy so the database snapshot and files describe the same point in time.
 
+## 2026-10-12 — Resolve symlinked backup roots before copying media
+
+- **Reviewed:** The new backup command's lexical path-overlap checks and its failure cleanup when a media destination resolves beneath the media source.
+- **Improvement:** Resolve existing source paths and destination prefixes through filesystem symlinks before checking overlaps, then verify the created backup directory still resolves outside database and media paths.
+- **Why it helps:** A `BACKUP_DIR` symlink into course media can no longer bypass the recursive-copy guard and create a temporary database snapshot inside the media tree before failing.
+- **Checked:** Added a Windows junction/Unix directory-symlink regression; it first reproduced the bypass and then passed after the guard change. Focused backup and restore suites passed (7/7), the full `npm test -- --test-reporter=dot` suite and `npm run build` passed, and JavaScript syntax checking passed.
+
 ## 2026-10-12 — Verify the reported role-selector hit area in a signed-in build
 
 - **Reviewed:** The browser comment's selected `label` target, the current account-detail markup, desktop/mobile selector widths, click activation guards, and role-update validation.

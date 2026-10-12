@@ -127,6 +127,17 @@ test('backup command rejects an output directory inside the media root without c
   await assert.rejects(fs.stat(unsafeDestination), { code: 'ENOENT' });
 });
 
+test('backup command rejects an output root that aliases the media root through a directory link', async () => {
+  const linkedDestination = path.join(fixtureDirectory, 'backup-to-media');
+  await fs.symlink(mediaRoot, linkedDestination, process.platform === 'win32' ? 'junction' : 'dir');
+
+  await assert.rejects(createBackup({
+    appConfig: { dbPath: databasePath, mediaRoot },
+    destinationRoot: linkedDestination,
+  }), /BACKUP_DIR must resolve outside the configured media root/);
+  assert.deepEqual(await fs.readdir(mediaRoot), ['course-one']);
+});
+
 test('backup command removes partial output if the media copy fails', async () => {
   const failedBackupRoot = path.join(fixtureDirectory, 'failed-backup-output');
 
