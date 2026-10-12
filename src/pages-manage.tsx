@@ -34,6 +34,7 @@ import { readImageDimensions } from './image-dimensions';
 import { firstQuizTextIssue, MAX_QUIZ_TITLE_LENGTH, QUIZ_TITLE_REQUIRED_ERROR, QUIZ_TITLE_TOO_LONG_ERROR, validateQuizTitle } from './quiz-validation';
 import { lessonResourceUrlError } from './resource-validation';
 import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordConfirmationFieldProps } from './password-confirmation';
+import { validateEmail } from './email-validation';
 import { userListEmptyMessage } from './user-list-empty-state';
 import { buildAuditActionOptions } from './audit-log-filter';
 import { readResetStatusAfterConflict, shouldClearResetConfirmationAfterFailure } from './platform-reset-status';
@@ -2592,6 +2593,7 @@ export function AdminUserDetailsPage() {
   const passwordConfirmationErrorId = `${passwordInputId}-confirmation-error`;
   const lastAdminHelpId = `${passwordInputId}-last-admin-help`;
   const certificateNameErrorId = `${passwordInputId}-certificate-name-error`;
+  const accountEmailErrorId = `${passwordInputId}-account-email-error`;
   const routeUserIdRef = useRef(userId);
   const actionSequenceRef = useRef(0);
   if (routeUserIdRef.current !== userId) {
@@ -2611,10 +2613,14 @@ export function AdminUserDetailsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [profileFirstName, setProfileFirstName] = useState('');
   const [profileLastName, setProfileLastName] = useState('');
+  const [accountEmail, setAccountEmail] = useState('');
+  const [accountEmailUserId, setAccountEmailUserId] = useState('');
+  const [accountEmailError, setAccountEmailError] = useState('');
   const [certificateNameError, setCertificateNameError] = useState('');
   const [invalidCertificateNameField, setInvalidCertificateNameField] = useState<'firstName' | 'lastName' | null>(null);
   const profileFirstNameInputRef = useRef<HTMLInputElement>(null);
   const profileLastNameInputRef = useRef<HTMLInputElement>(null);
+  const accountEmailInputRef = useRef<HTMLInputElement>(null);
   const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
   const [profileNamesUserId, setProfileNamesUserId] = useState('');
   const [pendingDisableAccountId, setPendingDisableAccountId] = useState<string | null>(null);
@@ -2636,16 +2642,18 @@ export function AdminUserDetailsPage() {
   }, [userId, page, loadRetryVersion]);
   useEffect(() => {
     if (!account || account.user.id !== userId) return;
+    setAccountEmail(account.user.email || '');
+    setAccountEmailUserId(account.user.id);
     setProfileFirstName(account.user.firstName || '');
     setProfileLastName(account.user.lastName || '');
     setProfileNamesUserId(account.user.id);
-  }, [account?.user.id, account?.user.firstName, account?.user.lastName, userId]);
+  }, [account?.user.id, account?.user.email, account?.user.firstName, account?.user.lastName, userId]);
   useEffect(() => {
     setError(''); setSuccess(''); setSavingAction(null); setPassword(''); setConfirmPassword('');
-    setCertificateNameError(''); setInvalidCertificateNameField(null); setPendingDisableAccountId(null);
+    setAccountEmailError(''); setCertificateNameError(''); setInvalidCertificateNameField(null); setPendingDisableAccountId(null);
   }, [userId]);
 
-  async function updateAccount(changes: { role?: Role; disabled?: boolean; firstName?: string; lastName?: string }, successMessage = 'Account settings were updated.', disableConfirmed = false) {
+  async function updateAccount(changes: { role?: Role; disabled?: boolean; firstName?: string; lastName?: string; email?: string }, successMessage = 'Account settings were updated.', disableConfirmed = false) {
     if (!account || saving) return;
     if (changes.disabled === true && !disableConfirmed) { setPendingDisableAccountId(account.user.id); return; }
     const requestedUserId = account.user.id;
@@ -2668,8 +2676,10 @@ export function AdminUserDetailsPage() {
         setProfileLastName(response.user.lastName || '');
         setProfileNamesUserId(response.user.id);
       }
+      if (changes.email !== undefined) setAccountEmail(response.user.email || '');
       if (signedInUser?.id === response.user.id && (signedInUser.role !== response.user.role || signedInUser.disabled !== response.user.disabled
-        || signedInUser.firstName !== response.user.firstName || signedInUser.lastName !== response.user.lastName)) {
+        || signedInUser.firstName !== response.user.firstName || signedInUser.lastName !== response.user.lastName
+        || signedInUser.email !== response.user.email)) {
         try { await refresh(); }
         catch {
           if (isCurrentAction()) setError('Account updated, but your access could not be refreshed. Reload this page to apply the change.');
@@ -2700,10 +2710,26 @@ export function AdminUserDetailsPage() {
           setInvalidCertificateNameField(invalidField);
           setCertificateNameError(cause.message);
           window.requestAnimationFrame(() => (invalidField === 'lastName' ? profileLastNameInputRef.current : profileFirstNameInputRef.current)?.focus());
+        } else if (cause instanceof ApiError && (cause.code === 'invalid_email' || cause.code === 'email_taken')
+          && changes.email !== undefined) {
+          setAccountEmailError(cause.message);
+          window.requestAnimationFrame(() => accountEmailInputRef.current?.focus());
         } else setError(cause instanceof ApiError ? cause.message : 'Account settings could not be updated.');
       }
     }
     finally { if (isCurrentAction()) setSavingAction(null); }
+  }
+
+  async function saveAccountEmail(event: React.FormEvent) {
+    event.preventDefault();
+    setError(''); setSuccess(''); setAccountEmailError('');
+    const emailError = validateEmail(accountEmail);
+    if (emailError) {
+      setAccountEmailError(emailError);
+      window.requestAnimationFrame(() => accountEmailInputRef.current?.focus());
+      return;
+    }
+    await updateAccount({ email: accountEmail.trim() }, 'Email address was updated.');
   }
 
   async function saveAccountName(event: React.FormEvent) {
@@ -2775,6 +2801,8 @@ export function AdminUserDetailsPage() {
   if (loading || (account && account.user.id !== userId)) return <div className="management-page page-loading" role="status" aria-live="polite">Loading account details…</div>;
   if (!account) return <div className="management-page">{error && <div className="account-list-error"><Notice>{error}</Notice>{canRetryLoad && <Button type="button" variant="secondary" onClick={() => setLoadRetryVersion((version) => version + 1)}>Try again</Button>}</div>}<Link className="back-link" to="/admin/users"><ArrowLeft size={17} />Back to users</Link></div>;
   const { user, courses, registrationFields } = account;
+  const accountEmailReady = accountEmailUserId === user.id;
+  const accountEmailChanged = accountEmailReady && accountEmail.trim() !== (user.email || '');
   const certificateNameReady = profileNamesUserId === user.id;
   const certificateNameChanged = certificateNameReady && (normalizeAccountName(profileFirstName) !== (user.firstName || '')
     || normalizeAccountName(profileLastName) !== (user.lastName || ''));
@@ -2784,7 +2812,12 @@ export function AdminUserDetailsPage() {
     {error && <Notice id={passwordConfirmationErrorId}>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
     <section className="account-detail-grid">
       <article className="account-detail-card account-overview-card" aria-labelledby="account-overview-heading"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><h2 id="account-overview-heading" className="account-overview-title">Account overview</h2></div></div><span className={`account-state ${user.registrationStatus === 'pending' ? 'account-pending' : user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.registrationStatus === 'pending' ? 'Pending approval' : user.disabled ? 'Disabled' : 'Active'}</span></div>
-        <dl className="account-meta-list"><div><dt>Email</dt><dd>{user.email || 'Not provided'}</dd></div><div><dt>Registration approval</dt><dd>{user.registrationStatus === 'pending' ? 'Pending' : 'Approved'}</dd></div><div><dt>User ID</dt><dd>{user.id}</dd></div><div><dt>Created</dt><dd><DateText value={user.createdAt} /></dd></div><div><dt>Last login</dt><dd>{user.lastLoginAt ? <DateTimeText value={user.lastLoginAt} /> : 'Not recorded'}</dd></div><div><dt>Last updated</dt><dd><DateText value={user.updatedAt} /></dd></div><div><dt>Courses assigned or enrolled</dt><dd>{account.total}</dd></div></dl>
+        <form className="account-profile-form account-email-form form-stack" onSubmit={saveAccountEmail} noValidate aria-busy={savingAction === 'account'}>
+          <label>Email address<input ref={accountEmailInputRef} name="email" type="email" required maxLength={254} autoComplete="email" aria-invalid={Boolean(accountEmailError) || undefined} aria-describedby={accountEmailError ? accountEmailErrorId : undefined} value={accountEmail} onChange={(event) => { setAccountEmail(event.target.value); setAccountEmailError(''); }} disabled={saving} /></label>
+          {accountEmailError && <p id={accountEmailErrorId} className="form-error" role="alert">{accountEmailError}</p>}
+          <Button type="submit" variant="secondary" disabled={saving || !accountEmailReady || !accountEmailChanged}>{accountEmailReady ? 'Save email address' : 'Loading…'}</Button>
+        </form>
+        <dl className="account-meta-list"><div><dt>Registration approval</dt><dd>{user.registrationStatus === 'pending' ? 'Pending' : 'Approved'}</dd></div><div><dt>User ID</dt><dd>{user.id}</dd></div><div><dt>Created</dt><dd><DateText value={user.createdAt} /></dd></div><div><dt>Last login</dt><dd>{user.lastLoginAt ? <DateTimeText value={user.lastLoginAt} /> : 'Not recorded'}</dd></div><div><dt>Last updated</dt><dd><DateText value={user.updatedAt} /></dd></div><div><dt>Courses assigned or enrolled</dt><dd>{account.total}</dd></div></dl>
         <form className="account-profile-form form-stack" onSubmit={saveAccountName} aria-busy={savingAction === 'account'}>
           <div><h3>Certificate name</h3><p>Set the first and last name shown on this user’s certificates.</p></div>
           <div className="account-name-fields">
