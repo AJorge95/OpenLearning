@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep keyboard focus visible on the video volume slider
+
+- **Reviewed:** The learner video toolbar's button and range-control focus styles, dark background, narrow-screen sizing, and existing slider label and percentage announcement.
+- **Improvement:** Give the volume slider the same white, offset `:focus-visible` outline as the adjacent playback buttons.
+- **Why it helps:** Keyboard users can locate the focused slider against the dark player toolbar, with a consistent focus indicator across the controls.
+- **Backend review:** Watch-progress validation and completion rules remain unchanged; this presentation-only improvement needs no API change.
+- **Checked:** `node --test tests/client/video-volume.test.js`, full `npm test -- --test-reporter=dot`, `npm run build`, and `git diff --check` passed. The protected lesson page redirected to `/login`, so the focus ring was verified in CSS and regression coverage rather than through a signed-in browser interaction.
+
 ## 2026-10-12 — Announce learner video volume in percentages
 
 - **Reviewed:** The watch-tracked lesson controls, normalized volume state and mute behavior, existing player recovery logic, and server-side watch verification.

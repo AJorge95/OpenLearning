@@ -14,3 +14,11 @@ test('announces learner video volume in percentage units', () => {
   assert.match(slider, /value=\{videoMuted \? 0 : videoVolume\}/);
   assert.match(slider, /aria-valuetext=\{`\$\{Math\.round\(\(videoMuted \? 0 : videoVolume\) \* 100\)\}%`\}/);
 });
+
+test('gives the volume slider the same high-contrast focus ring as nearby video controls', () => {
+  const stylesPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/styles.css');
+  const styles = fs.readFileSync(stylesPath, 'utf8');
+
+  assert.match(styles, /\.video-control-button:focus-visible \{ outline: 2px solid #fff; outline-offset: 2px; \}/);
+  assert.match(styles, /\.video-volume-control:focus-visible \{ outline: 2px solid #fff; outline-offset: 2px; \}/);
+});
