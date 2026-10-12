@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep email validation consistent across setup and signup
+
+- **Reviewed:** The browser email controls, server `validateEmail` rules, the two-step initial setup flow, registration submission, and the existing field-error accessibility pattern.
+- **Improvement:** Share the email validator between server and client. Check the setup email before advancing away from its field; check registration before submission; associate errors with the email input, mark it invalid, and restore focus if the server ever rejects it.
+- **Why it helps:** Addresses like `learner@localhost` can pass the browser's basic email check but fail the platform's stricter domain rules. Users now see the same actionable message beside the field, and setup keeps the field available for correction.
+- **Backend:** `server/auth.js` now imports the shared validator, preserving the same error contract for setup and registration routes.
+- **Checked:** Focused email, registration-focus, and registration-route tests passed (7/7); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; `git diff --check` passed; and the in-app browser showed the inline error and focused email field on `/register` for `learner@localhost`.
+
 ## 2026-10-12 — Document the upload preflight enforcement boundary
 
 - **Reviewed:** The client upload-size helper, the platform configuration fallback, and the server's upload-limit enforcement and 413 response formatting.
