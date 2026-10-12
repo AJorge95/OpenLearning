@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck lesson media upload and cleanup flows
+
+- **Reviewed:** Cover/video/document/caption upload validation, authorization at save time, audit transactions, temporary-file cleanup, replacement retention for version history, protected streaming, lesson-editor form semantics, upload progress, and responsive media controls.
+- **Result:** No runtime change. The backend keeps metadata and audit writes transactional, removes rejected temporary uploads, retains files used by published versions, and serves documents/captions only to authorized viewers of unlocked lessons. The editor exposes labeled upload controls, format help, progress, cancel actions, and consequence-specific removal confirmations.
+- **Why no change:** The reviewed reliability and accessibility paths are already implemented and covered; no new source-backed failure or unclear interaction appeared.
+- **Checked:** `node --test tests/server/media-routes.test.js` passed (22/22); focused media upload, caption, resource-validation, and removal UI tests passed (12/12). Rendered layout was not verified because the local browser session is signed out and Playwright has no Chromium executable.
+- **Needed to revisit:** A reproduced upload/cleanup failure or a signed-in rendered media-editor mismatch at a specific viewport.
+
 ## 2026-10-12 — Recheck learning-path editor interaction and layout
 
 - **Reviewed:** Published-course pagination and retry, the shared 200-course limit, selected-course availability, prerequisite controls, ordering actions, focus restoration, and narrow-screen layout rules.
