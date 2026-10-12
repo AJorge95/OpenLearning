@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck form-control accessible names
+
+- **Reviewed:** Native inputs, textareas, selects, shared password fields, dynamically identified quiz prompts, and the registration form/editor control semantics.
+- **Result:** No runtime change. The two controls flagged by the initial source scan are labeled by `PasswordField`'s rendered label and the quiz prompt's dynamic `htmlFor`; the other controls use wrapping labels or explicit accessible names.
+- **Why no change:** No control without a programmatic name or validation state was found, and the shared components preserve the correct association for generated IDs.
+- **Checked:** `node --test tests/client/password-field.test.js tests/client/course-editor-structure.test.js tests/client/registration-fields.test.js tests/client/auth-registration-focus.test.js` passed (22/22).
+- **Needed to revisit:** A rendered screen-reader case where a generated label fails to associate, or a newly added control missing its visible/programmatic name.
+
 ## 2026-10-12 — Recheck learner course-card structure and compact layout
 
 - **Reviewed:** Course-card link semantics and content order, title/metadata wrapping, progress and next-action labels, cover alternatives, narrow-screen image/text layout, and the catalog/My Learning payload paths.
