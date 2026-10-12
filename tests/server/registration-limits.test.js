@@ -54,13 +54,13 @@ function apiUrl(pathname) {
   return `http://127.0.0.1:${address.port}/api${pathname}`;
 }
 
-function registrationRequest(username) {
+function registrationRequest(username, email = `${username}@example.invalid`) {
   return fetch(apiUrl('/auth/register'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify({
       username,
-      email: `${username}@example.invalid`,
+      email,
       firstName: 'Limit',
       lastName: 'Check',
       password: 'RegistrationLimitPassphrase-2026',
@@ -101,6 +101,16 @@ before(async () => {
   server = createServer(app);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
+});
+
+test('registration rejects a host-only email domain before creating an account', async () => {
+  const response = await registrationRequest('registration_local_email', 'learner@localhost');
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: 'Enter a valid email address (up to 254 characters).',
+    code: 'invalid_email',
+  });
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get('registration_local_email').count, 0);
 });
 
 after(async () => {

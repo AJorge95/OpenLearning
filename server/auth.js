@@ -1,6 +1,9 @@
 import { randomBytes, scrypt, timingSafeEqual, randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import { db } from './db.js';
+import { validateEmail } from '../src/email-validation.ts';
+
+export { validateEmail };
 
 const scryptAsync = promisify(scrypt);
 const SCRYPT_COST = 16384;
@@ -16,18 +19,6 @@ export function normalizeUsername(username) {
 
 export function normalizeEmail(email) {
   return typeof email === 'string' ? email.trim() : '';
-}
-
-export function validateEmail(email) {
-  const normalized = normalizeEmail(email);
-  const separator = normalized.indexOf('@');
-  const domain = separator >= 0 ? normalized.slice(separator + 1) : '';
-  if (normalized.length > 254 || separator < 1 || separator !== normalized.lastIndexOf('@') || separator > 64
-    || !/^[^\s@]+$/.test(normalized.slice(0, separator)) || !domain.includes('.')
-    || domain.split('.').some((label) => !label || label.length > 63 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label))) {
-    return 'Enter a valid email address (up to 254 characters).';
-  }
-  return null;
 }
 
 export function validateCredentials(username, password) {

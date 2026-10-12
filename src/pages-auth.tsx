@@ -7,6 +7,7 @@ import { getPostLoginPath } from './post-login-path';
 import { findMissingRequiredRegistrationField, refreshRegistrationFieldValues } from './registration-fields';
 import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordConfirmationFieldProps } from './password-confirmation';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
+import { validateEmail } from './email-validation';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import type { RegistrationField, RegistrationFieldValues } from './types';
 
@@ -91,6 +92,8 @@ export function SetupPage() {
   const { completeSetup, configured, setupAvailable, user, connectionProtocol: initialProtocol, registrationEnabled: initialRegistrationEnabled, userLimit: initialUserLimit } = useAuth();
   const navigate = useNavigate();
   const setupErrorId = useId();
+  const setupEmailErrorId = useId();
+  const setupEmailInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<1 | 2>(1);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousStepRef = useRef(step);
@@ -108,6 +111,7 @@ export function SetupPage() {
   const [registrationEnabled, setRegistrationEnabled] = useState(initialRegistrationEnabled);
   const [userLimit, setUserLimit] = useState(String(initialUserLimit));
   const [error, setError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [saving, setSaving] = useState(false);
   const setupSubmissionInFlightRef = useRef(false);
 
@@ -134,6 +138,13 @@ export function SetupPage() {
       setError('Platform name must be between 2 and 80 characters.');
       return;
     }
+    const currentEmailError = validateEmail(email);
+    if (currentEmailError) {
+      setEmailError(currentEmailError);
+      window.requestAnimationFrame(() => setupEmailInputRef.current?.focus());
+      return;
+    }
+    setEmailError('');
     const confirmationError = getPasswordConfirmationError(password, confirmPassword);
     if (confirmationError) {
       setError(confirmationError);
@@ -156,7 +167,11 @@ export function SetupPage() {
       });
       navigate('/courses');
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Setup could not be completed. Try again.');
+      if (cause instanceof ApiError && cause.code === 'invalid_email') {
+        setEmailError(cause.message);
+        setStep(1);
+        window.requestAnimationFrame(() => setupEmailInputRef.current?.focus());
+      } else setError(cause instanceof ApiError ? cause.message : 'Setup could not be completed. Try again.');
     } finally {
       releaseSubmissionLock(setupSubmissionInFlightRef);
       setSaving(false);
@@ -180,7 +195,8 @@ export function SetupPage() {
             <label>Platform name<input required minLength={2} maxLength={80} value={platformName} onChange={(event) => setPlatformName(event.target.value)} autoFocus /></label>
             <PlatformIconPicker value={platformIcon} onChange={setPlatformIcon} />
             <div className="branding-choice-field"><span className="branding-choice-label">Color palette</span><small>Choose the accent colors used across the platform.</small><PalettePicker value={themePalette} onChange={choosePalette} /></div>
-            <label>Admin email<input required type="email" maxLength={254} autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+            <label>Admin email<input ref={setupEmailInputRef} required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? setupEmailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} /></label>
+            {emailError && <p id={setupEmailErrorId} className="form-error" role="alert">{emailError}</p>}
             <div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} /></label></div>
             <label>Admin username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} /></label>
             <PasswordField label="Password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} hint="Use at least 12 characters." />
@@ -251,7 +267,10 @@ export function RegisterPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const postLoginPath = getPostLoginPath(location.state?.from);
+  const emailErrorId = useId();
+  const emailInputRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
@@ -301,6 +320,13 @@ export function RegisterPage() {
     event.preventDefault();
     setError(''); setInvalidRegistrationFieldId('');
     setRegistrationFieldsChanged(false);
+    const currentEmailError = validateEmail(email);
+    if (currentEmailError) {
+      setEmailError(currentEmailError);
+      window.requestAnimationFrame(() => emailInputRef.current?.focus());
+      return;
+    }
+    setEmailError('');
     const missingField = findMissingRequiredRegistrationField(registrationFields, registrationFieldValues);
     if (missingField) {
       setError(`${missingField.label} is required.`);
@@ -325,6 +351,9 @@ export function RegisterPage() {
         setRegistrationFieldsChanged(true);
         setRegistrationFieldsLoading(true);
         setRegistrationFieldsRetryVersion((version) => version + 1);
+      } else if (cause instanceof ApiError && cause.code === 'invalid_email') {
+        setEmailError(cause.message);
+        window.requestAnimationFrame(() => emailInputRef.current?.focus());
       } else setError(cause instanceof ApiError ? cause.message : 'Registration failed. Try again.');
     }
     finally { releaseSubmissionLock(submissionInFlightRef); setSaving(false); }
@@ -333,7 +362,8 @@ export function RegisterPage() {
   return <AuthPanel><h1>Create your account</h1><p className="auth-description">Join your learning space and explore available courses.</p>
     {registrationApprovalRequired && <p className="auth-approval-note" role="note">New accounts need administrator approval before they can sign in.</p>}
     <form onSubmit={submit} className="form-stack" aria-busy={saving}>
-      <label>Email<input required type="email" maxLength={254} autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} /></label>
+      <label>Email<input ref={emailInputRef} required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? emailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} disabled={saving} /></label>
+      {emailError && <p id={emailErrorId} className="form-error" role="alert">{emailError}</p>}
       <div className="account-name-fields"><label>First name <small>Required · used on certificates</small><input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} disabled={saving} /></label><label>Last name <small>Required · used on certificates</small><input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} disabled={saving} /></label></div>
       <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>Letters, numbers, dots, underscores, and hyphens.</small></label>
       {registrationFieldsLoading ? <p className="registration-fields-loading" role="status">Loading registration details…</p> : registrationFieldsError
