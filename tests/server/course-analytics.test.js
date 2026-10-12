@@ -4343,6 +4343,50 @@ test('module deletion preserves its content and files when its audit entry canno
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.module_deleted' AND entity_id = 'module-delete-audit'").get().count, 1);
 });
 
+test('module deletion prepares its media-row cleanup statement once for multiple videos', async () => {
+  const courseId = 'course-module-media-batch';
+  const moduleId = 'module-media-batch';
+  const mediaIds = Array.from({ length: 3 }, (_, index) => `media-module-batch-${index + 1}`);
+  const fileNames = mediaIds.map((_id, index) => `module-video-${index + 1}.mp4`);
+  const mediaDirectory = path.join(fixtureDirectory, 'course-media', courseId);
+  const originalPrepare = database.prepare;
+  let mediaDeletePreparations = 0;
+  database.prepare = (sql) => {
+    if (sql.trim() === 'DELETE FROM media_files WHERE id = ?') mediaDeletePreparations += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    originalPrepare.call(database, `INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES (?, 'Module media batch fixture', 'draft', 'admin-1', 'admin-1')`).run(courseId);
+    originalPrepare.call(database, 'INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, 0)')
+      .run(moduleId, courseId, 'Media batch module');
+    const insertMedia = originalPrepare.call(database, `INSERT INTO media_files
+      (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+      VALUES (?, ?, ?, ?, 'video/mp4', 12, 'video')`);
+    const insertLesson = originalPrepare.call(database, 'INSERT INTO lessons (id, module_id, title, media_id, position) VALUES (?, ?, ?, ?, ?)');
+    fs.mkdirSync(mediaDirectory, { recursive: true });
+    mediaIds.forEach((mediaId, index) => {
+      insertMedia.run(mediaId, courseId, fileNames[index], fileNames[index]);
+      insertLesson.run(`lesson-module-batch-${index + 1}`, moduleId, `Video ${index + 1}`, mediaId, index);
+      fs.writeFileSync(path.join(mediaDirectory, fileNames[index]), 'fixture video');
+    });
+
+    const response = await fetch(apiUrl(`/manage/modules/${moduleId}`), {
+      method: 'DELETE',
+      headers: userHeaders('admin-1'),
+    });
+
+    assert.equal(response.status, 204);
+    assert.equal(mediaDeletePreparations, 1);
+    assert.equal(originalPrepare.call(database, 'SELECT COUNT(*) AS count FROM media_files WHERE id IN (?, ?, ?)').get(...mediaIds).count, 0);
+    assert.ok(fileNames.every((fileName) => !fs.existsSync(path.join(mediaDirectory, fileName))));
+  } finally {
+    database.prepare = originalPrepare;
+    originalPrepare.call(database, 'DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('lesson deletion preserves its content and files when its audit entry cannot be saved', async () => {
   database.exec(`
     INSERT INTO courses (id, title, status, created_by, updated_by)

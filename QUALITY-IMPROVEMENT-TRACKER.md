@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse the module media cleanup statement
+
+- **Reviewed:** The course editor's destructive module-removal confirmation, the route's transactional lesson/media-row deletion, and post-commit video/document/caption file cleanup.
+- **Improvement:** Prepare the media-row delete statement once when a module has attached videos, then reuse it for each row.
+- **Why it helps:** Removing a module with several videos no longer recompiles the same SQL statement for every video; empty modules still skip the statement entirely.
+- **Interface review:** The existing confirmation names lessons, quiz attempts, and uploaded files before deletion; no interaction or copy change was indicated.
+- **Checked:** A regression first observed 3 prepares for a 3-video module, then passed with one prepare and verified all media rows/files were removed. `node --test tests/server/course-analytics.test.js` passed (118/118), the module-removal client test passed (1/1), `npm run build` passed TypeScript and Vite, and `git diff --check` passed.
+
 ## 2026-10-12 — Reuse quiz child-insert statements during saves
 
 - **Reviewed:** Quiz editor question/choice limits and accessible actions, server-side quiz validation, unchanged-save handling, the immediate write transaction, and nested question/choice persistence.
