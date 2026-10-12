@@ -291,7 +291,7 @@ function uploadTypeMessage(kind) {
   if (kind === 'video') return 'Upload an MP4 video file.';
   if (kind === 'cover') return `Upload a JPG, PNG, or WebP course cover no larger than ${maxCourseCoverDimension} × ${maxCourseCoverDimension} pixels.`;
   if (kind === 'caption') return 'Upload a valid WebVTT (.vtt) captions file.';
-  return 'Upload a PDF, text, Word, PowerPoint, Excel, CSV, TSV, or OpenDocument file.';
+  return 'Upload a PDF, TXT, Markdown, RTF, Word, PowerPoint, Excel, CSV, TSV, or OpenDocument file.';
 }
 
 function storedFilename(originalName) {
