@@ -419,7 +419,6 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
     const nextIndex = findEnabledAppSelectIndex(options, index, direction);
     const nextOption = options[nextIndex];
     if (nextOption && !nextOption.disabled) setActiveValue(nextOption.value);
-    menuRef.current?.querySelector<HTMLElement>(`#${menuId}-option-${nextIndex}`)?.scrollIntoView({ block: 'nearest' });
   }
 
   function openMenu(startIndex = selectedIndex) {
@@ -496,6 +495,12 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
     const fallbackOption = options[activeOptionIndex];
     if (fallbackOption && !fallbackOption.disabled) setActiveValue(fallbackOption.value);
   }, [activeOptionIndex, activeValue, options, unavailable]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    // Keep the active descendant visible when opening or moving through a scrollable listbox.
+    menuRef.current?.querySelector<HTMLElement>(`#${menuId}-option-${activeOptionIndex}`)?.scrollIntoView({ block: 'nearest' });
+  }, [activeOptionIndex, menuId, menuOpen]);
 
   useEffect(() => {
     if (!menuOpen) return;
