@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Enlarge the video volume slider target
+
+- **Reviewed:** Existing video playback control markup, slider announcement and focus styling, desktop/mobile width rules, and the dedicated volume-control regression tests.
+- **Improvement:** Increase the native volume slider's target height from 20px to 24px and document the sizing intent beside the CSS rule. Add a client regression ensuring no responsive override reduces that height; the mobile rule continues to narrow only the slider width.
+- **Why it helps:** The slider is easier to adjust with touch or less precise pointer input while preserving the existing compact toolbar and keyboard/accessibility behavior. This meets the 24px target-size threshold in WCAG 2.2 SC 2.5.8.
+- **Checked:** `node --test tests/client/video-volume.test.js` passed (3/3); `npm run build` passed TypeScript and Vite; `git diff --check` passed. A disposable signed-in browser session rendered the built lesson player and changed the accessible slider value from 100% to 50%. Its placeholder video file intentionally did not play, so playback itself was not evaluated. The temporary server, database, and media file were removed.
+
 ## 2026-10-12 — Review settings feedback and backend failure paths
 
 - **Reviewed:** Recent tracker history and clean `main`; administrator email, account, and registration-settings form patterns; session expiry cleanup, readiness checks, and invalid saved registration-field handling.

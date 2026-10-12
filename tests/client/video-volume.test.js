@@ -22,3 +22,16 @@ test('gives the volume slider the same high-contrast focus ring as nearby video 
   assert.match(styles, /\.video-control-button:focus-visible \{ outline: 2px solid #fff; outline-offset: 2px; \}/);
   assert.match(styles, /\.video-volume-control:focus-visible \{ outline: 2px solid #fff; outline-offset: 2px; \}/);
 });
+
+test('keeps the volume slider pointer target at least 24px tall at every breakpoint', () => {
+  const stylesPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/styles.css');
+  const styles = fs.readFileSync(stylesPath, 'utf8');
+  const sliderRules = [...styles.matchAll(/\.video-volume-control\s*\{([^}]*)\}/g)]
+    .map(([, declarations]) => declarations);
+  const baseRule = sliderRules.find((declarations) => /width:\s*84px/.test(declarations));
+
+  assert.ok(baseRule, 'expected base volume slider styles');
+  assert.match(baseRule, /height:\s*24px/);
+  assert.ok(sliderRules.filter((declarations) => declarations !== baseRule)
+    .every((declarations) => !/height\s*:/.test(declarations)));
+});
