@@ -22,3 +22,18 @@ test('course analytics loads the summary once and fetches learner pages independ
   assert.match(source, /learnerPageError \? <div[^>]*role="alert"/);
   assert.match(source, /page=\{page\} pageSize=\{data\.pageSize\} total=\{data\.summary\.learnerCount\} loading=\{learnerPageLoading\}/);
 });
+
+test('course analytics fetches learner activity only when its disclosure opens', () => {
+  const componentStart = source.indexOf('function CourseAnalyticsLearnerActivity(');
+  const pageStart = source.indexOf('export function CourseAnalyticsPage()');
+  assert.ok(componentStart >= 0 && pageStart > componentStart, 'learner activity disclosure should own its request lifecycle');
+  const activity = source.slice(componentStart, pageStart);
+
+  assert.match(activity, /<details className="analytics-learner-details" aria-busy=\{loading\} onToggle=\{\(event\) => setOpen\(event\.currentTarget\.open\)\}>/);
+  assert.match(activity, /if \(!open \|\| details\) return;/);
+  assert.match(activity, /api\.get<CourseAnalyticsLearnerDetails>\(`\/api\/manage\/courses\/\$\{courseId\}\/analytics\/learners\/\$\{encodeURIComponent\(learner\.id\)\}`/);
+  assert.match(activity, /Loading activity details/);
+  assert.match(activity, /role="alert"[\s\S]*?Retry activity details/);
+  assert.match(activity, /controller\.abort\(\)/);
+  assert.match(source, /<CourseAnalyticsLearnerActivity courseId=\{courseId\} learner=\{learner\} \/>/);
+});

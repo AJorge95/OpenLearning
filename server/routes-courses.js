@@ -542,21 +542,108 @@ function courseAnalyticsLearners(course, learnerRows, lessons, quizzes) {
   });
 }
 
+function courseAnalyticsLearnerSummaries(course, learnerRows, lessons, quizzes) {
+  const learnerIds = learnerRows.map((learner) => learner.id);
+  const lessonTotalsByUser = new Map();
+  const quizTotalsByUser = new Map();
+  if (learnerIds.length) {
+    const learnerPlaceholders = learnerIds.map(() => '?').join(',');
+    for (const row of db.prepare(`
+      SELECT lp.user_id, COUNT(*) AS completed_lessons, MAX(lp.completed_at) AS latest_completed_at
+      FROM lesson_progress lp JOIN lessons l ON l.id = lp.lesson_id
+      JOIN course_modules m ON m.id = l.module_id
+      WHERE m.course_id = ? AND lp.user_id IN (${learnerPlaceholders})
+      GROUP BY lp.user_id
+    `).all(course.id, ...learnerIds)) lessonTotalsByUser.set(row.user_id, row);
+    for (const row of db.prepare(`
+      WITH quiz_by_user AS (
+        SELECT a.user_id, a.quiz_id, COUNT(*) AS attempts, MAX(a.passed) AS passed,
+          MAX(a.submitted_at) AS latest_submitted_at
+        FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
+        JOIN course_modules m ON m.id = q.module_id
+        WHERE m.course_id = ? AND a.user_id IN (${learnerPlaceholders})
+        GROUP BY a.user_id, a.quiz_id
+      )
+      SELECT user_id, SUM(attempts) AS attempts, SUM(passed) AS passed_quizzes,
+        MAX(latest_submitted_at) AS latest_submitted_at
+      FROM quiz_by_user GROUP BY user_id
+    `).all(course.id, ...learnerIds)) quizTotalsByUser.set(row.user_id, row);
+  }
+
+  const requiredItems = lessons.length + quizzes.length;
+  return learnerRows.map((learner) => {
+    const lessonTotals = lessonTotalsByUser.get(learner.id);
+    const quizTotals = quizTotalsByUser.get(learner.id);
+    const completedLessonCount = lessonTotals?.completed_lessons ?? 0;
+    const passedQuizCount = quizTotals?.passed_quizzes ?? 0;
+    const completedItems = completedLessonCount + passedQuizCount;
+    const activityDates = [lessonTotals?.latest_completed_at, quizTotals?.latest_submitted_at].filter(Boolean);
+    const lastActivityAt = activityDates.reduce((latest, date) => !latest || date > latest ? date : latest, null);
+    return {
+      id: learner.id,
+      username: learner.username,
+      disabled: Boolean(learner.disabled),
+      enrolledAt: learner.enrolled_at,
+      assignedAt: learner.granted_at,
+      completedLessonCount,
+      lessonCount: lessons.length,
+      passedQuizCount,
+      quizCount: quizzes.length,
+      progress: requiredItems ? Math.round((completedItems / requiredItems) * 100) : 0,
+      completed: requiredItems > 0 && completedItems === requiredItems,
+      started: completedItems > 0 || (quizTotals?.attempts ?? 0) > 0,
+      lastActivityAt,
+    };
+  });
+}
+
+function courseAnalyticsContext(courseParam) {
+  const courseId = logicalCourseId(courseParam) || courseParam;
+  const catalogCourse = canonicalCourse(courseId);
+  if (!catalogCourse) fail(404, 'Course not found.', 'not_found');
+  const latestPublishedVersion = publishedVersion(courseId);
+  // Analytics follow the version currently available to learners without creating an editable draft.
+  const course = latestPublishedVersion
+    ? db.prepare('SELECT * FROM courses WHERE id = ?').get(latestPublishedVersion.storage_course_id)
+    : catalogCourse;
+  return { courseId, catalogCourse, course };
+}
+
+function courseAnalyticsContent(courseId) {
+  const lessons = db.prepare(`
+    SELECT l.id, l.title, l.position, m.id AS module_id, m.title AS module_title, m.position AS module_position
+    FROM lessons l JOIN course_modules m ON m.id = l.module_id
+    WHERE m.course_id = ? ORDER BY m.position, m.id, l.position, l.id
+  `).all(courseId);
+  const quizzes = db.prepare(`
+    SELECT q.id, q.title, q.pass_mark, m.id AS module_id, m.title AS module_title, m.position AS module_position
+    FROM quizzes q JOIN course_modules m ON m.id = q.module_id
+    WHERE m.course_id = ? ORDER BY m.position, m.id, q.id
+  `).all(courseId);
+  return { lessons, quizzes };
+}
+
+courseRouter.get('/manage/courses/:courseId/analytics/learners/:learnerId', requireStaff, (req, res) => {
+  const { courseId, course } = courseAnalyticsContext(req.params.courseId);
+  const learner = db.prepare(`
+    SELECT u.id, u.username, u.disabled, e.enrolled_at, g.granted_at
+    FROM users u
+    LEFT JOIN enrollments e ON e.course_id = ? AND e.user_id = u.id
+    LEFT JOIN course_grants g ON g.course_id = ? AND g.user_id = u.id
+    WHERE u.id = ? AND u.role = 'learner' AND (e.user_id IS NOT NULL OR g.user_id IS NOT NULL)
+  `).get(courseId, courseId, req.params.learnerId);
+  if (!learner) fail(404, 'Learner activity not found.', 'not_found');
+  const { lessons, quizzes } = courseAnalyticsContent(course.id);
+  const [learnerDetails] = courseAnalyticsLearners(course, [learner], lessons, quizzes);
+  res.json({ lessonProgress: learnerDetails.lessonProgress, quizProgress: learnerDetails.quizProgress });
+});
+
 courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res) => {
   if (req.query.learnersOnly !== undefined && req.query.learnersOnly !== '1') {
     fail(400, 'Learner-only analytics requests must set learnersOnly=1.', 'validation_error');
   }
   const learnersOnly = req.query.learnersOnly === '1';
-  const courseId = logicalCourseId(req.params.courseId) || req.params.courseId;
-  const catalogCourse = canonicalCourse(courseId);
-  if (!catalogCourse) fail(404, 'Course not found.', 'not_found');
-  const latestPublishedVersion = publishedVersion(courseId);
-  // Analytics describe the content learners can currently access. Resolving the
-  // editable copy here created a draft as a side effect and detached the
-  // response identity and lesson IDs from the published course.
-  const course = latestPublishedVersion
-    ? db.prepare('SELECT * FROM courses WHERE id = ?').get(latestPublishedVersion.storage_course_id)
-    : catalogCourse;
+  const { courseId, catalogCourse, course } = courseAnalyticsContext(req.params.courseId);
   const pageSize = 50;
   const eligibleLearners = `SELECT u.id, u.username, u.disabled FROM (
     SELECT user_id AS id FROM enrollments WHERE course_id = ?
@@ -573,17 +660,8 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
     LEFT JOIN course_grants g ON g.course_id = ? AND g.user_id = eligible.id
     ORDER BY eligible.username COLLATE NOCASE, eligible.id ASC LIMIT ? OFFSET ?
   `).all(courseId, courseId, courseId, courseId, responsePageSize, offset);
-  const lessons = db.prepare(`
-    SELECT l.id, l.title, l.position, m.id AS module_id, m.title AS module_title, m.position AS module_position
-    FROM lessons l JOIN course_modules m ON m.id = l.module_id
-    WHERE m.course_id = ? ORDER BY m.position, m.id, l.position, l.id
-  `).all(course.id);
-  const quizzes = db.prepare(`
-    SELECT q.id, q.title, q.pass_mark, m.id AS module_id, m.title AS module_title, m.position AS module_position
-    FROM quizzes q JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id = ? ORDER BY m.position, m.id, q.id
-  `).all(course.id);
-  const learners = courseAnalyticsLearners(course, learnerRows, lessons, quizzes);
+  const { lessons, quizzes } = courseAnalyticsContent(course.id);
+  const learners = courseAnalyticsLearnerSummaries(course, learnerRows, lessons, quizzes);
 
   // Page changes need learner details only; avoid recalculating course-wide metrics.
   if (learnersOnly) {

@@ -250,33 +250,38 @@ export interface CourseAnalytics {
     passRate: number | null;
     averageScore: number | null;
   }>;
-  learners: Array<{
+  learners: CourseAnalyticsLearner[];
+}
+
+export interface CourseAnalyticsLearner {
+  id: string;
+  username: string;
+  disabled: boolean;
+  enrolledAt: string | null;
+  assignedAt: string | null;
+  completedLessonCount: number;
+  lessonCount: number;
+  passedQuizCount: number;
+  quizCount: number;
+  progress: number;
+  completed: boolean;
+  started: boolean;
+  lastActivityAt: string | null;
+}
+
+export interface CourseAnalyticsLearnerDetails {
+  lessonProgress: Array<{ id: string; title: string; moduleTitle: string; completedAt: string | null; completed: boolean }>;
+  quizProgress: Array<{
     id: string;
-    username: string;
-    disabled: boolean;
-    enrolledAt: string | null;
-    assignedAt: string | null;
-    completedLessonCount: number;
-    lessonCount: number;
-    passedQuizCount: number;
-    quizCount: number;
-    progress: number;
-    completed: boolean;
-    started: boolean;
-    lastActivityAt: string | null;
-    lessonProgress: Array<{ id: string; title: string; moduleTitle: string; completedAt: string | null; completed: boolean }>;
-    quizProgress: Array<{
-      id: string;
-      title: string;
-      moduleTitle: string;
-      passMark: number;
-      attempts: number;
-      highestScore: number | null;
-      latestScore: number | null;
-      latestPassed: boolean | null;
-      passed: boolean;
-      latestSubmittedAt: string | null;
-    }>;
+    title: string;
+    moduleTitle: string;
+    passMark: number;
+    attempts: number;
+    highestScore: number | null;
+    latestScore: number | null;
+    latestPassed: boolean | null;
+    passed: boolean;
+    latestSubmittedAt: string | null;
   }>;
 }
 
