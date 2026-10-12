@@ -10033,3 +10033,12 @@
 - **Improvement:** Add an isolated SQLite suite under `tests/server` covering each incomplete-content rejection plus a fully publishable lesson-and-quiz course.
 - **Why it helps:** Future edits to the publication validator are checked against the exact content required before learners can access a course, including the distinction between an uploaded video and one attached to a lesson.
 - **Checked:** `node --test tests/server/course-publishing-readiness.test.js` passed (4/4), and the full `npm test -- --test-reporter=dot` suite passed. The fixture uses a temporary database and removes it after the test run; `git diff --check` passed. No runtime source changed, so the build was not rerun in this test-only cycle.
+
+## 2026-10-12 — Verify the current account-role selector hit area
+
+- **Reviewed:** The supplied account-role screenshot and selected DOM path against the live account-detail route, current markup and CSS, and shared `AppSelect` pointer activation guard.
+- **Result:** No runtime change. The supplied screenshot targets an older label-wrapped layout that is absent from the current source. The reported account is the only active administrator, so its selector is intentionally disabled. On an enabled learner account, the live trigger measured 136 × 44px; clicking the 13px gap beside it or the far-right blank space in its row left the menu closed, while clicking within the trigger opened it.
+- **Why no change:** The current build already bounds the hit area to the visible trigger and rejects outside pointer activation. Changing the width again would duplicate the existing fix.
+- **Backend review:** The last-active-administrator safeguard explains why the reported account cannot be used to test an enabled control; no role-permission or account API change was indicated.
+- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-activation.test.js tests/client/app-select-label.test.js` passed (19/19). The local signed-in browser check used a separate enabled learner account and did not change account data. `git diff --check` passed.
+- **Needed to continue:** If the current source still shows an oversized selector after a fresh load, capture a new screenshot of the enabled control and the click location so the mismatch can be reproduced.
