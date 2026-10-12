@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck sign-in timing and throttling
+
+- **Reviewed:** Login input bounds, username lookup, missing/disabled/malformed-account password verification, generic credential errors, pending approval behavior, session regeneration and post-verification account checks, audit rollback, and request throttling.
+- **Result:** No runtime change. Login performs scrypt verification for both usable and unusable accounts, caps request lengths, rechecks account status and password hash inside an immediate transaction, and removes a newly regenerated session if sign-in cannot be completed. The login-only IP limiter allows 12 attempts per 15 minutes, skips successful requests, emits standard rate-limit headers, and returns a structured 429.
+- **Why no change:** The reviewed route and middleware preserve the current account-security contract, and the focused route/session/error regressions cover the audited failure paths. No latency or rate-limit mismatch was demonstrated.
+- **Checked:** Read the login and password-verification paths, rate-limit setup and mounting, and existing auth tests. `node --test tests/server/auth-rate-limit-mount.test.js tests/server/last-login.test.js` passed (17/17); the working tree was clean at cycle start.
+- **Needed to continue:** A representative sign-in latency profile or a reproducible rate-limit, account-state, or session failure outside current tests.
+
 ## 2026-10-12 — Ignore select clicks outside the visible trigger
 
 - **Reviewed:** The reported account-role hit area, the shared `AppSelect` click handler, current account-detail markup and sizing, and the existing label/hit-area regressions.
