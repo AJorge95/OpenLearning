@@ -8,6 +8,14 @@
 - **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js` passed (11/11), and the local Vite server returned the current `pages-manage.tsx` module (HTTP 200). The available browser tabs are signed out, and Playwright is not installed, so the protected account interaction could not be replayed. No account data changed.
 - **Needed to continue:** A hard reload of the authenticated account page to confirm it renders the current markup; if the click still opens the menu from outside the trigger, provide the clicked location and viewport so it can be reproduced against the current build.
 
+## 2026-10-12 — Recheck certificate issuance and presentation
+
+- **Reviewed:** Version-specific learner certificate issuance and idempotency, profile-name snapshots and backfill, bounded completion-candidate batches, learner-page loading and retry states, responsive layout, and print rules.
+- **Result:** No runtime change. Issuance requires a completed published course and a usable learner name, reuses the saved certificate for that version, and snapshots recipient, course, platform, and issue-date details. Backfill considers lesson and passed-quiz activity in batches. The page provides retry on fetch failure and dedicated narrow-screen and print styling.
+- **Why no change:** The service and interface agree on the certificate contract, and existing tests cover issuance, versioned backfill, query bounds, and certificate print styling. No new correctness or performance gap appeared in the reviewed code.
+- **Checked:** `node --test --test-reporter=dot tests/server/certificate-service.test.js tests/client/certificate-print-style.test.js` passed (8/8), and `git diff --check` passed. No certificate or learner data changed. A signed-in learner page is unavailable for rendered print-preview verification.
+- **Needed to continue:** A signed-in learner certificate page with print/PDF output, especially for long recipient or course names, or a reproducible issuance/backfill failure outside the covered cases.
+
 ## 2026-10-12 — Recheck learner video watch progress and recovery
 
 - **Reviewed:** Server heartbeat timing and watched-position bounds, lesson-completion thresholds, client progress serialization and rejected-seek resynchronization, background-tab resume, and the reduced-motion scroll behavior.
