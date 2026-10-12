@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Prevent label-forwarded clicks on nested actions
+
+- **Reviewed:** JSX label structure across all application TSX files, including native fields, buttons, links, and the shared custom selector; also checked the course-media progress/validation flow and its server cleanup boundary.
+- **Improvement:** Add a dedicated client regression that rejects nested buttons, links, and `AppSelect` controls inside labels while allowing the form field the label is meant to name.
+- **Why it helps:** Prevents blank label space from forwarding clicks into unrelated actions or expanding a custom selector's hit area, avoiding a repeat of the account-role dropdown issue.
+- **Backend review:** Upload limits, media signatures, temporary-file cleanup, and cancellation are already covered; no backend change was indicated.
+- **Checked:** `node --test tests/client/label-interaction.test.js` passed (2/2); the full `npm test -- --test-reporter=dot` suite and `git diff --check` passed. The AST scan found no current label/control violations.
+
 ## 2026-10-12 — Preserve image alternatives when media fails to load
 
 - **Reviewed:** The shared image fallback component, every `ImageWithFallback` call site, the screen-reader-only utility, and the existing media upload type/size validation and route coverage.
