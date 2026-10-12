@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide shared account-control icons from assistive technology
+
+- **Reviewed:** The shared learner account disclosure, staff sidebar sign-out control, their explicit accessible names and state announcements, and the live accessibility trees for learner and management routes.
+- **Improvement:** Mark the account-menu chevron and staff sign-out icon as decorative so the controls expose only their existing accessible names and state.
+- **Why it helps:** Screen-reader users avoid redundant generic image announcements when opening the account menu or signing out, while the chevron’s visual state and sign-out progress label remain unchanged.
+- **Backend review:** Session sign-out, route authorization, account-menu links, and pending-registration refresh behavior are unchanged; no server change was indicated.
+- **Checked:** Extended `tests/client/account-menu-accessibility.test.js` to cover both shared labelled controls. The live learner and staff pages now retain the named controls without the decorative account/sign-out image nodes. Focused checks passed (4/4), the full `npm test` suite passed (857/857), `npm run typecheck`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-13 — Hide decorative search icons from assistive technology
 
 - **Reviewed:** The learner catalog, staff course and access searches, administrator user search, audit and system log filters, and the existing search-landmark semantics in the live client.
