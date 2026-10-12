@@ -455,14 +455,22 @@ export function LearningPathsPage() {
     finally { setChangingPathStatusId(null); setSaving(false); }
   }
 
-  async function selfEnroll(path: LearningPath) {
+  async function selfEnroll(path: LearningPath, trigger: HTMLButtonElement) {
     if (joiningPathRef.current) return;
     joiningPathRef.current = true;
     setJoiningPathId(path.id);
     setError(''); setNotice('');
     try { await api.post(`/api/learning-paths/${path.id}/enroll`); setNotice(`You joined “${path.title}”.`); await load(); }
     catch (cause) { setError(requestMessage(cause, 'You could not join this learning path.')); }
-    finally { joiningPathRef.current = false; setJoiningPathId(null); }
+    finally {
+      joiningPathRef.current = false;
+      setJoiningPathId(null);
+      window.requestAnimationFrame(() => {
+        if (!pathsPageActiveRef.current) return;
+        if (trigger.isConnected) trigger.focus();
+        else document.getElementById(`learning-path-title-${path.id}`)?.focus();
+      });
+    }
   }
 
   async function loadPathLearners(pathId: string, query: string, page: number) {
@@ -614,7 +622,7 @@ export function LearningPathsPage() {
       {loading && <div className="log-loading" role="status">Loading learning paths…</div>}
       <div className="program-list" aria-busy={loading}>
       {paths.map((path) => <article className="program-card learning-path-card" key={path.id}>
-        <div className="program-card-heading"><div><span className="program-icon"><BookOpen size={18} /></span><div><h2>{path.title}</h2><p>{path.description || `${path.courseCount} courses in this path`}</p></div></div><span className={`program-status ${path.status}`}>{path.status}</span></div>
+        <div className="program-card-heading"><div><span className="program-icon"><BookOpen size={18} /></span><div><h2 id={`learning-path-title-${path.id}`} tabIndex={-1}>{path.title}</h2><p>{path.description || `${path.courseCount} courses in this path`}</p></div></div><span className={`program-status ${path.status}`}>{path.status}</span></div>
         {path.courseCount > 0 && <>
           <div className="program-progress-line"><span>{staff ? 'Your progress: ' : ''}{path.completedCourses} of {path.courseCount} courses complete</span><strong>{Math.round(path.completedCourses / path.courseCount * 100)}%</strong></div>
           <ProgressBar value={Math.round(path.completedCourses / path.courseCount * 100)} label={`${staff ? 'Your progress in' : 'Progress in'} ${path.title}`} />
@@ -630,7 +638,7 @@ export function LearningPathsPage() {
               ? <Button variant="secondary" aria-label={assignmentPath === path.id ? `Close assignments for ${path.title}` : `Assign learners to ${path.title}`} aria-expanded={assignmentPath === path.id} aria-controls={assignmentPath === path.id ? `path-assignments-${path.id}` : undefined} disabled={saving || assignmentBusy} onClick={() => void toggleAssignments(path)}><UsersRound size={15} />{assignmentPath === path.id ? 'Close assignments' : 'Assign learners'}</Button>
               : <span className="muted">Publish this path to assign learners.</span>}
             <Button variant="secondary" aria-label={`Archive ${path.title}`} disabled={saving || assignmentBusy} aria-busy={changingPathStatusId === path.id} onClick={() => requestPathArchive(path)}><Archive size={15} />{changingPathStatusId === path.id ? 'Archiving…' : 'Archive'}</Button></>
-            : !path.enrolled && path.selfEnrollment ? <Button aria-label={joiningPathId === path.id ? `Joining ${path.title}` : `Join path: ${path.title}`} disabled={joiningPathId !== null} aria-busy={joiningPathId === path.id} onClick={() => void selfEnroll(path)}>{joiningPathId === path.id ? 'Joining…' : 'Join path'}</Button> : path.enrolled ? <span className="program-enrolled"><Check size={15} />Enrolled</span> : null}
+            : !path.enrolled && path.selfEnrollment ? <Button aria-label={joiningPathId === path.id ? `Joining ${path.title}` : `Join path: ${path.title}`} disabled={joiningPathId !== null} aria-busy={joiningPathId === path.id} onClick={(event) => void selfEnroll(path, event.currentTarget)}>{joiningPathId === path.id ? 'Joining…' : 'Join path'}</Button> : path.enrolled ? <span className="program-enrolled"><Check size={15} />Enrolled</span> : null}
         </div>
         {staff && canAssignLearningPathLearners(path.status) && assignmentPath === path.id && <div id={`path-assignments-${path.id}`} className="path-assignment-panel" aria-busy={assignmentLoading || assignmentBusy}><h3>Assign a learner</h3>
           <form role="search" aria-label="Search learners" className="management-search path-assignment-search" onSubmit={(event) => searchPathLearners(event, path.id)}><Search size={16} aria-hidden="true" /><input ref={assignmentSearchInputRef} type="search" aria-label="Search learners by name or email" maxLength={100} placeholder="Search learners by name or email" value={assignmentSearch} disabled={assignmentBusy} onChange={(event) => setAssignmentSearch(event.target.value)} /><Button type="submit" variant="quiet" disabled={assignmentBusy}>Search</Button></form>
