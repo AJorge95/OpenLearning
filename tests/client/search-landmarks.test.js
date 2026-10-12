@@ -27,11 +27,20 @@ function courseAndManagementSearchForms() {
         const className = jsxStringAttribute(openingElement, 'className', sourceFile) || '';
         const role = jsxStringAttribute(openingElement, 'role', sourceFile);
         if (role === 'search' || /\b(?:management-search|search-field)\b/.test(className)) {
+          const searchIcons = [];
+          function collectSearchIcons(child) {
+            if (ts.isJsxSelfClosingElement(child) && child.tagName.getText(sourceFile) === 'Search') {
+              searchIcons.push(jsxStringAttribute(child, 'aria-hidden', sourceFile));
+            }
+            ts.forEachChild(child, collectSearchIcons);
+          }
+          node.children.forEach(collectSearchIcons);
           forms.push({
             fileName,
             className,
             role,
             label: jsxStringAttribute(openingElement, 'aria-label', sourceFile),
+            searchIcons,
           });
         }
       }
@@ -74,5 +83,14 @@ test('course and management search landmarks use native search inputs', () => {
     }
 
     visit(sourceFile);
+  }
+});
+
+test('course and management search landmarks hide decorative icons', () => {
+  const forms = courseAndManagementSearchForms();
+
+  for (const form of forms) {
+    assert.equal(form.searchIcons.length, 1, `${form.fileName} ${form.className} should contain one decorative Search icon`);
+    assert.equal(form.searchIcons[0], 'true', `${form.fileName} ${form.className} should hide its decorative Search icon`);
   }
 });

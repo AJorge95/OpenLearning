@@ -362,7 +362,7 @@ export function CourseManagementPage() {
     <div className="management-tabs" role="group" aria-label="Filter courses by status">
       {tabs.map((tab) => <button type="button" key={tab.value} aria-pressed={status === tab.value} className={status === tab.value ? 'active' : ''} onClick={() => changeCourseStatusFilter(tab.value)}>{tab.label}</button>)}
     </div>
-    <form role="search" aria-label="Search courses" className="management-search" onSubmit={submitSearch}><Search size={19} /><input ref={courseSearchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses" aria-label="Search courses" maxLength={120} /><button type="submit">Search</button></form>
+    <form role="search" aria-label="Search courses" className="management-search" onSubmit={submitSearch}><Search size={19} aria-hidden="true" /><input ref={courseSearchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses" aria-label="Search courses" maxLength={120} /><button type="submit">Search</button></form>
     {error && (failedRequest
       ? <div className="course-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
@@ -2184,7 +2184,7 @@ export function CourseAccessPage() {
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.query, failedRequest.page); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
     {notice && <div className="inline-notice inline-notice-success" role="status">{notice}</div>}
-    <form role="search" aria-label="Search course learners" className="access-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); setPage(1); load(search, 1); }}><Search size={18} /><input type="search" placeholder="Search learners by username or email" aria-label="Search learners by username or email" maxLength={100} value={query} onChange={(event) => setQuery(event.target.value)} /><Button variant="secondary" type="submit">Search</Button></form>
+    <form role="search" aria-label="Search course learners" className="access-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); setPage(1); load(search, 1); }}><Search size={18} aria-hidden="true" /><input type="search" placeholder="Search learners by username or email" aria-label="Search learners by username or email" maxLength={100} value={query} onChange={(event) => setQuery(event.target.value)} /><Button variant="secondary" type="submit">Search</Button></form>
     <div className="access-list">
       <div className="access-list-head"><span>Learner</span><span>Assignment</span><span>Action</span></div>
       {!failedRequest && users.length ? <ul className="access-rows" aria-label="Learner access">
@@ -2454,7 +2454,7 @@ export function AdminUsersPage() {
   return <div className="management-page users-page"><PageHeading title="Users" subtitle="Create accounts, review learning activity, and manage roles and access." action={<Link className="button button-primary" to="/admin/users/new"><Plus size={17} />Create account</Link>} />
     <div className="user-filter-row">
       <form role="search" aria-label="Search users" className="management-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); void load(1, search, roleFilter, approvalFilter); }}>
-        <Search size={18} />
+        <Search size={18} aria-hidden="true" />
         <input ref={userListSearchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search username or email" aria-label="Search username or email" maxLength={100} />
         <button type="submit">Search</button>
       </form>
@@ -3287,7 +3287,7 @@ export function AdminAuditLogPage() {
   return <div className="management-page logs-page"><PageHeading title="Audit log" subtitle="Review account, course, and platform changes, including access and comment removals." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
     <div className="log-filters">
       <form role="search" aria-label="Search audit log" className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}>
-        <Search size={18} />
+        <Search size={18} aria-hidden="true" />
         <input ref={searchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" aria-label="Search audit log" maxLength={100} />
         <button type="submit">Search</button>
       </form>
@@ -3364,7 +3364,7 @@ export function AdminSystemLogPage() {
   return <div className="management-page logs-page"><PageHeading title="System log" subtitle="Inspect server startup, runtime errors, and operational events." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
     <div className="log-filters">
       <form role="search" aria-label="Search system log" className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}>
-        <Search size={18} />
+        <Search size={18} aria-hidden="true" />
         <input ref={searchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search system events" aria-label="Search system log" maxLength={100} />
         <button type="submit">Search</button>
       </form>
