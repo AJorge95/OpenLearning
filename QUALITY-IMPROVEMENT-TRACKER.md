@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse caption options during playback updates
+
+- **Reviewed:** The learner video player's `onTimeUpdate` state updates, caption-track metadata, `AppSelect` option-reference validation, and the existing protected caption delivery route.
+- **Improvement:** Memoize the caption selector options until the current lesson's caption tracks change.
+- **Why it helps:** Frequent playback progress updates no longer rebuild caption option objects or rerun the selector's active-option validation; track order and labels remain unchanged.
+- **Backend review:** Caption upload validation and per-viewer/unlocked-lesson delivery checks remain unchanged.
+- **Checked:** Focused caption, fullscreen, recovery, and watch-progress tests passed (22/22); `npm run build` passed TypeScript and Vite; `git diff --check` passed. The signed-out browser could not render a learner lesson for visual playback QA.
+
 ## 2026-10-12 — Reuse admin log filter options across page updates
 
 - **Reviewed:** Audit-action option generation, the system severity selector, `AppSelect` option-validation dependencies, and the admin log routes' authorization, filter parsing, and paging bounds.
