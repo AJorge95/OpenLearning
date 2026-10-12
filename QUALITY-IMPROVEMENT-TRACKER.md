@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck public registration labels and validation
+
+- **Reviewed:** The rendered public registration form, its email/name/username/password labels and descriptions, configurable-field client refresh behavior, and the server's field definition and answer validation.
+- **Result:** No runtime change. The rendered accessibility tree exposes each required account field by name; client and server agree on registration-field labels, unique select choices, required answers, date validity, and the 2,000-character text cap. Stale schema submissions return a recoverable conflict before account creation.
+- **Why no change:** The public form remains clearly labeled and the validation boundary is already covered by focused client and route tests. No current UI or client/server mismatch surfaced.
+- **Checked:** Inspected the public `/register` accessibility tree, `src/registration-fields.ts`, `server/registration-fields.js`, and the registration routes. `node --test tests/client/registration-fields.test.js tests/server/registration-fields.test.js` passed (40/40).
+- **Needed to continue:** A rendered field that is unclear or inaccessible, or a reproducible registration rejection/state mismatch outside the existing boundary tests.
+
 ## 2026-10-12 — Recheck sign-in timing and throttling
 
 - **Reviewed:** Login input bounds, username lookup, missing/disabled/malformed-account password verification, generic credential errors, pending approval behavior, session regeneration and post-verification account checks, audit rollback, and request throttling.
