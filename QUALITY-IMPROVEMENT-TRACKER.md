@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep pruned audit filters identifiable
+
+- **Reviewed:** Audit-action filter state across refreshes, the action options returned by the admin API, and the 10,000-row audit retention behavior.
+- **Improvement:** When the selected action no longer appears in retained logs, keep it in the filter options with a “no longer retained” label instead of showing only the generic missing-value placeholder.
+- **Why it helps:** Administrators can still identify which action is filtering the empty or reduced result set and deliberately switch back to all actions or another filter.
+- **Backend review:** The endpoint groups action counts from the retained audit rows; no query or response change was needed.
+- **Checked:** Added dedicated client coverage for retained, missing, and empty selections and selector wiring. Focused audit/select tests passed (20/20), the audit/system log server tests passed (2/2), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed. The local browser remains at `/login`, so the authenticated audit filter could not be rendered for visual verification.
+
 ## 2026-10-12 — Keep the active select option in view
 
 - **Reviewed:** The shared `AppSelect` active-descendant state, existing keyboard scroll behavior, popup height cap, and the audit-action filter's dynamically supplied options.

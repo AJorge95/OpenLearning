@@ -29,6 +29,7 @@ import { firstQuizTextIssue } from './quiz-validation';
 import { lessonResourceUrlError } from './resource-validation';
 import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordConfirmationFieldProps } from './password-confirmation';
 import { userListEmptyMessage } from './user-list-empty-state';
+import { buildAuditActionOptions } from './audit-log-filter';
 import { readResetStatusAfterConflict, shouldClearResetConfirmationAfterFailure } from './platform-reset-status';
 import type { PlatformResetStatus } from './platform-reset-status';
 import type { UserApprovalFilter, UserRoleFilter } from './user-list-empty-state';
@@ -2913,9 +2914,10 @@ export function AdminAuditLogPage() {
     setAction(nextAction);
     setPage(1);
   }
+  const actionFilterOptions = buildAuditActionOptions(actions, action);
 
   return <div className="management-page logs-page"><PageHeading title="Audit log" subtitle="Review account, course, and platform changes, including access and comment removals." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
-    <div className="log-filters"><form role="search" aria-label="Search audit log" className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" aria-label="Search audit log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter log-role-filter"><span className="catalog-filter-label">Action</span><AppSelect className="app-select--filter" ariaLabel="Filter by action" leadingIcon={<Filter size={16} />} value={action} onChange={applyAuditFilterChange} options={[{ value: '', label: 'All actions' }, ...actions.map((item) => ({ value: item.action, label: `${item.action.replaceAll('_', ' ')} (${item.count})` }))]} /></div></div>
+    <div className="log-filters"><form role="search" aria-label="Search audit log" className="management-search" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }}><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search changes" aria-label="Search audit log" maxLength={100} /><button type="submit">Search</button></form><div className="select-wrap role-filter log-role-filter"><span className="catalog-filter-label">Action</span><AppSelect className="app-select--filter" ariaLabel="Filter by action" leadingIcon={<Filter size={16} />} value={action} onChange={applyAuditFilterChange} options={actionFilterOptions} /></div></div>
     {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
     {hasEmptyResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyMessage}</p>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable audit log" tabIndex={0}><table className="log-table" aria-busy={loading}><caption className="sr-only">Audit log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Change</th><th scope="col">Details</th></tr></thead><tbody>
