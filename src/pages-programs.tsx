@@ -664,6 +664,7 @@ export function CalendarPage() {
   const [items, setItems] = useState<CourseDeadline[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [hasInvalidDeadlines, setHasInvalidDeadlines] = useState(false);
   const [reloadSequence, setReloadSequence] = useState(0);
   const [deadlineTimerRevision, setDeadlineTimerRevision] = useState(0);
   const year = month.getFullYear();
@@ -677,9 +678,14 @@ export function CalendarPage() {
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    setLoading(true); setError(''); setItems([]);
-    api.get<{ items: CourseDeadline[] }>(`/api/calendar?from=${dateFrom}&to=${dateTo}`, { signal: controller.signal })
-      .then((result) => { if (active) setItems(result.items); })
+    setLoading(true); setError(''); setItems([]); setHasInvalidDeadlines(false);
+    api.get<{ items: CourseDeadline[]; hasInvalidDeadlines?: boolean }>(`/api/calendar?from=${dateFrom}&to=${dateTo}`, { signal: controller.signal })
+      .then((result) => {
+        if (active) {
+          setItems(result.items);
+          setHasInvalidDeadlines(Boolean(result.hasInvalidDeadlines));
+        }
+      })
       .catch((cause) => { if (active) setError(requestMessage(cause, 'Calendar could not be loaded.')); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; controller.abort(); };
@@ -690,6 +696,7 @@ export function CalendarPage() {
     setLoading(true);
     setError('');
     setItems([]);
+    setHasInvalidDeadlines(false);
     setMonth(currentCalendarMonth(requestedMonth));
   }
   const { monthItems, itemsByLocalDay } = useMemo(
@@ -713,6 +720,7 @@ export function CalendarPage() {
   return <div className="management-page programs-page calendar-page">
     <PageHeading title="Learning calendar" subtitle="Course completion deadlines shown in your local timezone." action={<div className="calendar-month-controls"><Button variant="secondary" aria-label="Previous month" onClick={() => navigateToMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={17} /></Button><span className="calendar-month-label" role="status" aria-live="polite" aria-atomic="true">{calendarMonthFormatter.format(month)}</span><Button variant="secondary" aria-label="Next month" onClick={() => navigateToMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={17} /></Button><Button variant="secondary" className="calendar-current-month" onClick={() => navigateToMonth(currentCalendarMonth())}>This month</Button></div>} />
     {error && <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => setReloadSequence((current) => current + 1)}>Try again</Button></div>}
+    {hasInvalidDeadlines && <div className="inline-notice" role="status">Some course deadlines could not be displayed. An administrator can check the system log.</div>}
     <section className="calendar-panel" aria-label={`Deadlines for ${calendarMonthFormatter.format(month)}`} aria-busy={loading} tabIndex={0}>
       <table className="calendar-grid"><caption className="sr-only">Calendar days and course deadlines for {calendarMonthFormatter.format(month)}</caption>
         <thead><tr>{weekdays.map((day) => <th scope="col" key={day}><span aria-hidden="true">{day.slice(0, 3)}</span><span className="sr-only">{day}</span></th>)}</tr></thead>
@@ -731,7 +739,7 @@ export function CalendarPage() {
           })}
         </tr>)}</tbody>
       </table>
-      {loading ? <p className="calendar-empty-note" role="status">Loading deadlines…</p> : shouldShowCalendarEmptyState(loading, error, monthItems.length) && <p className="calendar-empty-note" role="status"><CalendarDays size={18} />No course deadlines this month.</p>}
+      {loading ? <p className="calendar-empty-note" role="status">Loading deadlines…</p> : shouldShowCalendarEmptyState(loading, error, monthItems.length, hasInvalidDeadlines) && <p className="calendar-empty-note" role="status"><CalendarDays size={18} />No course deadlines this month.</p>}
     </section>
     {monthItems.length > 0 && <section className="calendar-deadline-list"><h2>Deadlines this month</h2><ul>{[...monthItems].sort((a, b) => a.dueAt.localeCompare(b.dueAt)).map((item) => <li key={item.courseId}><span className={`deadline-status ${item.status}`}>{item.status}</span><Link to={item.url}><strong>{item.title}</strong><small>{calendarDateTimeFormatter.format(new Date(item.dueAt))}</small></Link></li>)}</ul></section>}
   </div>;

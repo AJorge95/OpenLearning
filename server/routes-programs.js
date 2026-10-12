@@ -4,7 +4,7 @@ import { db } from './db.js';
 import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireObjectBody, requireStaff } from './http.js';
 import { courseLearningDeadlineAt, courseSummaries, courseSummariesWithState, insertCourseLearningStates, prepareCourseLearnerSummaryData, prepareCourseSummaryData } from './course-service.js';
 import { courseVersionHistoryPage, logicalCourseId, logicalCourseIds, publishRevision, restoreCourseVersion } from './course-versioning.js';
-import { writeAuditLog } from './log-store.js';
+import { writeAuditLog, writeSystemLog } from './log-store.js';
 import { textSearchPredicate } from './sql.js';
 import { MAX_LEARNING_PATH_COURSES } from '../shared/learning-path-limits.js';
 import { COMPETENCY_ACHIEVEMENT_BATCH_SIZE, COMPETENCY_PROGRESS_PAGE_SIZE } from '../shared/competency-progress.js';
@@ -49,9 +49,13 @@ function isCalendarDate(value) {
 }
 
 function calendarDeadlineDate(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
   // SQLite's space-separated timestamps have no zone; interpret them as UTC like stored deadlines.
-  const isoTimestamp = value.includes('T') ? value : `${value.replace(' ', 'T')}Z`;
-  return new Date(isoTimestamp);
+  const normalized = value.trim().replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
+  const hasDateTime = /^\d{4}-\d{2}-\d{2}T/.test(normalized);
+  const hasTimezone = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(normalized);
+  const date = new Date(hasDateTime && !hasTimezone ? `${normalized}Z` : normalized);
+  return Number.isFinite(date.getTime()) ? date : null;
 }
 
 function logAudit(actor, action, entityType, entityId, summary, details = {}) {
@@ -491,11 +495,28 @@ programsRouter.get('/calendar', (req, res) => {
       AND c.status = 'published' ORDER BY s.deadline_at, c.title COLLATE NOCASE, c.id ASC`).all(req.currentUser.id, from, endExclusive);
   const canView = createCourseAccessChecker(req.currentUser);
   const visibleItems = items.filter((item) => item.visibility === 'public' || canView(item));
-  const summaries = courseSummaries(visibleItems, req.currentUser);
-  const now = Date.now();
-  res.json({ items: visibleItems.map((item, index) => {
-    const completed = summaries[index].completed;
+  const validItems = [];
+  const invalidDeadlineCourseIds = [];
+  for (const item of visibleItems) {
     const dueAt = calendarDeadlineDate(item.deadline_at);
+    if (!dueAt) {
+      if (invalidDeadlineCourseIds.length < 10) invalidDeadlineCourseIds.push(item.course_id);
+      continue;
+    }
+    validItems.push({ ...item, dueAt });
+  }
+  const invalidDeadlineCount = visibleItems.length - validItems.length;
+  if (invalidDeadlineCount > 0) {
+    writeSystemLog('warn', 'calendar', 'Malformed course deadlines were omitted from the calendar response.', {
+      invalidDeadlineCount,
+      courseIds: invalidDeadlineCourseIds,
+    });
+  }
+  const summaries = courseSummaries(validItems, req.currentUser);
+  const now = Date.now();
+  res.json({ hasInvalidDeadlines: invalidDeadlineCount > 0, items: validItems.map((item, index) => {
+    const completed = summaries[index].completed;
+    const { dueAt } = item;
     return { courseId: item.course_id, title: item.title, category: item.category, dueAt: dueAt.toISOString(),
       status: completed ? 'completed' : dueAt.getTime() < now ? 'overdue' : 'upcoming', completed,
       url: `/courses/${item.course_id}` };

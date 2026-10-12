@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep malformed stored dates from breaking the learning calendar
+
+- **Reviewed:** Calendar deadline rows are stored as nullable text, the route's UTC timestamp normalization and serialization, existing deadline visibility filtering, the learner calendar's empty state, and the system-log diagnostic path.
+- **Improvement:** Skip unparseable visible deadline rows instead of allowing `toISOString()` to fail the whole calendar request. Log one warning with the skipped count and up to ten affected course IDs, return an additive `hasInvalidDeadlines` flag, and show learners a partial-data notice without claiming the month is empty.
+- **Why it helps:** A malformed legacy or manually edited deadline no longer hides every valid deadline in the requested month; administrators can find affected courses in the system log.
+- **Backend review:** Date normalization preserves timezone-less SQLite UTC values and explicit offsets. Invalid rows are checked only after course visibility, and the existing indexed date range and completion summaries remain intact.
+- **Checked:** The malformed-row server regression and existing calendar route cases passed (4/4); calendar client tests passed (10/10); the full `npm test -- --test-reporter=dot` suite and `npm run build` passed; `git diff --check` passed. Tests are in `tests/server/course-analytics.test.js` and `tests/client/calendar-dates.test.js`.
+
 ## 2026-10-12 — Read full course rows only for the My Learning page
 
 - **Reviewed:** My Learning's indexed enrollment, grant, and path membership scan, its request-scoped course-access checks, stable page clamping, and the fields consumed by course summaries.
