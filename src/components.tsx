@@ -48,7 +48,10 @@ export function ImageWithFallback(props: ImageWithFallbackProps) {
 
 function ImageWithFallbackImage({ src, className, alt, fallback, onError, loading, decoding }: ImageWithFallbackProps & { src: string }) {
   const [failed, setFailed] = useState(false);
-  if (failed) return <>{fallback}</>;
+  if (failed) {
+    // Keep the image's accessible alternative when replacing a broken image with its visual fallback.
+    return <>{fallback}{alt && <span className="sr-only" role="img" aria-label={alt} />}</>;
+  }
   return <img className={className} src={src} alt={alt} loading={loading} decoding={decoding} onError={() => { setFailed(true); onError?.(); }} />;
 }
 
