@@ -91,7 +91,7 @@ function collectInputNameViolations(sourceFile) {
   });
 }
 
-function buttonExpressionHasName(expression) {
+function jsxExpressionHasAccessibleText(expression) {
   if (ts.isStringLiteralLike(expression)) return Boolean(expression.text.trim());
   if (ts.isNumericLiteral(expression)) return true;
   if (ts.isIdentifier(expression) && expression.text === 'undefined') return false;
@@ -99,64 +99,71 @@ function buttonExpressionHasName(expression) {
     || expression.kind === ts.SyntaxKind.FalseKeyword
     || expression.kind === ts.SyntaxKind.TrueKeyword) return false;
   if (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression) || ts.isNonNullExpression(expression)) {
-    return buttonExpressionHasName(expression.expression);
+    return jsxExpressionHasAccessibleText(expression.expression);
   }
   if (ts.isConditionalExpression(expression)) {
-    // Every rendered branch needs a name; loading states must not become icon-only buttons.
-    return buttonExpressionHasName(expression.whenTrue) && buttonExpressionHasName(expression.whenFalse);
+    // Every rendered branch needs text so state changes cannot leave an empty control.
+    return jsxExpressionHasAccessibleText(expression.whenTrue) && jsxExpressionHasAccessibleText(expression.whenFalse);
   }
   if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) return false;
   if (ts.isBinaryExpression(expression)
     && [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(expression.operatorToken.kind)) {
-    return buttonExpressionHasName(expression.left) && buttonExpressionHasName(expression.right);
+    return jsxExpressionHasAccessibleText(expression.left) && jsxExpressionHasAccessibleText(expression.right);
   }
   return true;
 }
 
-function buttonChildrenHaveName(children) {
+function jsxChildrenHaveAccessibleText(children) {
   return children.some((child) => {
     if (ts.isJsxText(child)) return Boolean(child.getText().trim());
-    if (ts.isJsxExpression(child)) return Boolean(child.expression && buttonExpressionHasName(child.expression));
+    if (ts.isJsxExpression(child)) return Boolean(child.expression && jsxExpressionHasAccessibleText(child.expression));
     if (ts.isJsxElement(child)) {
       if (jsxAttributeValue(child.openingElement, 'aria-hidden') === 'true') return false;
       if (jsxTagName(child.openingElement.tagName) === 'img') {
         return Boolean(jsxAttributeValue(child.openingElement, 'alt'));
       }
-      return buttonChildrenHaveName(child.children);
+      return jsxChildrenHaveAccessibleText(child.children);
     }
     if (ts.isJsxSelfClosingElement(child)) {
       if (jsxAttributeValue(child, 'aria-hidden') === 'true') return false;
       return jsxTagName(child.tagName) === 'img' && Boolean(jsxAttributeValue(child, 'alt'));
     }
-    if (ts.isJsxFragment(child)) return buttonChildrenHaveName(child.children);
+    if (ts.isJsxFragment(child)) return jsxChildrenHaveAccessibleText(child.children);
     return false;
   });
 }
 
-function collectButtonNameViolations(sourceFile) {
+function collectElementNameViolations(sourceFile, elementTags) {
   const violations = [];
-  const buttonTags = new Set(['button', 'Button']);
 
   function inspect(element, children) {
     const hasExplicitName = Boolean(jsxAttributeValue(element, 'aria-label', sourceFile)
       || jsxAttributeValue(element, 'aria-labelledby', sourceFile));
-    if (hasExplicitName || buttonChildrenHaveName(children)) return;
+    if (hasExplicitName || jsxChildrenHaveAccessibleText(children)) return;
     const { line } = sourceFile.getLineAndCharacterOfPosition(element.getStart(sourceFile));
     violations.push(`${sourceFile.fileName}:${line + 1}`);
   }
 
   function visit(node) {
     if (ts.isJsxElement(node)) {
-      if (buttonTags.has(jsxTagName(node.openingElement.tagName))) inspect(node.openingElement, node.children);
+      if (elementTags.has(jsxTagName(node.openingElement.tagName))) inspect(node.openingElement, node.children);
       ts.forEachChild(node, visit);
       return;
     }
-    if (ts.isJsxSelfClosingElement(node) && buttonTags.has(jsxTagName(node.tagName))) inspect(node, []);
+    if (ts.isJsxSelfClosingElement(node) && elementTags.has(jsxTagName(node.tagName))) inspect(node, []);
     ts.forEachChild(node, visit);
   }
 
   visit(sourceFile);
   return violations;
+}
+
+function collectButtonNameViolations(sourceFile) {
+  return collectElementNameViolations(sourceFile, new Set(['button', 'Button']));
+}
+
+function collectLinkNameViolations(sourceFile) {
+  return collectElementNameViolations(sourceFile, new Set(['a', 'Link']));
 }
 
 function collectTsxFiles(directory) {
@@ -231,4 +238,26 @@ test('all project buttons expose text or an explicit accessible name', () => {
   });
 
   assert.deepEqual(violations, [], `Buttons need visible text or an explicit ARIA name:\n${violations.join('\n')}`);
+});
+
+test('the link label check detects icon-only links and empty conditional branches', () => {
+  const sourceFile = ts.createSourceFile(
+    'fixture.tsx',
+    'const iconOnly = <a href="/next"><Icon aria-hidden="true" /></a>;\nconst visibleText = <Link to="/courses"><Icon aria-hidden="true" />Browse courses</Link>;\nconst dynamicText = <Link to={course.url}>{course.title}</Link>;\nconst ariaNamed = <a href="/next" aria-label="Next item"><Icon aria-hidden="true" /></a>;\nconst sometimesEmpty = <Link to="/next">{isNext ? \'Next item\' : null}</Link>;',
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+
+  assert.deepEqual(collectLinkNameViolations(sourceFile), ['fixture.tsx:1', 'fixture.tsx:5']);
+});
+
+test('all project links expose text or an explicit accessible name', () => {
+  const violations = collectTsxFiles(sourceDirectory).flatMap((filePath) => {
+    const source = fs.readFileSync(filePath, 'utf8');
+    const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    return collectLinkNameViolations(sourceFile);
+  });
+
+  assert.deepEqual(violations, [], `Links need visible text or an explicit ARIA name:\n${violations.join('\n')}`);
 });
