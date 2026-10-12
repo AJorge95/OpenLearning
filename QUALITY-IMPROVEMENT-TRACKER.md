@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck shared focus indicators and session cleanup
+
+- **Reviewed:** Search-input outline suppression and its focus-within containers, the global focus-visible rule, custom-select/menu/forced-color focus states, and SQLite session expiry cleanup and error reporting.
+- **Result:** No runtime change. Search fields show a focus outline on their containers, other controls use the shared or component-specific focus styles, and expired or malformed sessions are discarded with cleanup failures reported without aborting store startup.
+- **Why no change:** The reviewed CSS does not suppress keyboard focus without a replacement, and the session lifecycle already covers expiry, cleanup failure, callback errors, and shutdown.
+- **Checked:** Focus and forced-color plus session-store tests passed (13/13).
+- **Needed to revisit:** A rendered keyboard or high-contrast mismatch, or a reproduced session cleanup/persistence failure outside the covered cases.
+
 ## 2026-10-12 — Reuse fixed availability choices in the path editor
 
 - **Reviewed:** The learning-path editor's title, description, and course-selection state updates, the availability selector, and `AppSelect` option-reference validation.
