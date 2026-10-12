@@ -17,6 +17,16 @@ test('document and body can shrink to the usable mobile viewport width', () => {
   assert.doesNotMatch(bodyRule[1], /min-width\s*:/);
 });
 
+test('authentication and setup screens follow the dynamic visible viewport height', () => {
+  const styles = fs.readFileSync(stylesPath, 'utf8');
+  const authRule = styles.match(/^\.auth-page, \.setup-page\s*\{([^}]*)\}/m);
+
+  assert.ok(authRule, 'expected shared auth and setup surface styling');
+  assert.match(authRule[1], /min-height:\s*100vh;/, 'keep a fallback for older browsers');
+  assert.match(authRule[1], /min-height:\s*100dvh;/, 'use the current visible viewport on mobile');
+  assert.ok(authRule[1].indexOf('min-height: 100vh') < authRule[1].indexOf('min-height: 100dvh'));
+});
+
 test('course catalog filters stack before the sort value is truncated', () => {
   const styles = fs.readFileSync(stylesPath, 'utf8');
   const breakpointStart = styles.indexOf('@media (max-width: 450px)');
