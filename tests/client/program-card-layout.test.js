@@ -25,6 +25,6 @@ test('learning-path course deadlines reuse a module-level locale formatter', () 
   const pathPageDeclaration = pageSource.indexOf('export function LearningPathsPage()');
 
   assert.ok(formatterDeclaration >= 0 && formatterDeclaration < pathPageDeclaration);
-  assert.match(pageSource, /pathCourseDeadlineFormatter\.format\(new Date\(course\.deadlineAt\)\)/);
-  assert.doesNotMatch(pageSource, /new Intl\.DateTimeFormat\(undefined, \{ dateStyle: 'medium' \}\)\.format\(new Date\(course\.deadlineAt\)\)/);
+  assert.match(pageSource, /pathCourseDeadlineFormatter\.format\(parseApiTimestamp\(course\.deadlineAt\)\)/);
+  assert.doesNotMatch(pageSource, /pathCourseDeadlineFormatter\.format\(new Date\(course\.deadlineAt\)\)/);
 });

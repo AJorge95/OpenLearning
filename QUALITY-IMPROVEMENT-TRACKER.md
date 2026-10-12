@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Parse learning deadlines with their UTC timezone
+
+- **Reviewed:** The database's naive SQLite deadline timestamps and ISO deadline values, their course and learning-path API consumers, overdue-status calculation, timer boundary, and localized date display.
+- **Improvement:** Use the shared API timestamp parser for My Learning deadline formatting, status and timer calculations, and due dates shown on learning-path cards.
+- **Why it helps:** SQLite timestamps without an explicit zone are consistently interpreted as UTC; learners in timezones behind UTC no longer see a deadline as upcoming after it has passed or receive a shifted display time.
+- **Backend review:** Course and path summaries can retain their existing deadline strings; the API contract remains unchanged and the shared parser applies the same UTC rule already used by the calendar.
+- **Checked:** Added a Honolulu-timezone regression for display, status, and timer behavior. Focused timestamp/deadline/calendar tests passed (24/24); the full `npm test -- --test-reporter=dot` suite, `npm run build`, and `git diff --check` passed. The protected `/my-learning` route redirected to `/login`, so authenticated rendering was not checked.
+
 ## 2026-10-12 — Recheck empty competency progress after paging changes
 
 - **Reviewed:** Competency progress totals and percentage calculation, successful empty-state announcements, load-more reconciliation, and the API's overall achieved count after bounded catalog paging.
