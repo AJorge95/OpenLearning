@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck media-cache identity and administrator updates
+
+- **Reviewed:** Media upload identity and cleanup, the bounded in-memory duration cache key, administrator account mutation handling, last-admin safeguards, and audit rollback behavior.
+- **Result:** No runtime change. Each uploaded media record receives a new ID, so replacing a video does not reuse an old cached duration. Account changes stay server-validated and audited; the client disables controls while a mutation is pending.
+- **Why no change:** Existing behavior matches the current data lifecycle and failure policy. No reproduced cache-invalidation or account-update failure, or representative workload evidence, supports another runtime change.
+- **Checked:** Duration-cache/read-failure tests passed (2/2), account safeguard/audit rollback tests passed (2/2), and watch-progress read/cache route regressions passed (2/2). The protected account page remains unavailable for live interaction checks because this browser session is signed out.
+- **Needed to revisit:** Evidence of media IDs being reused in place, duration-read workload measurements, or a signed-in current-build account update failure.
+
 ## 2026-10-12 — Bound the account role selector’s activation area
 
 - **Reviewed:** The supplied admin-page target path, current account-role JSX and CSS, custom `AppSelect` click handling, and available local browser state.
