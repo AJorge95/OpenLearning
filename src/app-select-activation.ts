@@ -14,8 +14,12 @@ export function subscribeToAppSelectPointerTracking() {
     document.addEventListener('pointerdown', rememberPointerDown, true);
   }
   pointerTrackingSubscribers += 1;
+  let subscribed = true;
 
   return () => {
+    // Repeated effect cleanup must not underflow the shared subscriber count.
+    if (!subscribed) return;
+    subscribed = false;
     pointerTrackingSubscribers -= 1;
     if (pointerTrackingSubscribers === 0) {
       document.removeEventListener('pointerdown', rememberPointerDown, true);
