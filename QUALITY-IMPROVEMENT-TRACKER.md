@@ -16,6 +16,14 @@
 - **Checked:** Reviewed `server/session-store.js`, `server/index.js`, `server/routes-courses.js`, the relevant schema indexes in `server/db.js`, and `tests/server/session-store.test.js`; all discovered test files are organized under `tests/client` or `tests/server`. No runtime tests were run because source behavior did not change; `git diff --check` passed.
 - **Needed to continue:** Representative session-backlog or catalog-latency measurements that point to a specific cleanup or query bottleneck. Add any resulting regression under `tests/server` or `tests/client`.
 
+## 2026-10-12 — Recheck the sign-in screen and authentication boundary
+
+- **Reviewed:** The rendered signed-out login panel, accessible names and focus, password visibility interaction, small-screen auth-panel rules, post-login destination validation, login rate limiting, session regeneration, account/approval rechecks, and transactional last-login/audit handling.
+- **Result:** No runtime change. The sign-in page has labeled username and password controls, an announced generic error path, a visible focus indicator, and the password visibility action changes its accessible name with its state. The route rejects invalid credentials consistently and rechecks account state before committing last-login history.
+- **Why no change:** The observed UI matches its labels and keyboard affordances, and the existing route already binds history/audit updates to a successful session with rollback on failure. No new interaction or backend mismatch appeared.
+- **Checked:** In a separate local QA tab at `http://127.0.0.1:5173/login`, the password action changed Show → Hide → Show and the accessible tree reflected each state; the temporary tab was closed. Focused client and auth-route tests passed (23/23), and `git diff --check` passed. No build was run because runtime source was unchanged.
+- **Needed to continue:** A reproduced sign-in, session, error-announcement, or narrow-screen layout mismatch in the current build.
+
 ## 2026-10-12 — Recheck public registration controls and signup handling
 
 - **Reviewed:** The current rendered `/register` form, field names and descriptions, password visibility interaction, registration validation, account-cap enforcement, and approval/session behavior.
