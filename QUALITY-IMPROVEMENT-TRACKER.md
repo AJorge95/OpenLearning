@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck learner course-card structure and compact layout
+
+- **Reviewed:** Course-card link semantics and content order, title/metadata wrapping, progress and next-action labels, cover alternatives, narrow-screen image/text layout, and the catalog/My Learning payload paths.
+- **Result:** No runtime change. Each card remains one course link, progress has a course-specific accessible name, and narrow cards preserve the title and action while moving the cover beside the text.
+- **Why no change:** Existing markup and responsive rules cover the reviewed states; no nested interactive element, missing action name, clipping rule, or payload mismatch surfaced.
+- **Checked:** Course-card, progress, catalog empty-search, My Learning, responsive-viewport, and server course-analytics tests passed (136/136). Signed-in rendered card layout was not checked in the current browser session.
+- **Needed to revisit:** A reproduced nested-link or keyboard issue, a title/action clipped at a supported viewport, or a course-card payload that omits required display data.
+
 ## 2026-10-12 — Preserve image fallback recovery when the source changes
 
 - **Reviewed:** The shared image fallback's failed-load state, course-cover replacement IDs, platform-icon version URLs, and alt/loading/decoding props.
