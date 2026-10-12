@@ -2316,9 +2316,14 @@ export function AdminUserCreatePage() {
   const navigate = useNavigate();
   const roleHelpId = useId();
   const passwordConfirmationErrorId = useId();
+  const accountNameErrorId = useId();
   const [email, setEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [invalidNameField, setInvalidNameField] = useState<'firstName' | 'lastName' | null>(null);
+  const firstNameInputRef = useRef<HTMLInputElement>(null);
+  const lastNameInputRef = useRef<HTMLInputElement>(null);
   const [username, setUsername] = useState('');
   const [role, setRole] = useState<Role>('learner');
   const [password, setPassword] = useState('');
@@ -2329,13 +2334,44 @@ export function AdminUserCreatePage() {
   async function createAccount(event: React.FormEvent) {
     event.preventDefault();
     if (saving) return;
+    setError(''); setNameError(''); setInvalidNameField(null);
+    const firstNameError = accountNameError(firstName, 'First name');
+    if (firstNameError) {
+      setInvalidNameField('firstName');
+      setNameError(firstNameError);
+      window.requestAnimationFrame(() => firstNameInputRef.current?.focus());
+      return;
+    }
+    const lastNameError = accountNameError(lastName, 'Last name');
+    if (lastNameError) {
+      setInvalidNameField('lastName');
+      setNameError(lastNameError);
+      window.requestAnimationFrame(() => lastNameInputRef.current?.focus());
+      return;
+    }
     const confirmationError = getPasswordConfirmationError(password, confirmPassword);
     if (confirmationError) { setError(confirmationError); return; }
-    setSaving(true); setError('');
+    setSaving(true);
     try {
-      const response = await api.post<{ user: User }>('/api/admin/users', { email, firstName, lastName, username, role, password, confirmPassword });
+      const response = await api.post<{ user: User }>('/api/admin/users', {
+        email,
+        firstName: normalizeAccountName(firstName),
+        lastName: normalizeAccountName(lastName),
+        username,
+        role,
+        password,
+        confirmPassword,
+      });
       navigate(`/admin/users/${response.user.id}`, { replace: true });
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'The account could not be created.'); }
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'invalid_name') {
+        // Keep server-side name validation attached to the matching creation field.
+        const invalidField = cause.message.startsWith('Last name') ? 'lastName' : 'firstName';
+        setInvalidNameField(invalidField);
+        setNameError(cause.message);
+        window.requestAnimationFrame(() => (invalidField === 'lastName' ? lastNameInputRef.current : firstNameInputRef.current)?.focus());
+      } else setError(cause instanceof ApiError ? cause.message : 'The account could not be created.');
+    }
     finally { setSaving(false); }
   }
 
@@ -2343,7 +2379,11 @@ export function AdminUserCreatePage() {
     <PageHeading title="Create account" subtitle="Set up a sign-in account and assign its platform role." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} />Back to users</Link>} />
     <section className="account-form-card"><form className="form-stack" onSubmit={createAccount} aria-busy={saving}>
       <label>Email<input required type="email" maxLength={254} autoComplete="email" autoFocus value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} /></label>
-      <div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} disabled={saving} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} disabled={saving} /></label></div>
+      <div className="account-name-fields">
+        <label>First name<input ref={firstNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="given-name" aria-invalid={invalidNameField === 'firstName' || undefined} aria-describedby={invalidNameField === 'firstName' ? accountNameErrorId : undefined} value={firstName} onChange={(event) => { setFirstName(event.target.value); if (invalidNameField === 'firstName') { setInvalidNameField(null); setNameError(''); } }} disabled={saving} /></label>
+        <label>Last name<input ref={lastNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="family-name" aria-invalid={invalidNameField === 'lastName' || undefined} aria-describedby={invalidNameField === 'lastName' ? accountNameErrorId : undefined} value={lastName} onChange={(event) => { setLastName(event.target.value); if (invalidNameField === 'lastName') { setInvalidNameField(null); setNameError(''); } }} disabled={saving} /></label>
+      </div>
+      {nameError && <p id={accountNameErrorId} className="form-error" role="alert">{nameError}</p>}
       <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>3–32 letters, numbers, dots, underscores, or hyphens.</small></label>
       <div className="account-form-role-field"><span>Platform role</span><AppSelect<Role> ariaLabel="Platform role" describedBy={roleHelpId} value={role} onChange={setRole} disabled={saving} options={[{ value: 'learner', label: 'Learner' }, { value: 'moderator', label: 'Moderator' }, { value: 'admin', label: 'Administrator' }]} /><small id={roleHelpId}>Choose administrator or moderator only when the person needs management access.</small></div>
       <PasswordField label="Password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} hint="Use at least 12 characters. You can reset it later from account details." />

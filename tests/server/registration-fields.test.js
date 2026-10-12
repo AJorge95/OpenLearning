@@ -1010,6 +1010,31 @@ test('administrator password reset route throttles requests per admin before tar
   }
 });
 
+test('administrator account creation rejects whitespace-only names before creating an account', async () => {
+  const username = 'account_invalid_name';
+  const email = 'invalid-name-account@example.invalid';
+  const response = await fetch(apiUrl('/admin/users'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({
+      username,
+      email,
+      firstName: '   ',
+      lastName: 'Account',
+      password: 'InvalidNameAccountPassphrase-2026',
+      confirmPassword: 'InvalidNameAccountPassphrase-2026',
+      role: 'learner',
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: 'First name must be between 1 and 80 characters.',
+    code: 'invalid_name',
+  });
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get(username).count, 0);
+});
+
 test('administrator account creation rolls back when its required audit entry cannot be written', async () => {
   const username = 'audit_failure_account';
   const email = 'audit-failure-account@example.invalid';
