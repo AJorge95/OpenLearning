@@ -8,6 +8,14 @@
 - **Backend review:** The route validates note length and completion policy within its transaction; no API or persistence change was needed.
 - **Checked:** Course-editor route-state tests passed (13/13); the server publication/review note-boundary test passed (1/1); `npm run build` passed TypeScript and Vite; `git diff --check` passed. The signed-in review page was not rendered because the available local browser session is signed out.
 
+## 2026-10-12 — Recheck account approval and role-management states
+
+- **Reviewed:** Pending-registration approval, role and status updates, account-list filters and retry, pending-count refresh, last-active-admin protection, and the approval transaction's session and audit behavior.
+- **Result:** No runtime change. The client retains current filters after account updates, exposes retry for an unavailable pending count, and keeps approval confirmation visible if its list refresh fails. The server approves, invalidates stale sessions, and audits within a transaction; audit failure rolls back the approval.
+- **Why no change:** Existing UI and route behavior covers the reviewed failure paths; no reproduced incorrect approval, lost confirmation, or role/status inconsistency justified another change.
+- **Checked:** Account list, filter, select, pending-approval, and registration client tests passed (12/12); the full `tests/server/last-login.test.js` passed (17/17); `git diff --check` passed. Signed-in account management was not rendered because the available browser session is signed out.
+- **Needed to revisit:** A reproduced approval/list mismatch, a lost pending-count retry, or an incorrect role/status transition in a signed-in admin flow.
+
 ## 2026-10-12 — Let staff revoke course access from disabled learners
 
 - **Reviewed:** Disabled learner rows in course access management, the UI's grant/revoke actions, and the existing course-grant API and audit transaction.
