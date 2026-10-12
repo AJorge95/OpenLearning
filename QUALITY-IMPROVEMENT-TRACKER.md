@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Batch learning-path course identity validation
+
+- **Reviewed:** Learning-path create/edit validation, the shared 200-course selection cap, and canonical resolution for courses, versions, modules, lessons, and quizzes.
+- **Improvement:** Resolve all distinct submitted course identities with one parameterized query across the course/content tables, then keep the existing published-course and duplicate checks.
+- **Why it helps:** A maximum-size selection of unknown or nested IDs no longer falls through to up to four individual identity lookups per ID; valid direct and nested IDs still normalize to their logical course.
+- **Interface review:** The editor still submits the ordered course selection and prerequisite choices unchanged; no interface change was needed.
+- **Checked:** The maximum-size lookup regression failed before the change and passes with one identity query. A resolver test covers direct course, version snapshot, module, lesson, quiz, unknown, and empty IDs. `node --test tests/server/course-analytics.test.js` passed (121/121), path editor/assignment client tests passed (21/21), `npm run build` passed TypeScript and Vite, and `git diff --check` passed.
+
 ## 2026-10-12 — Recheck the account role selector hit area
 
 - **Reviewed:** The reported account-detail click area, role-field markup, width and pointer-event rules, `AppSelect` activation bounds, and the current local browser session.

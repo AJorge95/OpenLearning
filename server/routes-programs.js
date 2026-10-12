@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireObjectBody, requireStaff } from './http.js';
 import { courseSummaries, courseSummary, ensureCourseLearningStateWithStatus } from './course-service.js';
-import { courseVersionHistoryPage, logicalCourseId, publishRevision, restoreCourseVersion } from './course-versioning.js';
+import { courseVersionHistoryPage, logicalCourseId, logicalCourseIds, publishRevision, restoreCourseVersion } from './course-versioning.js';
 import { writeAuditLog } from './log-store.js';
 import { textSearchPredicate } from './sql.js';
 import { MAX_LEARNING_PATH_COURSES } from '../shared/learning-path-limits.js';
@@ -265,17 +265,7 @@ function normalizePathCourses(courseInput, selfEnrollment) {
   }
   const inputIds = courseInput.map((item) => typeof item?.courseId === 'string' ? item.courseId : '');
   const distinctInputIds = [...new Set(inputIds)];
-  const courseIdByInputId = new Map();
-  if (distinctInputIds.length) {
-    const directCourses = db.prepare(`SELECT id, logical_course_id FROM courses WHERE id IN (${distinctInputIds.map(() => '?').join(', ')})`)
-      .all(...distinctInputIds);
-    for (const course of directCourses) courseIdByInputId.set(course.id, course.logical_course_id || course.id);
-    for (const id of distinctInputIds) {
-      if (courseIdByInputId.has(id)) continue;
-      const logicalId = logicalCourseId(id);
-      if (logicalId) courseIdByInputId.set(id, logicalId);
-    }
-  }
+  const courseIdByInputId = logicalCourseIds(distinctInputIds);
   const courseIds = inputIds.map((id) => courseIdByInputId.get(id) || id);
   const distinctCourseIds = [...new Set(courseIds)];
   const publishedCourses = distinctCourseIds.length
