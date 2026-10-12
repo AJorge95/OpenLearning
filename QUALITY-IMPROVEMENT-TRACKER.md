@@ -1,10 +1,10 @@
 # Quality Improvement Tracker
 
-## 2026-10-12 — Explain horizontally scrollable staff tables on mobile
+## 2026-10-12 — Explain horizontal scrolling when staff tables overflow
 
-- **Reviewed:** The responsive table styles, existing mobile-only scroll hint, and named, keyboard-scrollable analytics, account-activity, audit-log, and system-log table regions.
-- **Improvement:** Reuse the existing scroll hint in the six wide analytics and log table regions, with concise instructions for each table. Document why the hint stays hidden at wider sizes and add client regressions for region placement and the mobile breakpoint.
-- **Why it helps:** Staff on narrow screens can tell that more columns are available off-screen and how to reach them; wide layouts keep their existing uncluttered presentation.
+- **Reviewed:** The minimum widths of staff course/account, analytics, and log tables; their named keyboard-scroll regions; and the available content width after the staff sidebar and page padding.
+- **Improvement:** Tie the existing scroll hint to each region's actual content width with named CSS container queries, keeping the narrow-viewport fallback for older browsers. Add a client regression for all eight table regions and their matching width thresholds.
+- **Why it helps:** Staff see the scroll instruction whenever a table is wider than its available region, including tablet layouts where the desktop sidebar leaves much less width than the viewport suggests.
 - **Checked:** `node --test tests/client/staff-table-scroll-hints.test.js` passed; `npm run build` passed TypeScript and Vite; `git diff --check` passed. Rendered admin-table QA was unavailable because the browser session is signed out and local Playwright packages are not installed.
 
 ## 2026-10-12 — Preserve search focus in forced-colors mode
