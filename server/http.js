@@ -60,11 +60,20 @@ export function requireObjectBody(value, label = 'Request body') {
 }
 
 export function pageQuery(value, maximum = 100_000) {
-  if (value !== undefined && typeof value !== 'string') {
+  if (value === undefined) return 1;
+  if (typeof value !== 'string') {
     fail(400, 'Page must be a single value.', 'validation_error');
   }
-  const parsedPage = Number(value || 1);
-  return Number.isSafeInteger(parsedPage) && parsedPage > 0 ? Math.min(parsedPage, maximum) : 1;
+  const normalizedPage = value.trim();
+  if (!/^\d+$/.test(normalizedPage)) {
+    fail(400, 'Page must be a positive integer.', 'validation_error');
+  }
+  const parsedPage = Number(normalizedPage);
+  if (!Number.isSafeInteger(parsedPage) || parsedPage < 1) {
+    fail(400, 'Page must be a positive integer.', 'validation_error');
+  }
+  // Keep valid out-of-range requests bounded before callers calculate offsets.
+  return Math.min(parsedPage, maximum);
 }
 
 export function enumQuery(value, label, values, fallback = 'all') {
