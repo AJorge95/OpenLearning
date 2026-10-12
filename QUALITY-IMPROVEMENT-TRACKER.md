@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Defer learner pages until a signed-in route needs them
+
+- **Reviewed:** The production entry bundle, the static imports in `App.tsx`, existing staff/program lazy routes, and the learner route layout and loading announcements.
+- **Improvement:** Lazy-load the six pages exported by `pages-learner.tsx` behind a shared route-level Suspense fallback, keeping the app frame visible while the module loads.
+- **Why it helps:** Signed-out users no longer download the course catalog, player, quiz, certificate, and My learning module with the initial app. The entry bundle fell from 464.00 KB (142.43 KB gzip) to 396.83 KB (124.04 KB gzip); the 66.12 KB learner module is emitted separately and loaded through dynamic imports.
+- **Backend review:** Authentication and learner API contracts are unchanged.
+- **Checked:** Added `tests/client/learner-route-code-splitting.test.js` (1/1 passed), full `npm test -- --test-reporter=dot`, `npm run build` (TypeScript and Vite), and `git diff --check` passed. The production entry references learner pages through dynamic imports, and the local login page reloaded with its heading and controls intact. Signed-in learner navigation could not be exercised because the available browser session is signed out.
+
 ## 2026-10-12 — Match password visibility labels to button semantics
 
 - **Reviewed:** The shared password-visibility control used by setup, sign-in, registration, account settings, account creation, and password resets; its changing Show/Hide labels and state announcement.

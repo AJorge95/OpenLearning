@@ -3,8 +3,14 @@ import { createBrowserRouter, Link, Navigate, Outlet, Route, Routes, RouterProvi
 import { AuthProvider, useAuth } from './auth-context';
 import { AppFrame, Button, LoadingScreen, PageHeading, PlatformBrand, StaffFrame } from './components';
 import { AccountSecurityPage, LoginPage, RegisterPage, SetupPage } from './pages-auth';
-import { CatalogPage, CourseCertificatePage, CourseOverviewPage, CoursePlayerPage, MyLearningPage, QuizPage } from './pages-learner';
 
+// Keep the larger learner page module out of the signed-out entry bundle.
+const CatalogPage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.CatalogPage })));
+const CourseCertificatePage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.CourseCertificatePage })));
+const CourseOverviewPage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.CourseOverviewPage })));
+const CoursePlayerPage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.CoursePlayerPage })));
+const MyLearningPage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.MyLearningPage })));
+const QuizPage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.QuizPage })));
 const CourseAccessPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseAccessPage })));
 const CourseAnalyticsPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseAnalyticsPage })));
 const CourseEditorPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseEditorPage })));
@@ -41,6 +47,10 @@ function AdminOnly() {
 function CourseEditorRoute() {
   const { pathname } = useLocation();
   return <CourseEditorPage key={pathname} />;
+}
+
+function LearnerPageOutlet() {
+  return <Suspense fallback={<div className="page-loading" role="status" aria-live="polite">Loading learning page…</div>}><Outlet /></Suspense>;
 }
 
 class ManagementPageBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -197,15 +207,17 @@ function AuthRoutes() {
       <Route element={<SignedIn />}>
         <Route element={<AppFrame />}>
           <Route path="/" element={<Navigate to="/courses" replace />} />
-          <Route path="/courses" element={<CatalogPage />} />
-          <Route path="/courses/:courseId" element={<CourseOverviewPage />} />
-          <Route path="/courses/:courseId/learn/:lessonId" element={<CoursePlayerPage />} />
-          <Route path="/courses/:courseId/quiz/:quizId" element={<QuizPage />} />
-          <Route path="/my-learning" element={<MyLearningPage />} />
+          <Route element={<LearnerPageOutlet />}>
+            <Route path="/courses" element={<CatalogPage />} />
+            <Route path="/courses/:courseId" element={<CourseOverviewPage />} />
+            <Route path="/courses/:courseId/learn/:lessonId" element={<CoursePlayerPage />} />
+            <Route path="/courses/:courseId/quiz/:quizId" element={<QuizPage />} />
+            <Route path="/my-learning" element={<MyLearningPage />} />
+            <Route path="/my-learning/certificates/:courseId" element={<CourseCertificatePage />} />
+          </Route>
           <Route path="/learning-paths" element={<Suspense fallback={<LoadingScreen label="Loading learning paths…" />}><LearningPathsPage /></Suspense>} />
           <Route path="/competencies" element={<Suspense fallback={<LoadingScreen label="Loading competencies…" />}><CompetenciesPage /></Suspense>} />
           <Route path="/calendar" element={<Suspense fallback={<LoadingScreen label="Loading calendar…" />}><CalendarPage /></Suspense>} />
-          <Route path="/my-learning/certificates/:courseId" element={<CourseCertificatePage />} />
           <Route path="/account/security" element={<AccountSecurityPage />} />
         </Route>
         <Route element={<StaffOnly />}>
