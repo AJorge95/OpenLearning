@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Name authentication and account autofill fields
+
+- **Reviewed:** The rendered registration form, its `autocomplete` controls, setup and sign-in forms, account profile and password updates, administrator-created accounts, password resets, and the reported role-selector hit area.
+- **Improvement:** Add stable `name` attributes to standard email, username, name, and password fields while preserving existing autocomplete hints and controlled submission behavior.
+- **Why it helps:** Browser autofill and password managers can identify each field from both its name and autocomplete purpose; the form data also has consistent keys for browser tooling.
+- **Interface review:** The role selector still bounds activation and menu sizing to its visible trigger. The available browser sessions are signed out, so the protected account page could not be replayed; the local registration DOM now exposes `email`, `firstName`, `lastName`, `username`, `password`, and `confirmPassword` field names.
+- **API review:** Registration and account APIs still receive the same JSON values; no server contract changed.
+- **Checked:** Added an auth-form regression requiring stable names for every supported autofill field. Autofill, username, password, login-route, and registration tests passed (13/13); full `npm test -- --test-reporter=dot`, `npm run build` (TypeScript and Vite), and `git diff --check` passed.
+
 ## 2026-10-12 — Recover from stalled authentication startup requests
 
 - **Reviewed:** Setup-status, current-user, and CSRF bootstrap requests; the loading and retry states; API request cancellation; and CSRF refresh coalescing.
