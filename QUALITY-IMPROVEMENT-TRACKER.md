@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Expose account-menu disclosure state
+
+- **Reviewed:** The shared learner header, native account-menu disclosure, keyboard dismissal behavior, responsive account-menu layout, and the live browser accessibility tree.
+- **Improvement:** Mirror the native `<details>` state into an explicitly named button summary with `aria-expanded` and `aria-controls`, and rotate the account chevron while the menu is open. Route changes reset both the native disclosure and its accessible state.
+- **Why it helps:** Screen-reader users can identify the account control and whether its links are expanded, while sighted users receive the same open/closed cue as the interaction state.
+- **Backend review:** Account links, sign-out handling, session behavior, and role-scoped management links are unchanged; no server change was indicated.
+- **Checked:** Added client source regressions for the disclosure semantics, route reset, and chevron state. The running `/my-learning` page confirmed the account control is announced as a button, exposes `[expanded]` while open, and rotates its chevron. Focused checks passed (5/5), the full `npm test` suite passed (853/853), `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed.
+
 ## 2026-10-12 — Use native search controls across learner and staff views
 
 - **Reviewed:** Learner catalog search, course-management search, administrator user/log filters, learning-path searches, and the course-access learner search landmark and control semantics.

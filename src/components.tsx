@@ -156,9 +156,12 @@ export function Header() {
   const { pathname } = useLocation();
   const mainNavigationRef = useRef<HTMLElement>(null);
   const userMenuRef = useRef<HTMLDetailsElement>(null);
+  // Native details toggles outside React, so mirror its state for ARIA and visual feedback.
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   useEffect(() => {
     if (userMenuRef.current) userMenuRef.current.open = false;
+    setUserMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -209,9 +212,9 @@ export function Header() {
         <NavLink to="/competencies">Competencies</NavLink>
         <NavLink to="/calendar">Calendar</NavLink>
       </nav>
-      <details ref={userMenuRef} className="user-menu">
-        <summary aria-label={user?.username ? `Open account menu for ${user.username}` : 'Open account menu'}><span className="avatar">{user?.username.slice(0, 1).toUpperCase()}</span><span className="account-name">{user?.username}</span><ChevronDown size={16} /></summary>
-        <div className="user-menu-popover">
+      <details ref={userMenuRef} className="user-menu" onToggle={(event) => setUserMenuOpen(event.currentTarget.open)}>
+        <summary role="button" aria-label={user?.username ? `Open account menu for ${user.username}` : 'Open account menu'} aria-expanded={userMenuOpen} aria-controls="user-menu-popover"><span className="avatar">{user?.username.slice(0, 1).toUpperCase()}</span><span className="account-name">{user?.username}</span><ChevronDown size={16} /></summary>
+        <div id="user-menu-popover" className="user-menu-popover">
           <div className="user-menu-identity"><strong>{user?.username}</strong><span className="muted">{user?.role}</span></div>
           <Link to="/account/security">Account settings</Link>
           {user?.role === 'admin' && <Link to="/admin/users">User management</Link>}
