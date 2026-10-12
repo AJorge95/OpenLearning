@@ -3,7 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { COMPLETION_WINDOW_ERROR, validateCompletionWindowDays } from '../../src/course-editor-validation.ts';
+import {
+  COMPLETION_WINDOW_ERROR,
+  COURSE_TITLE_REQUIRED_ERROR,
+  COURSE_TITLE_TOO_LONG_ERROR,
+  MAX_COURSE_TITLE_LENGTH,
+  validateCompletionWindowDays,
+  validateCourseTitle,
+} from '../../src/course-editor-validation.ts';
 
 const sourceDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
 
@@ -18,6 +25,33 @@ test('completion windows reject values the editor API cannot save', () => {
   for (const value of ['0', '-1', '1.5', '3651', 'Infinity', 'not a number']) {
     assert.deepEqual(validateCompletionWindowDays(value), { value: null, error: COMPLETION_WINDOW_ERROR }, value);
   }
+});
+
+test('course titles are trimmed, required, and limited to the server maximum', () => {
+  assert.deepEqual(validateCourseTitle('  Workplace safety  '), { value: 'Workplace safety', error: null });
+  assert.deepEqual(validateCourseTitle('x'.repeat(MAX_COURSE_TITLE_LENGTH)), {
+    value: 'x'.repeat(MAX_COURSE_TITLE_LENGTH),
+    error: null,
+  });
+  assert.deepEqual(validateCourseTitle('   '), { value: null, error: COURSE_TITLE_REQUIRED_ERROR });
+  assert.deepEqual(validateCourseTitle('x'.repeat(MAX_COURSE_TITLE_LENGTH + 1)), {
+    value: null,
+    error: COURSE_TITLE_TOO_LONG_ERROR,
+  });
+});
+
+test('course title errors are attached to the field and checked before both editor save paths', () => {
+  const source = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
+  const saveCourse = source.slice(source.indexOf('async function saveCourse('), source.indexOf('async function saveCourseDetailsIfChanged('));
+  const saveDetails = source.slice(source.indexOf('async function saveCourseDetailsIfChanged('), source.indexOf('async function loadGovernance('));
+
+  assert.match(source, /<input ref=\{courseTitleInputRef\} required value=\{title\} maxLength=\{MAX_COURSE_TITLE_LENGTH\} aria-invalid=\{courseTitleError \? true : undefined\} aria-describedby=\{courseTitleError \? 'course-title-error' : undefined\}/);
+  assert.match(source, /id="course-title-error" className="course-title-error" role="alert">\{courseTitleError\}/);
+  assert.match(source, /function validatedCourseTitleForSave\(\)[\s\S]*?validateCourseTitle\(title\)[\s\S]*?courseTitleInputRef\.current\?\.focus\(\)/);
+  assert.match(saveCourse, /const validatedTitle = validatedCourseTitleForSave\(\)/);
+  assert.match(saveDetails, /const validatedTitle = validatedCourseTitleForSave\(\)/);
+  assert.match(saveCourse, /title: validatedTitle/);
+  assert.match(saveDetails, /title: validatedTitle/);
 });
 
 test('course editor describes invalid completion-window values and validates before save requests', () => {

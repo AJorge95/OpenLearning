@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Validate course titles before editor saves
+
+- **Reviewed:** Course-title persistence and limits in `server/routes-courses.js`, the course-details field, toolbar save/publish actions, and curriculum actions that save course details before continuing.
+- **Improvement:** Share the server's trim, required-value, and 160-character rules with the editor. Validate both save paths before sending a request, focus and describe the title field when invalid, show the correction beside it, and send normalized titles.
+- **Why it helps:** A blank or whitespace-only title can no longer fail as a page-level save error after an author clicks Save draft, Publish, or a curriculum action. Valid surrounding spaces are normalized to match the value persisted by the server.
+- **Backend:** `routes-courses.js` already trims and validates required course titles; it remains authoritative and its response contract is unchanged.
+- **Checked:** Added helper and editor-wiring regressions under `tests/client/`. Full `npm test -- --test-reporter=dot` passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. Playwright is not installed, and the connected browser is signed out, so the authenticated editor interaction could not be replayed.
+
 ## 2026-10-12 — Share platform-name validation in setup and settings
 
 - **Reviewed:** The first-run setup name field, administrator platform-identity field, server parsing for setup and settings, and the existing error/field accessibility patterns.
