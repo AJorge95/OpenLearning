@@ -755,7 +755,7 @@ export function CalendarPage() {
       </table>
       {loading ? <p className="calendar-empty-note" role="status">Loading deadlines…</p> : shouldShowCalendarEmptyState(loading, error, monthItems.length, hasInvalidDeadlines) && <p className="calendar-empty-note" role="status"><CalendarDays size={18} />No course deadlines this month.</p>}
     </section>
-    {monthItems.length > 0 && <section className="calendar-deadline-list"><h2>Deadlines this month</h2><ul>{[...monthItems].sort((a, b) => a.dueAt.localeCompare(b.dueAt)).map((item) => <li key={item.courseId}><span className={`deadline-status ${item.status}`}>{item.status}</span><Link to={item.url}><strong>{item.title}</strong><small>{calendarDateTimeFormatter.format(new Date(item.dueAt))}</small></Link></li>)}</ul></section>}
+    {monthItems.length > 0 && <section className="calendar-deadline-list"><h2>Deadlines this month</h2><ul>{monthItems.map((item) => <li key={item.courseId}><span className={`deadline-status ${item.status}`}>{item.status}</span><Link to={item.url}><strong>{item.title}</strong><small>{calendarDateTimeFormatter.format(new Date(item.dueAt))}</small></Link></li>)}</ul></section>}
   </div>;
 }
 

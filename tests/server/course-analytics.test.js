@@ -3408,16 +3408,20 @@ test('calendar date ranges reject impossible and overwide dates while accepting 
   assert.deepEqual((await validLeapDay.json()).items, []);
 });
 
-test('calendar treats SQLite space-separated deadlines as UTC', async () => {
+test('calendar normalizes mixed timestamp formats before ordering deadlines', async () => {
   const previousTimezone = process.env.TZ;
-  const courseId = 'calendar-space-timestamp';
-  const expectedDeadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-  const storedDeadline = expectedDeadline.slice(0, 19).replace('T', ' ');
-  const deadlineDate = storedDeadline.slice(0, 10);
-  database.prepare(`INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
-    VALUES (?, 'SQLite timestamp deadline', 'public', 'published', 'admin-1', 'admin-1')`).run(courseId);
-  database.prepare('INSERT INTO course_learning_state (user_id, course_id, deadline_at) VALUES (?, ?, ?)')
-    .run('learner-active', courseId, storedDeadline);
+  const sqliteCourseId = 'calendar-space-timestamp';
+  const isoCourseId = 'calendar-iso-timestamp';
+  const deadlineDate = '2099-01-01';
+  const sqliteDeadline = `${deadlineDate} 09:00:00`;
+  const earlierIsoDeadline = `${deadlineDate}T08:00:00.000Z`;
+  const insertCourse = database.prepare(`INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+    VALUES (?, ?, 'public', 'published', 'admin-1', 'admin-1')`);
+  insertCourse.run(sqliteCourseId, 'Later SQLite timestamp deadline');
+  insertCourse.run(isoCourseId, 'Earlier ISO timestamp deadline');
+  const insertDeadline = database.prepare('INSERT INTO course_learning_state (user_id, course_id, deadline_at) VALUES (?, ?, ?)');
+  insertDeadline.run('learner-active', sqliteCourseId, sqliteDeadline);
+  insertDeadline.run('learner-active', isoCourseId, earlierIsoDeadline);
 
   try {
     process.env.TZ = 'Pacific/Kiritimati';
@@ -3426,15 +3430,16 @@ test('calendar treats SQLite space-separated deadlines as UTC', async () => {
     });
 
     assert.equal(response.status, 200);
-    const item = (await response.json()).items.find((deadline) => deadline.courseId === courseId);
-    assert.ok(item, 'the deadline should be included in its stored UTC date range');
-    assert.equal(item.dueAt, `${storedDeadline.replace(' ', 'T')}.000Z`);
-    assert.equal(item.status, 'upcoming');
+    const items = (await response.json()).items;
+    assert.deepEqual(items.map((item) => item.courseId), [isoCourseId, sqliteCourseId]);
+    assert.deepEqual(items.map((item) => item.dueAt), [earlierIsoDeadline, `${deadlineDate}T09:00:00.000Z`]);
+    assert.ok(items.every((item) => item.status === 'upcoming'));
   } finally {
     if (previousTimezone === undefined) delete process.env.TZ;
     else process.env.TZ = previousTimezone;
-    database.prepare('DELETE FROM course_learning_state WHERE user_id = ? AND course_id = ?').run('learner-active', courseId);
-    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+    database.prepare('DELETE FROM course_learning_state WHERE user_id = ? AND course_id IN (?, ?)')
+      .run('learner-active', sqliteCourseId, isoCourseId);
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(sqliteCourseId, isoCourseId);
   }
 });
 

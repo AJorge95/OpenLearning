@@ -506,6 +506,8 @@ programsRouter.get('/calendar', (req, res) => {
     validItems.push({ ...item, dueAt });
   }
   const invalidDeadlineCount = visibleItems.length - validItems.length;
+  // Normalize mixed ISO and SQLite timestamp formats before presenting calendar events.
+  validItems.sort((first, second) => first.dueAt.getTime() - second.dueAt.getTime());
   if (invalidDeadlineCount > 0) {
     writeSystemLog('warn', 'calendar', 'Malformed course deadlines were omitted from the calendar response.', {
       invalidDeadlineCount,
