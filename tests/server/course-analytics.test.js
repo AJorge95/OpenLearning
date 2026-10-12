@@ -159,6 +159,21 @@ function userHeaders(userId) {
   return { 'x-test-user': userId, connection: 'close' };
 }
 
+function mp4Box(type, payload) {
+  const box = Buffer.alloc(8 + payload.length);
+  box.writeUInt32BE(box.length, 0);
+  box.write(type, 4, 4, 'ascii');
+  payload.copy(box, 8);
+  return box;
+}
+
+function mp4WithDurationSeconds(seconds) {
+  const movieHeader = Buffer.alloc(20);
+  movieHeader.writeUInt32BE(1_000, 12);
+  movieHeader.writeUInt32BE(seconds * 1_000, 16);
+  return mp4Box('moov', mp4Box('mvhd', movieHeader));
+}
+
 function insertCourseVersionHistory(courseId, versionCount) {
   const insertHistory = database.transaction(() => {
     database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
@@ -467,6 +482,57 @@ test('course managers must verify video watch before completing lessons in the p
       .run('lesson-watch', 'Rejected lesson completion before verified video watch');
     database.prepare('UPDATE lessons SET media_id = NULL WHERE id = ?').run('lesson-analytics');
     database.prepare('DELETE FROM media_files WHERE id = ?').run('media-admin-watch-check');
+  }
+});
+
+test('watch progress remains available when verified video duration cannot be cached', async () => {
+  const mediaId = 'media-duration-cache-failure';
+  const fileName = 'duration-cache-failure.mp4';
+  const courseDirectory = path.join(process.env.MEDIA_ROOT, 'course-analytics');
+  const filePath = path.join(courseDirectory, fileName);
+  const video = mp4WithDurationSeconds(12.5);
+  fs.mkdirSync(courseDirectory, { recursive: true });
+  fs.writeFileSync(filePath, video);
+  database.prepare(`INSERT INTO media_files
+    (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+    VALUES (?, 'course-analytics', ?, ?, 'video/mp4', ?, 'video')`)
+    .run(mediaId, fileName, fileName, video.length);
+  database.prepare('UPDATE lessons SET media_id = ? WHERE id = ?').run(mediaId, 'lesson-analytics');
+  database.exec(`CREATE TRIGGER fail_video_duration_cache
+    BEFORE UPDATE OF duration_seconds ON media_files
+    WHEN OLD.id = '${mediaId}' AND OLD.duration_seconds IS NULL
+    BEGIN SELECT RAISE(ABORT, 'injected duration cache failure'); END;`);
+
+  try {
+    const response = await fetch(apiUrl('/lessons/lesson-analytics/watch-progress'), {
+      headers: userHeaders('learner-active'),
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).durationSeconds, 12.5);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM lesson_watch_progress WHERE user_id = ? AND lesson_id = ?')
+      .get('learner-active', 'lesson-analytics').count, 0, 'GET should not create a watch-progress record');
+    assert.equal(database.prepare('SELECT duration_seconds FROM media_files WHERE id = ?').get(mediaId).duration_seconds, null);
+
+    const startResponse = await fetch(apiUrl('/lessons/lesson-analytics/watch-progress/start'), {
+      method: 'POST', headers: userHeaders('learner-active'),
+    });
+    assert.equal(startResponse.status, 200);
+    assert.equal((await startResponse.json()).durationSeconds, 12.5);
+    assert.equal(database.prepare('SELECT duration_seconds FROM lesson_watch_progress WHERE user_id = ? AND lesson_id = ?')
+      .get('learner-active', 'lesson-analytics').duration_seconds, 12.5);
+    assert.ok(database.prepare(`SELECT id FROM system_logs
+      WHERE source = 'video-duration' AND message = 'Verified video duration could not be cached' LIMIT 1`).get());
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS fail_video_duration_cache');
+    database.prepare('UPDATE lessons SET media_id = NULL WHERE id = ?').run('lesson-analytics');
+    database.prepare('DELETE FROM lesson_watch_telemetry WHERE user_id = ? AND lesson_id = ?')
+      .run('learner-active', 'lesson-analytics');
+    database.prepare('DELETE FROM lesson_watch_progress WHERE user_id = ? AND lesson_id = ?')
+      .run('learner-active', 'lesson-analytics');
+    database.prepare('DELETE FROM media_files WHERE id = ?').run(mediaId);
+    database.prepare(`DELETE FROM system_logs
+      WHERE source = 'video-duration' AND message = 'Verified video duration could not be cached'`).run();
+    fs.rmSync(filePath, { force: true });
   }
 });
 

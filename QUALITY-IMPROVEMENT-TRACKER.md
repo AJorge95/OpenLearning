@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep video playback available when duration caching fails
+
+- **Reviewed:** MP4 duration verification, the `media_files.duration_seconds` cache write, GET watch-progress reads, and explicit POST watch-start behavior.
+- **Improvement:** If the server verifies a valid video duration but cannot save or read the derived cache value, log the cache failure and use the verified duration for the current request.
+- **Why it helps:** A cache-only database error no longer turns a valid lesson video into an HTTP 500 or blocks watch-start when playback and progress storage are otherwise available.
+- **Checked:** Added a route regression that injects an SQLite trigger failure on the cache update. It verifies GET still returns the duration without creating watch progress, POST watch-start records the duration, and a warning is logged. The focused regression passed, the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed.
+
 ## 2026-10-12 — Recheck read-route side effects and role-selector reproduction
 
 - **Reviewed:** GET handlers across auth, admin, course, learning-path, and protected-media routes; video-duration verification; and the account-role selector's current markup, width rules, and pointer-coordinate guard.
