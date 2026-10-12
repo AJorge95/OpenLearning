@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck the supplied account-role selector screenshot
+
+- **Reviewed:** The screenshot's selected DOM path, the current account-details selector markup and hit-area rules, and the shared `AppSelect` activation guard.
+- **Result:** No runtime change. The screenshot identifies the older wrapping `<label>`; current source uses a separate control container, bounds the desktop selector to 8.5rem, and only enables pointer input on the visible trigger. The supplied browser session is now signed out at `/register`, so its authenticated account page could not be reloaded here.
+- **Why no change:** The current source already prevents a click outside the trigger from opening the menu, and the existing regression tests exercise both the bounded hit area and label-forwarded clicks. The screenshot does not match the current markup.
+- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js` passed (11/11). `git diff --check` passed. Local Playwright packages are not installed, and no role option was selected.
+- **Needed to continue:** Hard-reload the authenticated account page to load the current markup. If a click outside the visible trigger still opens the menu, provide the clicked position and viewport from that reloaded page.
+
 ## 2026-10-12 — Guard staff-page code splitting
 
 - **Reviewed:** Static and dynamic page imports, staff-only route nesting, the shared management-page loading/error boundary, and the production chunk output.
