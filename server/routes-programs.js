@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireObjectBody, requireStaff } from './http.js';
-import { courseSummaries, courseSummary, ensureCourseLearningStateWithStatus, prepareCourseSummaryData } from './course-service.js';
+import { courseLearningDeadlineAt, courseSummaries, courseSummariesWithState, insertCourseLearningStates, prepareCourseSummaryData } from './course-service.js';
 import { courseVersionHistoryPage, logicalCourseId, logicalCourseIds, publishRevision, restoreCourseVersion } from './course-versioning.js';
 import { writeAuditLog } from './log-store.js';
 import { textSearchPredicate } from './sql.js';
@@ -96,27 +96,48 @@ export function syncUnlockedPathStates(pathIds, userId, pathRowsById = new Map()
   const statesByCourse = new Map();
   for (const pathId of pathIds) {
     const rows = pathRowsById.get(pathId) ?? pathCourseRows(pathId);
-    const summaries = courseSummaries(rows, user, undefined, summaryDataByPathId.get(pathId));
+    const summaries = courseSummariesWithState(rows, user, summaryDataByPathId.get(pathId));
+    const pendingStateInsertions = [];
+    const startedAtDate = new Date();
+    const startedAt = startedAtDate.toISOString();
     let allEarlierCoursesCompleted = true;
     for (const [index, row] of rows.entries()) {
       const unlocked = !row.requires_previous || row.position === 0 || allEarlierCoursesCompleted;
-      let summary = summaries[index];
+      const summaryDetails = summaries[index];
+      let summary = summaryDetails.summary;
       if (unlocked) {
         const logicalId = row.logical_course_id || row.course_id;
-        let state;
-        let created = false;
-        if (statesByCourse.has(logicalId)) state = statesByCourse.get(logicalId);
-        else {
-          const ensured = ensureCourseLearningStateWithStatus(row.course_id, userId);
-          state = ensured.state;
-          created = ensured.created;
-          statesByCourse.set(logicalId, state);
+        let courseState = statesByCourse.get(logicalId);
+        if (!courseState) {
+          const state = summaryDetails.learningState;
+          const created = !state;
+          if (created) {
+            const deadlineDays = row.completion_window_days;
+            const targetVersionId = summaryDetails.version?.requires_recompletion ? summaryDetails.version.id : null;
+            const deadlineAt = courseLearningDeadlineAt(deadlineDays, startedAtDate);
+            const nextState = { user_id: userId, course_id: logicalId, target_version_id: targetVersionId, deadline_at: deadlineAt };
+            pendingStateInsertions.push({
+              courseId: logicalId,
+              targetVersionId,
+              deadlineAt,
+              deadlineWindowDays: deadlineDays ?? null,
+              startedAt,
+            });
+            courseState = { state: nextState, created: true };
+          } else {
+            courseState = { state, created: false };
+          }
+          statesByCourse.set(logicalId, courseState);
         }
-        // Creating a state can activate a version's required-recompletion reset.
-        if (created && state?.target_version_id) summary = courseSummary(row, user);
+        // A newly created recompletion state evaluates prior progress against the active version's exact IDs.
+        if (courseState.created && courseState.state?.target_version_id) {
+          summary = { ...summary, completed: summaryDetails.completedWithVersionReset };
+        }
       }
       allEarlierCoursesCompleted = allEarlierCoursesCompleted && summary.completed;
     }
+    // Reuse the state rows already loaded with progress and prepare one insert for all newly unlocked courses.
+    insertCourseLearningStates(userId, pendingStateInsertions);
   }
 }
 
