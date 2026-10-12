@@ -224,6 +224,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .analytics-learners-table-wrap { container-type: inline-size; container-name: learner-table; }
 .analytics-table { width: 100%; min-width: 780px; border-collapse: collapse; text-align: left; }
 .analytics-table th { height: 43px; padding: 0 12px; border-bottom: 1px solid var(--line); color: #5d6372; background: #f9f9fc; font-size: 11px; font-weight: 650; white-space: nowrap; }
+/* Keep metric-table row headers visually consistent with their data cells. */
 .analytics-table td, .analytics-table tbody th { padding: 13px 12px; border-bottom: 1px solid var(--line); color: #454a59; font-size: 12px; vertical-align: top; }
 .analytics-table tbody th { background: transparent; font-weight: 400; text-align: left; }
 .analytics-table tbody tr:last-child td, .analytics-table tbody tr:last-child th { border-bottom: 0; }

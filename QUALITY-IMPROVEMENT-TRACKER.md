@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Identify lessons and quizzes in analytics rows
+
+- **Reviewed:** Course analytics lesson-completion and quiz-performance tables, their scoped column headers and responsive data-cell styles, and the route's lesson/quiz metric payloads.
+- **Improvement:** Mark each lesson and quiz title cell as `<th scope="row">` so the metric table announces the item whose completion or performance values follow.
+- **Why it helps:** Screen-reader users retain lesson or quiz context while navigating module, participation, completion, and score values.
+- **Backend review:** The existing analytics response includes stable item IDs, titles, module names, and the corresponding metrics; query bounds and payload shape remain unchanged.
+- **Checked:** Added a client regression for both row headers and the shared data-cell treatment. The focused test passed (1/1), `node --test tests/server/course-analytics.test.js` passed (109/109), related account/course identity tests passed (2/2), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict typechecking and Vite bundling, and `git diff --check` passed. The browser remains at `/login`, so authenticated analytics rendering could not be checked; no account or course data was changed.
+
 ## 2026-10-12 — Expose course names as account activity row headers
 
 - **Reviewed:** The administrator's per-account course activity table, its course/status cell and responsive styling, and the `/api/admin/users/:userId` course summary query and pagination tests.
