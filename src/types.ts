@@ -280,6 +280,11 @@ export interface CourseAnalytics {
   }>;
 }
 
+export type CourseAnalyticsLearnerPage = Pick<CourseAnalytics, 'learners' | 'page' | 'pageSize'> & {
+  learnerCount: number;
+  disabledLearnerCount: number;
+};
+
 export interface CourseAccessUser {
   id: string;
   username: string;

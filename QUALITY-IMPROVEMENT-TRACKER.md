@@ -1,5 +1,21 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep course analytics responsive while paging learners
+
+- **Reviewed:** The course analytics page's page-change loading state, learner pagination, response payload, and aggregate SQL work performed by `/api/manage/courses/:courseId/analytics`.
+- **Improvement:** Load course-wide metrics once and fetch only learner details when changing pages. Keep the existing dashboard visible while the learner section loads, expose its busy state, and allow retry if that page request fails.
+- **Why it helps:** Administrators can keep reading summary metrics without waiting for them to be recomputed, and page changes avoid repeating course-wide aggregate queries.
+- **Backend:** Added a validated `learnersOnly=1` response with the requested learner page and counts; it reuses the existing learner-detail calculations and skips global progress, lesson completion, and quiz aggregate queries.
+- **Checked:** Focused server and client regressions passed (4/4); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed.
+
+## 2026-10-12 — Reject select activations outside the visible trigger
+
+- **Reviewed:** The platform-role selector width and hit-area rules, the custom select's pointer-coordinate guard, keyboard activation, and the supplied account-details screenshot.
+- **Improvement:** Reject zero-detail click events when they include coordinates outside the visible trigger, while keeping coordinate-free keyboard and assistive-technology activation available.
+- **Why it helps:** A click forwarded from the surrounding field cannot open the role menu from blank space beside the control.
+- **Backend:** No route or persistence behavior changed.
+- **Checked:** Focused select, role-hit-area, and analytics client/server regressions passed (19/19); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. The connected browser is signed out, so the reported account interaction could not be replayed in an authenticated UI.
+
 ## 2026-10-12 — Disable settings while a reset pauses API requests
 
 - **Reviewed:** The platform-reset request gate, settings form fieldset and save action, reset preparation/cancel/confirm state, live status polling, and existing reset client/route coverage.
