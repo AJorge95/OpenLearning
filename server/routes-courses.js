@@ -330,7 +330,8 @@ courseRouter.get('/manage/courses', requireStaff, (req, res) => {
 
 courseRouter.get('/courses/:courseId', (req, res) => {
   const course = requireCourseViewer(req.params.courseId, req.currentUser);
-  res.json({ course: getCoursePayload(course, req.currentUser) });
+  const includeQuizQuestions = enumQuery(req.query.includeQuizQuestions, 'quiz question option', ['0', '1'], '1') === '1';
+  res.json({ course: getCoursePayload(course, req.currentUser, { includeQuizQuestions }) });
 });
 
 function requireCertificateIssuanceEligibility(courseRef, user) {

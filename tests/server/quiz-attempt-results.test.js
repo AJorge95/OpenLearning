@@ -156,6 +156,35 @@ test('course payload points to the learner latest attempt and its detail remains
   assert.deepEqual(await otherUserResponse.json(), { error: 'Quiz result not found.', code: 'not_found' });
 });
 
+test('course payload can omit quiz questions without losing quiz status', async () => {
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const baseUrl = `http://127.0.0.1:${address.port}/api`;
+  const headers = { 'x-test-user': 'learner-1', connection: 'close' };
+
+  const fullResponse = await fetch(`${baseUrl}/courses/course-1`, { headers });
+  assert.equal(fullResponse.status, 200);
+  const fullText = await fullResponse.text();
+  const fullCourse = JSON.parse(fullText).course;
+  assert.equal(fullCourse.modules[0].quiz.questions[0].prompt, 'Question one?');
+  assert.deepEqual(fullCourse.modules[0].quiz.questions[0].choices.map((choice) => choice.text), ['Correct answer', 'Another answer']);
+
+  const compactResponse = await fetch(`${baseUrl}/courses/course-1?includeQuizQuestions=0`, { headers });
+  assert.equal(compactResponse.status, 200);
+  const compactText = await compactResponse.text();
+  const compactCourse = JSON.parse(compactText).course;
+  assert.deepEqual(compactCourse.modules[0].quiz.questions, []);
+  assert.deepEqual(compactCourse.modules[0].quiz.latestAttempt, fullCourse.modules[0].quiz.latestAttempt);
+  assert.equal(compactCourse.modules[0].quiz.passed, fullCourse.modules[0].quiz.passed);
+  assert.ok(compactText.length < fullText.length);
+
+  const invalidResponse = await fetch(`${baseUrl}/courses/course-1?includeQuizQuestions=no`, { headers });
+  assert.equal(invalidResponse.status, 400);
+  assert.deepEqual(await invalidResponse.json(), {
+    error: 'Choose a valid quiz question option.', code: 'validation_error',
+  });
+});
+
 test('quiz submission returns aggregate results only and requires an answer for every question', async () => {
   const address = server.address();
   assert(address && typeof address !== 'string');

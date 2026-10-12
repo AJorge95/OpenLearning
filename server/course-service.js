@@ -178,7 +178,7 @@ export function courseSummary(course, user, preloadedVersionsByCourse) {
   return courseSummaryDetails([course], user, preloadedVersionsByCourse)[0].summary;
 }
 
-export function getCoursePayload(course, user, { includeAnswers = false, storageCourseId } = {}) {
+export function getCoursePayload(course, user, { includeAnswers = false, includeQuizQuestions = true, storageCourseId } = {}) {
   const logicalId = course.logical_course_id || course.id;
   const editingCopy = Boolean(course.logical_course_id && includeAnswers);
   const version = publishedVersionForLogicalCourse(logicalId);
@@ -237,18 +237,21 @@ export function getCoursePayload(course, user, { includeAnswers = false, storage
   }
   const completedLessonIds = versionProgress.completedLessonIds;
   const quizChoicesByQuestion = new Map();
-  for (const choice of db.prepare(`
-    SELECT qc.id, qc.question_id, qc.choice_text, qc.is_correct
-    FROM quiz_choices qc
-    JOIN quiz_questions qq ON qq.id = qc.question_id
-    JOIN quizzes q ON q.id = qq.quiz_id
-    JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id = ?
-    ORDER BY qq.position, qq.id, qc.position, qc.id
-  `).all(contentId)) {
-    const choices = quizChoicesByQuestion.get(choice.question_id) ?? [];
-    choices.push(choice);
-    quizChoicesByQuestion.set(choice.question_id, choices);
+  // Overview and lesson views need quiz status, not prompts or choices, so skip both question-table reads.
+  if (includeQuizQuestions) {
+    for (const choice of db.prepare(`
+      SELECT qc.id, qc.question_id, qc.choice_text, qc.is_correct
+      FROM quiz_choices qc
+      JOIN quiz_questions qq ON qq.id = qc.question_id
+      JOIN quizzes q ON q.id = qq.quiz_id
+      JOIN course_modules m ON m.id = q.module_id
+      WHERE m.course_id = ?
+      ORDER BY qq.position, qq.id, qc.position, qc.id
+    `).all(contentId)) {
+      const choices = quizChoicesByQuestion.get(choice.question_id) ?? [];
+      choices.push(choice);
+      quizChoicesByQuestion.set(choice.question_id, choices);
+    }
   }
   const moduleRows = db.prepare('SELECT * FROM course_modules WHERE course_id = ? ORDER BY position, id').all(contentId);
   const lessonsByModule = new Map();
@@ -288,25 +291,27 @@ export function getCoursePayload(course, user, { includeAnswers = false, storage
   }
 
   const questionsByQuiz = new Map();
-  for (const question of db.prepare(`
-    SELECT qq.* FROM quiz_questions qq
-    JOIN quizzes q ON q.id = qq.quiz_id
-    JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id = ?
-    ORDER BY m.position, m.id, qq.position, qq.id
-  `).all(contentId)) {
-    const questions = questionsByQuiz.get(question.quiz_id) ?? [];
-    questions.push({
-      id: question.id,
-      prompt: question.prompt,
-      explanation: question.explanation,
-      choices: (quizChoicesByQuestion.get(question.id) ?? []).map((choice) => ({
-        id: choice.id,
-        text: choice.choice_text,
-        ...(includeAnswers ? { isCorrect: Boolean(choice.is_correct) } : {}),
-      })),
-    });
-    questionsByQuiz.set(question.quiz_id, questions);
+  if (includeQuizQuestions) {
+    for (const question of db.prepare(`
+      SELECT qq.* FROM quiz_questions qq
+      JOIN quizzes q ON q.id = qq.quiz_id
+      JOIN course_modules m ON m.id = q.module_id
+      WHERE m.course_id = ?
+      ORDER BY m.position, m.id, qq.position, qq.id
+    `).all(contentId)) {
+      const questions = questionsByQuiz.get(question.quiz_id) ?? [];
+      questions.push({
+        id: question.id,
+        prompt: question.prompt,
+        explanation: question.explanation,
+        choices: (quizChoicesByQuestion.get(question.id) ?? []).map((choice) => ({
+          id: choice.id,
+          text: choice.choice_text,
+          ...(includeAnswers ? { isCorrect: Boolean(choice.is_correct) } : {}),
+        })),
+      });
+      questionsByQuiz.set(question.quiz_id, questions);
+    }
   }
 
   const latestAttemptsByQuiz = new Map();
@@ -358,7 +363,7 @@ export function getCoursePayload(course, user, { includeAnswers = false, storage
         id: quiz.id,
         title: quiz.title,
         passMark: quiz.pass_mark,
-        questions: questionsByQuiz.get(quiz.id) ?? [],
+        questions: includeQuizQuestions ? questionsByQuiz.get(quiz.id) ?? [] : [],
         latestAttempt: latestAttempt ? { id: latestAttempt.id, score: latestAttempt.score, passed: Boolean(latestAttempt.passed), submittedAt: latestAttempt.submitted_at } : null,
         passed: versionProgress.passedQuizIds.has(quiz.id),
       };
