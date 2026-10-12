@@ -385,11 +385,46 @@ export function MyLearningPage() {
     <PageHeading title="My learning" subtitle="Start, continue, or review your courses." />
     {error && <ErrorNotice message={error} onRetry={courseLoadMoreFailed ? loadMore : load} />}
     {hasEmptyLearning && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{learningEmptyState.title}. {learningEmptyState.detail}</p>}
-    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading your courses…</div> : courses.length ? <div className="course-grid">{courses.map((course, index) => <div className="my-learning-card" key={course.id}><CourseCard course={course} showLearningProgress coverLoading={index === 0 ? 'eager' : 'lazy'} />{user?.role === 'learner' && course.deadlineAt && <LearningDeadlineLink deadlineAt={course.deadlineAt} completed={course.completed} />}{user?.role === 'learner' && course.completed && (user.firstName?.trim() && user.lastName?.trim() ? <Link className="certificate-card-link" to={`/my-learning/certificates/${course.id}`}><Award size={16} />View certificate</Link> : <Link className="certificate-card-link" to="/account/security"><Award size={16} />Add your name for certificate</Link>)}</div>)}</div> : hasEmptyCourses && !loadingCertificates && !certificates.length && <EmptyState title={learningEmptyState.title} detail={learningEmptyState.detail} action={<Link className="button button-primary" to="/courses">Browse courses</Link>} />}
+    {loading ? (
+      <div className="page-loading" role="status" aria-live="polite">Loading your courses…</div>
+    ) : courses.length ? (
+      <div className="course-grid">
+        {courses.map((course, index) => (
+          <div className="my-learning-card" key={course.id}>
+            <CourseCard course={course} showLearningProgress coverLoading={index === 0 ? 'eager' : 'lazy'} />
+            {user?.role === 'learner' && course.deadlineAt && <LearningDeadlineLink deadlineAt={course.deadlineAt} completed={course.completed} />}
+            {user?.role === 'learner' && course.completed && (
+              <>
+                {/* Give repeated certificate actions a course-specific name for screen-reader link lists. */}
+                {user.firstName?.trim() && user.lastName?.trim()
+                  ? <Link className="certificate-card-link" to={`/my-learning/certificates/${course.id}`} aria-label={`View certificate for ${course.title}`}><Award size={16} />View certificate</Link>
+                  : <Link className="certificate-card-link" to="/account/security" aria-label={`Add your name for the ${course.title} certificate`}><Award size={16} />Add your name for certificate</Link>}
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    ) : hasEmptyCourses && !loadingCertificates && !certificates.length ? (
+      <EmptyState title={learningEmptyState.title} detail={learningEmptyState.detail} action={<Link className="button button-primary" to="/courses">Browse courses</Link>} />
+    ) : null}
     {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {formatCountLabel(total, 'course', 'courses')}</p><p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{loadingMore ? 'Loading more courses…' : ''}</p>{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
     {(loadingCertificates || certificateError || certificates.length > 0) && <section className="certificate-history"><div className="certificate-history-heading"><h2>Your certificates</h2><p>Certificates remain available in your learning history.</p></div>
       {loadingCertificates && <p className="page-loading" role="status" aria-live="polite">Loading certificates…</p>}
-      {certificates.length > 0 && <div className="certificate-history-list">{certificates.map((certificate) => <article className="certificate-history-item" key={certificate.id}><span className="certificate-history-icon"><Award size={19} /></span><div className="certificate-history-copy"><h3>{certificate.courseTitle}</h3><p>Awarded {formatCertificateDate(certificate.issuedAt, certificateHistoryDateFormatter)} · {certificate.certificateCode}</p></div><Link className="button button-secondary" to={`/my-learning/certificates/${certificate.id}`}>View certificate</Link></article>)}</div>}
+      {certificates.length > 0 && (
+        <div className="certificate-history-list">
+          {certificates.map((certificate) => (
+            <article className="certificate-history-item" key={certificate.id}>
+              <span className="certificate-history-icon"><Award size={19} /></span>
+              <div className="certificate-history-copy">
+                <h3>{certificate.courseTitle}</h3>
+                <p>Awarded {formatCertificateDate(certificate.issuedAt, certificateHistoryDateFormatter)} · {certificate.certificateCode}</p>
+              </div>
+              {/* Course versions can award multiple certificates with the same title, so include the unique code. */}
+              <Link className="button button-secondary" to={`/my-learning/certificates/${certificate.id}`} aria-label={`View certificate for ${certificate.courseTitle}, code ${certificate.certificateCode}`}>View certificate</Link>
+            </article>
+          ))}
+        </div>
+      )}
       {certificateError && <ErrorNotice message={certificateError} onRetry={certificatesHasMore && certificates.length > 0 ? loadMoreCertificates : loadCertificatesFirstPage} />}
       {certificates.length > 0 && <div className="catalog-pagination"><p ref={certificatePaginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {certificates.length} of {formatCountLabel(certificateTotal, 'certificate', 'certificates')}</p><p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{loadingMoreCertificates ? 'Loading more certificates…' : ''}</p>{certificatesHasMore && <Button variant="secondary" disabled={loadingCertificates || loadingMoreCertificates} onClick={loadMoreCertificates}>{loadingMoreCertificates ? 'Loading more certificates…' : 'Load more certificates'}</Button>}</div>}
     </section>}

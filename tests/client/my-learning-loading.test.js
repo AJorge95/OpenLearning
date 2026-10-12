@@ -19,5 +19,5 @@ test('My Learning loads courses and certificates independently with a first-page
 });
 
 test('My Learning waits for certificate history before showing its combined empty state', () => {
-  assert.match(pageSource, /: hasEmptyCourses && !loadingCertificates && !certificates\.length && <EmptyState/);
+  assert.match(pageSource, /:\s*hasEmptyCourses && !loadingCertificates && !certificates\.length \?\s*\(\s*<EmptyState/);
 });
