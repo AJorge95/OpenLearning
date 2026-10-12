@@ -10025,3 +10025,11 @@
 - **Why it helps:** Learners no longer see disabled start controls without an explanation if older or inconsistent published data reaches the course page.
 - **Backend review:** New courses cannot be published without a module and a lesson; quiz content and video media are also validated. No server change was indicated because the empty state is a defensive presentation for existing records.
 - **Checked:** Added the regression in `tests/client/course-overview-accessibility.test.js` under the dedicated client-test folder. Focused course navigation and overview checks passed (16/16), the full Node test suite passed, and `npm run build` passed strict TypeScript checking and Vite bundling. `git diff --check` passed. Rendered empty-state QA was not run because the repository has no Playwright dependency and no empty-course browser fixture was created in the development database.
+
+## 2026-10-12 — Cover course publish-readiness rules
+
+- **Reviewed:** Lesson feedback/comment client and API behavior, then the course service's publication requirements for modules, lessons, attached video media, and quiz questions.
+- **Result:** Feedback, moderation, paging, reaction counts, and learner insertion ordering already have focused regression coverage. The publish-readiness rules had no direct service test in the current tree.
+- **Improvement:** Add an isolated SQLite suite under `tests/server` covering each incomplete-content rejection plus a fully publishable lesson-and-quiz course.
+- **Why it helps:** Future edits to the publication validator are checked against the exact content required before learners can access a course, including the distinction between an uploaded video and one attached to a lesson.
+- **Checked:** `node --test tests/server/course-publishing-readiness.test.js` passed (4/4), and the full `npm test -- --test-reporter=dot` suite passed. The fixture uses a temporary database and removes it after the test run; `git diff --check` passed. No runtime source changed, so the build was not rerun in this test-only cycle.
