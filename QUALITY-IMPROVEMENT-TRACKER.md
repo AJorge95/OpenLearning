@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck sign-in and public registration boundaries
+
+- **Reviewed:** Sign-in and registration field semantics, password visibility and autocomplete, registration-field loading/retry, server credential validation, identifier conflicts, approval enforcement, and audit/session rollback paths.
+- **Result:** No runtime change. The forms expose named fields and retry feedback, and the server already validates credentials, handles identifier races, blocks pending accounts from signing in, and rolls back failed audited writes.
+- **Why no change:** No reproducible user-facing failure or missing authentication workflow appeared in the reviewed source and existing route coverage.
+- **Checked:** Focused password-field, registration-approval, and authentication-route tests passed (24/24). `git diff --check` passed.
+- **Needed to revisit:** A concrete sign-in/registration failure or a defined new account-access requirement.
+
 ## 2026-10-12 — Wait for certificate history before showing the combined empty state
 
 - **Reviewed:** My Learning's independent course and certificate requests, the certificate loading/error panel, and the empty-state announcement and action.
