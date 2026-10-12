@@ -582,6 +582,8 @@ export function CourseCard({ course, showLearningProgress = false, coverLoading 
   showLearningProgress?: boolean;
   coverLoading?: React.ImgHTMLAttributes<HTMLImageElement>['loading'];
 }) {
+  // Keep the catalog scannable while giving learners enough context to choose a course.
+  const description = course.description.trim();
   const learningActionLabel = showLearningProgress
     ? courseCardActionLabel({ completed: course.completed, progress: course.progress })
     : null;
@@ -590,6 +592,7 @@ export function CourseCard({ course, showLearningProgress = false, coverLoading 
       <CourseCoverAsset course={course} className="course-cover" iconSize={34} loading={coverLoading} />
       <div className="course-card-copy">
         <h2>{course.title}</h2>
+        {description && <p className="course-description">{description}</p>}
         <p className="course-author">{course.owner || 'OpenLearning course'}</p>
         {showLearningProgress ? <><div className="card-progress-label"><span>{course.completed ? 'Completed' : `${course.progress}% complete`}</span><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /><span className="course-card-action">{learningActionLabel}<ChevronRight size={15} aria-hidden="true" /></span></> : <div className="card-meta"><BookOpen size={17} /><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div>}
       </div>
