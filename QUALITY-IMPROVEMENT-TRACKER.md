@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Review ARIA naming targets and comment moderation
+
+- **Reviewed:** JSX elements using `aria-label` without an explicit role, lesson comment removal confirmation and status feedback, and the comment moderation API.
+- **Result:** No runtime change. The naming candidates use native controls or named semantic elements such as landmarks, lists, fieldsets, media, and date values. Comment removal remains restricted to course managers, checks the lesson/comment relationship, and commits the deletion with its audit record.
+- **Why no change:** No ignored accessible name or moderation failure surfaced; existing semantics and transaction safeguards already cover the reviewed flows.
+- **Checked:** `node --test tests/client/lesson-comments.test.js tests/client/lesson-comment-removal-confirmation.test.js` passed (12/12), and `node --test tests/server/lesson-comment-moderation.test.js` passed (12/12).
+- **Needed to continue:** A rendered assistive-technology case where one of these names is ignored, or a reproducible authorization, audit, or comment-state failure.
+
 ## 2026-10-12 — Announce full weekday names in the calendar table
 
 - **Reviewed:** Calendar weekday headers, the horizontally scrollable calendar layout, local-month date grouping, and the deadline endpoint's range validation, access filtering, index use, and batched progress summaries.
