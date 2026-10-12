@@ -14,6 +14,16 @@ const publishedVersionLookupStatement = db.prepare(`SELECT v.*, c.title, c.descr
   FROM course_versions v JOIN courses c ON c.id = v.storage_course_id
   WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT 1`);
 
+function groupRowsBy(rows, key) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const items = grouped.get(row[key]) ?? [];
+    items.push(row);
+    grouped.set(row[key], items);
+  }
+  return grouped;
+}
+
 export function logicalCourseId(courseId) {
   const row = courseIdentityByIdStatement.get(courseId)
     ?? courseIdentityByModuleStatement.get(courseId)
@@ -60,53 +70,63 @@ function copyPublishedContent(sourceId, targetId, logicalId, actorId) {
   const addLesson = db.prepare(`INSERT INTO lessons (id, module_id, title, description, transcript, media_id, position, created_at, stable_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const addQuiz = db.prepare('INSERT INTO quizzes (id, module_id, title, pass_mark, created_at, updated_at, stable_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
-  const getLessons = db.prepare('SELECT * FROM lessons WHERE module_id = ? ORDER BY position, id');
-  const getResources = db.prepare('SELECT * FROM lesson_resources WHERE lesson_id = ? ORDER BY position, id');
-  const getCaptions = db.prepare('SELECT * FROM lesson_captions WHERE lesson_id = ?');
-  const getQuiz = db.prepare('SELECT * FROM quizzes WHERE module_id = ?');
-  const getQuestions = db.prepare('SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY position, id');
+  const getLessons = db.prepare(`SELECT l.* FROM lessons l
+    JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?
+    ORDER BY m.position, m.id, l.position, l.id`);
+  const getResources = db.prepare(`SELECT lr.* FROM lesson_resources lr
+    JOIN lessons l ON l.id = lr.lesson_id JOIN course_modules m ON m.id = l.module_id
+    WHERE m.course_id = ? ORDER BY m.position, m.id, l.position, l.id, lr.position, lr.id`);
+  const getCaptions = db.prepare(`SELECT lc.* FROM lesson_captions lc
+    JOIN lessons l ON l.id = lc.lesson_id JOIN course_modules m ON m.id = l.module_id
+    WHERE m.course_id = ? ORDER BY m.position, m.id, l.position, l.id, lc.id`);
+  const getQuizzes = db.prepare(`SELECT q.* FROM quizzes q JOIN course_modules m ON m.id = q.module_id
+    WHERE m.course_id = ? ORDER BY m.position, m.id`);
+  const getQuestions = db.prepare(`SELECT qq.* FROM quiz_questions qq
+    JOIN quizzes q ON q.id = qq.quiz_id JOIN course_modules m ON m.id = q.module_id
+    WHERE m.course_id = ? ORDER BY m.position, m.id, qq.position, qq.id`);
+  const getChoices = db.prepare(`SELECT qc.* FROM quiz_choices qc
+    JOIN quiz_questions qq ON qq.id = qc.question_id JOIN quizzes q ON q.id = qq.quiz_id
+    JOIN course_modules m ON m.id = q.module_id
+    WHERE m.course_id = ? ORDER BY m.position, m.id, qq.position, qq.id, qc.position, qc.id`);
   const addResource = db.prepare(`INSERT INTO lesson_resources (id, lesson_id, resource_type, title, href, file_name, original_name, mime_type, byte_size, position, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const addCaption = db.prepare(`INSERT INTO lesson_captions (id, lesson_id, language, label, file_name, original_name, byte_size, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   const addQuestion = db.prepare('INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position) VALUES (?, ?, ?, ?, ?)');
   const addChoice = db.prepare('INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES (?, ?, ?, ?, ?)');
-  // Load all choices for a quiz together instead of querying once for every question.
-  let getQuizChoices;
+  // Read each content table once, then copy its rows from the in-memory groups.
+  const groupCourseRows = (statement, key) => modules.length
+    ? groupRowsBy(statement.all(sourceId), key)
+    : new Map();
+  const lessonsByModule = groupCourseRows(getLessons, 'module_id');
+  const resourcesByLesson = lessonsByModule.size ? groupCourseRows(getResources, 'lesson_id') : new Map();
+  const captionsByLesson = lessonsByModule.size ? groupCourseRows(getCaptions, 'lesson_id') : new Map();
+  const quizByModule = new Map((modules.length ? getQuizzes.all(sourceId) : []).map((quiz) => [quiz.module_id, quiz]));
+  const questionsByQuiz = quizByModule.size ? groupCourseRows(getQuestions, 'quiz_id') : new Map();
+  const choicesByQuestion = questionsByQuiz.size ? groupCourseRows(getChoices, 'question_id') : new Map();
   for (const module of modules) {
     const nextModuleId = cloneId();
     moduleIds.set(module.id, nextModuleId);
     addModule.run(nextModuleId, targetId, module.title, module.position, module.created_at, module.stable_id || module.id);
-    for (const lesson of getLessons.all(module.id)) {
+    for (const lesson of lessonsByModule.get(module.id) ?? []) {
       const nextLessonId = cloneId();
       lessonIds.set(lesson.id, nextLessonId);
       addLesson.run(nextLessonId, nextModuleId, lesson.title, lesson.description, lesson.transcript, mediaIds.get(lesson.media_id) || lesson.media_id,
         lesson.position, lesson.created_at, lesson.stable_id || lesson.id);
-      for (const resource of getResources.all(lesson.id)) {
+      for (const resource of resourcesByLesson.get(lesson.id) ?? []) {
         addResource.run(cloneId(), nextLessonId, resource.resource_type, resource.title, resource.href, resource.file_name,
           resource.original_name, resource.mime_type, resource.byte_size, resource.position, resource.created_at);
       }
-      for (const caption of getCaptions.all(lesson.id)) {
+      for (const caption of captionsByLesson.get(lesson.id) ?? []) {
         addCaption.run(cloneId(), nextLessonId, caption.language, caption.label, caption.file_name, caption.original_name, caption.byte_size, caption.created_at);
       }
     }
-    const quiz = getQuiz.get(module.id);
+    const quiz = quizByModule.get(module.id);
     if (!quiz) continue;
     const nextQuizId = cloneId();
     quizIds.set(quiz.id, nextQuizId);
     addQuiz.run(nextQuizId, nextModuleId, quiz.title, quiz.pass_mark, quiz.created_at, quiz.updated_at, quiz.stable_id || quiz.id);
-    const questions = getQuestions.all(quiz.id);
-    const choicesByQuestion = new Map();
-    if (questions.length) {
-      getQuizChoices ??= db.prepare(`SELECT qc.* FROM quiz_choices qc
-        JOIN quiz_questions qq ON qq.id = qc.question_id
-        WHERE qq.quiz_id = ? ORDER BY qq.position, qq.id, qc.position, qc.id`);
-      for (const choice of getQuizChoices.all(quiz.id)) {
-        const choices = choicesByQuestion.get(choice.question_id) ?? [];
-        choices.push(choice);
-        choicesByQuestion.set(choice.question_id, choices);
-      }
-    }
+    const questions = questionsByQuiz.get(quiz.id) ?? [];
     for (const question of questions) {
       const nextQuestionId = cloneId();
       questionIds.set(question.id, nextQuestionId);

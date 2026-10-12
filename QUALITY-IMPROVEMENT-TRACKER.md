@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Batch nested content reads when cloning course revisions
+
+- **Reviewed:** The versioned-course copy path for lessons, resources, captions, quizzes, questions, and answer choices across modules.
+- **Improvement:** Read each populated content table once per source course, group rows by their parent ID, and retain module, lesson, question, and answer ordering during the copy. Empty parent levels skip descendant reads.
+- **Why it helps:** Revision creation no longer issues separate content queries for each module, lesson, or quiz, so read count stays bounded as courses grow.
+- **Interface review:** The same content, ordering, and revision workflow are preserved; no interface change was indicated.
+- **Checked:** A three-module regression verifies one read per populated content table and exact ordered copies of lessons, resources, captions, questions, and choices. `node --test tests/server/course-analytics.test.js` passed (119/119), related course-version/editor client tests passed (17/17), `npm run build` passed TypeScript and Vite, and `git diff --check` passed.
+
 ## 2026-10-12 — Batch quiz-choice reads when cloning course revisions
 
 - **Reviewed:** Versioned-course editing and the copy of quizzes, questions, and answer choices into a new revision.
