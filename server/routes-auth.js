@@ -10,6 +10,7 @@ import { writeAuditLog, writeSystemLog } from './log-store.js';
 import { passwordChangeLimiter } from './rate-limits.js';
 import { getRegistrationFields, normalizeRegistrationFieldValues, saveUserRegistrationFieldValues } from './registration-fields.js';
 import { accountNames } from './account-names.js';
+import { normalizePlatformName, platformNameValidationError } from '../src/platform-name-validation.ts';
 import { issueCompletedCertificatesForUser } from './certificate-service.js';
 
 export const authRouter = Router();
@@ -88,14 +89,9 @@ function getPlatformConfiguration(registeredCount) {
 }
 
 function parsePlatformName(value) {
-  if (typeof value !== 'string') {
-    fail(400, 'Platform name must be between 2 and 80 characters.', 'invalid_platform_name');
-  }
-  const name = value.trim();
-  if (name.length < 2 || name.length > 80) {
-    fail(400, 'Platform name must be between 2 and 80 characters.', 'invalid_platform_name');
-  }
-  return name;
+  const error = platformNameValidationError(value);
+  if (error) fail(400, error, 'invalid_platform_name');
+  return normalizePlatformName(value);
 }
 
 function registeredUserCount() {

@@ -9,6 +9,7 @@ import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordC
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
 import { validateEmail } from './email-validation';
 import { accountNameError, MAX_ACCOUNT_NAME_LENGTH, normalizeAccountName } from './account-name-validation';
+import { MAX_PLATFORM_NAME_LENGTH, MIN_PLATFORM_NAME_LENGTH, normalizePlatformName, platformNameValidationError } from './platform-name-validation';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import type { RegistrationField, RegistrationFieldValues } from './types';
 
@@ -94,6 +95,8 @@ export function SetupPage() {
   const navigate = useNavigate();
   const setupErrorId = useId();
   const setupEmailErrorId = useId();
+  const setupPlatformNameErrorId = useId();
+  const setupPlatformNameInputRef = useRef<HTMLInputElement>(null);
   const setupEmailInputRef = useRef<HTMLInputElement>(null);
   const setupFirstNameInputRef = useRef<HTMLInputElement>(null);
   const setupLastNameInputRef = useRef<HTMLInputElement>(null);
@@ -114,6 +117,7 @@ export function SetupPage() {
   const [registrationEnabled, setRegistrationEnabled] = useState(initialRegistrationEnabled);
   const [userLimit, setUserLimit] = useState(String(initialUserLimit));
   const [error, setError] = useState('');
+  const [platformNameError, setPlatformNameError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [invalidNameField, setInvalidNameField] = useState<'firstName' | 'lastName' | null>(null);
   const [saving, setSaving] = useState(false);
@@ -137,12 +141,15 @@ export function SetupPage() {
   function continueToAccessSettings(event: React.FormEvent) {
     event.preventDefault();
     setError('');
+    setPlatformNameError('');
     setInvalidNameField(null);
-    const normalizedPlatformName = platformName.trim();
-    if (normalizedPlatformName.length < 2 || normalizedPlatformName.length > 80) {
-      setError('Platform name must be between 2 and 80 characters.');
+    const currentPlatformNameError = platformNameValidationError(platformName);
+    if (currentPlatformNameError) {
+      setPlatformNameError(currentPlatformNameError);
+      window.requestAnimationFrame(() => setupPlatformNameInputRef.current?.focus());
       return;
     }
+    const normalizedPlatformName = normalizePlatformName(platformName);
     const currentEmailError = validateEmail(email);
     if (currentEmailError) {
       setEmailError(currentEmailError);
@@ -189,7 +196,11 @@ export function SetupPage() {
       });
       navigate('/courses');
     } catch (cause) {
-      if (cause instanceof ApiError && cause.code === 'invalid_email') {
+      if (cause instanceof ApiError && cause.code === 'invalid_platform_name') {
+        setPlatformNameError(cause.message);
+        setStep(1);
+        window.requestAnimationFrame(() => setupPlatformNameInputRef.current?.focus());
+      } else if (cause instanceof ApiError && cause.code === 'invalid_email') {
         setEmailError(cause.message);
         setStep(1);
         window.requestAnimationFrame(() => setupEmailInputRef.current?.focus());
@@ -220,7 +231,8 @@ export function SetupPage() {
           <h1 ref={stepHeadingRef} tabIndex={-1}>Set up your learning platform</h1>
           <p>Create the administrator account and choose a name for this installation.</p>
           <form onSubmit={continueToAccessSettings} className="form-stack">
-            <label>Platform name<input required minLength={2} maxLength={80} value={platformName} onChange={(event) => setPlatformName(event.target.value)} autoFocus /></label>
+            <label>Platform name<input ref={setupPlatformNameInputRef} required minLength={MIN_PLATFORM_NAME_LENGTH} maxLength={MAX_PLATFORM_NAME_LENGTH} aria-invalid={platformNameError ? true : undefined} aria-describedby={platformNameError ? setupPlatformNameErrorId : undefined} value={platformName} onChange={(event) => { setPlatformName(event.target.value); setPlatformNameError(''); }} autoFocus /></label>
+            {platformNameError && <p id={setupPlatformNameErrorId} className="form-error" role="alert">{platformNameError}</p>}
             <PlatformIconPicker value={platformIcon} onChange={setPlatformIcon} />
             <div className="branding-choice-field"><span className="branding-choice-label">Color palette</span><small>Choose the accent colors used across the platform.</small><PalettePicker value={themePalette} onChange={choosePalette} /></div>
             <label>Admin email<input ref={setupEmailInputRef} required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? setupEmailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} /></label>

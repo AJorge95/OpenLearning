@@ -23,6 +23,7 @@ import { useAuth } from './auth-context';
 import { canonicalCaptionLanguageTag, captionFileSizeError, captionLanguageErrorMessage } from './caption-validation';
 import { uploadSizeError } from './upload-size-validation';
 import { accountNameError, MAX_ACCOUNT_NAME_LENGTH, normalizeAccountName } from './account-name-validation';
+import { MAX_PLATFORM_NAME_LENGTH, MIN_PLATFORM_NAME_LENGTH, normalizePlatformName, platformNameValidationError } from './platform-name-validation';
 import { courseEditingNote } from './course-editing-note';
 import { COMPLETION_WINDOW_ERROR, validateCompletionWindowDays } from './course-editor-validation';
 import { isCourseCoverDimensionAllowed, MAX_COURSE_COVER_DIMENSION } from './course-cover-validation';
@@ -2639,7 +2640,10 @@ export function AdminUserDetailsPage() {
 
 export function AdminSettingsPage() {
   const { platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, userLimit, setBranding, setPlatformAccessSettings } = useAuth();
+  const platformNameErrorId = useId();
+  const platformNameInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(platformName);
+  const [platformNameError, setPlatformNameError] = useState('');
   const [icon, setIcon] = useState<string | null>(platformIcon);
   const [iconEdited, setIconEdited] = useState(false);
   const [palette, setPalette] = useState<BrandingPalette>(themePalette);
@@ -2736,12 +2740,15 @@ export function AdminSettingsPage() {
   }
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    const normalizedName = name.trim();
-    if (normalizedName.length < 2 || normalizedName.length > 80) {
-      setError('Platform name must be between 2 and 80 characters.'); setSuccess('');
+    setError(''); setSuccess(''); setPlatformNameError('');
+    const currentPlatformNameError = platformNameValidationError(name);
+    if (currentPlatformNameError) {
+      setPlatformNameError(currentPlatformNameError);
+      window.requestAnimationFrame(() => platformNameInputRef.current?.focus());
       return;
     }
-    setError(''); setSuccess(''); setSaving(true);
+    const normalizedName = normalizePlatformName(name);
+    setSaving(true);
     try {
       const result = await api.put<{ platformName: string; platformIcon: string | null; themePalette: BrandingPalette; connectionProtocol: ConnectionProtocol; registrationEnabled: boolean; registrationApprovalRequired: boolean; registrationAvailable: boolean; userLimit: number; registeredUserCount: number }>('/api/admin/settings', {
         platformName: normalizedName,
@@ -2756,7 +2763,12 @@ export function AdminSettingsPage() {
       registeredUserCountControllerRef.current?.abort();
       registeredUserCountControllerRef.current = null;
       setError(''); setRegisteredUserCountError(''); setRegisteredUserCountLoading(false); setName(result.platformName); setBranding(result.platformName, result.themePalette, result.platformIcon); setPlatformAccessSettings(result.connectionProtocol, result.registrationEnabled, result.registrationApprovalRequired, result.registrationAvailable, result.userLimit); setIconEdited(false); setRegisteredUserCount(result.registeredUserCount); setSuccess('Platform settings saved.');
-    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Settings could not be saved.'); }
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'invalid_platform_name') {
+        setPlatformNameError(cause.message);
+        window.requestAnimationFrame(() => platformNameInputRef.current?.focus());
+      } else setError(cause instanceof ApiError ? cause.message : 'Settings could not be saved.');
+    }
     finally { setSaving(false); }
   }
   async function prepareReset() {
@@ -2811,7 +2823,8 @@ export function AdminSettingsPage() {
     <form className="settings-card form-stack" onSubmit={submit} aria-busy={saving}>
       <fieldset className="settings-fields" aria-label="Platform settings" disabled={platformSettingsDisabled}>
       <div className="settings-card-heading"><span className="settings-icon"><Settings2 size={19} /></span><div><h2>Platform identity</h2><p>Choose the brand learners see throughout the platform.</p></div></div>
-      <label>Platform name<input required minLength={2} maxLength={80} value={name} onChange={(event) => setName(event.target.value)} /></label>
+      <label>Platform name<input ref={platformNameInputRef} required minLength={MIN_PLATFORM_NAME_LENGTH} maxLength={MAX_PLATFORM_NAME_LENGTH} aria-invalid={platformNameError ? true : undefined} aria-describedby={platformNameError ? platformNameErrorId : undefined} value={name} onChange={(event) => { setName(event.target.value); setPlatformNameError(''); }} /></label>
+      {platformNameError && <p id={platformNameErrorId} className="form-error" role="alert">{platformNameError}</p>}
       <PlatformIconPicker value={icon} onChange={(nextIcon) => { setIcon(nextIcon); setIconEdited(true); }} />
       <div className="branding-choice-field"><span className="branding-choice-label">Color palette</span><small>Preview a palette and save to apply it for everyone.</small><PalettePicker value={palette} onChange={choosePalette} /></div>
       <div className="settings-section-divider"><span>Connection and accounts</span></div>
