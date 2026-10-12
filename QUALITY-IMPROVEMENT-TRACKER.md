@@ -40,6 +40,14 @@
 - **Checked:** Password-reset dialog and guidance tests passed (5/5); the registration/account route suite, including password reset and audit rollback, passed (31/31); `git diff --check` passed. The signed-in admin dialog was not rendered because the available browser session is signed out.
 - **Needed to revisit:** A reproduced focus or dismissal issue, a password-reset/session mismatch, or a failure under realistic request latency.
 
+## 2026-10-12 — Recheck learner course discovery requests
+
+- **Reviewed:** Catalog search submission, category and sort changes, request cancellation and sequencing, load-more deduplication and page-drift recovery, empty states, and responsive filter layout.
+- **Result:** No runtime change. Searches submit explicitly; changing a filter applies the current search draft. Superseded requests are aborted, duplicate page rows are removed, and concurrent catalog changes trigger a fresh first-page load.
+- **Why no change:** Existing client and route behavior already covers the reviewed state and data-boundary cases; no missing/duplicate result or measured request bottleneck justified another change.
+- **Checked:** Catalog filter, pagination-announcement, and responsive-layout client tests passed (11/11); the full `tests/server/course-analytics.test.js` passed (122/122); `git diff --check` passed.
+- **Needed to revisit:** A reproduced missing or duplicate course during concurrent catalog updates, or measured latency on a large catalog.
+
 ## 2026-10-12 — Let staff revoke course access from disabled learners
 
 - **Reviewed:** Disabled learner rows in course access management, the UI's grant/revoke actions, and the existing course-grant API and audit transaction.
