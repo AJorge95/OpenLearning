@@ -5,6 +5,27 @@ const courseDirectoryPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const generatedUploadPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\.(?:mp4|jpe?g|png|webp|pdf|txt|md|rtf|docx?|pptx?|xlsx?|csv|tsv|odt|odp|ods|vtt)$/i;
 const maxFailureSamples = 10;
 
+export function getOrphanedMediaCleanupLog(cleanupResult, durationMs) {
+  const message = cleanupResult.failed
+    ? 'Some orphaned course media files could not be removed during startup'
+    : cleanupResult.removed
+      ? 'Removed orphaned course media files during startup'
+      : 'Completed orphaned course media cleanup during startup';
+
+  return {
+    level: cleanupResult.failed ? 'warn' : 'info',
+    message,
+    details: {
+      removed: cleanupResult.removed,
+      failed: cleanupResult.failed,
+      courseDirectoriesScanned: cleanupResult.courseDirectoriesScanned,
+      directoryEntriesScanned: cleanupResult.directoryEntriesScanned,
+      durationMs,
+      ...(cleanupResult.failed ? { failureSamples: cleanupResult.failureSamples } : {}),
+    },
+  };
+}
+
 export async function cleanupOrphanedCourseMedia(database, mediaRoot, minAgeMs) {
   if (!Number.isSafeInteger(minAgeMs) || minAgeMs < 0) throw new TypeError('Media cleanup age must be a non-negative safe integer.');
 
@@ -35,13 +56,17 @@ export async function cleanupOrphanedCourseMedia(database, mediaRoot, minAgeMs) 
   try {
     directories = await fs.readdir(root, { withFileTypes: true });
   } catch (error) {
-    if (error?.code === 'ENOENT') return { removed: 0, failed: 0, failureSamples: [] };
+    if (error?.code === 'ENOENT') {
+      return { removed: 0, failed: 0, courseDirectoriesScanned: 0, directoryEntriesScanned: 0, failureSamples: [] };
+    }
     throw error;
   }
 
   const cutoff = Date.now() - minAgeMs;
   let removed = 0;
   let failed = 0;
+  let courseDirectoriesScanned = 0;
+  let directoryEntriesScanned = 0;
   const failureSamples = [];
   const recordFailure = (stage, courseId, fileName, error) => {
     failed++;
@@ -58,6 +83,7 @@ export async function cleanupOrphanedCourseMedia(database, mediaRoot, minAgeMs) 
 
   for (const directory of directories) {
     if (!directory.isDirectory() || !courseDirectoryPattern.test(directory.name)) continue;
+    courseDirectoriesScanned++;
     const courseDirectory = path.join(root, directory.name);
     let files;
     try {
@@ -66,6 +92,8 @@ export async function cleanupOrphanedCourseMedia(database, mediaRoot, minAgeMs) 
       recordFailure('read_course_directory', directory.name, null, error);
       continue;
     }
+    // Count every listed entry, including items that are not eligible for deletion.
+    directoryEntriesScanned += files.length;
     const referenced = referencedFiles.get(directory.name) ?? new Set();
     for (const file of files) {
       if (!file.isFile() || !generatedUploadPattern.test(file.name) || referenced.has(file.name)) continue;
@@ -86,5 +114,5 @@ export async function cleanupOrphanedCourseMedia(database, mediaRoot, minAgeMs) 
       }
     }
   }
-  return { removed, failed, failureSamples };
+  return { removed, failed, courseDirectoriesScanned, directoryEntriesScanned, failureSamples };
 }

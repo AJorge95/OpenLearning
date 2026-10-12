@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import express from 'express';
 import session from 'express-session';
 import helmet from 'helmet';
@@ -15,7 +16,7 @@ import { courseRouter } from './routes-courses.js';
 import { adminRouter } from './routes-admin.js';
 import { mediaUploadRouter, protectedMediaRouter } from './routes-media.js';
 import { writeSystemLog } from './log-store.js';
-import { cleanupOrphanedCourseMedia } from './media-cleanup.js';
+import { cleanupOrphanedCourseMedia, getOrphanedMediaCleanupLog } from './media-cleanup.js';
 import { programsRouter } from './routes-programs.js';
 import { isReadyToServe } from './readiness.js';
 import { isPlatformResetActive, platformResetGate } from './platform-reset.js';
@@ -120,22 +121,17 @@ app.use(errorHandler);
 
 function cleanupOrphanedMedia() {
   if (isShuttingDown) return;
+  const startedAt = performance.now();
   void cleanupOrphanedCourseMedia(db, config.mediaRoot, Math.max(config.requestTimeoutMs, 24 * 60 * 60 * 1000)).then((cleanupResult) => {
     if (isShuttingDown) return;
-    if (cleanupResult.removed) {
-      writeSystemLog('info', 'media', 'Removed orphaned course media files during startup', { count: cleanupResult.removed });
-    }
-    if (cleanupResult.failed) {
-      writeSystemLog('warn', 'media', 'Some orphaned course media files could not be removed during startup', {
-        count: cleanupResult.failed,
-        failureSamples: cleanupResult.failureSamples,
-      });
-    }
+    const log = getOrphanedMediaCleanupLog(cleanupResult, Math.max(0, Math.round(performance.now() - startedAt)));
+    writeSystemLog(log.level, 'media', log.message, log.details);
   }).catch((error) => {
     if (isShuttingDown) return;
     writeSystemLog('warn', 'media', 'Orphaned course media cleanup failed during startup', {
       errorName: String(error?.name || 'Error').slice(0, 100),
       errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+      durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
     });
   });
 }
