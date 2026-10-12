@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Review per-lesson detail loading in the player
+
+- **Reviewed:** Lesson-player payload fields, the course rail and navigation helpers, the player request lifecycle, and the 50,000-character transcript limit.
+- **Result:** No runtime change. The player fetches full course details on load and reuses them as learners navigate; progress changes trigger a refresh. The rail uses lesson summaries, while the active lesson renders its video, transcript, captions, and resources. Scoping details to one lesson would require another course read when navigating to each lesson.
+- **Why no change:** The smaller response could avoid transferring up to 50,000 transcript characters per other lesson, but repeated route reads could add navigation latency. No representative course sizes or request-latency measurements currently show which tradeoff benefits learners.
+- **UI review:** The lesson page uses the full details for the active content and accessible transcript/caption/resource sections; the rail uses titles, completion, and video-presence indicators. No markup or CSS change is justified without evidence that the current navigation feels slow or the payload is materially large.
+- **Checked:** Traced `CoursePlayerPage`, `CurriculumModule`, and the navigation helpers against the current payload. No code changed; `git diff --check` passed.
+- **Needed to revisit:** Representative course payload sizes and lesson-navigation timings, or a learner report of slow navigation/loading on a large course.
+
 ## 2026-10-12 — Omit lesson content from overview and quiz payloads
 
 - **Reviewed:** The overview curriculum and quiz-page consumers, lesson navigation/progress helpers, and the course payload's transcript, media-name, resource, and caption reads.
