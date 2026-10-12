@@ -718,14 +718,20 @@ programsRouter.get('/manage/courses/:courseId/versions', requireStaff, (req, res
   const currentVersion = currentVersionNumber === null ? null : courseVersionHistoryPage(courseId, 1, 0)[0] ?? null;
   const total = Math.max(0, historySummary.count - Number(currentVersionNumber !== null));
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / COURSE_VERSION_PAGE_SIZE)));
-  const revision = db.prepare('SELECT r.*, u.username AS author FROM course_revisions r LEFT JOIN users u ON u.id = r.author_id WHERE r.course_id = ?').get(courseId);
+  // The draft author and review submitter can be different staff members.
+  const revision = db.prepare(`SELECT r.*, author.username AS author, submitter.username AS submitter_name
+    FROM course_revisions r
+    LEFT JOIN users author ON author.id = r.author_id
+    LEFT JOIN users submitter ON submitter.id = r.submitted_by
+    WHERE r.course_id = ?`).get(courseId);
   res.json({ currentVersion, versions: courseVersionHistoryPage(courseId, COURSE_VERSION_PAGE_SIZE,
     (page - 1) * COURSE_VERSION_PAGE_SIZE + Number(currentVersionNumber !== null)),
     total, page, pageSize: COURSE_VERSION_PAGE_SIZE, hasMore: page * COURSE_VERSION_PAGE_SIZE < total,
     revision: revision ? {
-    status: revision.review_status, author: revision.author, submittedAt: revision.submitted_at,
-    submittedBy: revision.submitted_by, reviewedBy: revision.reviewed_by, reviewNote: revision.review_note,
-  } : null });
+      status: revision.review_status, author: revision.author, submittedAt: revision.submitted_at,
+      submittedBy: revision.submitted_by, submittedByName: revision.submitter_name,
+      reviewedBy: revision.reviewed_by, reviewNote: revision.review_note,
+    } : null });
 });
 
 programsRouter.post('/manage/courses/:courseId/review', requireStaff, (req, res) => {

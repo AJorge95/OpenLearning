@@ -267,6 +267,33 @@ test('course version history keeps twenty prior versions on a single page', asyn
   }
 });
 
+test('course review history shows the submitter separately from the revision author', async () => {
+  const courseId = 'course-review-submitter-display';
+  const submitterId = 'course-review-submitter-user';
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
+    VALUES (?, 'review_submitter', 'review.submitter@example.invalid', 'not-used', 'moderator', 0)`)
+    .run(submitterId);
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Review submitter display', 'published', 'admin-1', 'admin-1')`).run(courseId);
+  database.prepare(`INSERT INTO course_revisions
+    (course_id, revision_course_id, author_id, review_status, submitted_by, submitted_at)
+    VALUES (?, ?, 'admin-1', 'in_review', ?, CURRENT_TIMESTAMP)`).run(courseId, courseId, submitterId);
+
+  try {
+    const response = await fetch(apiUrl(`/manage/courses/${courseId}/versions`), {
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(response.status, 200);
+    const { revision } = await response.json();
+    assert.equal(revision.author, 'admin');
+    assert.equal(revision.submittedBy, submitterId);
+    assert.equal(revision.submittedByName, 'review_submitter');
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+    database.prepare('DELETE FROM users WHERE id = ?').run(submitterId);
+  }
+});
+
 test('editing a versioned course clones caption references to shared media files', () => {
   const courseId = 'course-caption-version';
   try {
