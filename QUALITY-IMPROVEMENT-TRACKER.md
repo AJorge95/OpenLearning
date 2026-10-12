@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck the account-role hit area and quiz submission flow
+
+- **Reviewed:** The annotated role-selector target against current markup and bounded CSS, the shared select's pointer-coordinate guard, learner quiz readiness and feedback, route-scoped attempt state, and server-side answer validation and result scoping.
+- **Result:** No runtime change. The role field is a bounded non-label control and the shared select ignores pointer activation outside its trigger. The quiz enables submission only after every question has an answer; the server validates question and choice IDs before recording an attempt, and attempt details remain scoped to the learner.
+- **Why no change:** Existing source and regressions cover both paths. The supplied target selector still identifies the old wrapping label, while the current connected browser is signed out and cannot freshly render the annotated protected route.
+- **Checked:** Focused role-selector and quiz client tests passed (25/25); quiz-attempt route tests passed (7/7); `git diff --check` passed.
+- **Needed to revisit:** A fresh signed-in render that still opens the selector when clicking outside its visible trigger, or a reproduced quiz submission or result-access failure.
+
 ## 2026-10-12 — Associate password-change errors with their fields
 
 - **Reviewed:** Self-service password validation codes, current/new/confirmation inputs, the shared password visibility control, and existing confirmation feedback.
