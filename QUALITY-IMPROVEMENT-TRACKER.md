@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck shared SQL search semantics
+
+- **Reviewed:** Literal wildcard escaping, Unicode normalization and case handling, query-value binding, single-value validation, and the admin/user/course-access search callers.
+- **Result:** No runtime change. ASCII searches treat `%`, `_`, and `!` literally; non-ASCII searches use NFC-normalized case-insensitive matching; route values stay parameterized.
+- **Why no change:** Existing behavior matches the search controls and focused coverage; no result mismatch or measured query bottleneck appeared.
+- **Checked:** Focused SQL helper and admin/user/course-access route searches passed (5/5).
+- **Needed to revisit:** A reproduced mismatch in a specific endpoint or representative search workload showing a bottleneck.
+
 ## 2026-10-12 — Recheck shared focus indicators and session cleanup
 
 - **Reviewed:** Search-input outline suppression and its focus-within containers, the global focus-visible rule, custom-select/menu/forced-color focus states, and SQLite session expiry cleanup and error reporting.
