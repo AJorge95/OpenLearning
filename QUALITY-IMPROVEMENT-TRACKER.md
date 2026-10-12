@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep calendar deadlines in chronological order
+
+- **Reviewed:** The calendar route's indexed date-range query, UTC normalization for ISO and SQLite timestamps, the day-cell and monthly-list rendering order, and responsive horizontal scrolling.
+- **Improvement:** Sort valid calendar items by their parsed deadline before returning them, then let both calendar views preserve that order instead of sorting a second copy during render.
+- **Why it helps:** Mixed timestamp separators can make a later SQLite-format deadline appear before an earlier ISO deadline under lexical SQL ordering. Both the day grid and monthly list now show normalized chronological order, with less repeated client sorting.
+- **Backend review:** Date validation, the 62-day request bound, private-course access filtering, and the deadline lookup index remain in place.
+- **Checked:** `node --test tests/server/course-analytics.test.js tests/client/calendar-dates.test.js` passed (136/136), including a mixed-format 08:00 ISO / 09:00 SQLite ordering regression; the full `npm test -- --test-reporter=dot` suite, `npm run build` (TypeScript and Vite), and `git diff --check` passed.
+
 ## 2026-10-12 — Recheck registration-approval workflow coverage
 
 - **Reviewed:** Pending signup confirmation and focus handling, admin approval controls and filtering, session loading, the registration-status migration, and the signup-to-approval API flow.
