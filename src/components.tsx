@@ -666,7 +666,7 @@ export function CourseStatus({ status }: { status: Course['status'] }) {
 }
 
 export function VisibilityLabel({ visibility }: { visibility: Course['visibility'] }) {
-  return <span className="visibility-label">{visibility === 'public' ? <UsersRound size={15} /> : <LockKeyhole size={14} />}{visibility === 'public' ? 'All learners' : 'Private'}</span>;
+  return <span className="visibility-label">{visibility === 'public' ? <UsersRound size={15} aria-hidden="true" /> : <LockKeyhole size={14} aria-hidden="true" />}{visibility === 'public' ? 'All learners' : 'Private'}</span>;
 }
 
 export function UserInitial({ username }: { username: string }) {

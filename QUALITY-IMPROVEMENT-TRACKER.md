@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide redundant course-visibility icons from assistive technology
+
+- **Reviewed:** The shared `VisibilityLabel`, staff course-table cells, public/private text labels, and the live management accessibility tree.
+- **Improvement:** Mark the public and private visibility icons as decorative while retaining the existing “All learners” and “Private” text labels.
+- **Why it helps:** Screen-reader users hear one clear visibility status instead of a generic image followed by the same textual meaning; visual status cues remain unchanged.
+- **Backend review:** Course visibility values, authorization, course-list filtering, and publication behavior are unchanged; no server change was indicated.
+- **Checked:** Extended `tests/client/course-visibility-controls.test.js` for both shared visibility states. The live staff course table now exposes the text status without the redundant visibility image node. Focused checks passed (2/2), the full `npm test` suite passed (858/858), `npm run typecheck`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-13 — Hide shared account-control icons from assistive technology
 
 - **Reviewed:** The shared learner account disclosure, staff sidebar sign-out control, their explicit accessible names and state announcements, and the live accessibility trees for learner and management routes.
