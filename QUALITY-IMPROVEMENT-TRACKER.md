@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep registration requirement checkbox native
+
+- **Reviewed:** Registration-field editor checkbox markup, shared `.settings-card input` text-field styles, the required toggle row, and server validation for checkbox definitions and answers.
+- **Improvement:** Explicitly retain the signup requirement input's native 17px appearance and dimensions, and reset the text-field padding it otherwise inherits. Added a regression in `tests/client` for the labelled checkbox and its control styles.
+- **Why it helps:** The control's native size no longer depends on each browser ignoring text-input padding; the surrounding label remains a large, easy-to-activate row.
+- **Backend review:** Existing server rules require `required` to be a boolean and reject missing required checkbox answers; registration updates remain audited and transactional. No backend change was needed.
+- **Checked:** Registration client tests passed (15/15), registration server tests passed (32/32), `npm run build` passed TypeScript and Vite, and `git diff --check` passed. Failure-path server tests printed expected simulated audit/count errors while passing. The built `/admin/settings/registration-fields` page rendered at 1265×714 in an isolated signed-in session; activating the label changed the accessible checkbox value from 0 to 1 and back to 0 without saving. The Browser plugin and Playwright are unavailable, so rendered validation used the in-app computer-use browser. The temporary server, database, and browser tab were stopped and removed.
+
 ## 2026-10-12 — Check button submit behavior in forms
 
 - **Reviewed:** Native `<button>` elements in the React source, the shared `Button` component default, and buttons nested in search, reset, and editor forms.

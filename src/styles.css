@@ -1142,7 +1142,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .registration-field-editor input[aria-invalid="true"], .registration-field-editor .registration-options-field textarea[aria-invalid="true"] { border-color: var(--danger); }
 .registration-field-editor .registration-options-field textarea[aria-invalid="true"]:focus { border-color: var(--danger); }
 .settings-card .registration-required-toggle { display: flex; flex-direction: row; align-items: center; align-self: stretch; gap: 9px; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 4px; color: #414657; font-size: 12px; font-weight: 550; }
-.settings-card .registration-required-toggle input { width: 17px; min-height: 17px; flex: 0 0 auto; margin: 0; accent-color: var(--purple); }
+/* Keep the signup requirement checkbox native after shared settings text-field styles. */
+.settings-card .registration-required-toggle input { appearance: auto; width: 17px; height: 17px; min-height: 17px; padding: 0; flex: 0 0 auto; margin: 0; accent-color: var(--purple); }
 .registration-options-field { display: grid; gap: 7px; }
 .settings-card .registration-options-field textarea { width: 100%; min-height: 95px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 4px; color: #222634; background: #fff; font: inherit; font-size: 13px; line-height: 1.5; resize: vertical; }
 .settings-card .registration-options-field textarea:focus { outline: 2px solid var(--purple); border-color: var(--purple); }
