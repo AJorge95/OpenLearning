@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck learner video watch progress and recovery
+
+- **Reviewed:** Server heartbeat timing and watched-position bounds, lesson-completion thresholds, client progress serialization and rejected-seek resynchronization, background-tab resume, and the reduced-motion scroll behavior.
+- **Result:** No runtime change. The server caps credited movement by elapsed time, preserves watched high-water progress across authorized rewind and replay, and rejects implausible seeks. The client serializes heartbeats, captures event-time positions, and restores a server-verified checkpoint after tab suspension.
+- **Why no change:** Existing source and focused regressions already cover the reviewed timing, completion, rollback, visibility-resume, and video-retry boundaries. The current local browser has no signed-in learner lesson available for rendered playback review.
+- **Checked:** `node --test tests/server/lesson-watch.test.js tests/client/video-recovery.test.js` passed (20/20). The working tree was clean at cycle start; no account, course, or watch-progress data was changed.
+- **Needed to continue:** A signed-in learner playback issue outside the covered recovery cases, a browser-specific media-control mismatch at a mobile viewport, or representative heartbeat workload data identifying a service bottleneck.
+
 ## 2026-10-12 — Recheck learning-path assignment paging and actions
 
 - **Reviewed:** The assignment endpoint's split paging for enrolled and unassigned learners, its published-path and active-learner validation, audit transaction, the assignment panel's search, paging, empty and error states, and responsive control layout.
