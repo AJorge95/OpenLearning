@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Expose course descriptions to assistive technology
+
+- **Reviewed:** Course overview heading, visible description, start/continue actions, curriculum, and learner enrollment authorization and rollback behavior.
+- **Improvement:** Remove `aria-hidden` from the course description so the meaningful text shown beneath the title is available to screen readers.
+- **Why it helps:** Learners using assistive technology receive the same course context as sighted learners before choosing whether to begin or continue.
+- **Backend review:** Enrollment remains restricted to learners with access to a published course and creates enrollment/state within one transaction; no route change was needed.
+- **Checked:** Course overview/navigation UI tests passed (18/18); enrollment authorization/rollback route tests passed (2/2); full `npm test -- --test-reporter=dot`, `npm run build`, and `git diff --check` passed. The protected overview redirected to `/login`; the regression test is in `tests/client/`.
+
 ## 2026-10-12 — Give certificate actions distinct accessible names
 
 - **Reviewed:** My Learning course-card and certificate-history action names, repeated version-specific certificate records, certificate payload fields, owner scoping, and stable history ordering.
