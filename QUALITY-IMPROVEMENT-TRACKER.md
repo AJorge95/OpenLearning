@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Explain startup cleanup diagnostics in the admin guide
+
+- **Reviewed:** The system-log writer's cleanup completion and failure details against the administrator-facing log documentation.
+- **Improvement:** Document that completed startup cleanups report scan totals, removals, failures, and duration, while failed attempts include error details.
+- **Why it helps:** Administrators can interpret the newly visible cleanup entries and recognize when a scan needs investigation.
+- **Checked:** Confirmed the description matches the logged detail fields and failure branch; `git diff --check` passed.
+
 ## 2026-10-12 — Record startup media-cleanup scan metrics
 
 - **Reviewed:** Orphaned course-media cleanup results, startup system-log handling, bounded failure samples, and existing cleanup regressions.
