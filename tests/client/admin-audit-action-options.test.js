@@ -33,6 +33,13 @@ test('audit action options do not duplicate retained or empty selections', () =>
 test('the audit action selector uses the retention-aware options', () => {
   const source = fs.readFileSync(new URL('../../src/pages-manage.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /const actionFilterOptions = buildAuditActionOptions\(actions, action\)/);
+  assert.match(source, /const actionFilterOptions = useMemo\(\(\) => buildAuditActionOptions\(actions, action\), \[actions, action\]\)/);
   assert.match(source, /ariaLabel="Filter by action"[^\n]*options=\{actionFilterOptions\}/);
+});
+
+test('admin log filter options stay stable across unrelated page renders', () => {
+  const source = fs.readFileSync(new URL('../../src/pages-manage.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /const SYSTEM_LOG_LEVEL_OPTIONS: AppSelectOption<string>\[\] = \[/);
+  assert.match(source, /ariaLabel="Filter by severity"[^\n]*options=\{SYSTEM_LOG_LEVEL_OPTIONS\}/);
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Activity, AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, Filter, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload, UsersRound } from 'lucide-react';
 import { createPortal } from 'react-dom';
@@ -68,6 +68,12 @@ const USER_APPROVAL_FILTER_OPTIONS: AppSelectOption<UserApprovalFilter>[] = [
   { value: 'all', label: 'All accounts' },
   { value: 'pending', label: 'Pending approval' },
   { value: 'approved', label: 'Approved' },
+];
+const SYSTEM_LOG_LEVEL_OPTIONS: AppSelectOption<string>[] = [
+  { value: 'all', label: 'All levels' },
+  { value: 'error', label: 'Errors' },
+  { value: 'warn', label: 'Warnings' },
+  { value: 'info', label: 'Info' },
 ];
 
 function CourseVersionPagination({ page, pageSize, total, versions, loading, onChange }: {
@@ -3199,7 +3205,8 @@ export function AdminAuditLogPage() {
     setAction(nextAction);
     setPage(1);
   }
-  const actionFilterOptions = buildAuditActionOptions(actions, action);
+  // AppSelect revalidates its active option when the options reference changes.
+  const actionFilterOptions = useMemo(() => buildAuditActionOptions(actions, action), [actions, action]);
 
   return <div className="management-page logs-page"><PageHeading title="Audit log" subtitle="Review account, course, and platform changes, including access and comment removals." action={<Button variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Refresh</Button>} />
     <div className="log-filters">
@@ -3287,7 +3294,7 @@ export function AdminSystemLogPage() {
       </form>
       <div className="select-wrap role-filter log-role-filter">
         <span className="catalog-filter-label">Severity</span>
-        <AppSelect className="app-select--filter" ariaLabel="Filter by severity" leadingIcon={<Activity size={16} />} value={level} onChange={applySystemFilterChange} options={[{ value: 'all', label: 'All levels' }, { value: 'error', label: 'Errors' }, { value: 'warn', label: 'Warnings' }, { value: 'info', label: 'Info' }]} />
+        <AppSelect className="app-select--filter" ariaLabel="Filter by severity" leadingIcon={<Activity size={16} />} value={level} onChange={applySystemFilterChange} options={SYSTEM_LOG_LEVEL_OPTIONS} />
       </div>
       {hasAppliedFilters && <Button type="button" variant="secondary" onClick={clearFilters}>Clear filters</Button>}
     </div>

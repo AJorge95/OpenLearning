@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse admin log filter options across page updates
+
+- **Reviewed:** Audit-action option generation, the system severity selector, `AppSelect` option-validation dependencies, and the admin log routes' authorization, filter parsing, and paging bounds.
+- **Improvement:** Memoize audit-action options until the counts or selected action change, and hoist the fixed system severity options to a shared constant.
+- **Why it helps:** Loading and pagination state updates no longer rebuild unchanged option objects or rerun the selectors' active-option validation. Visible choices and filter behavior stay the same.
+- **Backend review:** Both routes already require administrator access, validate filters, and apply them before bounded paging; no API or query change was needed.
+- **Checked:** Focused audit/system log UI and route tests passed (13/13), `npm run build` passed TypeScript and Vite, and `git diff --check` passed. The protected log pages were not rendered in this signed-out browser session; the change does not alter rendered content.
+
 ## 2026-10-12 — Recheck readiness and graceful-shutdown boundaries
 
 - **Reviewed:** Startup listener ordering, deferred orphan-media cleanup, `/healthz` and `/readyz`, reset/shutdown readiness gates, and HTTP drain before SQLite close.
