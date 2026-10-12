@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Guard staff-page code splitting
+
+- **Reviewed:** Static and dynamic page imports, staff-only route nesting, the shared management-page loading/error boundary, and the production chunk output.
+- **Improvement:** Add a client regression test that requires every `pages-manage` route component to remain a named lazy import under the staff route boundary, with its accessible loading status and reload recovery state.
+- **Why it helps:** Public and learner routes keep the 157.40KB management module out of the entry bundle; the test prevents later route edits from adding its 40.54KB gzipped payload to those initial visits.
+- **Backend review:** No API or server behavior changed.
+- **Checked:** `node --test tests/client/staff-route-code-splitting.test.js` passed (2/2); `npm run build` passed TypeScript and Vite and emitted `pages-manage` as its own chunk (157.40KB; 40.54KB gzipped); `git diff --check` passed.
+
 ## 2026-10-12 — Separate registration name labels from certificate guidance
 
 - **Reviewed:** Registration first/last name labels, visible certificate guidance, invalid-name descriptions, responsive field layout, and the shared account-name validation used by the registration API.
