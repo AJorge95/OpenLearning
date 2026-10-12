@@ -624,7 +624,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .row-menu-popover .danger-menu-item { color: var(--danger); }
 .management-page > .empty-state { border: 1px solid var(--line); border-radius: 4px; padding: 68px 26px; }
 
-.programs-page { max-width: 1240px; }
+.programs-page { width: min(100%, 1240px); max-width: 1240px; }
+.app-main > .programs-page { padding: 58px 42px 84px; margin-inline: auto; }
 .programs-page > .page-heading { margin-bottom: 25px; }
 .program-editor-card, .program-card, .calendar-panel, .competency-summary, .competency-card, .competency-admin-row { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .program-editor-card, .program-card { padding: 21px; }
@@ -1416,6 +1417,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .platform-reset-heading, .platform-reset-content { padding-inline: 16px; }
   .platform-reset-actions { align-items: stretch; flex-direction: column-reverse; }
   .platform-reset-actions > .button { width: 100%; }
+  .app-main > .programs-page { padding: 34px 16px 54px; }
   .platform-icon-picker { align-items: flex-start; gap: 12px; padding: 12px; }
   .platform-icon-preview { width: 64px; height: 64px; }
   .platform-icon-controls { align-items: flex-start; gap: 8px 10px; }
