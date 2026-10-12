@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Align sign-in required-field cues
+
+- **Reviewed:** The rendered sign-in form, shared `PasswordField` label treatment, login field semantics, existing authentication regressions, and the current auth-page styling.
+- **Improvement:** Add the same visual “Required” cue to the sign-in username label that the password field already displays, while retaining the native `required` attribute and unchanged accessible field name.
+- **Why it helps:** People can scan the sign-in form and immediately see that both credentials are needed; the labels now use one consistent pattern across the page without changing validation or interaction behavior.
+- **Backend review:** Authentication routes, request validation, and session handling are unchanged; this is a presentation-only correction.
+- **Checked:** Added a focused client regression for the login indicator. The live local `/login` page rendered both cues at the existing desktop viewport, kept username focused, and showed no layout or framework error. The focused auth checks passed (10/10), `npm run typecheck` passed, `npm run build` passed, and `git diff --check` passed before commit.
+
 ## 2026-10-12 — Preview course descriptions in learner cards
 
 - **Reviewed:** The rendered learner course catalog, shared `CourseCard` markup, responsive card layouts, the course-summary payload, and existing catalog/search regressions.

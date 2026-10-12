@@ -17,6 +17,12 @@ test('public registration visibly marks core fields that are required', () => {
   assert.match(registrationPage, /<PasswordField label="Confirm password"[^>]*required/);
 });
 
+test('sign-in visibly marks the username field as required', () => {
+  const loginPage = authSource.slice(authSource.indexOf('export function LoginPage'), authSource.indexOf('export function RegisterPage'));
+
+  assert.match(loginPage, /<label><span className="form-label-row"><span>Username<\/span><small className="form-required-indicator" aria-hidden="true">Required<\/small><\/span><input[^>]*name="username"[^>]*required/);
+});
+
 test('password fields mark native required state without changing their accessible name', () => {
   assert.match(componentSource, /<label htmlFor=\{inputId\}><span className="form-label-row"><span>\{label\}<\/span>\{inputProps\.required && <small className="form-required-indicator" aria-hidden="true">Required<\/small>\}<\/span><\/label>/);
   assert.match(styles, /\.form-label-row\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*space-between;/);
