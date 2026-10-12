@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Document the upload preflight enforcement boundary
+
+- **Reviewed:** The client upload-size helper, the platform configuration fallback, and the server's upload-limit enforcement and 413 response formatting.
+- **Improvement:** Add concise comments explaining that the client limit is a usability preflight, the server remains authoritative, and the fallback and error wording must stay aligned with server configuration and responses.
+- **Why it helps:** Future changes to the server limit are less likely to leave the client default or rejection message misleading, and maintainers can see that client checks do not replace server validation.
+- **Checked:** The focused upload-size tests, full `npm test -- --test-reporter=dot` suite, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-12 — Preflight oversized course media and documents
 
 - **Reviewed:** `MAX_UPLOAD_BYTES` configuration, platform-configuration responses, the lesson-document, video, and course-cover upload flows, and the server's existing 413 upload-limit message.

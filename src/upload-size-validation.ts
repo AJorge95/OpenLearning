@@ -1,5 +1,7 @@
+// Keep this fallback aligned with server/config.js until platform configuration loads.
 export const DEFAULT_MAX_UPLOAD_BYTES = 2 * 1024 ** 3;
 
+// Match server/http.js so local preflight errors use the same limit wording as HTTP 413 responses.
 export function formatUploadLimit(bytes: number) {
   const units = ['bytes', 'KiB', 'MiB', 'GiB', 'TiB'];
   let value = bytes;
@@ -14,6 +16,7 @@ export function formatUploadLimit(bytes: number) {
   return `${size} (${bytes.toLocaleString('en-US')} ${bytes === 1 ? 'byte' : 'bytes'})`;
 }
 
+// This check improves feedback and saves bandwidth; upload routes remain authoritative.
 export function uploadSizeError(fileSizeBytes: number, maxUploadBytes: number) {
   if (!Number.isSafeInteger(fileSizeBytes) || fileSizeBytes < 0
     || !Number.isSafeInteger(maxUploadBytes) || maxUploadBytes <= 0
