@@ -58,6 +58,7 @@ test('calendar empty state appears only after a successful empty response', () =
   assert.equal(shouldShowCalendarEmptyState(true, '', 0), false);
   assert.equal(shouldShowCalendarEmptyState(false, 'Calendar could not be loaded.', 0), false);
   assert.equal(shouldShowCalendarEmptyState(false, '', 0), true);
+  assert.equal(shouldShowCalendarEmptyState(false, '', 0, true), false);
   assert.equal(shouldShowCalendarEmptyState(false, '', 1), false);
 });
 
@@ -107,8 +108,10 @@ test('calendar page schedules and clears its deadline status timer', () => {
 test('calendar page uses the successful-empty-state guard', () => {
   const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
 
-  assert.match(pageSource, /shouldShowCalendarEmptyState\(loading, error, monthItems\.length\)/);
-  assert.match(pageSource, /function navigateToMonth\(requestedMonth: Date\) \{\s*\/\/ Keep the loaded deadlines when the current-month control targets the displayed month\.\s*if \(isSameCalendarMonth\(month, requestedMonth\)\) return;\s*setLoading\(true\);\s*setError\(''\);\s*setItems\(\[\]\);\s*setMonth\(currentCalendarMonth\(requestedMonth\)\);\s*\}/);
+  assert.match(pageSource, /shouldShowCalendarEmptyState\(loading, error, monthItems\.length, hasInvalidDeadlines\)/);
+  assert.match(pageSource, /setHasInvalidDeadlines\(Boolean\(result\.hasInvalidDeadlines\)\)/);
+  assert.match(pageSource, /Some course deadlines could not be displayed\. An administrator can check the system log\./);
+  assert.match(pageSource, /function navigateToMonth\(requestedMonth: Date\) \{\s*\/\/ Keep the loaded deadlines when the current-month control targets the displayed month\.\s*if \(isSameCalendarMonth\(month, requestedMonth\)\) return;\s*setLoading\(true\);\s*setError\(''\);\s*setItems\(\[\]\);\s*setHasInvalidDeadlines\(false\);\s*setMonth\(currentCalendarMonth\(requestedMonth\)\);\s*\}/);
   assert.match(pageSource, /aria-label="Previous month" onClick=\{\(\) => navigateToMonth\(new Date\(year, monthIndex - 1, 1\)\)\}/);
   assert.match(pageSource, /aria-label="Next month" onClick=\{\(\) => navigateToMonth\(new Date\(year, monthIndex \+ 1, 1\)\)\}/);
   assert.match(pageSource, /className="calendar-current-month" onClick=\{\(\) => navigateToMonth\(currentCalendarMonth\(\)\)\}>This month<\/Button>/);

@@ -58,6 +58,7 @@ export function markCalendarDeadlinesOverdue(items: CourseDeadline[], now = Date
   return changed ? nextItems : items;
 }
 
-export function shouldShowCalendarEmptyState(loading: boolean, error: string, itemCount: number) {
-  return !loading && !error && itemCount === 0;
+export function shouldShowCalendarEmptyState(loading: boolean, error: string, itemCount: number, hasInvalidDeadlines = false) {
+  // A partial-data warning should not be followed by a contradictory "no deadlines" message.
+  return !loading && !error && itemCount === 0 && !hasInvalidDeadlines;
 }
