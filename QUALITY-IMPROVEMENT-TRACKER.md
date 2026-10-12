@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse learning-path rows during enrolled-learner synchronization
+
+- **Reviewed:** The learning-path patch transaction, shared course rows, and per-learner progress/state checks when course order changes.
+- **Improvement:** Load the updated path-course rows once and reuse them while synchronizing every enrolled learner; each learner still gets an independent progress and course-state check inside the same transaction.
+- **Why it helps:** Path edits avoid one repeated course-row query for every enrolled learner without changing prerequisite or state-creation behavior.
+- **Checked:** Added an API regression with two enrolled learners that verifies the path-course query runs once and both learners receive the newly unlocked course states. The full `npm test -- --test-reporter=dot` suite, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-12 — Keep the selected theme clear in forced-colors mode
 
 - **Reviewed:** Theme-picker button semantics, selected swatch/check styling, keyboard focus, and forced-color replacement of the palette's custom colors.
