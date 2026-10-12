@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Announce full weekday names in the calendar table
+
+- **Reviewed:** Calendar weekday headers, the horizontally scrollable calendar layout, local-month date grouping, and the deadline endpoint's range validation, access filtering, index use, and batched progress summaries.
+- **Improvement:** Keep the compact three-letter weekday headers visible while exposing each full weekday name to assistive technology.
+- **Why it helps:** Screen-reader users hear unambiguous column names without widening the calendar or changing its mobile scroll behavior.
+- **Backend review:** No API change was needed. Calendar requests remain limited to 62 days, inaccessible private deadlines are filtered, and completion summaries stay batched.
+- **Checked:** The focused calendar client tests passed (5/5), the calendar-specific server tests passed (6/6), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. The local `/calendar` accessibility tree exposed Sunday through Saturday while the browser view retained abbreviated headers.
+
 ## 2026-10-12 — Recheck readiness and startup recovery
 
 - **Reviewed:** The documented `/healthz` and `/readyz` contract, readiness checks and shutdown behavior, focused readiness tests, and the frontend startup and page-error recovery states.

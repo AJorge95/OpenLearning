@@ -642,7 +642,7 @@ export function CalendarPage() {
     {error && <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => setReloadSequence((current) => current + 1)}>Try again</Button></div>}
     <section className="calendar-panel" aria-label={`Deadlines for ${formatter.format(month)}`} aria-busy={loading} tabIndex={0}>
       <table className="calendar-grid"><caption className="sr-only">Calendar days and course deadlines for {formatter.format(month)}</caption>
-        <thead><tr>{weekdays.map((day) => <th scope="col" key={day}>{day.slice(0, 3)}</th>)}</tr></thead>
+        <thead><tr>{weekdays.map((day) => <th scope="col" key={day}><span aria-hidden="true">{day.slice(0, 3)}</span><span className="sr-only">{day}</span></th>)}</tr></thead>
         <tbody>{Array.from({ length: cells.length / 7 }, (_, weekIndex) => <tr key={`week-${weekIndex}`}>
           {cells.slice(weekIndex * 7, weekIndex * 7 + 7).map((day, dayIndex) => {
             if (!day) return <td className="calendar-day calendar-day-empty" key={`blank-${weekIndex}-${dayIndex}`} />;

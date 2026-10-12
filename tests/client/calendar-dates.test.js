@@ -57,3 +57,9 @@ test('calendar page uses the successful-empty-state guard', () => {
   assert.match(pageSource, /shouldShowCalendarEmptyState\(loading, error, monthItems\.length\)/);
   assert.match(pageSource, /className="calendar-current-month" onClick=\{\(\) => \{ setItems\(\[\]\); setMonth\(currentCalendarMonth\(\)\); \}\}>This month<\/Button>/);
 });
+
+test('calendar weekday headers keep short visual labels and expose full names to assistive tech', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
+
+  assert.match(pageSource, /<th scope="col" key=\{day\}><span aria-hidden="true">\{day\.slice\(0, 3\)\}<\/span><span className="sr-only">\{day\}<\/span><\/th>/);
+});
