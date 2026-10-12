@@ -9920,3 +9920,10 @@
 - **Result:** No code change. The form explains the 12-character minimum and signs the target out of active sessions; the admin-only endpoint independently validates the matching password, applies per-admin throttling, revokes sessions, and rolls back if the audit write fails.
 - **Why no change:** UI and backend behavior agree, and the important failure paths already have regression coverage.
 - **Checked:** Focused password-reset UI and server tests passed (8/8), including rate limiting and rollback on audit persistence failure. `git diff --check` passed.
+
+## 2026-10-12 — Recheck dynamic registration-field contracts
+
+- **Reviewed:** Learner-facing required indicators, keyboard focus on invalid fields, select-option refresh behavior, the staff registration-field editor, and server normalization and persistence before account creation.
+- **Result:** No code change. The UI's native constraints and answer types agree with server-side checks for required values, valid dates, configured select choices, checkbox values, and changed field schemas.
+- **Why no change:** Client and server already reject the same invalid answers, while the server remains authoritative if the form schema changes between load and submit.
+- **Checked:** Registration-field client tests passed (13/13); focused server validation, persistence, and stale-schema tests passed (7/7). `git diff --check` passed.
