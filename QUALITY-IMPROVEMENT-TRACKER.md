@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Normalize calendar deadline timestamps to UTC
+
+- **Reviewed:** The calendar API's accepted timestamp formats, overdue-status calculation, browser-local date grouping, and the existing range-index and completion-summary checks.
+- **Improvement:** Interpret SQLite space-separated deadline timestamps as UTC and return calendar deadlines in canonical ISO 8601 form before calculating their status.
+- **Why it helps:** Server timezone settings can no longer turn a future deadline into an overdue item, and learners' browsers receive a consistent instant to place on their local calendar.
+- **Backend behavior:** Date-range validation, access filtering, indexed lookups, and batched completion summaries remain unchanged.
+- **Checked:** Added a server regression that runs in `Pacific/Kiritimati` and verifies a space-separated deadline one hour in the future stays upcoming and returns with a UTC `Z` suffix. `npm test -- --test-reporter=dot` passed; `npm run build` passed type-checking and Vite bundling; the focused calendar client tests passed (5/5); `node --check server/routes-programs.js` and `git diff --check` passed.
+
 ## 2026-10-12 — Recheck the right-side role-selector hit area
 
 - **Reviewed:** The reported account route, current role-selector markup and width rules, an enabled learner account, and the account-role update route's last-active-administrator safeguard.
