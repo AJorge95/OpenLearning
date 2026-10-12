@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep the selected theme clear in forced-colors mode
+
+- **Reviewed:** Theme-picker button semantics, selected swatch/check styling, keyboard focus, and forced-color replacement of the palette's custom colors.
+- **Improvement:** Retain each choice's `aria-pressed` state and add a system-highlight card and swatch outline for the selected theme, plus a visible focus ring.
+- **Why it helps:** The active theme stays visually identifiable even when high-contrast settings remove the palette's original swatch colors.
+- **Checked:** Focused palette and custom-select forced-colors tests passed (2/2), `npm run build` passed TypeScript and Vite, and `git diff --check` passed. Rendered forced-colors QA was not run in this cycle.
+
 ## 2026-10-12 — Keep custom select states visible in forced-colors mode
 
 - **Reviewed:** `AppSelect` trigger, portaled listbox, selected and active options, disabled choices, and the quiz's existing forced-colors treatment.
