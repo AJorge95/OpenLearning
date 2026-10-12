@@ -235,8 +235,8 @@ export const api = {
               return;
             }
           }
-          // Node can return a timeout response before the request reaches Express's JSON error handler.
-          const timeoutMessage = 'The upload exceeded the server request timeout. Ask the platform administrator to increase REQUEST_TIMEOUT_MS for slower large uploads, then retry.';
+          // Node or a trusted reverse proxy can time out a request before Express returns JSON.
+          const timeoutMessage = 'The upload exceeded an HTTP request timeout. Ask the platform administrator to check REQUEST_TIMEOUT_MS and any reverse-proxy upload timeout for large or slow uploads, then retry.';
           const isRequestTimeout = xhr.status === 408;
           reject(new ApiError(
             xhr.status,

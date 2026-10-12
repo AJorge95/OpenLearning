@@ -279,7 +279,7 @@ test('explains how to recover when the server request timeout stops an upload', 
     (error) => error instanceof ApiError
       && error.status === 408
       && error.code === 'request_timeout'
-      && error.message === 'The upload exceeded the server request timeout. Ask the platform administrator to increase REQUEST_TIMEOUT_MS for slower large uploads, then retry.',
+      && error.message === 'The upload exceeded an HTTP request timeout. Ask the platform administrator to check REQUEST_TIMEOUT_MS and any reverse-proxy upload timeout for large or slow uploads, then retry.',
   );
   assert.equal(requests.length, 1);
 });

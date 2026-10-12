@@ -35,8 +35,8 @@
 ## 2026-10-12 — Explain server request timeouts during media uploads
 
 - **Reviewed:** The media client’s XHR response handling, Node’s configurable whole-request timeout, and the documented `REQUEST_TIMEOUT_MS` setting used for slower large uploads.
-- **Improvement:** Map HTTP 408 upload responses without a structured server message to a stable `request_timeout` error that tells the course manager which server setting the platform administrator can raise. Existing JSON error details remain preferred.
-- **Why it helps:** A server timeout no longer appears as the generic “Upload failed (408)” message, so staff can distinguish slow large uploads from file validation and connection errors and take a useful next step.
+- **Improvement:** Map HTTP 408 upload responses without a structured server message to a stable `request_timeout` error that points administrators to both Node's `REQUEST_TIMEOUT_MS` and a possible reverse-proxy upload timeout. Existing JSON error details remain preferred.
+- **Why it helps:** A timeout no longer appears as the generic “Upload failed (408)” message or send administrators toward the wrong layer when a proxy produced the response.
 - **Checked:** `node --test tests/client/api.test.js` passed (18/18), including a simulated plain-text 408 response; `npm run build` passed TypeScript and Vite; `git diff --check` passed.
 - **Backend review:** The upload size limit, request timeout, cancellation, and partial-file cleanup behavior are unchanged.
 
