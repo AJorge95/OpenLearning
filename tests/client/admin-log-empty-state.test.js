@@ -15,20 +15,24 @@ function functionBody(name) {
   return declaration.body.getText(sourceFile);
 }
 
-test('audit-log empty results can clear the applied search and action filters', () => {
+test('audit-log filters can be cleared with or without matching rows', () => {
   const page = functionBody('AdminAuditLogPage');
 
   assert.match(page, /const hasAppliedFilters = Boolean\(appliedQuery \|\| action\)/);
-  assert.match(page, /function clearFilters\(\) \{\s*setQuery\(''\);\s*setAppliedQuery\(''\);\s*setAction\(''\);\s*setPage\(1\);\s*\}/);
-  assert.match(page, /<LogEmptyState message=\{emptyMessage\} hasFilters=\{hasAppliedFilters\} onClear=\{clearFilters\} \/>/);
+  assert.match(page, /const searchInputRef = useRef<HTMLInputElement>\(null\)/);
+  assert.match(page, /function clearFilters\(\) \{\s*setQuery\(''\);\s*setAppliedQuery\(''\);\s*setAction\(''\);\s*setPage\(1\);[\s\S]*?searchInputRef\.current\?\.focus\(\);\s*\}/);
+  assert.match(page, /\{hasAppliedFilters && <Button type="button" variant="secondary" onClick=\{clearFilters\}>Clear filters<\/Button>\}/);
+  assert.match(page, /<LogEmptyState message=\{emptyMessage\} \/>/);
 });
 
-test('system-log empty results can clear the applied search and severity filters', () => {
+test('system-log filters can be cleared with or without matching rows', () => {
   const page = functionBody('AdminSystemLogPage');
 
   assert.match(page, /const hasAppliedFilters = Boolean\(appliedQuery \|\| level !== 'all'\)/);
-  assert.match(page, /function clearFilters\(\) \{\s*setQuery\(''\);\s*setAppliedQuery\(''\);\s*setLevel\('all'\);\s*setPage\(1\);\s*\}/);
-  assert.match(page, /<LogEmptyState message=\{emptyMessage\} hasFilters=\{hasAppliedFilters\} onClear=\{clearFilters\} \/>/);
+  assert.match(page, /const searchInputRef = useRef<HTMLInputElement>\(null\)/);
+  assert.match(page, /function clearFilters\(\) \{\s*setQuery\(''\);\s*setAppliedQuery\(''\);\s*setLevel\('all'\);\s*setPage\(1\);[\s\S]*?searchInputRef\.current\?\.focus\(\);\s*\}/);
+  assert.match(page, /\{hasAppliedFilters && <Button type="button" variant="secondary" onClick=\{clearFilters\}>Clear filters<\/Button>\}/);
+  assert.match(page, /<LogEmptyState message=\{emptyMessage\} \/>/);
 });
 
 test('audit action changes apply the visible search draft', () => {
@@ -58,9 +62,12 @@ test('audit change summaries and system event messages provide log row context',
   assert.match(styles, /\.log-table td small, \.log-table tbody th small/);
 });
 
-test('log empty-state recovery stays conditional on active filters', () => {
+test('log empty states describe no matches while active filters have a persistent reset', () => {
   const emptyState = functionBody('LogEmptyState');
 
   assert.match(emptyState, /<p>\{message\}<\/p>/);
-  assert.match(emptyState, /hasFilters && <Button type="button" variant="secondary" onClick=\{onClear\}>Clear filters<\/Button>/);
+  assert.doesNotMatch(emptyState, /Clear filters/);
+  const styles = fs.readFileSync(path.resolve('src/styles.css'), 'utf8');
+  assert.match(styles, /\.log-filters \{ display: grid; grid-template-columns: minmax\(260px, 1fr\) minmax\(180px, 260px\) auto;/);
+  assert.match(styles, /\.log-filters \{ grid-template-columns: 1fr; \}/);
 });
