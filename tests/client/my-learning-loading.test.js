@@ -16,5 +16,8 @@ test('My Learning loads courses and certificates independently with a first-page
   assert.match(pageSource, /certificateError && <ErrorNotice message=\{certificateError\} onRetry=\{certificatesHasMore && certificates\.length > 0 \? loadMoreCertificates : loadCertificatesFirstPage\}/);
   assert.match(pageSource, /const hasEmptyCourses = !loading && !error && courses\.length === 0/);
   assert.match(pageSource, /hasEmptyCourses && !loadingCertificates && !certificateError && certificates\.length === 0/);
-  assert.match(pageSource, /: hasEmptyCourses && !certificates\.length && <EmptyState/);
+});
+
+test('My Learning waits for certificate history before showing its combined empty state', () => {
+  assert.match(pageSource, /: hasEmptyCourses && !loadingCertificates && !certificates\.length && <EmptyState/);
 });
