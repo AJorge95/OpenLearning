@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep username entry neutral on mobile
+
+- **Reviewed:** Username fields in first-run setup, sign-in, public registration, and staff account creation, plus the browser's default mobile capitalization and spellcheck behavior.
+- **Improvement:** Set `autoCapitalize="none"` and `spellCheck={false}` on all four username inputs while preserving their existing `autoComplete="username"` hints and validation.
+- **Why it helps:** Mobile keyboards no longer capitalize or spellcheck account identifiers as users type them.
+- **Backend review:** Username validation and account routes remain unchanged.
+- **Reported role-selector follow-up:** Current source uses a separate text label and a bounded 8.5rem trigger with pointer input enabled only on the trigger. Existing hit-area regressions pass. The current browser redirects the reported protected route to `/login`, so the screenshot's wrapping-label target could not be compared against a signed-in render; no duplicate role CSS change was made.
+- **Checked:** The username-field regression passed (1/1); focused username, login, and role-selector tests passed (18/18); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. Browser inspection confirmed the public login page renders, but its sign-in interaction and the protected account page remain unverified.
+
 ## 2026-10-12 — Reuse calendar date formatters across renders
 
 - **Reviewed:** The calendar's month label and date-cell accessible names, their formatting options, the existing module-scoped deadline formatters, and the calendar's month and data update render paths.
