@@ -8,6 +8,7 @@ import { api, ApiError, fetchAccess, fetchCourse } from './api';
 import { requestPendingRegistrationCountRefresh } from './admin-navigation-events';
 import { AppSelect, Button, ConfirmationDialog, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PasswordField, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
 import { formatCountLabel } from './count-label';
+import { parseApiTimestamp } from './api-timestamp';
 import { accountCourseAssignmentLabel } from './account-course-activity';
 import { accountDisableConfirmation } from './account-disable-confirmation';
 import { courseDeletionConfirmation } from './course-deletion-confirmation';
@@ -163,12 +164,12 @@ function Notice({ children, kind = 'error', id }: { children: React.ReactNode; k
 }
 
 function DateText({ value }: { value: string }) {
-  const date = new Date(value.includes('Z') ? value : `${value.replace(' ', 'T')}Z`);
+  const date = parseApiTimestamp(value);
   return <span>{Number.isNaN(date.getTime()) ? '—' : courseDateFormatter.format(date)}</span>;
 }
 
 function DateTimeText({ value }: { value: string }) {
-  const date = new Date(value.includes('Z') ? value : `${value.replace(' ', 'T')}Z`);
+  const date = parseApiTimestamp(value);
   return <span>{Number.isNaN(date.getTime()) ? '—' : logTimestampFormatter.format(date)}</span>;
 }
 
@@ -1764,7 +1765,7 @@ export function CourseEditorPage() {
       {governanceLoading && <p className="course-governance-load-status" role="status">Loading version history and competency settings…</p>}
       {governanceError && <div className="course-governance-load-error"><Button type="button" variant="secondary" onClick={retryGovernanceLoad}>Retry loading course settings</Button></div>}
       {course.status === 'published' && governanceReady && <div className="revision-actions">
-        {review?.status === 'in_review' && <div className="review-state"><span className="program-status draft">Awaiting review</span><p>Submitted by {review.author || 'a staff member'}{review.submittedAt ? ` · ${logTimestampFormatter.format(new Date(review.submittedAt))}` : ''}</p>{review.reviewNote && <small>{review.reviewNote}</small>}</div>}
+        {review?.status === 'in_review' && <div className="review-state"><span className="program-status draft">Awaiting review</span><p>Submitted by {review.author || 'a staff member'}{review.submittedAt ? ` · ${logTimestampFormatter.format(parseApiTimestamp(review.submittedAt))}` : ''}</p>{review.reviewNote && <small>{review.reviewNote}</small>}</div>}
         {review?.status !== 'in_review' && <div className="review-submit-actions">{review?.status === 'changes_requested' && <div className="review-state"><span className="program-status draft">Changes requested</span>{review.reviewNote && <small>{review.reviewNote}</small>}</div>}<Button type="button" variant="secondary" onClick={() => void submitForReview()} disabled={saving || submittingReview || savingReviewDecision} aria-busy={submittingReview}>{submittingReview ? 'Submitting revision…' : 'Submit revision for review'}</Button></div>}
         {review?.status === 'in_review' && review.submittedBy !== editorUser?.id && <>
           <div className="review-decision-actions">
@@ -1791,14 +1792,14 @@ export function CourseEditorPage() {
         {versionHistoryError && <div className="error-notice-actionable" role="alert"><span>{versionHistoryError}</span><Button variant="secondary" disabled={versionHistoryLoading} onClick={() => void loadVersionHistory(versionPage)}>Retry version history</Button></div>}
         {versionHistoryLoading && <p role="status">Loading course versions…</p>}
         {currentVersion && <ol className="course-version-current"><li key={currentVersion.id}>
-          <div><strong>Version {currentVersion.version_number}<span className="current-version-label">Current</span></strong><small>{currentVersion.title} · Published {logTimestampFormatter.format(new Date(currentVersion.published_at))}{currentVersion.publisher ? ` by ${currentVersion.publisher}` : ''}</small>{currentVersion.change_note && <p>{currentVersion.change_note}</p>}</div>
+          <div><strong>Version {currentVersion.version_number}<span className="current-version-label">Current</span></strong><small>{currentVersion.title} · Published {logTimestampFormatter.format(parseApiTimestamp(currentVersion.published_at))}{currentVersion.publisher ? ` by ${currentVersion.publisher}` : ''}</small>{currentVersion.change_note && <p>{currentVersion.change_note}</p>}</div>
         </li></ol>}
         {versionTotal > 0 && <details className="course-version-history-disclosure">
           <summary>Previous versions <span>{versionTotal}</span></summary>
           <ol>{versions.map((version) => {
           const restoring = restoringVersionRequests.has(`${courseId}:${version.id}`);
           return <li key={version.id}>
-        <div><strong>Version {version.version_number}</strong><small>{version.title} · Published {logTimestampFormatter.format(new Date(version.published_at))}{version.publisher ? ` by ${version.publisher}` : ''}</small>{version.change_note && <p>{version.change_note}</p>}</div>
+        <div><strong>Version {version.version_number}</strong><small>{version.title} · Published {logTimestampFormatter.format(parseApiTimestamp(version.published_at))}{version.publisher ? ` by ${version.publisher}` : ''}</small>{version.change_note && <p>{version.change_note}</p>}</div>
         <Button type="button" variant="secondary" aria-label={`Restore version ${version.version_number} as a new course version`} disabled={restoring} aria-busy={restoring} onClick={() => requestRestoreVersion(version)}>{restoring ? 'Restoring version…' : 'Restore as new version'}</Button>
       </li>;
           })}</ol>
@@ -2834,7 +2835,7 @@ type SystemLogEntry = {
 };
 
 function LogTimestamp({ value }: { value: string }) {
-  const date = new Date(value.includes('Z') ? value : `${value.replace(' ', 'T')}Z`);
+  const date = parseApiTimestamp(value);
   const valid = !Number.isNaN(date.getTime());
   return <time dateTime={valid ? date.toISOString() : undefined}>{valid ? logTimestampFormatter.format(date) : value}</time>;
 }
