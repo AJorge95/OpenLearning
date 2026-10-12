@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { findMissingRequiredRegistrationField, refreshRegistrationFieldValues, validateRegistrationFieldEditor } from '../../src/registration-fields.ts';
+import { buildRegistrationFieldSelectOptions, findMissingRequiredRegistrationField, refreshRegistrationFieldValues, validateRegistrationFieldEditor } from '../../src/registration-fields.ts';
 
 const fields = [
   { id: 'department', label: 'Department', type: 'select', required: true, options: ['Design', 'Research'] },
@@ -23,6 +23,20 @@ test('custom signup fields use a navigable heading without changing its visual s
 
   assert.match(pageSource, /registration-form-fields-heading"><h2>About you<\/h2><span>/);
   assert.match(styles, /\.registration-form-fields-heading h2 \{ margin: 0; color: var\(--ink\); font-size: 14px; \}/);
+});
+
+test('registration select options stay stable while answer values rerender the form', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-auth.tsx', import.meta.url), 'utf8');
+  const optionsByFieldId = buildRegistrationFieldSelectOptions(fields);
+
+  assert.match(pageSource, /useMemo\(\(\) => buildRegistrationFieldSelectOptions\(fields\), \[fields\]\)/);
+  assert.match(pageSource, /options=\{selectOptionsByFieldId\.get\(field\.id\) \?\? EMPTY_REGISTRATION_SELECT_OPTIONS\}/);
+  assert.deepEqual(optionsByFieldId.get('department'), [
+    { value: '', label: 'Choose an option' },
+    { value: 'Design', label: 'Design' },
+    { value: 'Research', label: 'Research' },
+  ]);
+  assert.equal(optionsByFieldId.has('about'), false);
 });
 
 test('checkbox requiredness and optional blank fields are handled separately', () => {

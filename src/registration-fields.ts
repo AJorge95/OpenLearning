@@ -6,6 +6,18 @@ export type RegistrationFieldEditorIssue = {
   message: string;
 };
 
+export function buildRegistrationFieldSelectOptions(fields: RegistrationField[]) {
+  const optionsByFieldId = new Map<string, { value: string; label: string }[]>();
+  for (const field of fields) {
+    if (field.type !== 'select') continue;
+    optionsByFieldId.set(field.id, [
+      { value: '', label: 'Choose an option' },
+      ...field.options.map((option) => ({ value: option, label: option })),
+    ]);
+  }
+  return optionsByFieldId;
+}
+
 function caseInsensitiveKey(value: string) {
   return value.normalize('NFC').toLowerCase().normalize('NFC');
 }
