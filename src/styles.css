@@ -82,6 +82,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .app-select--filter .app-select-chevron { display: grid; place-items: center; width: 25px; height: 25px; padding: 5px; border-radius: 8px; color: var(--muted); background: var(--subtle); }
 /* Keep the custom listbox states legible when users choose a forced palette. */
 @media (forced-colors: active) {
+  /* Keep keyboard focus visible when forced colors replace the app palette. */
   .search-field:focus-within, .management-search:focus-within, .access-search:focus-within { border-color: Highlight; outline-color: Highlight; }
   .app-select-trigger { color: ButtonText; border-color: ButtonText; background: ButtonFace; }
   .app-select-trigger:hover:not(:disabled), .app-select-trigger[aria-expanded="true"], .app-select--filter .app-select-trigger:hover:not(:disabled), .app-select--filter .app-select-trigger[aria-expanded="true"] { border-color: Highlight; background: ButtonFace; box-shadow: none; }

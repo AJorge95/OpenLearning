@@ -3,7 +3,7 @@
 ## 2026-10-12 — Preserve search focus in forced-colors mode
 
 - **Reviewed:** The shared catalog, management, and access search wrappers, their palette-based focus ring, and existing forced-colors treatments for other shared controls.
-- **Improvement:** Override each search wrapper's focused border and outline colors with the system `Highlight` color when forced colors are active. Add a client regression for all three search surfaces.
+- **Improvement:** Override each search wrapper's focused border and outline colors with the system `Highlight` color when forced colors are active. Add a client regression for all three search surfaces and a code comment explaining the system-color override.
 - **Why it helps:** Keyboard focus stays visibly distinct in high-contrast palettes even when the interface's regular color palette is unavailable or remapped.
 - **Checked:** `node --test tests/client/search-forced-colors.test.js` passed; `npm run build` passed TypeScript and Vite; `git diff --check` passed. Rendered forced-colors QA was not available because the browser session is signed out and local Playwright packages are not installed.
 
