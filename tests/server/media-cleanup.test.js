@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { cleanupOrphanedCourseMedia } from '../../server/media-cleanup.js';
+import { cleanupOrphanedCourseMedia, getOrphanedMediaCleanupLog } from '../../server/media-cleanup.js';
 
 async function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -39,6 +39,45 @@ function createDatabase() {
   return database;
 }
 
+test('startup cleanup logs clean passes and retains bounded failure diagnostics', () => {
+  assert.deepEqual(getOrphanedMediaCleanupLog({
+    removed: 0,
+    failed: 0,
+    courseDirectoriesScanned: 0,
+    directoryEntriesScanned: 0,
+    failureSamples: [],
+  }, 7), {
+    level: 'info',
+    message: 'Completed orphaned course media cleanup during startup',
+    details: {
+      removed: 0,
+      failed: 0,
+      courseDirectoriesScanned: 0,
+      directoryEntriesScanned: 0,
+      durationMs: 7,
+    },
+  });
+
+  const failureSample = { stage: 'read_course_directory', errorCode: 'EACCES' };
+  const failedLog = getOrphanedMediaCleanupLog({
+    removed: 1,
+    failed: 1,
+    courseDirectoriesScanned: 3,
+    directoryEntriesScanned: 12,
+    failureSamples: [failureSample],
+  }, 19);
+  assert.equal(failedLog.level, 'warn');
+  assert.equal(failedLog.message, 'Some orphaned course media files could not be removed during startup');
+  assert.deepEqual(failedLog.details, {
+    removed: 1,
+    failed: 1,
+    courseDirectoriesScanned: 3,
+    directoryEntriesScanned: 12,
+    durationMs: 19,
+    failureSamples: [failureSample],
+  });
+});
+
 test('orphan cleanup removes only stale generated files not referenced by course data', async () => {
   const root = await createFixtureDirectory();
   const database = createDatabase();
@@ -70,7 +109,13 @@ test('orphan cleanup removes only stale generated files not referenced by course
 
     const result = await cleanupOrphanedCourseMedia(database, root, 60_000);
 
-    assert.deepEqual(result, { removed: 1, failed: 0, failureSamples: [] });
+    assert.deepEqual(result, {
+      removed: 1,
+      failed: 0,
+      courseDirectoriesScanned: 1,
+      directoryEntriesScanned: 6,
+      failureSamples: [],
+    });
     await assert.rejects(fs.stat(path.join(courseDirectory, staleName)), { code: 'ENOENT' });
     for (const fileName of [mediaName, documentName, captionName, recentName, unrecognizedName]) {
       await fs.access(path.join(courseDirectory, fileName));
@@ -89,6 +134,8 @@ test('orphan cleanup treats a missing media root as empty and rejects invalid ag
     assert.deepEqual(await cleanupOrphanedCourseMedia(database, missingRoot, 0), {
       removed: 0,
       failed: 0,
+      courseDirectoriesScanned: 0,
+      directoryEntriesScanned: 0,
       failureSamples: [],
     });
     await assert.rejects(cleanupOrphanedCourseMedia(database, root, -1), TypeError);
@@ -138,6 +185,8 @@ test('orphan cleanup continues after directory errors and caps diagnostic sample
 
     assert.equal(result.removed, 0);
     assert.equal(result.failed, courseIds.length);
+    assert.equal(result.courseDirectoriesScanned, courseIds.length);
+    assert.equal(result.directoryEntriesScanned, 0);
     assert.equal(result.failureSamples.length, 10);
     assert.ok(result.failureSamples.every((sample) => (
       sample.stage === 'read_course_directory' && sample.errorCode === 'EACCES'
@@ -189,6 +238,8 @@ test('orphan cleanup ignores files lost to races and preserves files after inspe
 
     assert.equal(result.removed, 0);
     assert.equal(result.failed, 2);
+    assert.equal(result.courseDirectoriesScanned, 1);
+    assert.equal(result.directoryEntriesScanned, 3);
     assert.deepEqual(result.failureSamples.map((sample) => sample.stage).sort(), ['inspect_file', 'remove_file']);
     assert.ok(result.failureSamples.every((sample) => sample.errorCode === 'EACCES'));
     await assert.rejects(fs.stat(path.join(courseDirectory, disappearedName)), { code: 'ENOENT' });

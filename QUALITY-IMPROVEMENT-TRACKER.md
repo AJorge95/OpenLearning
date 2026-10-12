@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Record startup media-cleanup scan metrics
+
+- **Reviewed:** Orphaned course-media cleanup results, startup system-log handling, bounded failure samples, and existing cleanup regressions.
+- **Improvement:** Return the number of course directories and directory entries scanned, and write one aggregate system-log event for each completed cleanup with removals, failures, scan counts, and elapsed milliseconds. Unexpected cleanup errors also include elapsed time.
+- **Why it helps:** A clean pass now leaves a compact operational record, and slow or unusually large scans can be spotted before changing cleanup behavior based on guesswork.
+- **Checked:** Extended cleanup tests for successful, missing-root, and directory-error scan counts, plus clean and failed aggregate log entries. Focused cleanup and system-log tests, the full test suite, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-12 — Load authentication startup data concurrently
 
 - **Reviewed:** The authentication provider’s setup-status, current-user, and CSRF startup requests and their dependencies.
