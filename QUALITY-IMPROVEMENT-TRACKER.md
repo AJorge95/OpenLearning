@@ -87,6 +87,15 @@
 - **Checked:** The role-boundary, label-fallback, activation, label-accessibility, and admin-list route regressions passed (37/37); `npm run build` passed TypeScript and Vite; `git diff --check` passed. The Vite stylesheet at port 5173 returns 200 with the desktop boundary, trigger-only pointer target, and mobile sizing rules. Rendered interaction could not be repeated: the available browser is signed out at `/register`, the Browser plugin is unavailable, and Playwright is not installed.
 - **Needed to continue:** Hard-reload the authenticated account page and retry the click beside the visible control. If it still opens, capture the click position and viewport from that refreshed page.
 
+### Follow-up — Recheck the reported role-selector click boundary
+
+- **Reviewed:** The newly supplied screenshot and target path, the account-role JSX and CSS served by the Vite instance at `127.0.0.1:5173`, the shared selector activation guard, and the existing account-role/AppSelect regressions.
+- **Result:** No source change. The screenshot still shows the legacy label wrapper, while the live Vite module serves the separate caption and bounded selector. The current CSS restricts pointer input to the visible trigger, and the account-role menu matches the trigger width.
+- **Why no change:** The available in-app browser tab is signed out at `/register`; the authenticated account route is not open there, so the reported click could not be reproduced against the current rendered page.
+- **Backend review:** Rechecked the admin account-role update validation and existing registration-field validation coverage; no API behavior change was indicated.
+- **Checked:** Focused AppSelect positioning, navigation, layout, label, forced-colors, active-option, and activation tests plus registration-field tests passed. `git diff --check` passed.
+- **Needed to continue:** Hard-reload the authenticated account page and retry a click just outside the visible selector. If it still opens, provide the refreshed page and the click position/viewport so the live hit area can be measured.
+
 ## 2026-10-12 — Guard staff-page code splitting
 
 - **Reviewed:** Static and dynamic page imports, staff-only route nesting, the shared management-page loading/error boundary, and the production chunk output.
