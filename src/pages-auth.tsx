@@ -478,7 +478,7 @@ export function RegisterPage() {
   return <AuthPanel><h1>Create your account</h1><p className="auth-description">Join your learning space and explore available courses.</p>
     {registrationApprovalRequired && <p className="auth-approval-note" role="note">New accounts need administrator approval before they can sign in.</p>}
     <form onSubmit={submit} className="form-stack" aria-busy={saving}>
-      <label>Email<input ref={emailInputRef} name="email" required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? emailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setError(''); }} disabled={saving} /></label>
+      <label><span className="form-label-row"><span>Email</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={emailInputRef} name="email" required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? emailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setError(''); }} disabled={saving} /></label>
       {emailError && <p id={emailErrorId} className="form-error" role="alert">{emailError}</p>}
       {/* Keep certificate guidance in each field's description instead of its accessible name. */}
       <div className="account-name-fields registration-name-fields">
@@ -523,7 +523,7 @@ export function RegisterPage() {
           />
         </div>
       </div>
-      <div className="form-stack-username-field"><label htmlFor={usernameInputId}>Username</label><input id={usernameInputId} name="username" aria-describedby={usernameHelpId} required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small id={usernameHelpId}>Letters, numbers, dots, underscores, and hyphens.</small></div>
+      <div className="form-stack-username-field"><label htmlFor={usernameInputId}><span className="form-label-row"><span>Username</span><small className="form-required-indicator" aria-hidden="true">Required</small></span></label><input id={usernameInputId} name="username" aria-describedby={usernameHelpId} required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small id={usernameHelpId}>Letters, numbers, dots, underscores, and hyphens.</small></div>
       {registrationFieldsLoading ? <p className="registration-fields-loading" role="status">Loading registration details…</p> : registrationFieldsError
         ? <div className="registration-fields-load-error"><p className="form-error" role="alert">{registrationFieldsError}</p><Button type="button" variant="secondary" onClick={() => setRegistrationFieldsRetryVersion((version) => version + 1)}>Retry</Button></div>
         : <RegistrationFieldsForm fields={registrationFields} values={registrationFieldValues} disabled={saving} invalidFieldId={invalidRegistrationFieldId} onChange={(id, value) => { setRegistrationFieldValues((current) => ({ ...current, [id]: value })); setRegistrationFieldsChanged(false); if (id === invalidRegistrationFieldId) { setInvalidRegistrationFieldId(''); setError(''); } }} />}

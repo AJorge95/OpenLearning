@@ -379,7 +379,7 @@ export function PasswordField({ label, hint, hintId, inputRef, id, disabled, 'ar
   }
 
   return <div className="password-field">
-    <label htmlFor={inputId}>{label}</label>
+    <label htmlFor={inputId}><span className="form-label-row"><span>{label}</span>{inputProps.required && <small className="form-required-indicator" aria-hidden="true">Required</small>}</span></label>
     <div className="password-input-control">
       <input {...inputProps} ref={inputRef} id={inputId} type={visible ? 'text' : 'password'} disabled={disabled} aria-describedby={describedByIds} onChange={handlePasswordChange} />
       {/* The label names the next action (Show/Hide), so this button intentionally has no pressed toggle state. */}

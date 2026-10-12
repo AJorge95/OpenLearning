@@ -1194,6 +1194,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .auth-approval-note { margin: 0; padding: 10px 12px; color: #805000; background: #fff8e7; border: 1px solid #f0dba8; border-radius: 6px; font-size: 12px; line-height: 1.5; }
 .auth-eyebrow { display: block; margin-bottom: 7px; color: var(--muted); font-size: 12px; }
 .form-stack { display: grid; gap: 17px; }
+/* Native required state stays semantic while the visual cue is hidden from the field name. */
+.form-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; width: 100%; }
+.form-label-row .form-required-indicator { flex: 0 0 auto; color: var(--muted); font-size: 11px; font-weight: 450; }
 .form-stack .form-stack-username-field { display: grid; gap: 6px; min-width: 0; }
 .form-stack .form-stack-username-field small { margin-top: 0; }
 .form-stack input { min-height: 46px; }

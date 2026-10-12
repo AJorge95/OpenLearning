@@ -14,7 +14,7 @@ const registerPage = authSource.slice(
 );
 
 test('the registration form does not move focus into its long form on page load', () => {
-  assert.match(registerPage, /<label>Email<input[^>]*type="email"[^>]*maxLength=\{254\}[^>]*autoComplete="email"/);
+  assert.match(registerPage, /<label><span className="form-label-row"><span>Email<\/span><small className="form-required-indicator" aria-hidden="true">Required<\/small><\/span><input[^>]*type="email"[^>]*maxLength=\{254\}[^>]*autoComplete="email"/);
   assert.match(registerPage, /aria-invalid=\{emailError \? true : undefined\} aria-describedby=\{emailError \? emailErrorId : undefined\}/);
   assert.doesNotMatch(registerPage, /autoFocus/);
 });
