@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse course summary reads while syncing path learners
+
+- **Reviewed:** The learning-path edit transaction, enrollment state synchronization, and the shared course-summary loader.
+- **Improvement:** Prepare course versions, content rows, counts, lessons, and quizzes once for the edited path, then reuse that immutable summary data while checking each enrolled learner's progress and initializing newly unlocked states.
+- **Why it helps:** Editing a path no longer repeats the same course-structure queries for every enrolled learner; only learner-specific history and state checks scale with the enrollment count.
+- **Checked:** Added an isolated route regression with three enrolled learners; the shared course-structure reads ran twice total (once for synchronization and once for the response payload), and each learner received the expected first-course state while the prerequisite course remained locked. `tests/server/course-analytics.test.js` passed (123/123); `npm run build` passed TypeScript and Vite; `git diff --check` passed.
+
 ## 2026-10-12 — Reject pointer clicks that land beside the platform-role selector
 
 - **Reviewed:** The reported account-role click area, its 8.5rem field and matching popup width, and the shared `AppSelect` label-forwarding guard.
