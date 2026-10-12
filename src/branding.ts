@@ -23,6 +23,7 @@ export interface PlatformConfiguration extends PlatformAccessSettings {
   platformName: string;
   platformIcon: string | null;
   themePalette: BrandingPalette;
+  maxUploadBytes: number;
 }
 
 export function isBrandingPalette(value: unknown): value is BrandingPalette {

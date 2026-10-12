@@ -21,6 +21,7 @@ import { validateRegistrationFieldEditor } from './registration-fields';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import { useAuth } from './auth-context';
 import { canonicalCaptionLanguageTag, captionFileSizeError, captionLanguageErrorMessage } from './caption-validation';
+import { uploadSizeError } from './upload-size-validation';
 import { courseEditingNote } from './course-editing-note';
 import { COMPLETION_WINDOW_ERROR, validateCompletionWindowDays } from './course-editor-validation';
 import { isCourseCoverDimensionAllowed, MAX_COURSE_COVER_DIMENSION } from './course-cover-validation';
@@ -621,6 +622,7 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
   onError: (message: string) => void;
   onNotice: (message: string) => void;
 }) {
+  const { maxUploadBytes } = useAuth();
   const documentFormatHelpId = useId();
   const [title, setTitle] = useState(lesson.title);
   const [description, setDescription] = useState(lesson.description);
@@ -701,6 +703,12 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
   }
 
   async function uploadDocument(file: File, input: HTMLInputElement) {
+    const fileSizeError = uploadSizeError(file.size, maxUploadBytes);
+    if (fileSizeError) {
+      onError(fileSizeError);
+      input.focus();
+      return;
+    }
     const upload = { controller: new AbortController(), input, cancelledByUser: false };
     uploadControllerRef.current = upload;
     setBusy(true); setUploadKind('document'); setUploadProgress(0); onError('');
@@ -911,7 +919,7 @@ export function CourseEditorPage() {
   const route = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { user: editorUser } = useAuth();
+  const { user: editorUser, maxUploadBytes } = useAuth();
   const coverHelpId = useId();
   const completionWindowInputRef = useRef<HTMLInputElement>(null);
   const createCourseRequestRef = useRef<Promise<{ course: Course }> | null>(null);
@@ -1659,6 +1667,12 @@ export function CourseEditorPage() {
   }
 
   async function uploadVideo(lessonId: string, file: File, input: HTMLInputElement) {
+    const fileSizeError = uploadSizeError(file.size, maxUploadBytes);
+    if (fileSizeError) {
+      setError(fileSizeError);
+      input.focus();
+      return;
+    }
     if (uploadingLessonIdsRef.current.has(lessonId)) return;
     const requestedCourseId = courseId;
     const uploadKey = `video:${lessonId}`;
@@ -1691,6 +1705,12 @@ export function CourseEditorPage() {
   }
 
   async function uploadCover(file: File, input: HTMLInputElement) {
+    const fileSizeError = uploadSizeError(file.size, maxUploadBytes);
+    if (fileSizeError) {
+      setError(fileSizeError);
+      input.focus();
+      return;
+    }
     if (coverUploadRef.current) return;
     const requestedCourseId = courseId;
     const validationSequence = ++coverValidationSequenceRef.current;

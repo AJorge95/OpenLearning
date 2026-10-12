@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { ApiError, api, getMe, getSetupStatus } from './api';
 import { BRAND_PALETTES, DEFAULT_PALETTE } from './branding';
 import type { BrandingPalette, ConnectionProtocol, PlatformConfiguration } from './branding';
+import { DEFAULT_MAX_UPLOAD_BYTES } from './upload-size-validation';
 import { isRegistrationAvailabilityError } from './registration-availability';
 import type { RegistrationFieldValues, Role, User } from './types';
 
@@ -15,6 +16,7 @@ interface AuthContextValue {
   registrationApprovalRequired: boolean;
   registrationAvailable: boolean;
   userLimit: number;
+  maxUploadBytes: number;
   configured: boolean;
   setupAvailable: boolean;
   loading: boolean;
@@ -41,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [registrationApprovalRequired, setRegistrationApprovalRequiredState] = useState(false);
   const [registrationAvailable, setRegistrationAvailableState] = useState(true);
   const [userLimit, setUserLimitState] = useState(0);
+  const [maxUploadBytes, setMaxUploadBytesState] = useState(DEFAULT_MAX_UPLOAD_BYTES);
   const [configured, setConfigured] = useState(false);
   const [setupAvailable, setSetupAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -67,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRegistrationApprovalRequiredState(me.registrationApprovalRequired ?? setup.registrationApprovalRequired ?? false);
     setRegistrationAvailableState(me.registrationAvailable ?? setup.registrationAvailable ?? true);
     setUserLimitState(me.userLimit ?? setup.userLimit ?? 0);
+    setMaxUploadBytesState(me.maxUploadBytes ?? setup.maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES);
     setUser(me.user);
   }, []);
 
@@ -123,6 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRegistrationApprovalRequiredState(result.registrationApprovalRequired ?? false);
     setRegistrationAvailableState(result.registrationAvailable ?? true);
     setUserLimitState(result.userLimit ?? 0);
+    setMaxUploadBytesState(result.maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES);
   }, []);
 
   const signUp = useCallback(async (email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => {
@@ -162,6 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRegistrationApprovalRequiredState(result.registrationApprovalRequired ?? false);
     setRegistrationAvailableState(result.registrationAvailable ?? true);
     setUserLimitState(result.userLimit ?? 0);
+    setMaxUploadBytesState(result.maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES);
   }, []);
 
   const setBranding = useCallback((name: string, palette: BrandingPalette, icon: string | null) => {
@@ -192,8 +198,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
-    user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, registrationAvailable, userLimit, configured, setupAvailable, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings,
-  }), [user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, registrationAvailable, userLimit, configured, setupAvailable, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings]);
+    user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, registrationAvailable, userLimit, maxUploadBytes, configured, setupAvailable, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings,
+  }), [user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, registrationAvailable, userLimit, maxUploadBytes, configured, setupAvailable, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

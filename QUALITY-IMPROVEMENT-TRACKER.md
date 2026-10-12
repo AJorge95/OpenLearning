@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Preflight oversized course media and documents
+
+- **Reviewed:** `MAX_UPLOAD_BYTES` configuration, platform-configuration responses, the lesson-document, video, and course-cover upload flows, and the server's existing 413 upload-limit message.
+- **Improvement:** Return the configured byte limit with platform configuration and reject oversized video, cover, and lesson-document selections before saving lesson/course details, decoding covers, or sending multipart requests. Focus the selected file control and show the same formatted limit message the server uses.
+- **Why it helps:** Staff see the actionable size limit immediately and avoid waiting for a large upload to fail after consuming network bandwidth. Cover validation also avoids decoding an image that cannot be uploaded.
+- **Backend:** Expose the configured limit in the existing configuration response and keep the server's 413 wording aligned, including singular byte formatting.
+- **Checked:** Focused upload, media-route, and configuration-response tests passed (24/24); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. The connected browser is signed out, so the staff-only upload flow was not replayed in the browser.
+
 ## 2026-10-12 — Name learning-path learner pagination landmarks
 
 - **Reviewed:** The learning-path assignment panel, its page controls, the matching learner-directory API response, and the shared responsive pagination styles.

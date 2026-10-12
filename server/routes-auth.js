@@ -78,6 +78,7 @@ function getPlatformConfiguration(registeredCount) {
   const protocol = setting('connection_protocol');
   return {
     ...getBranding(),
+    maxUploadBytes: config.maxUploadBytes,
     connectionProtocol: protocol === 'http' || protocol === 'https' ? protocol : defaultConnectionProtocol(),
     registrationEnabled: setting('registration_enabled') !== '0',
     registrationApprovalRequired: setting('registration_approval_required') === '1',
