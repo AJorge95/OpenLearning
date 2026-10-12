@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep AppSelect pointer tracking safe across repeated cleanup
+
+- **Reviewed:** The shared document-level pointer listener, subscriber reference count, React effect teardown, and the selector's outside-label activation guard.
+- **Improvement:** Make each pointer-tracking cleanup idempotent and add a regression that cleans up twice, then verifies a later select can still subscribe and unsubscribe normally.
+- **Why it helps:** Repeated teardown can no longer underflow the shared subscriber count and silently prevent later AppSelect controls from tracking pointer origins.
+- **Checked:** The focused AppSelect activation tests passed (6/6), the full `npm test -- --test-reporter=dot` suite passed, `npm run typecheck` and `npm run build` passed, and `git diff --check` passed. No rendered layout changed; the active browser session is signed out, so authenticated selector interaction was not rechecked in-browser.
+
 ## 2026-10-12 — Back up the configured database and media paths
 
 - **Reviewed:** The backup example, SQLite WAL mode, `DATA_DIR`/`DB_PATH`/`MEDIA_ROOT` resolution, the running reset-backup implementation, and existing test organization.
