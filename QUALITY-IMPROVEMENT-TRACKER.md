@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Review shared button names and account role constraints
+
+- **Reviewed:** Shared `Button` behavior, native and shared button call sites across the JSX source, recent accessibility tracker entries, and the account-role update transaction.
+- **Result:** No additional runtime change. A focused TypeScript AST scan found no button without visible text or an accessible name. The account endpoint still validates role values, protects the last active administrator, and requires its audit event before completing a change.
+- **Why no change:** The reviewed controls and backend contract already cover the observed needs; no new user-facing or reliability defect surfaced.
+- **Checked:** Read-only source and tracker review. No account changes were made.
+- **Needed to continue:** A rendered control missing an accessible name or a concrete backend failure outside the existing role-update safeguards.
+
 ## 2026-10-12 — Protect orphaned-media cleanup failure handling
 
 - **Reviewed:** Startup cleanup of course media, stale-file checks, reference preservation, filesystem race handling, and the bounded failure-sample policy.
