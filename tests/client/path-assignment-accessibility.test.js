@@ -16,6 +16,13 @@ test('learning-path learner paging is a landmark named for its path', () => {
   assert.match(pageSource, /!assignmentHasMore \|\| assignmentBusy/);
 });
 
+test('learner assignment rows and selector options stay stable during unrelated page updates', () => {
+  assert.match(pageSource, /const assignableLearners = useMemo\(\(\) => learners\.filter\(\(learner\) => !learner\.enrolled\), \[learners\]\)/);
+  assert.match(pageSource, /const enrolledLearners = useMemo\(\(\) => learners\.filter\(\(learner\) => learner\.enrolled\), \[learners\]\)/);
+  assert.match(pageSource, /const assignmentOptions = useMemo\(\(\) => \[[\s\S]*?\], \[assignableLearners, assignmentTotal\]\)/);
+  assert.match(pageSource, /ariaLabel="Select a learner"[^\n]*options=\{assignmentOptions\}/);
+});
+
 test('assignment confirmation describes the enrollment outcome', () => {
   assert.match(pageSource, /setNotice\('Learner is enrolled in the path\.'\)/);
 });

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse paged learner rows in path assignment controls
+
+- **Reviewed:** The learning-path assignment panel's paged learner results, assignable/enrolled row derivation, selector options, loading and assignment state updates, and the existing staff-only assignment routes.
+- **Improvement:** Memoize the assignable and enrolled learner groups from the loaded page, then memoize selector options until those rows or the directory total change.
+- **Why it helps:** Assignment-panel and path-page state updates no longer refilter up to 50 rows or rebuild the selector's option objects when the directory page is unchanged.
+- **Backend review:** Assignment authorization, published-path checks, learner-ID validation, and transaction/audit handling remain unchanged.
+- **Checked:** Focused assignment UI and route tests passed (16/16), `npm run build` passed TypeScript and Vite, and `git diff --check` passed. The staff page was not rendered in the signed-out browser session.
+
 ## 2026-10-12 — Reuse caption options during playback updates
 
 - **Reviewed:** The learner video player's `onTimeUpdate` state updates, caption-track metadata, `AppSelect` option-reference validation, and the existing protected caption delivery route.
