@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck learner course catalog filters and paging
+
+- **Reviewed:** Search and category/sort interaction, clear and retry controls, load-more recovery and page-drift handling, responsive filter layout, accessible progress announcements, and published-course visibility/category queries.
+- **Result:** No runtime change. Filter changes apply the visible search draft, superseded requests are aborted, failed load-more requests can be retried, and page drift reloads the current result set. The route validates query, category, and sort values and excludes inaccessible or version-snapshot courses from the catalog and category list.
+- **Why no change:** Existing source and regressions cover the identified interaction, visibility, and pagination states. No stale results, duplicate page, missing accessible announcement, or mobile layout issue was reproduced.
+- **Checked:** Catalog filter, responsive, and pagination UI tests passed (11/11); catalog visibility/category route regressions passed (3/3). The authenticated catalog was not rendered in the current signed-out browser session.
+- **Needed to revisit:** A measured delay on a large catalog, duplicate or missing courses after concurrent catalog changes, or a reproduced filter/accessibility/responsive failure.
+
 ## 2026-10-12 — Recheck account-detail loading and course history
 
 - **Reviewed:** Route changes between user accounts, abortable detail loads, retryable versus permanent errors, last-administrator conflict refresh, and paginated course history assembled from enrollments, grants, and published learning paths.
