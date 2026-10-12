@@ -91,11 +91,11 @@ function splitIntoBatches(values, size) {
   return batches;
 }
 
-export function syncUnlockedPathStates(pathIds, userId) {
+export function syncUnlockedPathStates(pathIds, userId, pathRowsById = new Map()) {
   const user = { id: userId, role: 'learner', disabled: false };
   const statesByCourse = new Map();
   for (const pathId of pathIds) {
-    const rows = pathCourseRows(pathId);
+    const rows = pathRowsById.get(pathId) ?? pathCourseRows(pathId);
     const summaries = courseSummaries(rows, user);
     let allEarlierCoursesCompleted = true;
     for (const [index, row] of rows.entries()) {
@@ -117,6 +117,15 @@ export function syncUnlockedPathStates(pathIds, userId) {
       }
       allEarlierCoursesCompleted = allEarlierCoursesCompleted && summary.completed;
     }
+  }
+}
+
+function syncUnlockedPathStatesForEnrollments(pathId, enrollments) {
+  if (!enrollments.length) return;
+  // Path order is shared by every learner, so load it once before per-user progress checks.
+  const pathRowsById = new Map([[pathId, pathCourseRows(pathId)]]);
+  for (const enrollment of enrollments) {
+    syncUnlockedPathStates([pathId], enrollment.user_id, pathRowsById);
   }
 }
 
@@ -358,7 +367,7 @@ programsRouter.patch('/manage/learning-paths/:pathId', requireStaff, (req, res) 
     if (coursesChanged) {
       savePathCourses(current.id, courses);
       const enrolledLearners = db.prepare('SELECT user_id FROM learning_path_enrollments WHERE path_id = ?').all(current.id);
-      for (const enrollment of enrolledLearners) syncUnlockedPathStates([current.id], enrollment.user_id);
+      syncUnlockedPathStatesForEnrollments(current.id, enrolledLearners);
     }
     logAudit(req.currentUser, 'path.updated', 'learning_path', current.id, `Updated learning path: ${title}`, { status, selfEnrollment, courseCount: courses.length });
     return pathPayload(db.prepare('SELECT * FROM learning_paths WHERE id = ?').get(current.id), null);

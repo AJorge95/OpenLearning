@@ -2815,6 +2815,51 @@ test('learning-path patches reject arrays and skip no-op writes and audit events
   }
 });
 
+test('learning-path course edits load shared course rows once for all enrolled learners', async () => {
+  const pathId = 'path-sync-shared-course-rows';
+  const courseIds = [`${pathId}-course-1`, `${pathId}-course-2`];
+  database.prepare(`INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+    VALUES (?, 'Shared row sync', 'published', 0, 'admin-1', 'admin-1')`).run(pathId);
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
+    (?, 'Shared row course one', 'published', 'admin-1', 'admin-1'),
+    (?, 'Shared row course two', 'published', 'admin-1', 'admin-1')`).run(...courseIds);
+  database.prepare(`INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+    (?, ?, ?, 0, 0), (?, ?, ?, 1, 1)`).run(`${pathId}-step-1`, pathId, courseIds[0], `${pathId}-step-2`, pathId, courseIds[1]);
+  database.prepare(`INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by) VALUES
+    (?, ?, 'learner-active', 'assigned', 'admin-1'), (?, ?, 'learner-unassigned', 'assigned', 'admin-1')`)
+    .run(`${pathId}-enrollment-1`, pathId, `${pathId}-enrollment-2`, pathId);
+
+  const expectedPathRowsQuery = 'SELECT pc.id AS path_course_id, pc.path_id, pc.course_id, pc.position, pc.requires_previous, c.* FROM learning_path_courses pc JOIN courses c ON c.id = pc.course_id WHERE pc.path_id = ? ORDER BY pc.position';
+  const originalPrepare = database.prepare;
+  let pathRowsReadCount = 0;
+  database.prepare = (sql) => {
+    if (sql.replace(/\s+/g, ' ').trim() === expectedPathRowsQuery) pathRowsReadCount += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    const response = await fetch(apiUrl(`/manage/learning-paths/${pathId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ courses: [
+        { courseId: courseIds[0], requiresPrevious: false },
+        { courseId: courseIds[1], requiresPrevious: false },
+      ] }),
+    });
+
+    assert.equal(response.status, 200);
+    const { path } = await response.json();
+    assert.deepEqual(path.courses.map((course) => course.requiresPrevious), [false, false]);
+    assert.equal(pathRowsReadCount, 1, 'shared path course rows should be fetched once for both enrolled learners');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE course_id IN (?, ?) AND user_id IN (?, ?)')
+      .get(...courseIds, 'learner-active', 'learner-unassigned').count, 4);
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run(pathId);
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(...courseIds);
+  }
+});
+
 test('learning-path updates roll back when the response cannot be read', async () => {
   const pathId = 'path-update-payload-read';
   const originalDescription = 'Before response failure';

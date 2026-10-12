@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const styles = fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
-const forcedColors = styles.match(/@media \(forced-colors: active\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+const forcedColors = Array.from(styles.matchAll(/@media \(forced-colors: active\)\s*\{([\s\S]*?)\n\}/g), (match) => match[1])
+  .find((rules) => rules.includes('.quiz-choice')) ?? '';
 
 test('quiz choices keep native radio and selected-state cues in forced-colors mode', () => {
   assert.notEqual(forcedColors, '', 'quiz styles should adapt to forced-colors mode');
