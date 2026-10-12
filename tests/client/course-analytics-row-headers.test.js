@@ -15,7 +15,7 @@ function stringAttribute(element, attributeName) {
     ? attribute.initializer.text : '';
 }
 
-test('lesson and quiz names provide row context in course analytics tables', () => {
+test('lesson, quiz, and learner names provide row context in course analytics tables', () => {
   const sourcePath = path.join(sourceRoot, 'pages-manage.tsx');
   const source = fs.readFileSync(sourcePath, 'utf8');
   const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -29,8 +29,9 @@ test('lesson and quiz names provide row context in course analytics tables', () 
   }
 
   visit(sourceFile);
-  assert.equal(rowHeaders.filter((header) => header.includes('{lesson.title}')).length, 1);
-  assert.equal(rowHeaders.filter((header) => header.includes('{quiz.title}')).length, 1);
+  assert.equal(rowHeaders.filter((header) => header.includes('<strong>{lesson.title}</strong>')).length, 1);
+  assert.equal(rowHeaders.filter((header) => header.includes('<strong>{quiz.title}</strong>')).length, 1);
+  assert.equal(rowHeaders.filter((header) => header.includes('<strong>{learner.username}</strong>')).length, 1);
 
   const styles = fs.readFileSync(path.resolve(sourceRoot, 'styles.css'), 'utf8');
   assert.match(styles, /\.analytics-table td, \.analytics-table tbody th\s*\{[^}]*padding:\s*13px 12px;[^}]*border-bottom:\s*1px solid var\(--line\);[^}]*vertical-align:\s*top;/);
