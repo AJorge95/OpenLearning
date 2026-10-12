@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Give certificate actions distinct accessible names
+
+- **Reviewed:** My Learning course-card and certificate-history action names, repeated version-specific certificate records, certificate payload fields, owner scoping, and stable history ordering.
+- **Improvement:** Add course-specific accessible names to certificate-card links and include the certificate code in each history link's name so awards for different course versions remain distinguishable. Visible link text stays concise.
+- **Why it helps:** Screen-reader users can identify the destination from a link list without relying on nearby card content; version-specific awards for the same course also have unique names.
+- **Backend review:** Certificate history already returns the course title and unique code, scopes reads to the signed-in learner, and uses indexed newest-first ordering, so no route change was needed.
+- **Checked:** New accessibility tests passed (2/2); My Learning/certificate flow tests passed (5/5); certificate service and route tests passed (11/11); full `npm test -- --test-reporter=dot`, `npm run build`, and `git diff --check` passed. The authenticated My Learning page redirected to `/login` in the available browser session. The new regression remains in `tests/client/`.
+
 ## 2026-10-12 — Recheck learner course catalog filters and paging
 
 - **Reviewed:** Search and category/sort interaction, clear and retry controls, load-more recovery and page-drift handling, responsive filter layout, accessible progress announcements, and published-course visibility/category queries.
