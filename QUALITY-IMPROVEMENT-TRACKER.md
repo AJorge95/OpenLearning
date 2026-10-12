@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep the active select option in view
+
+- **Reviewed:** The shared `AppSelect` active-descendant state, existing keyboard scroll behavior, popup height cap, and the audit-action filter's dynamically supplied options.
+- **Improvement:** Scroll the active option into view whenever a listbox opens or its active option changes. Centralize this in an effect so opening by pointer, keyboard, or typeahead keeps the active item visible as well as arrow-key navigation.
+- **Why it helps:** Users can see and screen-reader users can follow the option currently announced, even when a long menu opens around a selection below its scroll viewport.
+- **Backend review:** The audit endpoint groups existing action types for the filter, so its option list can exceed the menu's visible height. The endpoint contract and query remain unchanged.
+- **Checked:** Added a client regression for the active-option visibility effect. Focused select, navigation, positioning, labeling, and role-boundary tests passed (27/27); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict TypeScript checking and Vite bundling; and `git diff --check` passed. The local browser remains at `/login`, so the authenticated admin filter could not be rendered for visual verification.
+
 ## 2026-10-12 — Add row context to administrator logs
 
 - **Reviewed:** Audit and system log table headings, expandable detail rows, existing cell styles, and the admin log response fields for each event.
