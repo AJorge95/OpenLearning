@@ -242,7 +242,7 @@ test('account details explain and disable controls for the last active administr
   assert.match(pageSource, /isLastActiveAdmin: boolean/);
   assert.equal((pageSource.match(/disabled=\{saving \|\| user\.isLastActiveAdmin\}/g) || []).length, 2);
   assert.match(pageSource, /ariaLabelledBy="account-platform-role-label" describedBy=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\}/);
-  assert.match(pageSource, /disabled=\{saving \|\| user\.isLastActiveAdmin\} onChange=\{\(role\) => updateAccount\(\{ role \}\)\}/);
+  assert.match(pageSource, /disabled=\{saving \|\| user\.isLastActiveAdmin\} busy=\{saving\} onChange=\{\(role\) => updateAccount\(\{ role \}\)\}/);
   assert.match(pageSource, /user\.isLastActiveAdmin && <p className="account-admin-protection" id=\{lastAdminHelpId\}>This is the only active administrator\./);
 });
 

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Communicate administrator account action progress
+
+- **Reviewed:** The administrator user list and account-detail role controls, shared `AppSelect` semantics, inline approval/reset/status actions, disabled-state behavior, and existing account-management regressions.
+- **Improvement:** Add an optional busy state to the shared custom select and expose it on administrator role changes. While a user-list action is saving, announce the row-level busy state and change reset/status labels to `Resetting…` or `Saving…` so the disabled control does not look inert.
+- **Why it helps:** Administrators receive immediate, accessible feedback while role, password, approval, or account-status requests are in flight, reducing repeat clicks and uncertainty about whether a disabled control is still working.
+- **Backend review:** Account authorization, last-active-administrator protection, audit logging, session revocation, and response refresh behavior are unchanged; the existing save state remains the source of truth.
+- **Checked:** Added `tests/client/admin-user-action-feedback.test.js` and updated the existing AppSelect account-detail assertion. Focused client checks passed (14/14), the full `npm test` suite passed (849/849), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The local signed-in Users page rendered at 1280×720; the learner role selector opened and closed with Escape, the disabled sole-administrator selector remained guarded, and no account mutation was submitted. The affected in-flight state was verified by source regression rather than a live mutation.
+
 ## 2026-10-12 — Align first-run setup required-field cues
 
 - **Reviewed:** The two-step setup wizard, its native required constraints, shared password-label treatment, field-level validation focus, and the existing auth-page required indicator pattern.
