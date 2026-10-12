@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck auth route focus and page titles
+
+- **Reviewed:** The shared route-status effect, auth-page `main-content` targets, page-title updates from route headings, and the registration-to-login navigation path.
+- **Result:** No runtime change. Auth routes expose a focusable main region; when navigation replaces the page, focus moves to that region, and the document title follows the new heading.
+- **Why no change:** The rendered route transition behaved as intended; the destination main region received focus and the page title changed to match the destination heading.
+- **Checked:** In a temporary local browser tab, `/register` → **Sign in** navigated to `/login`; the browser showed the “Welcome back” title, and the focused accessibility element was the new `main-content`. The tab was closed afterward. No build or test run was needed because no source code changed.
+- **Needed to continue:** A route transition that leaves focus on a removed control, omits a usable heading, or fails to update the title.
+
 ## 2026-10-12 — Keep staff navigation reachable on short screens
 
 - **Reviewed:** The administrator and moderator sidebar structure, its seven-link maximum, fixed desktop viewport height, back and account actions, and the existing mobile rule that moves navigation into normal page flow.
