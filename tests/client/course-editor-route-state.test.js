@@ -186,6 +186,14 @@ test('blank change-request feedback is announced and associated with its textare
   assert.match(source, /\{changeRequestNoteError && <p id=\{`review-change-note-error-\$\{courseId\}`\} className="form-error" role="alert"/);
 });
 
+test('review decision inputs stay fixed while the decision is saving', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+
+  assert.match(source, /checked=\{requiresRecompletion\} onChange=\{\(event\) => setRequiresRecompletion\(event\.target\.checked\)\}[^>]*disabled=\{savingReviewDecision\}/);
+  assert.match(source, /<label className="version-change-note">[\s\S]*?<input[^>]*onChange=\{\(event\) => setChangeNote\(event\.target\.value\)\}[^>]*disabled=\{savingReviewDecision\}/);
+  assert.match(source, /<textarea ref=\{changeRequestNoteInputRef\}[\s\S]*?maxLength=\{1000\} rows=\{4\} required autoFocus disabled=\{savingReviewDecision\}/);
+});
+
 test('course-version restore confirmation validates its route and keeps feedback scoped to the source course', () => {
   const source = fs.readFileSync(sourcePath, 'utf8');
   const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
