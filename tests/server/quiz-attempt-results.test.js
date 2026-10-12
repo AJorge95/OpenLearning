@@ -89,6 +89,18 @@ before(async () => {
     INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES
       ('choice-3', 'question-2', 'Answer for quiz two', 1, 0),
       ('choice-4', 'question-3', 'Answer for quiz three', 1, 0);
+    INSERT INTO media_files (id, course_id, original_name, file_name, mime_type, byte_size, media_kind) VALUES
+      ('media-2', 'course-2', 'lesson-two.mp4', 'lesson-two.mp4', 'video/mp4', 100, 'video'),
+      ('media-3', 'course-2', 'lesson-three.mp4', 'lesson-three.mp4', 'video/mp4', 100, 'video');
+    INSERT INTO lessons (id, module_id, title, description, transcript, media_id, position) VALUES
+      ('lesson-2', 'module-2', 'Lesson two', 'Description for lesson two', 'Transcript for lesson two', 'media-2', 0),
+      ('lesson-3', 'module-3', 'Lesson three', 'Description for lesson three', 'Transcript for lesson three', 'media-3', 0);
+    INSERT INTO lesson_resources (id, lesson_id, resource_type, title, href, position) VALUES
+      ('resource-2', 'lesson-2', 'link', 'Lesson two reference', 'https://example.invalid/lesson-two', 0),
+      ('resource-3', 'lesson-3', 'link', 'Lesson three reference', 'https://example.invalid/lesson-three', 0);
+    INSERT INTO lesson_captions (id, lesson_id, language, label, file_name, original_name, byte_size) VALUES
+      ('caption-2', 'lesson-2', 'en', 'English', 'lesson-two.vtt', 'Lesson two captions.vtt', 20),
+      ('caption-3', 'lesson-3', 'en', 'English', 'lesson-three.vtt', 'Lesson three captions.vtt', 20);
   `);
   const questions = [{
     id: 'question-1',
@@ -200,6 +212,63 @@ test('course payload can omit quiz questions without losing quiz status', async 
   assert.equal(invalidResponse.status, 400);
   assert.deepEqual(await invalidResponse.json(), {
     error: 'Choose a valid quiz question option.', code: 'validation_error',
+  });
+});
+
+test('course payload can omit unused lesson details while preserving outline fields', async () => {
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const baseUrl = `http://127.0.0.1:${address.port}/api`;
+  const headers = { 'x-test-user': 'admin-1', connection: 'close' };
+  const fullResponse = await fetch(`${baseUrl}/courses/course-2`, { headers });
+  assert.equal(fullResponse.status, 200);
+  const fullText = await fullResponse.text();
+  const fullCourse = JSON.parse(fullText).course;
+  const fullLesson = fullCourse.modules[0].lessons[0];
+  assert.equal(fullLesson.description, 'Description for lesson two');
+  assert.equal(fullLesson.transcript, 'Transcript for lesson two');
+  assert.equal(fullLesson.resources[0].title, 'Lesson two reference');
+  assert.equal(fullLesson.captions[0].label, 'English');
+
+  const originalPrepare = database.prepare;
+  let resourceQueryCount = 0;
+  let captionQueryCount = 0;
+  database.prepare = (sql) => {
+    if (sql.includes('FROM lesson_resources lr')) resourceQueryCount += 1;
+    if (sql.includes('FROM lesson_captions lc')) captionQueryCount += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  let compactResponse;
+  let compactText;
+  try {
+    compactResponse = await fetch(`${baseUrl}/courses/course-2?includeLessonDetails=0`, { headers });
+    compactText = await compactResponse.text();
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.equal(compactResponse.status, 200);
+  assert.equal(resourceQueryCount, 0);
+  assert.equal(captionQueryCount, 0);
+  const compactCourse = JSON.parse(compactText).course;
+  const compactLesson = compactCourse.modules[0].lessons[0];
+  assert.equal(compactLesson.title, fullLesson.title);
+  assert.equal(compactLesson.completed, fullLesson.completed);
+  assert.equal(compactLesson.hasVideo, true);
+  assert.equal(compactLesson.description, '');
+  assert.equal(compactLesson.transcript, '');
+  assert.equal(compactLesson.mediaUrl, null);
+  assert.equal(compactLesson.videoName, null);
+  assert.deepEqual(compactLesson.resources, []);
+  assert.deepEqual(compactLesson.captions, []);
+  assert.deepEqual(compactCourse.modules.map((module) => module.quiz.passed), fullCourse.modules.map((module) => module.quiz.passed));
+  assert.ok(compactText.length < fullText.length);
+
+  const invalidResponse = await fetch(`${baseUrl}/courses/course-2?includeLessonDetails=no`, { headers });
+  assert.equal(invalidResponse.status, 400);
+  assert.deepEqual(await invalidResponse.json(), {
+    error: 'Choose a valid lesson detail option.', code: 'validation_error',
   });
 });
 

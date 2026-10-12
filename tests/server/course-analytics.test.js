@@ -3895,7 +3895,7 @@ test('course publication rolls back when the published editor response cannot be
   let payloadReadFailed = false;
 
   database.prepare = (sql) => {
-    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT l.*, mf.original_name, mf.mime_type FROM lessons l JOIN course_modules m ON m.id = l.module_id LEFT JOIN media_files mf ON mf.id = l.media_id WHERE m.course_id = ? ORDER BY m.position, m.id, l.position, l.id') {
+    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT l.id, l.module_id, l.title, l.description, l.transcript, l.position, l.media_id, mf.original_name FROM lessons l JOIN course_modules m ON m.id = l.module_id LEFT JOIN media_files mf ON mf.id = l.media_id WHERE m.course_id = ? ORDER BY m.position, m.id, l.position, l.id') {
       payloadReadFailed = true;
       throw new Error('Injected published course payload read failure');
     }

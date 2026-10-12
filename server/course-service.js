@@ -183,6 +183,7 @@ export function getCoursePayload(course, user, {
   includeQuizQuestions = true,
   // Editor payloads expose answer keys but do not display the current user's attempt details.
   includeLatestAttempts = !includeAnswers,
+  includeLessonDetails = true,
   quizId = null,
   storageCourseId,
 } = {}) {
@@ -212,43 +213,48 @@ export function getCoursePayload(course, user, {
   }
   const quizQuestionFilter = quizId === null ? '' : 'AND q.id = ?';
   const quizQuestionParameters = quizId === null ? [contentId] : [contentId, quizId];
+  // Outlines and quiz screens only need lesson navigation and progress, not long transcripts or attachments.
   const lessonResources = new Map();
-  for (const resource of db.prepare(`
-    SELECT lr.id, lr.lesson_id, lr.resource_type, lr.title, lr.href, lr.original_name
-    FROM lesson_resources lr
-    JOIN lessons l ON l.id = lr.lesson_id
-    JOIN course_modules m ON m.id = l.module_id
-    WHERE m.course_id = ?
-    ORDER BY lr.lesson_id, lr.position, lr.id
-  `).all(contentId)) {
-    const resources = lessonResources.get(resource.lesson_id) ?? [];
-    resources.push({
-      id: resource.id,
-      kind: resource.resource_type,
-      title: resource.title,
-      url: resource.resource_type === 'link' ? resource.href : `/media/resources/${resource.id}`,
-      fileName: resource.original_name,
-    });
-    lessonResources.set(resource.lesson_id, resources);
+  if (includeLessonDetails) {
+    for (const resource of db.prepare(`
+      SELECT lr.id, lr.lesson_id, lr.resource_type, lr.title, lr.href, lr.original_name
+      FROM lesson_resources lr
+      JOIN lessons l ON l.id = lr.lesson_id
+      JOIN course_modules m ON m.id = l.module_id
+      WHERE m.course_id = ?
+      ORDER BY lr.lesson_id, lr.position, lr.id
+    `).all(contentId)) {
+      const resources = lessonResources.get(resource.lesson_id) ?? [];
+      resources.push({
+        id: resource.id,
+        kind: resource.resource_type,
+        title: resource.title,
+        url: resource.resource_type === 'link' ? resource.href : `/media/resources/${resource.id}`,
+        fileName: resource.original_name,
+      });
+      lessonResources.set(resource.lesson_id, resources);
+    }
   }
   const captionsByLesson = new Map();
-  for (const caption of db.prepare(`
-    SELECT lc.id, lc.lesson_id, lc.language, lc.label, lc.original_name
-    FROM lesson_captions lc
-    JOIN lessons l ON l.id = lc.lesson_id
-    JOIN course_modules m ON m.id = l.module_id
-    WHERE m.course_id = ?
-    ORDER BY lc.lesson_id, lc.language
-  `).all(contentId)) {
-    const captions = captionsByLesson.get(caption.lesson_id) ?? [];
-    captions.push({
-      id: caption.id,
-      language: caption.language,
-      label: caption.label,
-      url: `/media/captions/${caption.id}`,
-      fileName: caption.original_name,
-    });
-    captionsByLesson.set(caption.lesson_id, captions);
+  if (includeLessonDetails) {
+    for (const caption of db.prepare(`
+      SELECT lc.id, lc.lesson_id, lc.language, lc.label, lc.original_name
+      FROM lesson_captions lc
+      JOIN lessons l ON l.id = lc.lesson_id
+      JOIN course_modules m ON m.id = l.module_id
+      WHERE m.course_id = ?
+      ORDER BY lc.lesson_id, lc.language
+    `).all(contentId)) {
+      const captions = captionsByLesson.get(caption.lesson_id) ?? [];
+      captions.push({
+        id: caption.id,
+        language: caption.language,
+        label: caption.label,
+        url: `/media/captions/${caption.id}`,
+        fileName: caption.original_name,
+      });
+      captionsByLesson.set(caption.lesson_id, captions);
+    }
   }
   const completedLessonIds = versionProgress.completedLessonIds;
   const quizChoicesByQuestion = new Map();
@@ -270,27 +276,34 @@ export function getCoursePayload(course, user, {
   }
   const moduleRows = db.prepare('SELECT * FROM course_modules WHERE course_id = ? ORDER BY position, id').all(contentId);
   const lessonsByModule = new Map();
-  for (const lesson of db.prepare(`
-    SELECT l.*, mf.original_name, mf.mime_type
+  const lessonRows = includeLessonDetails ? db.prepare(`
+    SELECT l.id, l.module_id, l.title, l.description, l.transcript, l.position, l.media_id, mf.original_name
     FROM lessons l
     JOIN course_modules m ON m.id = l.module_id
     LEFT JOIN media_files mf ON mf.id = l.media_id
     WHERE m.course_id = ?
     ORDER BY m.position, m.id, l.position, l.id
-  `).all(contentId)) {
+  `).all(contentId) : db.prepare(`
+    SELECT l.id, l.module_id, l.title, l.position, l.media_id
+    FROM lessons l
+    JOIN course_modules m ON m.id = l.module_id
+    WHERE m.course_id = ?
+    ORDER BY m.position, m.id, l.position, l.id
+  `).all(contentId);
+  for (const lesson of lessonRows) {
     const lessons = lessonsByModule.get(lesson.module_id) ?? [];
     lessons.push({
       id: lesson.id,
       title: lesson.title,
-      description: lesson.description,
-      transcript: lesson.transcript,
+      description: includeLessonDetails ? lesson.description : '',
+      transcript: includeLessonDetails ? lesson.transcript : '',
       position: lesson.position,
       mediaId: lesson.media_id,
-      mediaUrl: lesson.media_id ? `/media/${lesson.media_id}` : null,
-      videoName: lesson.original_name,
+      mediaUrl: includeLessonDetails && lesson.media_id ? `/media/${lesson.media_id}` : null,
+      videoName: includeLessonDetails ? lesson.original_name : null,
       hasVideo: Boolean(lesson.media_id),
-      resources: lessonResources.get(lesson.id) ?? [],
-      captions: captionsByLesson.get(lesson.id) ?? [],
+      resources: includeLessonDetails ? lessonResources.get(lesson.id) ?? [] : [],
+      captions: includeLessonDetails ? captionsByLesson.get(lesson.id) ?? [] : [],
       completed: completedLessonIds.has(lesson.id),
     });
     lessonsByModule.set(lesson.module_id, lessons);

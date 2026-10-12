@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Omit lesson content from overview and quiz payloads
+
+- **Reviewed:** The overview curriculum and quiz-page consumers, lesson navigation/progress helpers, and the course payload's transcript, media-name, resource, and caption reads.
+- **Improvement:** Add a validated `includeLessonDetails=0` option. Course overview and quiz pages now receive lesson identity, title, completion, and video-presence fields without loading descriptions, transcripts, media names, resources, or captions. The lesson player and other callers retain the full payload by default.
+- **Why it helps:** Long transcripts and unused lesson attachments no longer travel with course summaries or quiz pages, and those requests skip the resource and caption queries entirely.
+- **UI review:** The overview curriculum renders lesson titles, completion/video markers, and quiz state; the quiz page uses course progress/navigation and the selected quiz. Neither renders lesson descriptions, transcripts, resources, or captions. Existing semantic structure and responsive controls remain unchanged.
+- **Checked:** Server coverage proves compact responses preserve outline and quiz state, omit details, make zero resource/caption queries, and are smaller than the full response; invalid options return 400 and the full default remains intact. Focused client/server tests passed (8/8), the publish-rollback regression passed with the updated lesson projection, the full test suite and `npm run build` passed, and syntax plus `git diff --check` passed.
+
 ## 2026-10-12 — Skip learner attempt reads in course-editor payloads
 
 - **Reviewed:** Course editor GET and save responses, every `getCoursePayload` call that includes answer keys, and client reads of `latestAttempt`.

@@ -469,7 +469,7 @@ export function CourseOverviewPage() {
     courseRequestControllerRef.current?.abort();
     courseRequestControllerRef.current = requestController;
     setCourse(null); setError(''); setLoading(true); setStarting(false);
-    fetchCourse(courseId, false, { signal: requestController.signal, includeQuizQuestions: false, includeLatestAttempts: false }).then((result) => {
+    fetchCourse(courseId, false, { signal: requestController.signal, includeQuizQuestions: false, includeLatestAttempts: false, includeLessonDetails: false }).then((result) => {
       if (requestSequence === loadSequenceRef.current && routeCourseIdRef.current === courseId) setCourse(result.course);
     }).catch((cause) => {
       if (requestSequence === loadSequenceRef.current && routeCourseIdRef.current === courseId) setError(cause instanceof ApiError ? cause.message : 'This course could not be loaded.');
@@ -1623,7 +1623,7 @@ export function QuizPage() {
     setCourse(null); setLoading(true); setError(''); setAttemptDetailsLoadFailed(false);
     void (async () => {
       try {
-        const { course: data } = await fetchCourse(courseId, false, { signal: requestController.signal, quizId });
+        const { course: data } = await fetchCourse(courseId, false, { signal: requestController.signal, quizId, includeLessonDetails: false });
         if (!isCurrentRequest()) return;
         setCourse(data);
         const latestAttempt = data.modules?.find((module) => module.quiz?.id === quizId)?.quiz?.latestAttempt;

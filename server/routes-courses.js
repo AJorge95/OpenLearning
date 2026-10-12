@@ -332,6 +332,7 @@ courseRouter.get('/courses/:courseId', (req, res) => {
   const course = requireCourseViewer(req.params.courseId, req.currentUser);
   const includeQuizQuestions = enumQuery(req.query.includeQuizQuestions, 'quiz question option', ['0', '1'], '1') === '1';
   const includeLatestAttempts = enumQuery(req.query.includeLatestAttempts, 'quiz attempt option', ['0', '1'], '1') === '1';
+  const includeLessonDetails = enumQuery(req.query.includeLessonDetails, 'lesson detail option', ['0', '1'], '1') === '1';
   const quizId = req.query.quizId;
   if (quizId !== undefined && (typeof quizId !== 'string' || !quizId || quizId.length > 120 || quizId.trim() !== quizId)) {
     fail(400, 'Choose a valid quiz.', 'validation_error');
@@ -342,6 +343,7 @@ courseRouter.get('/courses/:courseId', (req, res) => {
   res.json({ course: getCoursePayload(course, req.currentUser, {
     includeQuizQuestions,
     includeLatestAttempts,
+    includeLessonDetails,
     ...(quizId ? { quizId } : {}),
   }) });
 });
