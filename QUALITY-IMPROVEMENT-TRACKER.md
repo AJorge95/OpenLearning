@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck route query validation consistency
+
+- **Reviewed:** Route query reads across courses, learning paths, calendar, account lists, and log pages, including repeated values and malformed page, filter, quiz, and date inputs.
+- **Result:** No runtime change. List pages share the strict `pageQuery` parser, filters reject non-single or unsupported values, the optional quiz ID requires a bounded single string, and the calendar rejects missing, repeated, malformed, or reversed date ranges.
+- **Why no change:** The remaining direct query reads either validate their type before use or feed a shared validator. No request value was found to be silently accepted in a way that could return a misleading result or bypass a limit.
+- **Checked:** Reviewed route handlers and `server/http.js`; `node --test tests/server/http-pagination.test.js` passed (3/3), covering malformed page errors and the omitted-page default. No build was run because runtime source was unchanged; `git diff --check` passed.
+- **Needed to continue:** A reproduced route that accepts a malformed or repeated query value or returns a misleading result for one.
+
 ## 2026-10-12 — Strengthen palette state indicators
 
 - **Reviewed:** Palette contrast coverage and the hover/selected borders for secondary actions, quiz answers, and calendar dates and events.
