@@ -32,6 +32,14 @@
 - **Checked:** `rg --files -g AGENTS.md -g QUALITY-IMPROVEMENT-TRACKER.md` found the tracker and no additional project guidance file; the marker search returned no candidates; `git status` was clean before this tracker entry.
 - **Needed to revisit:** A concrete user-reported issue, an identified incomplete workflow, or a measured reliability or performance problem.
 
+## 2026-10-12 — Recheck administrator password-reset behavior
+
+- **Reviewed:** Reset-dialog semantics, keyboard focus containment and restoration, password guidance and confirmation, per-account save state, route validation, rate limiting, session invalidation, and transactional audit persistence.
+- **Result:** No runtime change. The form prevents dismissal while saving and clears the temporary password on close; the route validates before hashing and commits the hash, session removal, and audit entry together.
+- **Why no change:** Existing client and route coverage already protects the reviewed interaction and rollback cases; no reproducible mismatch justified another change.
+- **Checked:** Password-reset dialog and guidance tests passed (5/5); the registration/account route suite, including password reset and audit rollback, passed (31/31); `git diff --check` passed. The signed-in admin dialog was not rendered because the available browser session is signed out.
+- **Needed to revisit:** A reproduced focus or dismissal issue, a password-reset/session mismatch, or a failure under realistic request latency.
+
 ## 2026-10-12 — Let staff revoke course access from disabled learners
 
 - **Reviewed:** Disabled learner rows in course access management, the UI's grant/revoke actions, and the existing course-grant API and audit transaction.
