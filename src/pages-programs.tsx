@@ -36,6 +36,9 @@ const learningPathStatusFilters: Array<{ label: string; value: LearningPathStatu
 const pathCourseDeadlineFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 const calendarTimeFormatter = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
 const calendarDateTimeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
+// Reuse locale-aware calendar formatters across month navigation and deadline updates.
+const calendarMonthFormatter = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
+const calendarFullDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'full' });
 
 function PathEditor({ existing, busy, onSave, onCancel, onDirtyChange }: {
   existing: LearningPath | null;
@@ -642,14 +645,12 @@ export function CalendarPage() {
   );
   const days = [...Array(firstDay).fill(null), ...Array.from({ length: dayCount }, (_, index) => index + 1)];
   const cells = [...days, ...Array((7 - days.length % 7) % 7).fill(null)];
-  const formatter = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
-  const fullDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'full' });
   const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   return <div className="management-page programs-page calendar-page">
-    <PageHeading title="Learning calendar" subtitle="Course completion deadlines shown in your local timezone." action={<div className="calendar-month-controls"><Button variant="secondary" aria-label="Previous month" onClick={() => navigateToMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={17} /></Button><span className="calendar-month-label" role="status" aria-live="polite" aria-atomic="true">{formatter.format(month)}</span><Button variant="secondary" aria-label="Next month" onClick={() => navigateToMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={17} /></Button><Button variant="secondary" className="calendar-current-month" onClick={() => navigateToMonth(currentCalendarMonth())}>This month</Button></div>} />
+    <PageHeading title="Learning calendar" subtitle="Course completion deadlines shown in your local timezone." action={<div className="calendar-month-controls"><Button variant="secondary" aria-label="Previous month" onClick={() => navigateToMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={17} /></Button><span className="calendar-month-label" role="status" aria-live="polite" aria-atomic="true">{calendarMonthFormatter.format(month)}</span><Button variant="secondary" aria-label="Next month" onClick={() => navigateToMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={17} /></Button><Button variant="secondary" className="calendar-current-month" onClick={() => navigateToMonth(currentCalendarMonth())}>This month</Button></div>} />
     {error && <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => setReloadSequence((current) => current + 1)}>Try again</Button></div>}
-    <section className="calendar-panel" aria-label={`Deadlines for ${formatter.format(month)}`} aria-busy={loading} tabIndex={0}>
-      <table className="calendar-grid"><caption className="sr-only">Calendar days and course deadlines for {formatter.format(month)}</caption>
+    <section className="calendar-panel" aria-label={`Deadlines for ${calendarMonthFormatter.format(month)}`} aria-busy={loading} tabIndex={0}>
+      <table className="calendar-grid"><caption className="sr-only">Calendar days and course deadlines for {calendarMonthFormatter.format(month)}</caption>
         <thead><tr>{weekdays.map((day) => <th scope="col" key={day}><span aria-hidden="true">{day.slice(0, 3)}</span><span className="sr-only">{day}</span></th>)}</tr></thead>
         <tbody>{Array.from({ length: cells.length / 7 }, (_, weekIndex) => <tr key={`week-${weekIndex}`}>
           {cells.slice(weekIndex * 7, weekIndex * 7 + 7).map((day, dayIndex) => {
@@ -657,7 +658,7 @@ export function CalendarPage() {
             const key = localDateKey(new Date(year, monthIndex, day));
             const dueItems = itemsByLocalDay.get(key) || [];
             const date = new Date(year, monthIndex, day);
-            return <td className={`calendar-day ${dueItems.length ? 'has-deadline' : ''}`} key={key}><div className="calendar-day-content"><time dateTime={key} aria-label={fullDateFormatter.format(date)} aria-current={key === todayKey ? 'date' : undefined}>{day}</time>{dueItems.map((item) => {
+            return <td className={`calendar-day ${dueItems.length ? 'has-deadline' : ''}`} key={key}><div className="calendar-day-content"><time dateTime={key} aria-label={calendarFullDateFormatter.format(date)} aria-current={key === todayKey ? 'date' : undefined}>{day}</time>{dueItems.map((item) => {
               const dueAt = new Date(item.dueAt);
               const statusLabel = item.status === 'overdue' ? 'Overdue' : item.status === 'completed' ? 'Completed' : 'Upcoming';
               const dateTimeLabel = calendarDateTimeFormatter.format(dueAt);

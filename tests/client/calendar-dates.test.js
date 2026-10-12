@@ -72,3 +72,19 @@ test('calendar weekday headers keep short visual labels and expose full names to
 
   assert.match(pageSource, /<th scope="col" key=\{day\}><span aria-hidden="true">\{day\.slice\(0, 3\)\}<\/span><span className="sr-only">\{day\}<\/span><\/th>/);
 });
+
+test('calendar reuses month and day formatters outside the component render path', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
+  const componentStart = pageSource.indexOf('export function CalendarPage()');
+  const componentEnd = pageSource.indexOf('export function CompetenciesPage()', componentStart);
+  const componentSource = pageSource.slice(componentStart, componentEnd);
+  const monthFormatterIndex = pageSource.indexOf('const calendarMonthFormatter = new Intl.DateTimeFormat');
+  const dayFormatterIndex = pageSource.indexOf('const calendarFullDateFormatter = new Intl.DateTimeFormat');
+
+  assert.ok(componentStart >= 0, 'expected to find CalendarPage');
+  assert.ok(monthFormatterIndex >= 0 && monthFormatterIndex < componentStart);
+  assert.ok(dayFormatterIndex >= 0 && dayFormatterIndex < componentStart);
+  assert.match(componentSource, /calendarMonthFormatter\.format\(month\)/);
+  assert.match(componentSource, /calendarFullDateFormatter\.format\(date\)/);
+  assert.doesNotMatch(componentSource, /new Intl\.DateTimeFormat/);
+});
