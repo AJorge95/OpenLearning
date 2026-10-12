@@ -83,6 +83,7 @@
 - **Needed to revisit:** If the issue remains after refreshing the page, inspect the current rendered markup and pointer coordinates against the current local Vite bundle.
 - **Follow-up:** The user reported the right-side activation again. The supplied page still targets the former wide `<label>` markup; the current Vite JSX and stylesheet serve the separate 8.5rem selector and non-interactive parent area. Navigating to the protected account route in the available browser redirects to sign-in, so the current rendered hit area could not be exercised. The expanded focused selector suite passed (11/11); no duplicate runtime change was made.
 - **Next check:** Sign in and refresh the account page. If the current selector still opens from outside its visible field, capture the current rendered DOM and click coordinates for a targeted fix.
+- **Latest recheck (2026-10-12):** Opening the reported account URL in the available browser again redirects to `/login`. The current source still bounds pointer events and the menu to the visible trigger; the role/AppSelect regression suite passed (20/20). A signed-in page refreshed to the current bundle is needed to confirm whether the issue persists before changing runtime behavior.
 
 ## 2026-10-12 — Use published-version quiz counts in account activity
 
