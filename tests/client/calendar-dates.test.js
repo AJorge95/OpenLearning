@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { calendarMonthRequestRange, currentCalendarMonth, groupCalendarDeadlines, isSameCalendarMonth, shouldShowCalendarEmptyState } from '../../src/calendar-dates.ts';
+import { calendarMonthRequestRange, currentCalendarMonth, getCalendarDeadlineRefreshDelay, groupCalendarDeadlines, isSameCalendarMonth, markCalendarDeadlinesOverdue, shouldShowCalendarEmptyState } from '../../src/calendar-dates.ts';
+
+const deadline = (dueAt, status = 'upcoming', completed = false) => ({
+  courseId: 'course-1', title: 'Course', category: '', dueAt, status, completed, url: '/courses/course-1',
+});
 
 test('current-month navigation returns to the first day of the local month', () => {
   const month = currentCalendarMonth(new Date(2026, 9, 11, 14, 30));
@@ -55,6 +59,49 @@ test('calendar empty state appears only after a successful empty response', () =
   assert.equal(shouldShowCalendarEmptyState(false, 'Calendar could not be loaded.', 0), false);
   assert.equal(shouldShowCalendarEmptyState(false, '', 0), true);
   assert.equal(shouldShowCalendarEmptyState(false, '', 1), false);
+});
+
+test('calendar schedules the earliest upcoming deadline and ignores completed or invalid dates', () => {
+  const now = Date.parse('2026-10-12T10:00:00.000Z');
+  const items = [
+    deadline('2026-10-12T10:00:01.000Z'),
+    deadline('2026-10-12T11:00:00.000Z'),
+    deadline('2026-10-12T10:00:00.000Z', 'completed', true),
+    deadline('not-a-date'),
+  ];
+
+  assert.equal(getCalendarDeadlineRefreshDelay(items, now), 1001);
+  assert.equal(getCalendarDeadlineRefreshDelay([deadline('2026-10-12T09:00:00.000Z', 'overdue')], now), null);
+  assert.equal(getCalendarDeadlineRefreshDelay([deadline('2026-10-12T09:00:00.000Z')], now), 0);
+});
+
+test('calendar changes only passed upcoming deadlines to overdue', () => {
+  const now = Date.parse('2026-10-12T10:00:00.000Z');
+  const passed = deadline('2026-10-12T09:59:59.000Z');
+  const future = deadline('2026-10-12T10:00:01.000Z');
+  const completed = deadline('2026-10-12T09:00:00.000Z', 'completed', true);
+  const overdue = deadline('2026-10-12T09:00:00.000Z', 'overdue');
+  const items = [passed, future, completed, overdue];
+  const next = markCalendarDeadlinesOverdue(items, now);
+
+  assert.equal(next[0].status, 'overdue');
+  assert.equal(next[1], future);
+  assert.equal(next[2], completed);
+  assert.equal(next[3], overdue);
+  const unchangedItems = [future];
+  assert.equal(markCalendarDeadlinesOverdue(unchangedItems, now), unchangedItems);
+});
+
+test('calendar page schedules and clears its deadline status timer', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
+  const componentStart = pageSource.indexOf('export function CalendarPage()');
+  const componentEnd = pageSource.indexOf('export function CompetenciesPage()', componentStart);
+  const componentSource = pageSource.slice(componentStart, componentEnd);
+
+  assert.match(componentSource, /getCalendarDeadlineRefreshDelay\(monthItems\)/);
+  assert.match(componentSource, /setItems\(\(currentItems\) => markCalendarDeadlinesOverdue\(currentItems, now\)\)/);
+  assert.match(componentSource, /return \(\) => window\.clearTimeout\(timer\)/);
+  assert.match(componentSource, /\[monthItems, deadlineTimerRevision\]/);
 });
 
 test('calendar page uses the successful-empty-state guard', () => {
