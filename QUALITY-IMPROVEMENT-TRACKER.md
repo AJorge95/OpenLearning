@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Skip account-table counts when registration is unlimited
+
+- **Reviewed:** Setup and signup success payloads, registration availability under finite and unlimited caps, the transactional cap recheck, and the reported platform-role selector boundary.
+- **Improvement:** Let setup and signup evaluate registration availability without eagerly computing the registered-user count. The existing helper now reads the count only when registration is enabled with a finite cap; signup still rechecks after insertion inside its immediate transaction.
+- **Why it helps:** Unlimited successful signups no longer scan the entire users table just to return an availability value that does not depend on that count.
+- **Interface review:** The role selector remains bounded to its 8.5rem trigger, its popup matches that width, and pointer activation from beside the trigger is rejected. The connected browser is signed out, so the protected account page could not be replayed.
+- **Checked:** Added query-level regressions for unlimited setup and signup and asserted that finite-cap signup reports the post-insert availability correctly. Registration route tests passed (36/36); role-selector tests passed (25/25); full `npm test -- --test-reporter=dot`, `npm run build` (TypeScript and Vite), and `git diff --check` passed.
+
 ## 2026-10-12 — Recheck account-cap reads during authentication bootstrap
 
 - **Reviewed:** Public setup-status and `/auth/me` responses, login and administrator settings payloads, the registered-user count query, registration closed states, and the signup transaction.

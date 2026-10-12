@@ -638,22 +638,34 @@ test('initial setup rolls back when its success payload cannot be read', async (
 });
 
 test('setup, registration, and successful sign-in record last login for admin details', async () => {
-  const setupResponse = await fetch(apiUrl('/setup'), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', connection: 'close' },
-    body: JSON.stringify({
-      setupToken: isolatedConfig.SETUP_TOKEN,
-      platformName: 'Last Login Test',
-      username: lastLoginAdminUsername,
-      email: 'admin.last-login@example.invalid',
-      firstName: 'Last',
-      lastName: 'Login',
-      password: lastLoginAdminPassword,
-      confirmPassword: lastLoginAdminPassword,
-    }),
-  });
+  const originalPrepareForSetup = database.prepare;
+  let setupRegisteredUserCountReads = 0;
+  database.prepare = function countSetupUserQueries(sql, ...parameters) {
+    if (sql === 'SELECT COUNT(*) AS count FROM users') setupRegisteredUserCountReads += 1;
+    return originalPrepareForSetup.call(this, sql, ...parameters);
+  };
+  let setupResponse;
+  try {
+    setupResponse = await fetch(apiUrl('/setup'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        setupToken: isolatedConfig.SETUP_TOKEN,
+        platformName: 'Last Login Test',
+        username: lastLoginAdminUsername,
+        email: 'admin.last-login@example.invalid',
+        firstName: 'Last',
+        lastName: 'Login',
+        password: lastLoginAdminPassword,
+        confirmPassword: lastLoginAdminPassword,
+      }),
+    });
+  } finally {
+    database.prepare = originalPrepareForSetup;
+  }
   assert.equal(setupResponse.status, 201);
   const setup = await setupResponse.json();
+  assert.equal(setupRegisteredUserCountReads, 0, 'unlimited initial setup should not count all users');
   assert.equal(setup.platformName, 'Last Login Test');
   assert.equal(setup.registrationAvailable, true);
   const adminId = setup.user.id;
