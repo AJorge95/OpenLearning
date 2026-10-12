@@ -94,7 +94,6 @@
 - **Result:** No runtime change. The current page uses a separate caption and an 8.5rem desktop trigger; pointer input reaches only the trigger, and the popup matches its width. The screenshot's wrapping `label` target is absent from current source.
 - **Why no change:** A signed-in check of a fresh build confirmed the existing fix; another CSS adjustment would duplicate it.
 - **Checked:** `npm run typecheck`, a Vite production build to an isolated temporary output directory, and all 25 focused account-role and AppSelect label, activation, layout, and positioning tests passed. On the isolated current build at `http://127.0.0.1:6184`, at 1265×713 the trigger and menu measured about 134px. A click 10px to the right left the menu closed; the trigger opened its three options; the same outside click closed the menu. No role value was changed. `git diff --check` passed.
-- **Latest recheck:** The supplied account URL redirected the available browser to `/login`, so this pass could not reproduce the click on an authenticated page. Current markup still uses a separate caption and bounded trigger; the focused role-selector and AppSelect tests passed (17/17). The screenshot's wrapping `label` is not present in the current source.
 - **Needed to revisit:** A refreshed signed-in session on the affected instance that still opens the menu from outside the visible trigger; capture that instance's viewport, click coordinates, and served bundle for comparison.
 
 ## 2026-10-12 — Review session retention and catalog-query tuning evidence
@@ -957,7 +956,7 @@
 - **Needed to revisit:** If the issue remains after refreshing the page, inspect the current rendered markup and pointer coordinates against the current local Vite bundle.
 - **Follow-up:** The user reported the right-side activation again. The supplied page still targets the former wide `<label>` markup; the current Vite JSX and stylesheet serve the separate 8.5rem selector and non-interactive parent area. Navigating to the protected account route in the available browser redirects to sign-in, so the current rendered hit area could not be exercised. The expanded focused selector suite passed (11/11); no duplicate runtime change was made.
 - **Next check:** Sign in and refresh the account page. If the current selector still opens from outside its visible field, capture the current rendered DOM and click coordinates for a targeted fix.
-- **Latest recheck (2026-10-12):** Opening the reported account URL in the available browser again redirects to `/login`. The current source still bounds pointer events and the menu to the visible trigger; the role/AppSelect regression suite passed (20/20). A signed-in page refreshed to the current bundle is needed to confirm whether the issue persists before changing runtime behavior.
+- **Latest recheck (2026-10-12):** Opening the reported account URL in the available browser again redirects to `/login`. The current source still bounds pointer events and the menu to the visible trigger; the role/AppSelect regression suite passed (20/20) in the earlier recheck and 17/17 in the latest focused run. A signed-in page refreshed to the current bundle is needed to confirm whether the issue persists before changing runtime behavior.
 
 ## 2026-10-12 — Use published-version quiz counts in account activity
 
