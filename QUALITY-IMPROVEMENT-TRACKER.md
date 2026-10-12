@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck the reported role-selector click boundary
+
+- **Reviewed:** The browser comment's highlighted target, the current account-details markup, the AppSelect pointer-origin guard, selector and menu sizing, and the Vite-served source and styles.
+- **Result:** No runtime change. The current page uses a separate role-control `div` rather than the highlighted wrapping `label`; pointer events are limited to the 8.5rem trigger, forwarded clicks that begin outside it are rejected, and the menu matches the trigger width.
+- **Why no change:** The existing implementation and focused regressions cover the reported click and width boundary; the screenshot target identifies markup that is no longer in the current source.
+- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js tests/client/app-select-activation.test.js tests/client/app-select-position.test.js tests/client/app-select-layout.test.js` passed (25/25). The local Vite server serves the current component and CSS. The available browser session redirects the protected admin page to `/login`, so signed-in interaction could not be replayed.
+- **Needed to revisit:** The same click still opens the menu on a refreshed, signed-in account page using the current markup.
+
 ## 2026-10-12 — Recheck form-control accessible names
 
 - **Reviewed:** Native inputs, textareas, selects, shared password fields, dynamically identified quiz prompts, and the registration form/editor control semantics.
