@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Report malformed saved quiz breakdowns clearly
+
+- **Reviewed:** Learner-scoped quiz attempt detail loading, persisted question snapshots, the shared HTTP error handler, and the learner result fallback that preserves the saved score.
+- **Improvement:** Validate that a saved question snapshot parses as an array of question objects. On malformed data, write a focused system-log entry with the attempt and quiz IDs and return the stable `quiz_attempt_details_unavailable` API error.
+- **Why it helps:** Corrupt saved breakdowns no longer surface as an opaque internal exception. Staff can locate the affected result from the system log, while the learner can still see the score from the course payload.
+- **Checked:** Added a regression under `tests/server` for malformed JSON and a `null` array entry; the focused quiz-result suite passed (8/8), the full `npm test` suite passed (781/781), `npm run build` passed TypeScript and Vite, and `git diff --check` passed.
+
 ## 2026-10-12 — Recheck learner and program async loading paths
 
 - **Reviewed:** Learner certificate, course, and quiz loading; calendar refreshes; competency pagination; and learning-path list and assignment requests. Checked cancellation, stale-response guards, loading/error states, and retry behavior.

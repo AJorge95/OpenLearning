@@ -1481,6 +1481,25 @@ courseRouter.delete('/lessons/:lessonId/completion', (req, res) => {
   res.json({ completed: false });
 });
 
+function parseQuizAttemptSnapshot(attempt) {
+  let snapshot;
+  try {
+    snapshot = JSON.parse(attempt.question_snapshot_json);
+    if (!Array.isArray(snapshot) || snapshot.some((question) => !question || typeof question !== 'object' || Array.isArray(question))) {
+      throw new TypeError('Invalid question snapshot shape.');
+    }
+  } catch (error) {
+    // Keep a corrupt breakdown from obscuring the score returned by the course payload.
+    writeSystemLog('error', 'quiz-attempt', 'Saved quiz question breakdown data is invalid.', {
+      attemptId: attempt.id,
+      quizId: attempt.quiz_id,
+      errorName: String(error?.name || 'Error').slice(0, 100),
+    });
+    fail(500, 'The saved question breakdown is unavailable.', 'quiz_attempt_details_unavailable');
+  }
+  return snapshot;
+}
+
 function summarizeQuizAttempt(attempt, snapshot) {
   const questions = Array.isArray(snapshot) ? snapshot : [];
   return {
@@ -1566,5 +1585,5 @@ courseRouter.get('/quizzes/:quizId/attempts/:attemptId', (req, res) => {
   const attempt = db.prepare('SELECT * FROM quiz_attempts WHERE id = ? AND quiz_id = ? AND user_id = ?')
     .get(req.params.attemptId, req.params.quizId, req.currentUser.id);
   if (!attempt) fail(404, 'Quiz result not found.', 'not_found');
-  res.json({ attempt: summarizeQuizAttempt(attempt, JSON.parse(attempt.question_snapshot_json)) });
+  res.json({ attempt: summarizeQuizAttempt(attempt, parseQuizAttemptSnapshot(attempt)) });
 });

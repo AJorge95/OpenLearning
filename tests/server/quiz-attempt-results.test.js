@@ -186,6 +186,37 @@ test('course payload points to the learner latest attempt and its detail remains
   assert.deepEqual(await otherUserResponse.json(), { error: 'Quiz result not found.', code: 'not_found' });
 });
 
+test('malformed saved question snapshots return a logged, structured detail error', async () => {
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const endpoint = `http://127.0.0.1:${address.port}/api/quizzes/quiz-1/attempts/attempt-1`;
+  const originalSnapshot = database.prepare('SELECT question_snapshot_json FROM quiz_attempts WHERE id = ?').get('attempt-1').question_snapshot_json;
+
+  try {
+    for (const malformedSnapshot of ['not-json', '[null]']) {
+      database.prepare('UPDATE quiz_attempts SET question_snapshot_json = ? WHERE id = ?').run(malformedSnapshot, 'attempt-1');
+      const response = await fetch(endpoint, { headers: { 'x-test-user': 'learner-1', connection: 'close' } });
+
+      assert.equal(response.status, 500);
+      assert.deepEqual(await response.json(), {
+        error: 'The saved question breakdown is unavailable.',
+        code: 'quiz_attempt_details_unavailable',
+      });
+
+      const log = database.prepare(`SELECT level, source, message, details_json FROM system_logs
+        WHERE source = 'quiz-attempt' ORDER BY id DESC LIMIT 1`).get();
+      assert.equal(log.level, 'error');
+      assert.equal(log.message, 'Saved quiz question breakdown data is invalid.');
+      assert.deepEqual(JSON.parse(log.details_json), {
+        attemptId: 'attempt-1', quizId: 'quiz-1',
+        errorName: malformedSnapshot === 'not-json' ? 'SyntaxError' : 'TypeError',
+      });
+    }
+  } finally {
+    database.prepare('UPDATE quiz_attempts SET question_snapshot_json = ? WHERE id = ?').run(originalSnapshot, 'attempt-1');
+  }
+});
+
 test('course payload can omit quiz questions without losing quiz status', async () => {
   const address = server.address();
   assert(address && typeof address !== 'string');
