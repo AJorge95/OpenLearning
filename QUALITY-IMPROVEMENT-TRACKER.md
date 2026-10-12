@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Bound the account role selector’s activation area
+
+- **Reviewed:** The supplied admin-page target path, current account-role JSX and CSS, custom `AppSelect` click handling, and available local browser state.
+- **Improvement:** Use a styled native `<select>` for the platform-role field. Its selectable element is exactly 8.5rem wide on desktop and fills the row on narrow screens; the separate caption and accessible description remain connected to it.
+- **Why it helps:** The browser cannot forward clicks from a wider label to the role control, and the clickable area matches the visible field. Native keyboard and assistive-technology selection behavior also removes the custom popup activation path for this account-access change.
+- **Checked:** Expanded the role-control regressions to require a separate caption, native select, the three supported roles, width-bounded CSS, responsive sizing, and visible keyboard focus. The role/AppSelect accessibility and activation tests passed (15/15), TypeScript checking passed, and `git diff --check` passed. The available local browser is signed out and redirects the protected account page to `/login`, so the interaction could not be rendered live.
+
 ## 2026-10-12 — Report video read failures clearly and let learners retry
 
 - **Reviewed:** Verified MP4 duration reads, malformed-media handling, watch-progress loading, request cancellation, and the learner player’s error states.
