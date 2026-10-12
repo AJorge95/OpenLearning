@@ -331,6 +331,7 @@ courseRouter.get('/manage/courses', requireStaff, (req, res) => {
 courseRouter.get('/courses/:courseId', (req, res) => {
   const course = requireCourseViewer(req.params.courseId, req.currentUser);
   const includeQuizQuestions = enumQuery(req.query.includeQuizQuestions, 'quiz question option', ['0', '1'], '1') === '1';
+  const includeLatestAttempts = enumQuery(req.query.includeLatestAttempts, 'quiz attempt option', ['0', '1'], '1') === '1';
   const quizId = req.query.quizId;
   if (quizId !== undefined && (typeof quizId !== 'string' || !quizId || quizId.length > 120 || quizId.trim() !== quizId)) {
     fail(400, 'Choose a valid quiz.', 'validation_error');
@@ -338,7 +339,11 @@ courseRouter.get('/courses/:courseId', (req, res) => {
   if (quizId !== undefined && !includeQuizQuestions) {
     fail(400, 'Quiz question selection requires quiz questions.', 'validation_error');
   }
-  res.json({ course: getCoursePayload(course, req.currentUser, { includeQuizQuestions, ...(quizId ? { quizId } : {}) }) });
+  res.json({ course: getCoursePayload(course, req.currentUser, {
+    includeQuizQuestions,
+    includeLatestAttempts,
+    ...(quizId ? { quizId } : {}),
+  }) });
 });
 
 function requireCertificateIssuanceEligibility(courseRef, user) {

@@ -178,7 +178,7 @@ export function courseSummary(course, user, preloadedVersionsByCourse) {
   return courseSummaryDetails([course], user, preloadedVersionsByCourse)[0].summary;
 }
 
-export function getCoursePayload(course, user, { includeAnswers = false, includeQuizQuestions = true, quizId = null, storageCourseId } = {}) {
+export function getCoursePayload(course, user, { includeAnswers = false, includeQuizQuestions = true, includeLatestAttempts = true, quizId = null, storageCourseId } = {}) {
   const logicalId = course.logical_course_id || course.id;
   const editingCopy = Boolean(course.logical_course_id && includeAnswers);
   const version = publishedVersionForLogicalCourse(logicalId);
@@ -324,7 +324,7 @@ export function getCoursePayload(course, user, { includeAnswers = false, include
 
   // Pass state comes from versionProgress; this query only supplies latest-attempt details.
   const latestAttemptsByQuiz = new Map();
-  if (user) {
+  if (user && includeLatestAttempts) {
     const latestAttemptQuizFilter = quizId === null ? '' : 'AND q.id = ?';
     for (const attempt of db.prepare(`
       SELECT q.id AS quiz_id, a.id, a.score, a.passed, a.submitted_at

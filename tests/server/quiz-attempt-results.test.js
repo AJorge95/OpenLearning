@@ -203,6 +203,41 @@ test('course payload can omit quiz questions without losing quiz status', async 
   });
 });
 
+test('course payload can omit latest attempts without querying or losing quiz pass state', async () => {
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const originalPrepare = database.prepare;
+  let latestAttemptQueryCount = 0;
+  database.prepare = (sql) => {
+    if (sql.includes('SELECT q.id AS quiz_id, a.id, a.score, a.passed, a.submitted_at')) latestAttemptQueryCount += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  let response;
+  let payload;
+  try {
+    response = await fetch(`http://127.0.0.1:${address.port}/api/courses/course-1?includeLatestAttempts=0`, {
+      headers: { 'x-test-user': 'learner-1', connection: 'close' },
+    });
+    payload = await response.json();
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.equal(response.status, 200);
+  assert.equal(latestAttemptQueryCount, 0);
+  assert.equal(payload.course.modules[0].quiz.latestAttempt, null);
+  assert.equal(payload.course.modules[0].quiz.passed, false);
+
+  const invalidResponse = await fetch(`http://127.0.0.1:${address.port}/api/courses/course-1?includeLatestAttempts=yes`, {
+    headers: { 'x-test-user': 'learner-1', connection: 'close' },
+  });
+  assert.equal(invalidResponse.status, 400);
+  assert.deepEqual(await invalidResponse.json(), {
+    error: 'Choose a valid quiz attempt option.', code: 'validation_error',
+  });
+});
+
 test('quiz-specific course payload keeps progress but omits other quiz questions and attempts', async () => {
   const address = server.address();
   assert(address && typeof address !== 'string');
