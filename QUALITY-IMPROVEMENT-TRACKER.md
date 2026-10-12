@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Review learner playback and session delivery
+
+- **Reviewed:** Learner playback controls and responsive layouts; session expiry, malformed-row cleanup and callback errors; protected media, document and caption authorization; byte-range and `HEAD` handling; and response-close cleanup for file streams.
+- **Result:** No runtime change. The player exposes named controls and recovery feedback, and its narrow-screen caption and volume controls have dedicated layouts. The backend bounds session lifetime, removes expired or malformed sessions, checks access before delivery, and stops reads after a client disconnect.
+- **Why no change:** The source matches the documented playback and session behavior, and focused regressions cover the identified failure paths. No current interface mismatch, persistence failure, unauthorized media path, or performance bottleneck was demonstrated.
+- **Checked:** `node --test tests/server/session-store.test.js tests/server/file-stream.test.js tests/server/media-routes.test.js` passed (31/31). Also reviewed the player markup and responsive CSS, session-store implementation, protected media routes, and prior tracker entries. No account or course data was changed.
+- **Needed to continue:** A reproduced playback, accessibility, or responsive failure; a session-store error outside the tested cases; or representative session/media workload measurements identifying a bottleneck.
+
 ## 2026-10-12 — Document learning-path search
 
 - **Reviewed:** The README feature list against the `/learning-paths` API and the learner and staff list controls. The shipped search by path title and description was missing from the product overview.
