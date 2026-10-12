@@ -304,6 +304,9 @@ function recordUnhandledError(error, req) {
 }
 
 export function errorHandler(error, req, res, next) {
+  // Multer reports an interrupted upload after the client has left; it should not appear as a server failure.
+  if ((error?.message === 'Request aborted' || error?.message === 'Request closed')
+    && (req.aborted || req.destroyed)) return;
   if (res.headersSent) {
     recordUnhandledError(error, req);
     return next(error);

@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep cancelled uploads out of server error logs
+
+- **Reviewed:** Multer's partial-file cleanup on request abort, the shared HTTP error handler, and the media-route upload fixture.
+- **Improvement:** Ignore Multer's `Request aborted` and `Request closed` errors after the incoming request is destroyed. Add an integration regression that disconnects after file bytes reach disk and checks both temporary-file cleanup and error-log stability.
+- **Why it helps:** Cancelled large uploads no longer look like server failures in the administrator system log, while incomplete files are still removed.
+- **Checked:** `node --test tests/server/media-routes.test.js` passed (24/24), including partial-file cleanup and suppression of both abort and close error paths. The full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript and Vite, and `git diff --check` passed.
+
 ## 2026-10-12 — Cover text contrast in every color palette
 
 - **Reviewed:** Palette foreground and background tokens used for links, selected course and quiz states, dropdown options, and muted copy.
