@@ -10058,3 +10058,11 @@
 - **Why no change:** The reviewed UI and backend contracts align, and the inspected failure, boundary, and recovery paths already have focused coverage. No current mismatch or measured workload issue justified an additional implementation.
 - **Checked:** `node --test tests/server/lesson-watch.test.js tests/server/certificate-service.test.js tests/server/certificate-routes.test.js tests/client/course-progress.test.js` passed (27/27). No runtime source changed, so the build was not rerun; `git diff --check` passed.
 - **Needed to continue:** A reproducible learner playback or progress mismatch, an incorrectly issued or inaccessible certificate, or representative production-size workload data identifying a specific performance bottleneck.
+
+## 2026-10-12 — Recheck registration-field recovery and validation
+
+- **Reviewed:** Learner-side required-field and schema-refresh behavior, administrator field configuration, registration availability errors, and server-side answer normalization and audit-backed persistence.
+- **Result:** No runtime change. The form retains only values compatible with the refreshed schema, reports stale answers with a retry path, and distinguishes closed registration from other failures. The server remains authoritative for required answers, calendar dates, configured choices, checkbox types, and field-schema changes.
+- **Why no change:** The client and server rules align, invalid stored configuration is recoverable through admin settings, and the reviewed stale-schema and persistence failures already have regressions.
+- **Checked:** `node --test tests/client/registration-fields.test.js tests/client/registration-availability.test.js tests/server/registration-fields.test.js` passed (47/47). Expected audit/database failure logs were emitted by rollback tests. No runtime source changed, so the build was not rerun; `git diff --check` passed.
+- **Needed to continue:** A reproducible client/server mismatch after editing registration fields, or a concrete failure updating the form after a schema change.
