@@ -438,12 +438,16 @@ export function RegisterPage() {
 export function AccountSecurityPage() {
   const { user, refresh } = useAuth();
   const passwordErrorId = useId();
+  const profileNameErrorId = useId();
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
   const [profileMessage, setProfileMessage] = useState('');
   const [profileError, setProfileError] = useState('');
+  const [invalidProfileNameField, setInvalidProfileNameField] = useState<'firstName' | 'lastName' | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const profileSubmissionInFlightRef = useRef(false);
+  const firstNameInputRef = useRef<HTMLInputElement>(null);
+  const lastNameInputRef = useRef<HTMLInputElement>(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -458,10 +462,28 @@ export function AccountSecurityPage() {
 
   async function saveProfile(event: React.FormEvent) {
     event.preventDefault();
+    setProfileError(''); setProfileMessage(''); setInvalidProfileNameField(null);
+    const firstNameError = accountNameError(firstName, 'First name');
+    if (firstNameError) {
+      setInvalidProfileNameField('firstName');
+      setProfileError(firstNameError);
+      window.requestAnimationFrame(() => firstNameInputRef.current?.focus());
+      return;
+    }
+    const lastNameError = accountNameError(lastName, 'Last name');
+    if (lastNameError) {
+      setInvalidProfileNameField('lastName');
+      setProfileError(lastNameError);
+      window.requestAnimationFrame(() => lastNameInputRef.current?.focus());
+      return;
+    }
     if (!acquireSubmissionLock(profileSubmissionInFlightRef)) return;
-    setProfileError(''); setProfileMessage(''); setSavingProfile(true);
+    setSavingProfile(true);
     try {
-      const result = await api.put<{ certificatesIssued: number }>('/api/auth/profile', { firstName, lastName });
+      const result = await api.put<{ certificatesIssued: number }>('/api/auth/profile', {
+        firstName: normalizeAccountName(firstName),
+        lastName: normalizeAccountName(lastName),
+      });
       const certificateMessage = result.certificatesIssued > 0
         ? ` ${result.certificatesIssued} newly eligible ${result.certificatesIssued === 1 ? 'certificate is' : 'certificates are'} now in My learning.`
         : '';
@@ -471,7 +493,15 @@ export function AccountSecurityPage() {
       } catch {
         setProfileMessage(`Profile details were saved, but account information could not refresh. Reload to see the updated name.${certificateMessage}`);
       }
-    } catch (cause) { setProfileError(cause instanceof ApiError ? cause.message : 'Profile details could not be updated.'); }
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'invalid_name') {
+        // Keep authoritative server validation beside the certificate-name field that needs correction.
+        const invalidField = cause.message.startsWith('Last name') ? 'lastName' : 'firstName';
+        setInvalidProfileNameField(invalidField);
+        setProfileError(cause.message);
+        window.requestAnimationFrame(() => (invalidField === 'lastName' ? lastNameInputRef.current : firstNameInputRef.current)?.focus());
+      } else setProfileError(cause instanceof ApiError ? cause.message : 'Profile details could not be updated.');
+    }
     finally { releaseSubmissionLock(profileSubmissionInFlightRef); setSavingProfile(false); }
   }
 
@@ -503,8 +533,11 @@ export function AccountSecurityPage() {
     <section className="account-settings-section"><h2>Profile details</h2><p>Certificates use your first and last name. Your email address is also included on certificates.</p>
       <form className="surface-form form-stack" onSubmit={saveProfile} aria-busy={savingProfile}>
         <label>Email<input type="email" value={user?.email || ''} readOnly aria-describedby="profile-email-help" /></label><small id="profile-email-help">Contact an administrator if you need to change your email address.</small>
-        <div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} disabled={savingProfile} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} disabled={savingProfile} /></label></div>
-        {profileMessage && <p className="form-success" role="status">{profileMessage}</p>}{profileError && <p className="form-error" role="alert">{profileError}</p>}
+        <div className="account-name-fields">
+          <label>First name<input ref={firstNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="given-name" aria-invalid={invalidProfileNameField === 'firstName' || undefined} aria-describedby={invalidProfileNameField === 'firstName' ? profileNameErrorId : undefined} value={firstName} onChange={(event) => { setFirstName(event.target.value); setProfileMessage(''); if (invalidProfileNameField === 'firstName') { setInvalidProfileNameField(null); setProfileError(''); } }} disabled={savingProfile} /></label>
+          <label>Last name<input ref={lastNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="family-name" aria-invalid={invalidProfileNameField === 'lastName' || undefined} aria-describedby={invalidProfileNameField === 'lastName' ? profileNameErrorId : undefined} value={lastName} onChange={(event) => { setLastName(event.target.value); setProfileMessage(''); if (invalidProfileNameField === 'lastName') { setInvalidProfileNameField(null); setProfileError(''); } }} disabled={savingProfile} /></label>
+        </div>
+        {profileMessage && <p className="form-success" role="status">{profileMessage}</p>}{profileError && <p id={profileNameErrorId} className="form-error" role="alert">{profileError}</p>}
         <Button type="submit" disabled={savingProfile}>{savingProfile ? 'Saving profile…' : 'Save profile details'}</Button>
       </form>
     </section>

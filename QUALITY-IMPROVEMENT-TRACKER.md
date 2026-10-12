@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Validate self-service certificate-name updates
+
+- **Reviewed:** The account-security profile form, shared account-name rules, certificate backfill response, and the self-service profile route's `invalid_name` contract.
+- **Improvement:** Validate before the profile request, normalize valid spacing, and mark, describe, and focus the invalid name field. Map server-side `invalid_name` responses to the matching field while retaining the existing success message for certificate backfills.
+- **Why it helps:** People can correct a whitespace-only certificate name beside the field before the server rejects their profile update; valid spacing matches the saved account name.
+- **Backend:** The profile route and certificate issuance flow remain unchanged; requests use normalized values and the existing validation response.
+- **Checked:** Focused account-name and profile-route tests, full `npm test -- --test-reporter=dot`, `npm run build`, and `git diff --check` passed. The connected browser is signed out, so the authenticated profile editor could not be replayed there.
+
 ## 2026-10-12 — Validate names in administrator account creation
 
 - **Reviewed:** The manual account form, shared account-name rules, account-creation request payload, and the API's existing `invalid_name` error contract.
