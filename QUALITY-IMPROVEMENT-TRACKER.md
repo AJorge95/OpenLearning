@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Document learning-path search
+
+- **Reviewed:** The README feature list against the `/learning-paths` API and the learner and staff list controls. The shipped search by path title and description was missing from the product overview.
+- **Improvement:** Describe learning paths as searchable, clarify that staff can search and assign them, and state that learners search eligible published paths and can self-enroll only when every path course is public.
+- **Why it helps:** Teams evaluating or operating the platform can discover the path-finding workflow and understand which published paths learners can access.
+- **Backend review:** The route searches title and description within the existing staff-status, learner-visibility, and pagination rules, and bounds queries to 120 characters. No runtime behavior or API contract changed.
+- **Checked:** Compared the README wording with `GET /api/learning-paths`, both role-specific list views, and the existing path-search regression coverage. Focused path-search tests passed.
+
 ## 2026-10-12 — Keep catalog filters easy to clear
 
 - **Reviewed:** The learner catalog search, category and sort controls, the filter state used for paging, and the existing recovery action. The one-click reset was only available in the no-results message, so matching results left learners to clear a combined search and category manually.

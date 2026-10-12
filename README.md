@@ -9,7 +9,7 @@ If OpenLearning is useful for your team, please [star the repository](https://gi
 - Username-and-password sign-in, email addresses for new accounts, configurable learner registration fields and account limits, and a one-time setup wizard for the initial administrator.
 - Administrator, moderator, and learner roles.
 - Public courses for signed-in learners, plus private courses available through an individual grant or an unlocked step in an assigned learning path.
-- Guided learning paths that order courses, optionally require earlier courses to be completed, and can be assigned by staff. Learner self-enrollment is available for paths made only of public courses.
+- Searchable guided learning paths order courses and can require earlier courses to be completed. Staff can search paths by title or description and assign them; learners can search eligible published paths and self-enroll when every course is public.
 - Course competency mappings and learner progress toward an organization’s competency map.
 - Versioned course publication with review workflows, restoration of earlier versions, and optional completion windows.
 - A learner calendar for course deadlines and completion status.
