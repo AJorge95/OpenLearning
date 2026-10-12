@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck learner quiz payload and result states
+
+- **Reviewed:** Quiz-page load cancellation and retry, current-quiz question/choice filtering, latest-attempt lookup and indexes, saved-score fallback, focus behavior, and responsive quiz layout.
+- **Result:** No runtime change. Course payload reads already batch resources, captions, questions, and choices; quiz routes restrict question/choice reads to the requested quiz; latest-attempt lookups have indexes for both user-first and quiz-first access. The result view keeps the saved score available when the breakdown request fails and provides a retry.
+- **Why no change:** Existing source and tests cover the payload and failure states without a reproduced delay, lost score, focus issue, or responsive-layout defect.
+- **Checked:** Quiz-result accessibility tests passed (5/5); course-detail version/progress regressions passed (3/3); `git diff --check` passed. The signed-in quiz flow was not rendered in a browser during this review.
+- **Needed to revisit:** A measured payload delay on a large quiz, or a signed-in desktop/mobile run that reproduces a result, retry, focus, or layout failure.
+
 ## 2026-10-12 — Combine path-edit state writes across learners
 
 - **Reviewed:** The path-edit learner batch, per-user unlock decisions, bounded multi-row state inserts, and the assignment panel's search, busy/error states, keyboard-select control, and narrow-screen layout.
