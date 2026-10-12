@@ -778,8 +778,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .editor-field-grid textarea { min-height: 90px; line-height: 1.55; }
 .visibility-field { display: flex; gap: 19px; align-items: center; border: 0; margin: 0; padding: 0; }
 .visibility-field legend { margin-bottom: 8px; color: #292d3b; font-size: 13px; font-weight: 650; }
-.visibility-field label { display: flex; gap: 7px; align-items: center; color: #414657; font-size: 13px; }
-.visibility-field input { width: 16px; min-height: 16px; accent-color: var(--purple); }
+.visibility-field label { display: flex; gap: 7px; align-items: center; min-height: 24px; color: #414657; font-size: 13px; cursor: pointer; }
+/* Reset shared text-field padding so visibility radios retain their native 24px target. */
+.visibility-field input { appearance: auto; width: 24px; height: 24px; min-height: 24px; padding: 0; accent-color: var(--purple); flex: 0 0 auto; }
 .cover-upload-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
 .cover-upload-row > div { display: flex; align-items: center; gap: 12px; flex: 1; }
 .cover-upload-row > div > img, .cover-preview-empty { width: 78px; height: 50px; object-fit: cover; display: grid; place-items: center; color: var(--purple); background: var(--purple-soft); }
@@ -927,8 +928,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .quiz-answer-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .form-hint { color: var(--muted); font-size: 11px; margin: 7px 0 9px; }
 .choice-editor-row { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
-/* The correct-answer radio sits beside a text field, so give it a full-size pointer target. */
-.choice-editor-row input[type="radio"] { width: 24px; height: 24px; min-height: 24px; accent-color: var(--purple); flex: 0 0 auto; }
+/* Reset shared text-field padding so correct-answer radios keep a native 24px target. */
+.choice-editor-row input[type="radio"] { appearance: auto; width: 24px; height: 24px; min-height: 24px; padding: 0; accent-color: var(--purple); flex: 0 0 auto; }
 .choice-editor-row input:not([type="radio"]) { min-width: 0; min-height: 36px; font-size: 12px; }
 .choice-editor-row .icon-button { flex: 0 0 auto; }
 .add-choice { margin-top: 1px; font-size: 11px; }

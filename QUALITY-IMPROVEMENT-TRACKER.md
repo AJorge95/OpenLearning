@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep compact editor radios native and correctly sized
+
+- **Reviewed:** Course visibility and quiz correct-answer radio markup, the shared text-field selectors that cascade into those controls, keyboard and forced-colors behavior, and the reported administrator role-selector hit area.
+- **Improvement:** Reset inherited text-field padding on the course visibility and quiz answer radios, explicitly retain native radio appearance and 24px dimensions, and give the visibility labels a 24px clickable row. Added client regressions in `tests/client` for the affected styles and labelled choices.
+- **Why it helps:** Radios embedded in editor grids no longer inherit text-field padding that distorts their native hit area. The controls remain native, keyboard-operable, and consistent with the surrounding 24px targets.
+- **Role selector report:** The current source already replaces the old label-wrapped role control with a separate caption and a bounded 8.5rem selector; the legacy markup has a matching pointer-boundary safeguard. In a fresh build the outside gap stayed closed and the visible trigger opened its three options. The supplied DOM path identifies the older label-wrapped markup, so a hard refresh or serving the latest build is needed if that markup is still present in the browser.
+- **Backend review:** Course visibility and account-role permissions remain enforced by existing server routes; this CSS-only change does not alter either value or its validation.
+- **Checked:** The focused account-role, custom-select, visibility-radio, quiz-radio, course-editor, and forced-colors tests passed (22/22); `npm run build` passed TypeScript and Vite; `git diff --check` passed. The production build rendered `/admin/users/role-qa-target` at 1265×714 in an isolated signed-in session. Clicking beside the control left it closed, while activating the trigger opened the options. The Browser plugin and Playwright are unavailable, so this rendered check used the in-app computer-use browser. The temporary server, database, and browser tab were stopped and removed.
+
 ## 2026-10-12 — Enlarge quiz-editor correct-answer radios
 
 - **Reviewed:** Correct-answer radio markup and accessibility names, its answer-row layout and responsive sizing, existing quiz-editor tests, and server-side quiz validation.
