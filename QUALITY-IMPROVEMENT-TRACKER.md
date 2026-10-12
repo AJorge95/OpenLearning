@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Preserve image fallback recovery when the source changes
+
+- **Reviewed:** The shared image fallback's failed-load state, course-cover replacement IDs, platform-icon version URLs, and alt/loading/decoding props.
+- **Improvement:** Add a focused regression that requires the fallback renderer to remount when its source URL changes, and document why the key is intentional.
+- **Why it helps:** A failed cover or icon no longer leaves a stale placeholder after the server provides its replacement URL; future refactors retain the retry behavior.
+- **Backend review:** Cover replacements receive a new media ID and platform-icon updates receive a new version token, so the existing API changes the source URL without a server change.
+- **Checked:** Image fallback, cover, and platform-icon client tests passed (6/6); the full `npm test -- --test-reporter=dot` suite and `npm run build` passed. `git diff --check` passed. No forced image-decode failure was replayed in the browser.
+
 ## 2026-10-12 — Recheck account-menu navigation dismissal
 
 - **Reviewed:** Shared account-menu dismissal on route changes, outside pointer/focus and Escape, plus active-link reveal at both ends of the horizontally scrollable mobile navigation.
