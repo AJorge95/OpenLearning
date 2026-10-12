@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck learner dialogs, quiz controls, and account limits
+
+- **Reviewed:** Quiz question grouping and result announcements, confirmation and password-reset dialog naming/focus behavior, project-wide input/button/link names, account-role selector bounds, request pagination, readiness, and concurrent registration limits.
+- **Result:** No runtime change. The reviewed controls use native fieldsets and named dialogs, and registration limits are rechecked transactionally; existing focused regressions cover these contracts.
+- **Why no change:** The source and current tests show the expected interaction, accessibility, and validation behavior. No new failure or changed product requirement justified a code edit.
+- **Checked:** Client regressions passed (19/19) and server regressions passed (11/11); `git diff --check` passed. The account-role issue still needs a hard-refreshed signed-in page reproduction if the click outside its visible trigger remains possible.
+
 ## 2026-10-12 — Verify duplicate setup requests skip password hashing
 
 - **Reviewed:** The first-run setup identifier preflight and the new duplicate-username/email route regression. Existing assertions proved the route avoids opening a write transaction, but did not lock down the earlier performance boundary.
