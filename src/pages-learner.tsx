@@ -7,7 +7,7 @@ import type { AppSelectOption } from './components';
 import { formatCountLabel } from './count-label';
 import { parseApiTimestamp } from './api-timestamp';
 import { courseCatalogCategoryOptions, courseCatalogParams, hasCourseCatalogFilters } from './course-catalog-filters';
-import { formatLearningDeadlineDate, getLearningDeadlineStatus } from './learning-deadline';
+import { formatLearningDeadlineDate, getLearningDeadlineRefreshDelay, getLearningDeadlineStatus } from './learning-deadline';
 import { courseActivityActionLabel, nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from './course-navigation';
 import { summarizeCourseProgress } from './course-progress';
 import { shuffleQuizChoices } from './quiz-choice-order';
@@ -46,7 +46,15 @@ const certificateIssueDateFormatter = new Intl.DateTimeFormat(undefined, { dateS
 const lessonCommentDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
 function LearningDeadlineLink({ deadlineAt, completed }: { deadlineAt: string; completed: boolean }) {
-  const status = getLearningDeadlineStatus(deadlineAt, completed);
+  const [now, setNow] = useState(() => Date.now());
+  const status = getLearningDeadlineStatus(deadlineAt, completed, now);
+  useEffect(() => {
+    if (completed) return;
+    const delay = getLearningDeadlineRefreshDelay(deadlineAt, now);
+    if (delay === null) return;
+    const timer = window.setTimeout(() => setNow(Date.now()), delay);
+    return () => window.clearTimeout(timer);
+  }, [completed, deadlineAt, now]);
   const label = status === 'completed' ? 'Completed' : status === 'overdue' ? 'Overdue' : 'Due';
   return <Link className={`learning-deadline ${status}`} to="/calendar"><CalendarDays size={15} /><span><strong>{label}</strong><small>{formatLearningDeadlineDate(deadlineAt)}</small></span></Link>;
 }
