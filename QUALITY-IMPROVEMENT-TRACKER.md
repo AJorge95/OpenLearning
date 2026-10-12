@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck registration-approval workflow coverage
+
+- **Reviewed:** Pending signup confirmation and focus handling, admin approval controls and filtering, session loading, the registration-status migration, and the signup-to-approval API flow.
+- **Result:** No runtime change. Pending users receive no session and cannot sign in; the admin flow invalidates stale sessions after approval, records approval once, and permits sign-in afterward. Existing UI tests cover the confirmation, approval filter/actions, and policy checkbox.
+- **Why no change:** The earlier review's unverified end-to-end gap is now covered by server integration tests, including audit rollback and repeated approval. Changing approval behavior without a new product rule or reproduced failure would add risk without improving the established flow.
+- **Checked:** `node --test tests/server/last-login.test.js tests/client/registration-approval.test.js` passed (20/20); `git diff --check` passed.
+- **Needed to continue:** A concrete approval-workflow failure or a changed product rule.
+
 ## 2026-10-12 — Verify CSRF refresh stability within a session
 
 - **Reviewed:** Session token generation, the `/api/csrf` route, write middleware validation, and the caller-owned refresh behavior used by startup retries.
