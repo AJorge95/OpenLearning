@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Review learner course-overview content and wrapping
+
+- **Reviewed:** The course hero and “About this course” description, the hero description's accessible-tree treatment, course title wrapping, course-cover alternatives, and the desktop/mobile overview layouts.
+- **Result:** No runtime change. The hero repeats a real course description visually for context but hides that copy from assistive technology; the “About this course” section remains the accessible description. Global heading styles wrap long unbroken titles, and the hero stacks at narrow viewports.
+- **Why no change:** The duplicate description is already announced once, the current layout addresses long heading overflow, and existing course-cover and course-editor checks cover the surrounding content contract.
+- **Checked:** `node --test --test-reporter=dot tests/client/course-editor-validation.test.js tests/client/course-cover-accessibility.test.js tests/client/course-navigation.test.js` passed (24/24). No learner or course data changed.
+- **Needed to continue:** A current screen-reader report that the description is missing or repeated, or a narrow-viewport course title that still causes horizontal overflow.
+
 ## 2026-10-12 — Recheck readiness and session lifecycle
 
 - **Reviewed:** Liveness and readiness route ordering, database/setup/admin readiness gates, shutdown draining and timeout, indexed session expiry cleanup, cleanup error reporting, and session-store close behavior.
