@@ -7,6 +7,7 @@ import type { BlockerFunction } from 'react-router-dom';
 import { api, ApiError, fetchAccess, fetchCourse } from './api';
 import { requestPendingRegistrationCountRefresh } from './admin-navigation-events';
 import { AppSelect, Button, ConfirmationDialog, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PasswordField, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
+import type { AppSelectOption } from './components';
 import { formatCountLabel } from './count-label';
 import { parseApiTimestamp } from './api-timestamp';
 import { accountCourseAssignmentLabel } from './account-course-activity';
@@ -46,6 +47,23 @@ const courseDateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short',
 const logTimestampFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const quizTitleLimit = MAX_QUIZ_TITLE_LENGTH;
 const defaultQuizTitleSuffix = ' quiz';
+// Keep this shared across the 50-row account table so each update does not revalidate every select's options.
+const ADMIN_USER_ROLE_OPTIONS: AppSelectOption<Role>[] = [
+  { value: 'admin', label: 'Administrator' },
+  { value: 'moderator', label: 'Moderator' },
+  { value: 'learner', label: 'Learner' },
+];
+const USER_ROLE_FILTER_OPTIONS: AppSelectOption<UserRoleFilter>[] = [
+  { value: 'all', label: 'All roles' },
+  { value: 'admin', label: 'Administrators' },
+  { value: 'moderator', label: 'Moderators' },
+  { value: 'learner', label: 'Learners' },
+];
+const USER_APPROVAL_FILTER_OPTIONS: AppSelectOption<UserApprovalFilter>[] = [
+  { value: 'all', label: 'All accounts' },
+  { value: 'pending', label: 'Pending approval' },
+  { value: 'approved', label: 'Approved' },
+];
 
 function CourseVersionPagination({ page, pageSize, total, versions, loading, onChange }: {
   page: number; pageSize: number; total: number; versions: CourseVersion[]; loading: boolean; onChange: (page: number) => void;
@@ -2391,11 +2409,11 @@ export function AdminUsersPage() {
       </form>
       <div className="select-wrap role-filter user-role-filter">
         <span className="catalog-filter-label">Role</span>
-        <AppSelect className="app-select--filter" ariaLabel="Filter by role" leadingIcon={<UsersRound size={16} />} value={roleFilter} onChange={(nextRoleFilter) => applyUserListFilterChange(nextRoleFilter, approvalFilter)} options={[{ value: 'all', label: 'All roles' }, { value: 'admin', label: 'Administrators' }, { value: 'moderator', label: 'Moderators' }, { value: 'learner', label: 'Learners' }]} />
+        <AppSelect className="app-select--filter" ariaLabel="Filter by role" leadingIcon={<UsersRound size={16} />} value={roleFilter} onChange={(nextRoleFilter) => applyUserListFilterChange(nextRoleFilter, approvalFilter)} options={USER_ROLE_FILTER_OPTIONS} />
       </div>
       <div className="select-wrap role-filter user-approval-filter">
         <span className="catalog-filter-label">Registration</span>
-        <AppSelect className="app-select--filter" ariaLabel="Filter by registration approval" value={approvalFilter} onChange={(nextApprovalFilter) => applyUserListFilterChange(roleFilter, nextApprovalFilter)} options={[{ value: 'all', label: 'All accounts' }, { value: 'pending', label: 'Pending approval' }, { value: 'approved', label: 'Approved' }]} />
+        <AppSelect className="app-select--filter" ariaLabel="Filter by registration approval" value={approvalFilter} onChange={(nextApprovalFilter) => applyUserListFilterChange(roleFilter, nextApprovalFilter)} options={USER_APPROVAL_FILTER_OPTIONS} />
       </div>
       {hasAppliedUserFilters && <Button type="button" variant="secondary" onClick={clearUserListFilters}>Clear filters</Button>}
     </div>
@@ -2407,7 +2425,7 @@ export function AdminUsersPage() {
       const lastAdminHelpId = `last-active-admin-${user.id}`;
       return <tr key={user.id}>
         <th scope="row"><Link className="owner-cell user-detail-link" to={`/admin/users/${user.id}`}><UserInitial username={user.username} /><span className="user-detail-link-copy"><strong>{user.username}</strong>{user.email && <small>{user.email}</small>}</span></Link></th>
-        <td><AppSelect<Role> className="app-select--compact" ariaLabel={`Role for ${user.username}`} describedBy={user.isLastActiveAdmin ? lastAdminHelpId : undefined} value={user.role} disabled={savingIds.has(user.id) || user.isLastActiveAdmin} onChange={(role) => updateUser(user, { role })} options={[{ value: 'admin', label: 'Administrator' }, { value: 'moderator', label: 'Moderator' }, { value: 'learner', label: 'Learner' }]} /></td>
+        <td><AppSelect<Role> className="app-select--compact" ariaLabel={`Role for ${user.username}`} describedBy={user.isLastActiveAdmin ? lastAdminHelpId : undefined} value={user.role} disabled={savingIds.has(user.id) || user.isLastActiveAdmin} onChange={(role) => updateUser(user, { role })} options={ADMIN_USER_ROLE_OPTIONS} /></td>
         <td><span className={`account-state ${user.registrationStatus === 'pending' ? 'account-pending' : user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.registrationStatus === 'pending' ? 'Pending approval' : user.disabled ? 'Disabled' : 'Active'}</span>{user.isLastActiveAdmin && <small className="last-active-admin-note" id={lastAdminHelpId}>This is the only active administrator. Add another administrator before changing this account’s role or status.</small>}</td>
         <td>{user.createdAt ? <DateText value={user.createdAt} /> : '—'}</td>
         <td><div className="user-row-actions">{user.registrationStatus === 'pending' && <button type="button" className="text-action" aria-label={`Approve registration for ${user.username}`} disabled={savingIds.has(user.id)} onClick={() => approveRegistration(user)}>{savingIds.has(user.id) ? 'Approving…' : 'Approve'}</button>}<Link className="text-action" to={`/admin/users/${user.id}`} aria-label={`Details for ${user.username}`}>Details</Link><button type="button" className="text-action" aria-label={`Reset password for ${user.username}`} disabled={savingIds.has(user.id)} onClick={(event) => openPasswordReset(user, event.currentTarget)}>Reset password</button><button type="button" className={user.disabled ? 'text-action' : 'text-action danger-text'} aria-label={`${user.disabled ? 'Enable' : 'Disable'} account for ${user.username}`} aria-describedby={user.isLastActiveAdmin ? lastAdminHelpId : undefined} disabled={savingIds.has(user.id) || user.isLastActiveAdmin} onClick={() => updateUser(user, { disabled: !user.disabled })}>{user.disabled ? 'Enable' : 'Disable'}</button></div></td>
