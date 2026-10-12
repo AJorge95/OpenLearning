@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reconcile the role-control comment with current source
+
+- **Reviewed:** The supplied screenshot's target markup, the current administrator role-control JSX and hit-area rules, the focused regressions, and the browser surfaces available in this session.
+- **Result:** No additional runtime change. The screenshot targets the earlier wrapping-label structure; current source gives the caption its own element and bounds pointer input to the native select. The existing menu width follows that control.
+- **Why no change:** The reported right-side activation is already addressed in source and covered by the role-control regressions. A second CSS change needs a fresh reproduction against the current build to avoid changing a working hit area speculatively.
+- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js` passed (11/11), and `git diff --check` passed. The available in-app browser is at sign-in and Chrome is at registration, so the protected account route could not be rechecked in this session.
+- **Needed to revisit:** A fresh authenticated current-build reproduction showing the menu open from outside the visible trigger, with the viewport and click position.
+
 ## 2026-10-12 — Omit unused quiz questions from course overview and lesson payloads
 
 - **Reviewed:** The shared course payload, quiz question/choice queries, and data used by the course overview, lesson player, quiz page, and course editor.
