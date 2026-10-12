@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck database reads inside server loops
+
+- **Reviewed:** Course and path summary construction, learner-state and deadline lookups, certificate backfill, analytics summaries, and loop-local prepared statements.
+- **Result:** No runtime change. Collection reads use bounded batches and related prepared statements are reused; the scan found no unbounded per-row database read in the reviewed server paths.
+- **Why no change:** Existing batching already bounds query count and parameter lists for larger course, path, learner, and certificate sets.
+- **Checked:** `node --test tests/server/course-analytics.test.js tests/server/certificate-service.test.js tests/server/certificate-routes.test.js` passed (135/135).
+- **Needed to revisit:** A measured query-count increase with collection size, or a new loop that performs an independent database read per row.
+
 ## 2026-10-12 — Recheck deliberate error fallbacks
 
 - **Reviewed:** Empty and fallback catches in authentication, readiness, log serialization, registration configuration, session parsing, browser capability handling, and media upload validation; compared them with their existing cleanup and diagnostic paths.
