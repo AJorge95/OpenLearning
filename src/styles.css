@@ -1184,7 +1184,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .account-registration-fields dl { grid-template-columns: 1fr; }
 }
 
-.auth-page, .setup-page { min-height: 100vh; display: grid; place-items: center; padding: 32px 20px; background: #fff; }
+/* Center auth forms within the visible mobile viewport when browser chrome expands or collapses. */
+.auth-page, .setup-page { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 32px 20px; background: #fff; }
 .auth-panel { width: min(100%, 430px); padding: 19px 5px; }
 .auth-brand { margin-bottom: 44px; }
 .auth-panel h1 { font-size: 32px; margin: 0 0 8px; }

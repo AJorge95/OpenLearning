@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep auth forms centered in the visible mobile viewport
+
+- **Reviewed:** The rendered public signup page and its accessible field names, shared auth/setup viewport styling, the existing responsive breakpoints, and the dynamic viewport-unit pattern already used elsewhere in the stylesheet.
+- **Improvement:** Retain `100vh` as a compatibility fallback, then use `100dvh` for the sign-in, registration, and setup surfaces so their minimum height tracks the visible viewport as mobile browser chrome changes.
+- **Why it helps:** Centered forms are less likely to sit partly below the usable screen when mobile browser controls expand or collapse; long forms can still grow and scroll naturally.
+- **Checked:** `node --test tests/client/responsive-viewport.test.js` passed (4/4), including fallback order; `npm run build` passed TypeScript and Vite; `git diff --check` passed. The public `/register` page rendered at 1270×704 with its labels and controls present and no framework overlay. A mobile-sized rendered viewport was unavailable in the connected browser, so the mobile-specific result is source- and regression-checked rather than visually emulated.
+- **Backend review:** Registration validation and account creation are unchanged; no backend change was indicated by this layout review.
+
 ## 2026-10-12 — Recheck the account role selector against the served client
 
 - **Reviewed:** The latest report and screenshot DOM path, the source module served from the local Vite server, the current account-role JSX and width/pointer rules, and the AppSelect activation guard.
