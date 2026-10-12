@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Stack registration field controls before tablet overflow
+
+- **Reviewed:** The registration editor's three minimum column widths, admin sidebar/content padding across breakpoints, field-level errors and required controls, plus the signup route's server-side answer validation and transaction behavior.
+- **Improvement:** Switch the registration field editor to one column through 860px; keep the existing compact/mobile action layout at 720px.
+- **Why it helps:** The editor no longer forces three columns into the narrower staff-content area on tablet-sized viewports, which could push controls beyond the settings card.
+- **Backend review:** Signup still validates submitted answers against the current field definitions and stores the account, answer snapshots, audit event, and initial login state atomically; no API change was needed.
+- **Checked:** Registration-field client tests passed (13/13), registration validation/signup tests passed (31/31), `npm run build` passed TypeScript and Vite, and `git diff --check` passed. The protected settings page was not available for a rendered viewport check in the signed-out browser session.
+
 ## 2026-10-12 — Recheck registration-field validation and signup atomicity
 
 - **Reviewed:** Admin field-definition validation, answer types and required values, stale field IDs, Unicode choice matching, signup transaction boundaries, and required audit persistence.

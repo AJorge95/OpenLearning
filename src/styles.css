@@ -1137,8 +1137,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .account-registration-fields dl > div { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 4px; background: #fbfbfd; }
 .account-registration-fields dt { color: var(--muted); font-size: 10px; font-weight: 650; }
 .account-registration-fields dd { margin: 5px 0 0; color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
-@media (max-width: 720px) {
+@media (max-width: 860px) {
   .registration-field-editor-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
   .registration-fields-actions { align-items: flex-start; flex-direction: column; }
   .account-registration-fields dl { grid-template-columns: 1fr; }
 }
