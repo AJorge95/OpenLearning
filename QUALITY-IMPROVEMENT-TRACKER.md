@@ -3,7 +3,7 @@
 ## 2026-10-12 — Review completion deadlines after prerequisite rollback
 
 - **Reviewed:** The README's completion-window contract, path unlock-state creation, lesson-completion undo, calendar visibility checks, and the learner path-card status and due-date display.
-- **Result:** No runtime change. A course learning state and its deadline are created when a path course first unlocks; undoing a prerequisite removes lesson progress and re-locks the downstream course but does not clear that state. Private-course deadlines are hidden from the calendar when path access is revoked, while the path card continues to show an existing due date alongside its locked message.
+- **Result:** No runtime change. A course learning state, including its optional deadline, is created when a path course first unlocks; undoing a prerequisite removes lesson progress and re-locks the downstream course but does not clear that state. Private-course deadlines are hidden from the calendar when path access is revoked, while the path card continues to show an existing due date alongside its locked message.
 - **Why no change:** The product documentation says completion windows appear in the calendar and do not block course access, but does not define whether time pauses or resets while a prerequisite re-locks a previously unlocked course. Changing the deadline could alter learner expectations.
 - **Checked:** The existing regression for private deadline visibility after access revocation and the prerequisite-undo/re-lock test passed (2/2).
 - **Needed to continue:** A product rule for whether locked time counts toward an existing completion window, pauses it, or resets it on re-unlock.
