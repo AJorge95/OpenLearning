@@ -420,6 +420,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .video-watch-progress { position: relative; flex: 1 1 auto; min-width: 40px; height: 6px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.18); }
 .video-watch-progress span { display: block; height: 100%; border-radius: inherit; background: var(--purple); transition: width .2s linear; }
 .video-volume-control { width: 84px; height: 20px; accent-color: #fff; cursor: pointer; }
+/* Keep keyboard focus clear against the dark video-control toolbar. */
+.video-volume-control:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .video-caption-select { flex: 0 0 144px; width: 144px; }
 .video-caption-select .app-select-trigger { min-height: 36px; padding: 6px 9px; border-color: rgba(255,255,255,.18); border-radius: 8px; color: #f7f7fa; background: rgba(255,255,255,.06); font-size: 12px; }
 .video-caption-select .app-select-trigger:hover:not(:disabled), .video-caption-select .app-select-trigger[aria-expanded="true"] { border-color: rgba(255,255,255,.4); background: rgba(255,255,255,.14); }
