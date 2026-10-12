@@ -16,6 +16,14 @@
 - **Checked:** `node --test tests/client/api.test.js tests/server/last-login.test.js` passed (32/32).
 - **Needed to revisit:** A concrete API response mismatch, duplicated write after a CSRF retry, cancellation edge case, or request-body parser failure outside these cases.
 
+## 2026-10-12 — Recheck database indexes on high-traffic read paths
+
+- **Reviewed:** SQLite indexes against course-list and analytics reads, certificate-history ordering, filtered audit/system log pages, and batched log-retention cleanup.
+- **Result:** No runtime change. Existing compound indexes match the reviewed ordering and lookup patterns, and the retention path deletes old rows by indexed ID ranges.
+- **Why no change:** Query-plan regressions already assert index use for certificates and logs; no representative workload or plan regression identifies another index worth its write and storage cost.
+- **Checked:** `node --test tests/server/log-store.test.js tests/server/certificate-service.test.js` passed (12/12); course analytics and catalog tests passed (119/119).
+- **Needed to revisit:** A measured slow query or an `EXPLAIN QUERY PLAN` regression on a representative dataset.
+
 ## 2026-10-12 — Recheck learner catalog filters and pagination recovery
 
 - **Reviewed:** The catalog search form and filter controls, empty and loading announcements, stale-request cancellation, duplicate-page and catalog-drift recovery, plus the public course route's parameterized filters, access checks, and bounded pagination.
