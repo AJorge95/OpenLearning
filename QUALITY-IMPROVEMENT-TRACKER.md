@@ -669,6 +669,7 @@
 - **Result:** No runtime change. The form prevents dismissal while saving and clears the temporary password on close; the route validates before hashing and commits the hash, session removal, and audit entry together.
 - **Why no change:** Existing client and route coverage already protects the reviewed interaction and rollback cases; no reproducible mismatch justified another change.
 - **Checked:** Password-reset dialog and guidance tests passed (5/5); the registration/account route suite, including password reset and audit rollback, passed (31/31); `git diff --check` passed. The signed-in admin dialog was not rendered because the available browser session is signed out.
+- **Rechecked (2026-10-12):** Shared password-field, password-guidance, and reset-dialog tests passed (9/9); account, password/session, and session-store tests passed (56/56). The current routes preserve the self-service session, revoke other sessions, and atomically roll back administrator resets when audit persistence fails. The browser remains signed out, so authenticated dialog rendering was not repeated.
 - **Needed to revisit:** A reproduced focus or dismissal issue, a password-reset/session mismatch, or a failure under realistic request latency.
 
 ## 2026-10-12 — Recheck learner course discovery requests
