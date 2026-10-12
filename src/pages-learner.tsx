@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownUp, ArrowLeft, ArrowRight, Award, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, LockKeyhole, Maximize, MessageSquare, Minimize, Pause, Play, Printer, RotateCcw, Search, Send, ThumbsDown, ThumbsUp, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { ArrowDownUp, ArrowLeft, ArrowRight, Award, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, LockKeyhole, Maximize, MessageSquare, Minimize, Pause, Play, Printer, RotateCcw, Search, Send, ThumbsDown, ThumbsUp, Trash2, Volume2, VolumeX, X } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
 import { AppSelect, Button, ConfirmationDialog, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
@@ -123,6 +123,7 @@ export function CatalogPage() {
     return load(filtersRef.current);
   }
 
+  // Keep the reset action reachable from matching results and return focus to search.
   function clearCatalogFilters() {
     const defaults = { query: '', category: '', sort: 'recent' };
     filtersRef.current = defaults;
@@ -202,12 +203,14 @@ export function CatalogPage() {
         <div className="select-wrap catalog-filter-control catalog-filter-control--sort"><span className="catalog-filter-label">Sort by</span><AppSelect className="app-select--filter" ariaLabel="Sort by" leadingIcon={<ArrowDownUp size={16} />} value={sort} onChange={(nextSort) => applyCatalogControlChange(category, nextSort)} options={[{ value: 'recent', label: 'Recently updated' }, { value: 'title', label: 'Course title' }]} /></div>
       </div>
       <form role="search" aria-label="Search courses" className="search-field" onSubmit={(event) => { event.preventDefault(); load({ query: query.trim(), category, sort }); }}>
-        <Search size={19} /><input ref={searchInputRef} aria-label="Search courses" placeholder="Search courses" maxLength={120} value={query} onChange={(event) => setQuery(event.target.value)} /><button type="submit" aria-label="Submit search"><ArrowRight size={17} /></button>
+        <Search size={19} /><input ref={searchInputRef} aria-label="Search courses" placeholder="Search courses" maxLength={120} value={query} onChange={(event) => setQuery(event.target.value)} />
+        {hasAppliedFilters && <button type="button" className="clear-catalog-filters" aria-label="Clear search and filters" title="Clear search and filters" onClick={clearCatalogFilters}><X size={17} /></button>}
+        <button type="submit" aria-label="Submit search"><ArrowRight size={17} /></button>
       </form>
     </div>
     {error && <ErrorNotice message={error} onRetry={loadMoreFailed ? loadMore : retryLoad} />}
     {hasEmptyCatalogResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyCatalogState.title}. {emptyCatalogState.detail}</p>}
-    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading courses…</div> : courses.length ? <div className="course-grid">{courses.map((course, index) => <CourseCard key={course.id} course={course} coverLoading={index === 0 ? 'eager' : 'lazy'} />)}</div> : error ? null : <EmptyState icon={<Filter size={24} />} title={emptyCatalogState.title} detail={emptyCatalogState.detail} action={hasAppliedFilters && <Button variant="secondary" onClick={clearCatalogFilters}>Clear search and filters</Button>} />}
+    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading courses…</div> : courses.length ? <div className="course-grid">{courses.map((course, index) => <CourseCard key={course.id} course={course} coverLoading={index === 0 ? 'eager' : 'lazy'} />)}</div> : error ? null : <EmptyState icon={<Filter size={24} />} title={emptyCatalogState.title} detail={emptyCatalogState.detail} />}
     {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {formatCountLabel(total, 'course', 'courses')}</p><p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{loadingMore ? 'Loading more courses…' : ''}</p>{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
   </div>;
 }

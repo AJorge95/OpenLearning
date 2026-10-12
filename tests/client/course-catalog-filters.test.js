@@ -30,6 +30,15 @@ test('catalog empty-state filtering recognizes only submitted search and categor
   assert.equal(hasCourseCatalogFilters({ query: 'skills', category: '', sort: 'recent' }), true);
 });
 
+test('learners can clear active catalog filters while matching results are visible', () => {
+  const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /const hasAppliedFilters = hasCourseCatalogFilters\(filtersRef\.current\)/);
+  assert.match(source, /\{hasAppliedFilters && <button type="button" className="clear-catalog-filters" aria-label="Clear search and filters"[^>]*onClick=\{clearCatalogFilters\}/);
+  assert.match(source, /function clearCatalogFilters\(\) \{[\s\S]*?filtersRef\.current = defaults;[\s\S]*?setQuery\(''\);[\s\S]*?searchInputRef\.current\?\.focus\(\);/);
+  assert.match(source, /<EmptyState icon=\{<Filter size=\{24\} \/>\} title=\{emptyCatalogState\.title\} detail=\{emptyCatalogState\.detail\} \/>/);
+});
+
 test('catalog category and sort changes apply the visible search draft', () => {
   const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
 

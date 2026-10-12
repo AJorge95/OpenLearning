@@ -136,7 +136,9 @@ h1, h2, h3, h4 { color: var(--ink); letter-spacing: -.035em; overflow-wrap: anyw
 .search-field:focus-within, .management-search:focus-within, .access-search:focus-within { border-color: var(--purple); outline: 2px solid var(--purple); outline-offset: 2px; }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .search-field button { border: 0; background: transparent; color: var(--purple); width: 30px; height: 32px; display: grid; place-items: center; border-radius: 3px; }
+.search-field .clear-catalog-filters { color: var(--muted); }
 .search-field button:hover { background: var(--purple-soft); }
+.search-field .clear-catalog-filters:hover { color: var(--purple); }
 .course-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px 20px; }
 .catalog-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 22px; margin-top: 28px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 .catalog-pagination p { margin: 0; }
