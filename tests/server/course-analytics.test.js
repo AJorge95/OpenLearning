@@ -382,6 +382,49 @@ test('analytics count each eligible learner once and report course-wide completi
   assert.equal(result.learners.some((learner) => learner.id === 'learner-unassigned'), false);
 });
 
+test('learner-only analytics pages skip course-wide aggregate queries', async () => {
+  const fullResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics?page=1'), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(fullResponse.status, 200);
+  const fullPage = await fullResponse.json();
+
+  let aggregateQueryCount = 0;
+  const originalPrepare = database.prepare;
+  database.prepare = (sql) => {
+    if (sql.includes('learner_progress AS (')
+      || sql.includes('COUNT(lp.user_id) AS completed_count')
+      || sql.includes('learner_quiz AS (')) aggregateQueryCount += 1;
+    return originalPrepare.call(database, sql);
+  };
+  let response;
+  try {
+    response = await fetch(apiUrl('/manage/courses/course-analytics/analytics?page=1&learnersOnly=1'), {
+      headers: userHeaders('admin-1'),
+    });
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.equal(response.status, 200);
+  const learnerPage = await response.json();
+  assert.deepEqual(learnerPage.learners, fullPage.learners);
+  assert.equal(learnerPage.page, fullPage.page);
+  assert.equal(learnerPage.pageSize, fullPage.pageSize);
+  assert.equal(learnerPage.learnerCount, fullPage.summary.learnerCount);
+  assert.equal(learnerPage.disabledLearnerCount, fullPage.summary.disabledLearnerCount);
+  assert.equal('summary' in learnerPage, false);
+  assert.equal('lessonMetrics' in learnerPage, false);
+  assert.equal('quizMetrics' in learnerPage, false);
+  assert.equal(aggregateQueryCount, 0);
+
+  const invalidModeResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics?learnersOnly=true'), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(invalidModeResponse.status, 400);
+  assert.equal((await invalidModeResponse.json()).code, 'validation_error');
+});
+
 test('lesson order is enforced for learners while course managers can preview later lessons', () => {
   database.prepare(`INSERT INTO lessons (id, module_id, title, position)
     VALUES ('lesson-analytics-following', 'module-analytics', 'Following lesson', 1)`).run();

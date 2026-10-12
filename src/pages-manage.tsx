@@ -33,7 +33,7 @@ import { buildAuditActionOptions } from './audit-log-filter';
 import { readResetStatusAfterConflict, shouldClearResetConfirmationAfterFailure } from './platform-reset-status';
 import type { PlatformResetStatus } from './platform-reset-status';
 import type { UserApprovalFilter, UserRoleFilter } from './user-list-empty-state';
-import type { Competency, Course, CourseAccessUser, CourseAnalytics, CourseModule, CourseVersion, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
+import type { Competency, Course, CourseAccessUser, CourseAnalytics, CourseAnalyticsLearnerPage, CourseModule, CourseVersion, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
 
 type CourseListResponse = { courses: Course[]; total: number; page: number; pageSize: number };
 type FailedCourseListRequest = { page: number; query: string; status: string };
@@ -355,19 +355,44 @@ export function CourseAnalyticsPage() {
   const [data, setData] = useState<CourseAnalytics | null>(null);
   const [page, setPage] = useState(1);
   const [refreshVersion, setRefreshVersion] = useState(0);
-  const [failedPage, setFailedPage] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [learnerPageLoading, setLearnerPageLoading] = useState(false);
+  const [learnerPageError, setLearnerPageError] = useState('');
+  const [learnerPageRetryVersion, setLearnerPageRetryVersion] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
-    setData(null); setError(''); setFailedPage(null); setLoading(true);
-    api.get<CourseAnalytics>(`/api/manage/courses/${courseId}/analytics?page=${page}`, { signal: controller.signal })
+    setData(null); setPage(1); setError(''); setLearnerPageError(''); setLearnerPageLoading(false); setLoading(true);
+    api.get<CourseAnalytics>(`/api/manage/courses/${courseId}/analytics?page=1`, { signal: controller.signal })
       .then((result) => { if (active) { setData(result); setPage(result.page); } })
-      .catch((cause) => { if (active) { setError(cause instanceof ApiError ? cause.message : 'Course analytics could not be loaded.'); setFailedPage(page); } })
+      .catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.message : 'Course analytics could not be loaded.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; controller.abort(); };
-  }, [courseId, page, refreshVersion]);
+  }, [courseId, refreshVersion]);
+
+  useEffect(() => {
+    if (!data || data.course.id !== courseId || page === data.page) return;
+    const controller = new AbortController();
+    let active = true;
+    setLearnerPageLoading(true);
+    setLearnerPageError('');
+    api.get<CourseAnalyticsLearnerPage>(`/api/manage/courses/${courseId}/analytics?page=${page}&learnersOnly=1`, { signal: controller.signal })
+      .then((result) => {
+        if (!active) return;
+        setData((current) => current && current.course.id === courseId ? {
+          ...current,
+          summary: { ...current.summary, learnerCount: result.learnerCount, disabledLearnerCount: result.disabledLearnerCount },
+          learners: result.learners,
+          page: result.page,
+          pageSize: result.pageSize,
+        } : current);
+        setPage(result.page);
+      })
+      .catch((cause) => { if (active) setLearnerPageError(cause instanceof ApiError ? cause.message : 'Learner progress could not be loaded.'); })
+      .finally(() => { if (active) setLearnerPageLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [courseId, page, learnerPageRetryVersion, data?.course.id, data?.page]);
 
   if (data && data.course.id !== courseId) return <div className="management-page page-loading" role="status" aria-live="polite">Loading course analytics…</div>;
 
@@ -375,7 +400,7 @@ export function CourseAnalyticsPage() {
     <div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>Course dashboard</span></div>
     <PageHeading title={data?.course.title || 'Course dashboard'} subtitle="Learner progress and assessment performance across this course." action={<div className="analytics-heading-actions"><Link className="button button-secondary" to={`/manage/courses/${courseId}/access`}>Assign learners</Link><Link className="button button-secondary" to={`/manage/courses/${courseId}/edit`}>Edit course</Link></div>} />
     {error && <><Notice>{error}</Notice><Button variant="secondary" onClick={() => setRefreshVersion((version) => version + 1)}>Try again</Button></>}
-    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading course analytics…</div> : !failedPage && data && <>
+    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading course analytics…</div> : data && <>
       <div className="analytics-course-context"><CourseStatus status={data.course.status} /><VisibilityLabel visibility={data.course.visibility} /><span>{data.course.category}</span><span>{formatCountLabel(data.summary.learnerCount, 'learner', 'learners')} enrolled or assigned{data.summary.disabledLearnerCount ? ` · ${formatCountLabel(data.summary.disabledLearnerCount, 'learner', 'learners')} disabled` : ''}</span></div>
       <section className="analytics-kpi-grid" aria-label="Course summary metrics">
         <article className="analytics-kpi"><span>Completion rate</span><strong>{data.summary.completionRate === null ? '—' : `${data.summary.completionRate}%`}</strong><small>{data.summary.completedLearnerCount} of {formatCountLabel(data.summary.learnerCount, 'learner', 'learners')} completed</small></article>
@@ -394,9 +419,11 @@ export function CourseAnalyticsPage() {
         {data.quizMetrics.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable quiz performance metrics" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Quiz performance metrics</caption><thead><tr><th scope="col">Module</th><th scope="col">Quiz</th><th scope="col">Participation</th><th scope="col">Passed</th><th scope="col">Pass rate</th><th scope="col">Average score</th><th scope="col">Attempts</th></tr></thead><tbody>{data.quizMetrics.map((quiz) => <tr key={quiz.id}><td>{quiz.moduleTitle}</td><th scope="row"><strong>{quiz.title}</strong><small>Pass mark {quiz.passMark}%</small></th><td>{formatCountLabel(quiz.learnersAttempted, 'learner', 'learners')} · {quiz.participationRate === null ? '—' : `${quiz.participationRate}%`}</td><td>{quiz.learnersPassed} / {quiz.learnersAttempted}</td><td>{quiz.passRate === null ? '—' : <Percentage value={quiz.passRate} />}</td><td>{quiz.averageScore === null ? '—' : `${quiz.averageScore}%`}</td><td>{quiz.attempts}</td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No quizzes yet" detail="Add module quizzes to see participation and score metrics." />}
       </section>
 
-      <section className="analytics-section analytics-learners-section">
+      <section className="analytics-section analytics-learners-section" aria-busy={learnerPageLoading}>
         <div className="analytics-section-heading"><div><h2>Learner progress</h2><p>Per-person lesson completion, quiz attempts, and course completion.</p></div><span>{formatCountLabel(data.summary.learnerCount, 'learner', 'learners')}</span></div>
-        {data.learners.length ? <div className="analytics-table-wrap analytics-learners-table-wrap" role="region" aria-label="Scrollable learner progress" tabIndex={0}><table className="analytics-table analytics-learners-table"><caption className="sr-only">Learner-level course progress</caption><thead><tr><th scope="col">Learner</th><th scope="col">Progress</th><th scope="col">Lessons</th><th scope="col">Quizzes passed</th><th scope="col">Last activity</th><th scope="col">Status</th></tr></thead><tbody>{data.learners.map((learner) => <tr key={learner.id}>
+        {learnerPageLoading ? <p className="page-loading" role="status" aria-live="polite">Loading learner progress page {page}…</p>
+          : learnerPageError ? <div className="error-notice-actionable" role="alert"><span>{learnerPageError}</span><Button variant="secondary" onClick={() => setLearnerPageRetryVersion((version) => version + 1)}>Retry learner page</Button></div>
+            : data.learners.length ? <div className="analytics-table-wrap analytics-learners-table-wrap" role="region" aria-label="Scrollable learner progress" tabIndex={0}><table className="analytics-table analytics-learners-table"><caption className="sr-only">Learner-level course progress</caption><thead><tr><th scope="col">Learner</th><th scope="col">Progress</th><th scope="col">Lessons</th><th scope="col">Quizzes passed</th><th scope="col">Last activity</th><th scope="col">Status</th></tr></thead><tbody>{data.learners.map((learner) => <tr key={learner.id}>
           <th scope="row">
             <strong>{learner.username}</strong>
             {learner.disabled && <small className="analytics-disabled-label">Disabled account</small>}
@@ -432,7 +459,7 @@ export function CourseAnalyticsPage() {
           <td>{learner.lastActivityAt ? <DateText value={learner.lastActivityAt} /> : '—'}</td>
           <td><span className={`analytics-learner-state ${learner.completed ? 'is-complete' : learner.started ? 'is-started' : ''}`}>{learner.completed ? 'Completed' : learner.started ? 'In progress' : 'Not started'}</span></td>
         </tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No learners assigned or enrolled" detail="Assign learners to this course or wait for learners to open it." action={<Link className="button button-primary" to={`/manage/courses/${courseId}/access`}>Assign learners</Link>} />}
-        {data.summary.learnerCount > 0 && <LogPagination page={data.page} pageSize={data.pageSize} total={data.summary.learnerCount} loading={loading} onChange={setPage} />}
+        {data.summary.learnerCount > 0 && <LogPagination page={page} pageSize={data.pageSize} total={data.summary.learnerCount} loading={learnerPageLoading} onChange={(nextPage) => { setLearnerPageError(''); setPage(nextPage); }} />}
       </section>
     </>}
   </div>;

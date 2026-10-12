@@ -388,7 +388,99 @@ courseRouter.get('/manage/courses/:courseId', requireStaff, (req, res) => {
   res.json({ course: getCoursePayload(course, req.currentUser, { includeAnswers: true }) });
 });
 
+function courseAnalyticsLearners(course, learnerRows, lessons, quizzes) {
+  const progressByUser = new Map();
+  const learnerIds = learnerRows.map((learner) => learner.id);
+  if (learnerIds.length) for (const row of db.prepare(`
+    SELECT lp.user_id, lp.lesson_id, lp.completed_at
+    FROM lesson_progress lp JOIN lessons l ON l.id = lp.lesson_id
+    JOIN course_modules m ON m.id = l.module_id
+    WHERE m.course_id = ? AND lp.user_id IN (${learnerIds.map(() => '?').join(',')})
+  `).all(course.id, ...learnerIds)) {
+    const entries = progressByUser.get(row.user_id) ?? new Map();
+    entries.set(row.lesson_id, row.completed_at);
+    progressByUser.set(row.user_id, entries);
+  }
+
+  const quizResultsByUser = new Map();
+  if (learnerIds.length) for (const row of db.prepare(`
+    SELECT a.user_id, a.quiz_id, COUNT(*) AS attempts, MAX(a.score) AS highest_score,
+      MAX(a.passed) AS passed,
+      (SELECT latest.score FROM quiz_attempts latest WHERE latest.user_id = a.user_id AND latest.quiz_id = a.quiz_id
+        ORDER BY latest.submitted_at DESC, latest.rowid DESC LIMIT 1) AS latest_score,
+      (SELECT latest.passed FROM quiz_attempts latest WHERE latest.user_id = a.user_id AND latest.quiz_id = a.quiz_id
+        ORDER BY latest.submitted_at DESC, latest.rowid DESC LIMIT 1) AS latest_passed,
+      MAX(a.submitted_at) AS latest_submitted_at
+    FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
+    JOIN course_modules m ON m.id = q.module_id
+    WHERE m.course_id = ? AND a.user_id IN (${learnerIds.map(() => '?').join(',')})
+    GROUP BY a.user_id, a.quiz_id
+  `).all(course.id, ...learnerIds)) {
+    const entries = quizResultsByUser.get(row.user_id) ?? new Map();
+    entries.set(row.quiz_id, row);
+    quizResultsByUser.set(row.user_id, entries);
+  }
+
+  return learnerRows.map((learner) => {
+    const completedLessons = progressByUser.get(learner.id) ?? new Map();
+    const quizResults = quizResultsByUser.get(learner.id) ?? new Map();
+    const lessonProgress = lessons.map((lesson) => ({
+      id: lesson.id,
+      title: lesson.title,
+      moduleTitle: lesson.module_title,
+      completedAt: completedLessons.get(lesson.id) ?? null,
+      completed: completedLessons.has(lesson.id),
+    }));
+    const quizProgress = quizzes.map((quiz) => {
+      const result = quizResults.get(quiz.id);
+      return {
+        id: quiz.id,
+        title: quiz.title,
+        moduleTitle: quiz.module_title,
+        passMark: quiz.pass_mark,
+        attempts: result?.attempts ?? 0,
+        highestScore: result?.highest_score ?? null,
+        latestScore: result?.latest_score ?? null,
+        latestPassed: result ? Boolean(result.latest_passed) : null,
+        passed: result ? Boolean(result.passed) : false,
+        latestSubmittedAt: result?.latest_submitted_at ?? null,
+      };
+    });
+    const completedLessonCount = lessonProgress.filter((lesson) => lesson.completed).length;
+    const passedQuizCount = quizProgress.filter((quiz) => quiz.passed).length;
+    const requiredItems = lessons.length + quizzes.length;
+    const completedItems = completedLessonCount + passedQuizCount;
+    const progress = requiredItems ? Math.round((completedItems / requiredItems) * 100) : 0;
+    const activityDates = [
+      ...lessonProgress.map((lesson) => lesson.completedAt),
+      ...quizProgress.map((quiz) => quiz.latestSubmittedAt),
+    ].filter(Boolean);
+    const lastActivityAt = activityDates.reduce((latest, date) => !latest || date > latest ? date : latest, null);
+    return {
+      id: learner.id,
+      username: learner.username,
+      disabled: Boolean(learner.disabled),
+      enrolledAt: learner.enrolled_at,
+      assignedAt: learner.granted_at,
+      completedLessonCount,
+      lessonCount: lessons.length,
+      passedQuizCount,
+      quizCount: quizzes.length,
+      progress,
+      completed: requiredItems > 0 && completedItems === requiredItems,
+      started: completedItems > 0 || quizProgress.some((quiz) => quiz.attempts > 0),
+      lastActivityAt,
+      lessonProgress,
+      quizProgress,
+    };
+  });
+}
+
 courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res) => {
+  if (req.query.learnersOnly !== undefined && req.query.learnersOnly !== '1') {
+    fail(400, 'Learner-only analytics requests must set learnersOnly=1.', 'validation_error');
+  }
+  const learnersOnly = req.query.learnersOnly === '1';
   const courseId = logicalCourseId(req.params.courseId) || req.params.courseId;
   const catalogCourse = canonicalCourse(courseId);
   if (!catalogCourse) fail(404, 'Course not found.', 'not_found');
@@ -425,6 +517,18 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
     FROM quizzes q JOIN course_modules m ON m.id = q.module_id
     WHERE m.course_id = ? ORDER BY m.position, m.id, q.id
   `).all(course.id);
+  const learners = courseAnalyticsLearners(course, learnerRows, lessons, quizzes);
+
+  // Page changes need learner details only; avoid recalculating course-wide metrics.
+  if (learnersOnly) {
+    return res.json({
+      learners,
+      page,
+      pageSize: responsePageSize,
+      learnerCount: learnerTotals.total,
+      disabledLearnerCount: learnerTotals.disabled_count,
+    });
+  }
 
   const requiredItemCount = lessons.length + quizzes.length;
   const globalProgress = db.prepare(`
@@ -498,92 +602,6 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
     WHERE m.course_id = ? GROUP BY q.id
   `).all(courseId, courseId, course.id, course.id);
   const quizTotalsById = new Map(quizTotals.map((row) => [row.id, row]));
-
-  const progressByUser = new Map();
-  const learnerIds = learnerRows.map((learner) => learner.id);
-  if (learnerIds.length) for (const row of db.prepare(`
-    SELECT lp.user_id, lp.lesson_id, lp.completed_at
-    FROM lesson_progress lp JOIN lessons l ON l.id = lp.lesson_id
-    JOIN course_modules m ON m.id = l.module_id
-    WHERE m.course_id = ? AND lp.user_id IN (${learnerIds.map(() => '?').join(',')})
-  `).all(course.id, ...learnerIds)) {
-    const entries = progressByUser.get(row.user_id) ?? new Map();
-    entries.set(row.lesson_id, row.completed_at);
-    progressByUser.set(row.user_id, entries);
-  }
-
-  const quizResultsByUser = new Map();
-  if (learnerIds.length) for (const row of db.prepare(`
-    SELECT a.user_id, a.quiz_id, COUNT(*) AS attempts, MAX(a.score) AS highest_score,
-      MAX(a.passed) AS passed,
-      (SELECT latest.score FROM quiz_attempts latest WHERE latest.user_id = a.user_id AND latest.quiz_id = a.quiz_id
-        ORDER BY latest.submitted_at DESC, latest.rowid DESC LIMIT 1) AS latest_score,
-      (SELECT latest.passed FROM quiz_attempts latest WHERE latest.user_id = a.user_id AND latest.quiz_id = a.quiz_id
-        ORDER BY latest.submitted_at DESC, latest.rowid DESC LIMIT 1) AS latest_passed,
-      MAX(a.submitted_at) AS latest_submitted_at
-    FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-    JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id = ? AND a.user_id IN (${learnerIds.map(() => '?').join(',')})
-    GROUP BY a.user_id, a.quiz_id
-  `).all(course.id, ...learnerIds)) {
-    const entries = quizResultsByUser.get(row.user_id) ?? new Map();
-    entries.set(row.quiz_id, row);
-    quizResultsByUser.set(row.user_id, entries);
-  }
-
-  const learners = learnerRows.map((learner) => {
-    const completedLessons = progressByUser.get(learner.id) ?? new Map();
-    const quizResults = quizResultsByUser.get(learner.id) ?? new Map();
-    const lessonProgress = lessons.map((lesson) => ({
-      id: lesson.id,
-      title: lesson.title,
-      moduleTitle: lesson.module_title,
-      completedAt: completedLessons.get(lesson.id) ?? null,
-      completed: completedLessons.has(lesson.id),
-    }));
-    const quizProgress = quizzes.map((quiz) => {
-      const result = quizResults.get(quiz.id);
-      return {
-        id: quiz.id,
-        title: quiz.title,
-        moduleTitle: quiz.module_title,
-        passMark: quiz.pass_mark,
-        attempts: result?.attempts ?? 0,
-        highestScore: result?.highest_score ?? null,
-        latestScore: result?.latest_score ?? null,
-        latestPassed: result ? Boolean(result.latest_passed) : null,
-        passed: result ? Boolean(result.passed) : false,
-        latestSubmittedAt: result?.latest_submitted_at ?? null,
-      };
-    });
-    const completedLessonCount = lessonProgress.filter((lesson) => lesson.completed).length;
-    const passedQuizCount = quizProgress.filter((quiz) => quiz.passed).length;
-    const requiredItems = lessons.length + quizzes.length;
-    const completedItems = completedLessonCount + passedQuizCount;
-    const progress = requiredItems ? Math.round((completedItems / requiredItems) * 100) : 0;
-    const activityDates = [
-      ...lessonProgress.map((lesson) => lesson.completedAt),
-      ...quizProgress.map((quiz) => quiz.latestSubmittedAt),
-    ].filter(Boolean);
-    const lastActivityAt = activityDates.reduce((latest, date) => !latest || date > latest ? date : latest, null);
-    return {
-      id: learner.id,
-      username: learner.username,
-      disabled: Boolean(learner.disabled),
-      enrolledAt: learner.enrolled_at,
-      assignedAt: learner.granted_at,
-      completedLessonCount,
-      lessonCount: lessons.length,
-      passedQuizCount,
-      quizCount: quizzes.length,
-      progress,
-      completed: requiredItems > 0 && completedItems === requiredItems,
-      started: completedItems > 0 || quizProgress.some((quiz) => quiz.attempts > 0),
-      lastActivityAt,
-      lessonProgress,
-      quizProgress,
-    };
-  });
 
   const lessonMetrics = lessons.map((lesson) => {
     const completedCount = lessonCompletionById.get(lesson.id) ?? 0;

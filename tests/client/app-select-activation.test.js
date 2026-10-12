@@ -13,6 +13,10 @@ test('rejects label-forwarded pointer activation from beside the trigger', () =>
   assert.equal(isAppSelectActivationWithinTrigger({ detail: 1, clientX: 120, clientY: 70 }, triggerBounds), false);
 });
 
+test('rejects zero-detail activations with coordinates outside the trigger', () => {
+  assert.equal(isAppSelectActivationWithinTrigger({ detail: 0, clientX: 246, clientY: 40 }, triggerBounds), false);
+});
+
 test('keeps keyboard activation available without pointer coordinates', () => {
   assert.equal(isAppSelectActivationWithinTrigger({ detail: 0, clientX: 0, clientY: 0 }, triggerBounds), true);
 });
