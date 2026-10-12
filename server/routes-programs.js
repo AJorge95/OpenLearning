@@ -47,6 +47,12 @@ function isCalendarDate(value) {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
+function calendarDeadlineDate(value) {
+  // SQLite's space-separated timestamps have no zone; interpret them as UTC like stored deadlines.
+  const isoTimestamp = value.includes('T') ? value : `${value.replace(' ', 'T')}Z`;
+  return new Date(isoTimestamp);
+}
+
 function logAudit(actor, action, entityType, entityId, summary, details = {}) {
   const auditId = writeAuditLog({ actor, action, entityType, entityId, summary, details });
   if (!auditId) fail(500, 'The change could not be saved because the audit log is unavailable.', 'audit_unavailable');
@@ -436,8 +442,8 @@ programsRouter.get('/calendar', (req, res) => {
   const now = Date.now();
   res.json({ items: visibleItems.map((item, index) => {
     const completed = summaries[index].completed;
-    const dueAt = new Date(item.deadline_at);
-    return { courseId: item.course_id, title: item.title, category: item.category, dueAt: item.deadline_at,
+    const dueAt = calendarDeadlineDate(item.deadline_at);
+    return { courseId: item.course_id, title: item.title, category: item.category, dueAt: dueAt.toISOString(),
       status: completed ? 'completed' : dueAt.getTime() < now ? 'overdue' : 'upcoming', completed,
       url: `/courses/${item.course_id}` };
   }) });

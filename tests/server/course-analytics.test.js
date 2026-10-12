@@ -2679,6 +2679,36 @@ test('calendar date ranges reject impossible and overwide dates while accepting 
   assert.deepEqual((await validLeapDay.json()).items, []);
 });
 
+test('calendar treats SQLite space-separated deadlines as UTC', async () => {
+  const previousTimezone = process.env.TZ;
+  const courseId = 'calendar-space-timestamp';
+  const expectedDeadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const storedDeadline = expectedDeadline.slice(0, 19).replace('T', ' ');
+  const deadlineDate = storedDeadline.slice(0, 10);
+  database.prepare(`INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+    VALUES (?, 'SQLite timestamp deadline', 'public', 'published', 'admin-1', 'admin-1')`).run(courseId);
+  database.prepare('INSERT INTO course_learning_state (user_id, course_id, deadline_at) VALUES (?, ?, ?)')
+    .run('learner-active', courseId, storedDeadline);
+
+  try {
+    process.env.TZ = 'Pacific/Kiritimati';
+    const response = await fetch(apiUrl(`/calendar?from=${deadlineDate}&to=${deadlineDate}`), {
+      headers: userHeaders('learner-active'),
+    });
+
+    assert.equal(response.status, 200);
+    const item = (await response.json()).items.find((deadline) => deadline.courseId === courseId);
+    assert.ok(item, 'the deadline should be included in its stored UTC date range');
+    assert.equal(item.dueAt, `${storedDeadline.replace(' ', 'T')}.000Z`);
+    assert.equal(item.status, 'upcoming');
+  } finally {
+    if (previousTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTimezone;
+    database.prepare('DELETE FROM course_learning_state WHERE user_id = ? AND course_id = ?').run('learner-active', courseId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('calendar deadline results use version-aware course completion and batched summaries', async () => {
   database.prepare(`INSERT INTO course_learning_state (user_id, course_id, deadline_at, started_at)
     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
