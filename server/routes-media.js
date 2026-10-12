@@ -183,6 +183,7 @@ async function readJpegCourseCoverDimensions(fileHandle, size) {
 async function fileSignatureMatchesKind(file, kind) {
   const ext = originalExtension(file.originalname);
   if (kind === 'caption') {
+    let validationError;
     try {
       const size = (await fs.promises.stat(file.path)).size;
       if (size < 6 || size > maxCaptionFileBytes) return false;
@@ -190,8 +191,18 @@ async function fileSignatureMatchesKind(file, kind) {
       const text = contents.toString('utf8');
       if (!Buffer.from(text, 'utf8').equals(contents) || text.includes('\0')) return false;
       return hasValidWebVttCueTimings(text);
-    } catch {
-      return false;
+    } catch (error) {
+      validationError = error;
+    }
+    if (validationError) {
+      // A caption read failure is operational, not evidence of malformed WebVTT content.
+      writeSystemLog('error', 'media', 'Upload signature validation failed', {
+        kind,
+        errorName: String(validationError?.name || 'Error').slice(0, 100),
+        errorCode: typeof validationError?.code === 'string' ? validationError.code.slice(0, 100) : undefined,
+      });
+      await cleanupTemporaryUpload(file, 'Temporary upload cleanup failed after signature validation error', { kind });
+      throw new ApiError(500, 'The uploaded file could not be checked. Please try again.', 'media_validation_unavailable');
     }
   }
   if (kind === 'document' && ext !== '.pdf' && ext !== '.rtf'

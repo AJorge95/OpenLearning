@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Distinguish caption read failures from invalid WebVTT uploads
+
+- **Reviewed:** Caption upload size and WebVTT validation, the signature validator's caption-specific file reads, temporary-upload cleanup, and the route's existing invalid-format response.
+- **Improvement:** Treat filesystem errors during caption `stat` or `readFile` as operational failures. Log the error details, remove the temporary upload, and return the same retryable `media_validation_unavailable` response used by other media signatures; keep malformed or out-of-range captions on the existing client-error path.
+- **Why it helps:** A storage failure no longer tells course staff that a valid captions file is malformed, and a failed read cannot leave its temporary upload behind.
+- **Checked:** Added a caption-route regression under `tests/server/` with a valid WebVTT payload and injected `EIO` read failure; it verifies the retryable response, system-log details, unchanged caption records, and temporary-file cleanup. The focused media-route suite passed (22/22), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed.
+
 ## 2026-10-12 — Report media signature read failures as server errors
 
 - **Reviewed:** The media upload signature validator, its course-cover and lesson-document callers, temporary-upload cleanup, and existing system-log handling.

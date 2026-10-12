@@ -289,6 +289,43 @@ test('reports a signature-read failure as retryable and removes the temporary up
   }
 });
 
+test('reports a caption-read failure as retryable and removes the temporary upload', async () => {
+  const courseMediaDirectory = path.dirname(captionPath);
+  const originalFiles = (await fs.readdir(courseMediaDirectory)).sort();
+  const originalCaptionCount = database.prepare('SELECT COUNT(*) AS count FROM lesson_captions').get().count;
+  const originalReadFile = fsSync.promises.readFile;
+  fsSync.promises.readFile = async () => {
+    throw Object.assign(new Error('Injected caption read failure.'), { code: 'EIO' });
+  };
+
+  try {
+    const form = new FormData();
+    form.set('lessonId', 'lesson-caption-audit');
+    form.set('language', 'es');
+    form.set('label', 'Spanish');
+    form.set('file', new File(['WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHola.\n'], 'captions.vtt', { type: 'text/vtt' }));
+
+    const response = await fetch(apiUrl('/manage/courses/course-caption-audit/lesson-captions'), {
+      method: 'POST',
+      headers: { 'x-test-user': 'admin-media', connection: 'close' },
+      body: form,
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 500);
+    assert.equal(payload.code, 'media_validation_unavailable');
+    assert.equal(payload.error, 'The uploaded file could not be checked. Please try again.');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM lesson_captions').get().count, originalCaptionCount);
+    assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
+
+    const log = database.prepare(`SELECT level, details_json FROM system_logs
+      WHERE source = 'media' AND message = 'Upload signature validation failed' ORDER BY id DESC LIMIT 1`).get();
+    assert.equal(log?.level, 'error');
+    assert.deepEqual(JSON.parse(log.details_json), { kind: 'caption', errorName: 'Error', errorCode: 'EIO' });
+  } finally {
+    fsSync.promises.readFile = originalReadFile;
+  }
+});
+
 test('streams protected video byte ranges and rejects unsatisfiable ranges', async () => {
   const response = await fetch(mediaUrl('/media-range-tests'), {
     headers: { 'x-test-user': 'admin-media', range: 'bytes=2-5', connection: 'close' },
