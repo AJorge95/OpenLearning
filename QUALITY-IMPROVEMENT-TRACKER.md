@@ -24,6 +24,14 @@
 - **Checked:** Audit filter and empty-state client tests passed (10/10); audit and system log route tests passed (2/2); `git diff --check` passed. The signed-in audit page was not rendered because the available browser session is signed out.
 - **Needed to revisit:** A reproduced entry omitted from a search, a stale filter after a retention change, or a measurable delay as the log history grows.
 
+## 2026-10-12 — Scan for unfinished implementation markers
+
+- **Reviewed:** Project guidance, the clean working tree, and source markers for `TODO`, `FIXME`, `XXX`, `not implemented`, and `coming soon` across `src` and `server`.
+- **Result:** No runtime change. The matches were SQL parameter placeholders and user-facing input placeholders; no unfinished implementation marker or stub surfaced.
+- **Why no change:** A keyword scan produced no source-backed behavior gap to fix, so a speculative feature would not be a useful improvement.
+- **Checked:** `rg --files -g AGENTS.md -g QUALITY-IMPROVEMENT-TRACKER.md` found the tracker and no additional project guidance file; the marker search returned no candidates; `git status` was clean before this tracker entry.
+- **Needed to revisit:** A concrete user-reported issue, an identified incomplete workflow, or a measured reliability or performance problem.
+
 ## 2026-10-12 — Let staff revoke course access from disabled learners
 
 - **Reviewed:** Disabled learner rows in course access management, the UI's grant/revoke actions, and the existing course-grant API and audit transaction.
