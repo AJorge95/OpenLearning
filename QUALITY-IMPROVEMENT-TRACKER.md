@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Refresh learner deadline status at its due time
+
+- **Reviewed:** My Learning deadline labels, the date-status helper, calendar deadline timestamps, and the existing learner deadline tests.
+- **Improvement:** Schedule a one-shot card refresh just after each upcoming deadline so its status changes from “Due” to “Overdue” while the page remains open. Completed and already-overdue cards do not schedule timers; very distant deadlines are rechecked within the browser timer limit.
+- **Why it helps:** Learners no longer have to reload My Learning to see a deadline become overdue, and changing or removing a card clears its pending timer.
+- **Backend review:** The calendar and course APIs already provide the same persisted deadline timestamps; no API or storage change was needed.
+- **Checked:** `node --test tests/client/learning-deadline.test.js` passed (6/6), covering the exact time boundary, past/invalid dates, long delays, and timer cleanup wiring. `npm run build` passed TypeScript and Vite, and `git diff --check` passed. Rendered signed-in My Learning behavior was not exercised because the available browser session is signed out and Playwright is not installed in this workspace.
+
 ## 2026-10-12 — Recheck lesson media upload and cleanup flows
 
 - **Reviewed:** Cover/video/document/caption upload validation, authorization at save time, audit transactions, temporary-file cleanup, replacement retention for version history, protected streaming, lesson-editor form semantics, upload progress, and responsive media controls.
