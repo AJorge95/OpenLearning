@@ -37,7 +37,17 @@ test('registration rejects invalid names and submits normalized values', () => {
   const registerPage = source.slice(source.indexOf('export function RegisterPage()'), source.indexOf('export function AccountSecurityPage()'));
   assert.match(registerPage, /accountNameError\(firstName, 'First name'\)[\s\S]*firstNameInputRef\.current\?\.focus\(\)[\s\S]*accountNameError\(lastName, 'Last name'\)/);
   assert.match(registerPage, /signUp\(email, normalizedFirstName, normalizedLastName/);
-  assert.match(registerPage, /aria-invalid=\{invalidNameField === 'lastName' \|\| undefined\} aria-describedby=\{invalidNameField === 'lastName' \? 'registration-form-error' : undefined\}/);
+  for (const [name, label, helpId] of [['firstName', 'First', 'firstNameHelpId'], ['lastName', 'Last', 'lastNameHelpId']]) {
+    assert.ok(registerPage.includes('const ' + name + 'InputId = useId();'));
+    assert.ok(registerPage.includes('<label htmlFor={' + name + 'InputId}>' + label + ' name</label>'));
+    assert.ok(registerPage.includes('<small id={' + helpId + '}>Required · used on certificates</small>'));
+    assert.match(registerPage, new RegExp(`<input\\s+id=\\{${name}InputId\\}`));
+    assert.ok(registerPage.includes("aria-describedby={invalidNameField === '" + name + "' ?"));
+    assert.ok(registerPage.includes('${' + helpId + '} registration-form-error`'));
+    assert.ok(registerPage.includes(': ' + helpId + '}'));
+  }
+  assert.match(registerPage, /aria-invalid=\{invalidNameField === 'firstName' \|\| undefined\}/);
+  assert.match(registerPage, /aria-invalid=\{invalidNameField === 'lastName' \|\| undefined\}/);
 });
 
 test('certificate-name editing validates before saving and identifies the field to correct', () => {

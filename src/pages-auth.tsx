@@ -319,6 +319,10 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const postLoginPath = getPostLoginPath(location.state?.from);
   const emailErrorId = useId();
+  const firstNameInputId = useId();
+  const firstNameHelpId = `${firstNameInputId}-help`;
+  const lastNameInputId = useId();
+  const lastNameHelpId = `${lastNameInputId}-help`;
   const usernameInputId = useId();
   const usernameHelpId = `${usernameInputId}-help`;
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -447,7 +451,49 @@ export function RegisterPage() {
     <form onSubmit={submit} className="form-stack" aria-busy={saving}>
       <label>Email<input ref={emailInputRef} name="email" required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? emailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setError(''); }} disabled={saving} /></label>
       {emailError && <p id={emailErrorId} className="form-error" role="alert">{emailError}</p>}
-      <div className="account-name-fields"><label>First name <small>Required · used on certificates</small><input ref={firstNameInputRef} name="firstName" required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="given-name" aria-invalid={invalidNameField === 'firstName' || undefined} aria-describedby={invalidNameField === 'firstName' ? 'registration-form-error' : undefined} value={firstName} onChange={(event) => { setFirstName(event.target.value); if (invalidNameField === 'firstName') { setInvalidNameField(null); setError(''); } }} disabled={saving} /></label><label>Last name <small>Required · used on certificates</small><input ref={lastNameInputRef} name="lastName" required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="family-name" aria-invalid={invalidNameField === 'lastName' || undefined} aria-describedby={invalidNameField === 'lastName' ? 'registration-form-error' : undefined} value={lastName} onChange={(event) => { setLastName(event.target.value); if (invalidNameField === 'lastName') { setInvalidNameField(null); setError(''); } }} disabled={saving} /></label></div>
+      {/* Keep certificate guidance in each field's description instead of its accessible name. */}
+      <div className="account-name-fields registration-name-fields">
+        <div className="registration-name-field">
+          <label htmlFor={firstNameInputId}>First name</label>
+          <small id={firstNameHelpId}>Required · used on certificates</small>
+          <input
+            id={firstNameInputId}
+            ref={firstNameInputRef}
+            name="firstName"
+            required
+            maxLength={MAX_ACCOUNT_NAME_LENGTH}
+            autoComplete="given-name"
+            aria-invalid={invalidNameField === 'firstName' || undefined}
+            aria-describedby={invalidNameField === 'firstName' ? `${firstNameHelpId} registration-form-error` : firstNameHelpId}
+            value={firstName}
+            onChange={(event) => {
+              setFirstName(event.target.value);
+              if (invalidNameField === 'firstName') { setInvalidNameField(null); setError(''); }
+            }}
+            disabled={saving}
+          />
+        </div>
+        <div className="registration-name-field">
+          <label htmlFor={lastNameInputId}>Last name</label>
+          <small id={lastNameHelpId}>Required · used on certificates</small>
+          <input
+            id={lastNameInputId}
+            ref={lastNameInputRef}
+            name="lastName"
+            required
+            maxLength={MAX_ACCOUNT_NAME_LENGTH}
+            autoComplete="family-name"
+            aria-invalid={invalidNameField === 'lastName' || undefined}
+            aria-describedby={invalidNameField === 'lastName' ? `${lastNameHelpId} registration-form-error` : lastNameHelpId}
+            value={lastName}
+            onChange={(event) => {
+              setLastName(event.target.value);
+              if (invalidNameField === 'lastName') { setInvalidNameField(null); setError(''); }
+            }}
+            disabled={saving}
+          />
+        </div>
+      </div>
       <div className="form-stack-username-field"><label htmlFor={usernameInputId}>Username</label><input id={usernameInputId} name="username" aria-describedby={usernameHelpId} required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small id={usernameHelpId}>Letters, numbers, dots, underscores, and hyphens.</small></div>
       {registrationFieldsLoading ? <p className="registration-fields-loading" role="status">Loading registration details…</p> : registrationFieldsError
         ? <div className="registration-fields-load-error"><p className="form-error" role="alert">{registrationFieldsError}</p><Button type="button" variant="secondary" onClick={() => setRegistrationFieldsRetryVersion((version) => version + 1)}>Retry</Button></div>

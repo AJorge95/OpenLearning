@@ -1564,6 +1564,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 
 .account-name-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; min-width: 0; }
 .account-name-fields > label { min-width: 0; }
+.registration-name-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.registration-name-field > small { color: var(--muted); font-size: 10px; font-weight: 450; }
 .account-settings-page { display: grid; gap: 14px; }
 .account-settings-page > h1, .account-settings-page > .lead-copy { margin-bottom: 0; }
 .account-settings-section { display: grid; gap: 10px; }

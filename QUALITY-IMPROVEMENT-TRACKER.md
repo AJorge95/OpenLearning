@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Separate registration name labels from certificate guidance
+
+- **Reviewed:** Registration first/last name labels, visible certificate guidance, invalid-name descriptions, responsive field layout, and the shared account-name validation used by the registration API.
+- **Improvement:** Give each name input a concise explicit label and link “Required · used on certificates” through `aria-describedby`. Preserve that description when an invalid-name message is also present.
+- **Why it helps:** Screen-reader users hear the field name separately from its instructions, while requiredness remains available through the native required state and visible guidance stays unchanged.
+- **Backend review:** The API still uses the shared 1–80 character name validator and normalization; its request contract and behavior are unchanged.
+- **Checked:** `node --test tests/client/account-name-validation.test.js` passed (6/6); `npm run build` passed TypeScript and Vite; `git diff --check` passed. The rendered accessibility tree exposed “First name” and “Last name” as the input names, with the certificate guidance linked as descriptions. At 390px, the two fields stack and the document has no horizontal overflow.
+
 ## 2026-10-12 — Respect reduced motion in hover feedback
 
 - **Reviewed:** The existing reduced-motion media query and hover transforms on course cards and settings palette choices.
