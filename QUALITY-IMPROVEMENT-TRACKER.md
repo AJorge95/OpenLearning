@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck public registration controls and signup handling
+
+- **Reviewed:** The current rendered `/register` form, field names and descriptions, password visibility interaction, registration validation, account-cap enforcement, and approval/session behavior.
+- **Result:** No runtime change. The rendered fields have accessible names; Show reveals the password as text and changes to Hide, and Hide remasks it. The registration handler validates input and custom fields, rechecks availability and identifier conflicts inside its immediate transaction, and creates a session only when approval is not required.
+- **Why no change:** The current interaction matches its labels, and focused UI and server regressions already cover password visibility, registration approval, account limits, duplicate identifiers, audit rollback, and session recovery. No new UI or backend failure appeared.
+- **Checked:** `node --test tests/client/password-field.test.js` passed (4/4); `node --test tests/server/last-login.test.js tests/server/registration-limits.test.js` passed (22/22). In the local signed-out Chrome tab at `http://127.0.0.1:5173/register`, Show changed the input type from `password` to `text`, Hide restored `password`, and browser console errors/warnings were empty. No build was run because runtime source was unchanged; `git diff --check` passed.
+- **Needed to revisit:** A reproduced registration-field or approval/session mismatch, or measured signup latency under a representative workload.
+
 ## 2026-10-12 — Announce the empty-course first-module disclosure state
 
 - **Reviewed:** The empty curriculum state, both module-form triggers, the inline form's focus and cancel behavior, the module-creation route, and its audit rollback coverage.
