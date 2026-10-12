@@ -33,7 +33,7 @@ test('all password-entry forms use the shared field while the setup token stays 
   assert.equal((authSource.match(/<PasswordField\b/g) || []).length, 8);
   assert.equal((managementSource.match(/<PasswordField\b/g) || []).length, 6);
   assert.equal((authSource.match(/type="password"/g) || []).length, 1);
-  assert.match(authSource, /<label>One-time setup token<input name="setupToken" required[^>]*type="password"/);
+  assert.match(authSource, /<label><span className="form-label-row"><span>One-time setup token<\/span><small className="form-required-indicator" aria-hidden="true">Required<\/small><\/span><input name="setupToken" required[^>]*type="password"/);
   assert.doesNotMatch(managementSource, /type="password"/);
 });
 
