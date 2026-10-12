@@ -25,6 +25,13 @@ test('custom signup fields use a navigable heading without changing its visual s
   assert.match(styles, /\.registration-form-fields-heading h2 \{ margin: 0; color: var\(--ink\); font-size: 14px; \}/);
 });
 
+test('registration field editor stacks before its fixed minimum columns overflow staff content', () => {
+  const styles = fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
+
+  assert.match(styles, /\.registration-field-editor-grid \{ display: grid; grid-template-columns: minmax\(180px, 1fr\) minmax\(170px, \.8fr\) minmax\(150px, \.65fr\);/);
+  assert.match(styles, /@media \(max-width: 860px\) \{\s*\.registration-field-editor-grid \{ grid-template-columns: 1fr; \}\s*\}/);
+});
+
 test('registration select options stay stable while answer values rerender the form', () => {
   const pageSource = fs.readFileSync(new URL('../../src/pages-auth.tsx', import.meta.url), 'utf8');
   const optionsByFieldId = buildRegistrationFieldSelectOptions(fields);
