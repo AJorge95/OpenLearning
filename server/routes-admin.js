@@ -305,7 +305,6 @@ adminRouter.get('/users/:userId', (req, res) => {
       SELECT course_id, MAX(learning_path_enrolled) FROM course_sources GROUP BY course_id
     )
     SELECT c.*, uc.learning_path_enrolled,
-      (SELECT COUNT(*) FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = c.id) AS quiz_count,
       (SELECT enrolled_at FROM enrollments e WHERE e.course_id = c.id AND e.user_id = ? LIMIT 1) AS enrolled_at,
       (SELECT granted_at FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ? LIMIT 1) AS granted_at
     FROM user_courses uc JOIN courses c ON c.id = uc.course_id
@@ -325,7 +324,6 @@ adminRouter.get('/users/:userId', (req, res) => {
     registrationFields,
     courses: courses.map((course) => ({
       ...summaries.get(course.id),
-      quizCount: course.quiz_count,
       enrolledAt: course.enrolled_at,
       grantedAt: course.granted_at,
       learningPathEnrolled: Boolean(course.learning_path_enrolled),

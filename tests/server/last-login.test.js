@@ -921,6 +921,40 @@ test('admin account course activity includes published paths and deduplicates ov
   }
 });
 
+test('admin account course activity counts quizzes from the published course version', async () => {
+  const admin = await ensureLastLoginAdmin();
+  const courseId = 'account-activity-versioned-quizzes';
+  const versionId = `${courseId}-v2`;
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by, logical_course_id)
+    VALUES (?, 'Versioned activity', 'published', ?, ?, NULL), (?, 'Versioned activity v2', 'published', ?, ?, ?)`)
+    .run(courseId, admin.id, admin.id, versionId, admin.id, admin.id, courseId);
+  database.prepare(`INSERT INTO course_modules (id, course_id, title, position)
+    VALUES (?, ?, 'Original module', 0), (?, ?, 'Current module one', 0), (?, ?, 'Current module two', 1)`)
+    .run(`${courseId}-module`, courseId, `${versionId}-module-one`, versionId, `${versionId}-module-two`, versionId);
+  database.prepare('INSERT INTO quizzes (id, module_id, title) VALUES (?, ?, ?), (?, ?, ?), (?, ?, ?)')
+    .run(`${courseId}-quiz`, `${courseId}-module`, 'Original quiz',
+      `${versionId}-quiz-one`, `${versionId}-module-one`, 'Current quiz one',
+      `${versionId}-quiz-two`, `${versionId}-module-two`, 'Current quiz two');
+  database.prepare(`INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+    VALUES (?, ?, ?, 1, ?), (?, ?, ?, 2, ?)`)
+    .run(`${courseId}-publication-one`, courseId, courseId, admin.id,
+      `${courseId}-publication-two`, courseId, versionId, admin.id);
+  database.prepare('INSERT INTO enrollments (id, course_id, user_id) VALUES (?, ?, ?)')
+    .run(`${courseId}-enrollment`, courseId, admin.id);
+
+  try {
+    const response = await fetch(apiUrl(`/admin/users/${admin.id}`), { headers: { connection: 'close' } });
+    assert.equal(response.status, 200);
+    const details = await response.json();
+    const course = details.courses.find((entry) => entry.id === courseId);
+    assert.ok(course);
+    assert.equal(course.versionNumber, 2);
+    assert.equal(course.quizCount, 2);
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(courseId, versionId);
+  }
+});
+
 test('sign-in rolls back last-login history and session when its audit entry cannot be written', async () => {
   const user = await ensureLastLoginAdmin();
   const originalLoginAt = '2001-01-01 00:00:00';
