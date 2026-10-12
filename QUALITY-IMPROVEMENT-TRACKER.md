@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Document the accessible state-border token
+
+- **Reviewed:** The strong palette border token and its selected, hover, and expanded-state uses across shared controls, quizzes, and the calendar.
+- **Improvement:** Add a source comment explaining that the strong token uses the full palette accent so state borders remain distinct on pale surfaces.
+- **Why it helps:** Future palette or component edits are less likely to replace an accessibility-critical state boundary with a decorative low-contrast tint.
+- **Checked:** `node --test tests/client/control-border-contrast.test.js` passed (4/4), confirming the comment did not disturb palette parsing or the contrast contracts; `git diff --check` passed. No runtime behavior changed.
+
 ## 2026-10-12 — Recheck route query validation consistency
 
 - **Reviewed:** Route query reads across courses, learning paths, calendar, account lists, and log pages, including repeated values and malformed page, filter, quiz, and date inputs.

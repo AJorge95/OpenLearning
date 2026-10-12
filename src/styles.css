@@ -19,6 +19,7 @@
   --purple-hover-bg: #fcfbff;
   --purple-selected: #f0ecff;
   --purple-border: #a890ef;
+  /* Use the full palette accent for state borders that must stand out on pale surfaces. */
   --purple-border-strong: var(--purple);
   --green: #18834b;
   --green-soft: #eaf8ef;
