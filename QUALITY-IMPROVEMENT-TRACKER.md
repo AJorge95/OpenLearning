@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck quiz attempt retry and result handling
+
+- **Reviewed:** Quiz answer labels and fieldsets, live submission guidance, saving and route-change locks, responsive quiz layout, answer validation, and transactional attempt/result persistence.
+- **Result:** No runtime change. The learner form disables answer controls while submitting and prevents a second in-flight submit for the same quiz route. The API validates a complete answer set, snapshots the submitted questions, and saves the attempt inside an immediate transaction; prior attempts remain user-scoped.
+- **Why no change:** Retrying a quiz is an explicit learner feature, and the existing design treats each accepted POST as a new attempt. Changing behavior after an ambiguous network failure needs a product rule for whether that retry should be deduplicated.
+- **Checked:** `node --test tests/server/quiz-attempt-results.test.js tests/client/pending-request-keys.test.js tests/client/quiz-prior-pass.test.js` passed (14/14); `git diff --check` passed.
+- **Needed to continue:** A product decision about uncertain submission retries or a reproduced quiz-attempt failure.
+
 ## 2026-10-12 — Recheck media upload errors and cleanup
 
 - **Reviewed:** Course-editor file input labels and format help, progress announcements and cancel actions, configured Multer limits, temporary-file cleanup, upload audit rollback, and startup orphan cleanup.
