@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse fixed selector choices in admin forms
+
+- **Reviewed:** Quiz-editor title and question rerenders, the pass-mark selector, manual-account form state, and the shared role-option list.
+- **Improvement:** Hoist quiz pass-mark choices to one module-level array and reuse the existing role choices in account creation.
+- **Why it helps:** Typing in quiz fields or account details no longer rebuilds these fixed option objects or reruns `AppSelect` option validation.
+- **Backend review:** Account role validation and quiz persistence are unchanged; no route or schema change was needed.
+- **Checked:** Focused admin-form, selector, and course-editor tests passed (24/24), `npm run build` passed TypeScript and Vite, and `git diff --check` passed. The protected account editor was not rendered in this signed-out browser session; the change does not alter visible content.
+
 ## 2026-10-12 — Reuse paged learner rows in path assignment controls
 
 - **Reviewed:** The learning-path assignment panel's paged learner results, assignable/enrolled row derivation, selector options, loading and assignment state updates, and the existing staff-only assignment routes.
