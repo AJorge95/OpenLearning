@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Associate password-change errors with their fields
+
+- **Reviewed:** Self-service password validation codes, current/new/confirmation inputs, the shared password visibility control, and existing confirmation feedback.
+- **Improvement:** Map stable API error codes to the affected password input, connect the live error alert through `aria-describedby`, and show a danger border on invalid fields. Editing the affected field clears its error; changing either new-password field clears a mismatch.
+- **Why it helps:** Learners can tell which password needs correction visually and through assistive technology, while unrelated field errors remain visible until the learner edits the field that resolves them.
+- **Backend review:** Current-password checks, password policy codes, rate limits, transactional hash updates, session revocation, and audit behavior remain unchanged.
+- **Checked:** Focused password-change, confirmation, password-field, and account-password guidance tests passed (17/17); the server's invalid-new-password response-code regression passed (1/1). `npm run build` passed TypeScript and Vite; `git diff --check` passed. Rendered account settings were not exercised because the available browser session is signed out and Playwright is not installed.
+
 ## 2026-10-12 — Recheck certificate history and issuance boundaries
 
 - **Reviewed:** Certificate-history links, owner-scoped certificate lookup, version-specific issuance, eligibility and name checks, route-change loading state, responsive certificate layout, and print overrides.

@@ -33,6 +33,13 @@ test('password mismatch feedback marks and describes only the confirmation field
   });
 });
 
+test('server-confirmation errors can keep the confirmation field associated with the alert', () => {
+  assert.deepEqual(passwordConfirmationFieldProps('The passwords differ.', 'password-error', true), {
+    'aria-invalid': true,
+    'aria-describedby': 'password-error',
+  });
+});
+
 test('all password confirmation forms use the shared client validation', () => {
   const countValidationCalls = (fileName) => {
     const source = fs.readFileSync(path.join(sourceDirectory, fileName), 'utf8');
@@ -60,7 +67,7 @@ test('all six confirmation fields link mismatch feedback to their rendered alert
 
     assert.equal(fields.length, 3, `${fileName} should contain three password-confirmation fields`);
     for (const field of fields) {
-      const errorId = field.match(/passwordConfirmationFieldProps\(error,\s*(?:'([^']+)'|([A-Za-z][\w]*))\)/);
+      const errorId = field.match(/passwordConfirmationFieldProps\(error,\s*(?:'([^']+)'|([A-Za-z][\w]*))(?:,\s*[^)]*)?\)/);
       assert.ok(errorId, `${fileName} confirmation field should derive invalid state from the shared helper`);
       const id = errorId[1] || errorId[2];
       assert.match(source, new RegExp(`(?:<p|<Notice)[^>]*id=(?:\\{${id}\\}|"${id}")`), `${fileName} should render the referenced mismatch alert`);

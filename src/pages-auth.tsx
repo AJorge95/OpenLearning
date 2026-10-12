@@ -6,6 +6,8 @@ import { AppSelect, Button, ImageWithFallback, PalettePicker, PasswordField, Pla
 import { getPostLoginPath } from './post-login-path';
 import { buildRegistrationFieldSelectOptions, findMissingRequiredRegistrationField, refreshRegistrationFieldValues } from './registration-fields';
 import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordConfirmationFieldProps } from './password-confirmation';
+import { accountPasswordFieldForError, shouldClearAccountPasswordFieldErrorOnEdit } from './password-change-errors';
+import type { AccountPasswordField } from './password-change-errors';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
 import { validateEmail } from './email-validation';
 import { accountNameError, MAX_ACCOUNT_NAME_LENGTH, normalizeAccountName } from './account-name-validation';
@@ -470,6 +472,7 @@ export function AccountSecurityPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [invalidPasswordField, setInvalidPasswordField] = useState<AccountPasswordField | null>(null);
   const [saving, setSaving] = useState(false);
   const passwordSubmissionInFlightRef = useRef(false);
   useEffect(() => {
@@ -527,14 +530,15 @@ export function AccountSecurityPage() {
     const confirmationError = getPasswordConfirmationError(password, confirmPassword);
     if (confirmationError) {
       setError(confirmationError);
+      setInvalidPasswordField('confirmation');
       setMessage('');
       return;
     }
     if (!acquireSubmissionLock(passwordSubmissionInFlightRef)) return;
-    setError(''); setMessage(''); setSaving(true);
+    setError(''); setInvalidPasswordField(null); setMessage(''); setSaving(true);
     try {
       await api.put('/api/auth/password', { currentPassword, password, confirmPassword });
-      setCurrentPassword(''); setPassword(''); setConfirmPassword(''); setMessage('Your password has been updated. Other active sessions have been signed out.');
+      setCurrentPassword(''); setPassword(''); setConfirmPassword(''); setInvalidPasswordField(null); setMessage('Your password has been updated. Other active sessions have been signed out.');
     } catch (cause) {
       let authRefreshFailed = false;
       if (cause instanceof ApiError && (cause.status === 401 || cause.code === 'password_changed')) {
@@ -542,9 +546,15 @@ export function AccountSecurityPage() {
         try { await refresh(); } catch { authRefreshFailed = true; }
       }
       const message = cause instanceof ApiError ? cause.message : 'Password could not be updated.';
+      setInvalidPasswordField(cause instanceof ApiError ? accountPasswordFieldForError(cause.code) : null);
       setError(authRefreshFailed ? `${message} Your sign-in status could not be refreshed. Reload before continuing.` : message);
     }
     finally { releaseSubmissionLock(passwordSubmissionInFlightRef); setSaving(false); }
+  }
+  function clearPasswordFieldFeedback(field: AccountPasswordField) {
+    if (!shouldClearAccountPasswordFieldErrorOnEdit(field, invalidPasswordField)) return;
+    setInvalidPasswordField(null);
+    setError('');
   }
   return <div className="narrow-content account-settings-page"><div className="breadcrumbs"><Link to="/courses">Browse courses</Link><span>/</span><span>Account settings</span></div><h1>Account settings</h1><p className="lead-copy">Manage your certificate name and account password.</p>
     <section className="account-settings-section"><h2>Profile details</h2><p>Certificates use your first and last name. Your email address is also included on certificates.</p>
@@ -560,9 +570,9 @@ export function AccountSecurityPage() {
     </section>
     <section className="account-settings-section"><h2>Change password</h2><p className="lead-copy">Choose a new password. Other signed-in devices will be signed out after you save.</p>
     <form className="surface-form form-stack" onSubmit={submit} aria-busy={saving}>
-      <PasswordField label="Current password" required maxLength={256} autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} disabled={saving} />
-      <PasswordField label="New password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} hint="Use at least 12 characters." />
-      <PasswordField label="Confirm new password" {...passwordConfirmationFieldProps(error, passwordErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />
+      <PasswordField label="Current password" required maxLength={256} autoComplete="current-password" aria-invalid={invalidPasswordField === 'current' || undefined} aria-describedby={invalidPasswordField === 'current' ? passwordErrorId : undefined} value={currentPassword} onChange={(event) => { setCurrentPassword(event.target.value); clearPasswordFieldFeedback('current'); }} disabled={saving} />
+      <PasswordField label="New password" required minLength={12} maxLength={256} autoComplete="new-password" aria-invalid={invalidPasswordField === 'new' || undefined} aria-describedby={invalidPasswordField === 'new' ? passwordErrorId : undefined} value={password} onChange={(event) => { setPassword(event.target.value); clearPasswordFieldFeedback('new'); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} hint="Use at least 12 characters." />
+      <PasswordField label="Confirm new password" {...passwordConfirmationFieldProps(error, passwordErrorId, invalidPasswordField === 'confirmation')} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); clearPasswordFieldFeedback('confirmation'); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />
       {message && <p className="form-success" role="status">{message}</p>}{error && <p id={passwordErrorId} className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Update password'}</Button>
     </form>
