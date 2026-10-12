@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck registration-field validation and signup atomicity
+
+- **Reviewed:** Admin field-definition validation, answer types and required values, stale field IDs, Unicode choice matching, signup transaction boundaries, and required audit persistence.
+- **Result:** No runtime change. The server validates definitions on save and validates answers against the current field set again inside the immediate signup transaction. The created account, answer snapshots, audit record, and initial login state roll back together on failure.
+- **Why no change:** Limits, malformed values, duplicate fields/options, stale configuration, invalid dates/selections, failed audit writes, and account rollback already have direct coverage; no gap or repeated work was found.
+- **Checked:** `node --test tests/server/registration-fields.test.js` passed (31/31). Expected fault-injection cases logged audit and count-read failures while asserting rollback behavior.
+- **Needed to revisit:** A reproduced partial signup, acceptance of an invalid answer, or a newly defined registration-field requirement.
+
 ## 2026-10-12 — Recheck the reported Platform role click width
 
 - **Reviewed:** The new browser comment and screenshot, account-role markup served by the local Vite process, selector and menu sizing, and the outside-trigger activation guard.
