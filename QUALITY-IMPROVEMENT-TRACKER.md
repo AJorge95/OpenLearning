@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck read-route side effects and role-selector reproduction
+
+- **Reviewed:** GET handlers across auth, admin, course, learning-path, and protected-media routes; video-duration verification; and the account-role selector's current markup, width rules, and pointer-coordinate guard.
+- **Result:** No runtime change. GET routes do not create learner enrollment, progress, or certificate records. `GET /lessons/:lessonId/watch-progress` can fill the verified video-duration cache in `media_files`, and `GET /csrf` initializes the session token; both are bounded to supporting request/session data. The current role selector remains a separately captioned 8.5rem desktop control with pointer input limited to its trigger.
+- **Why no change:** The reviewed GET handlers preserve learner state, and the duration write is an idempotent derived cache. The current local browser is signed out, so the reported protected account interaction cannot be reproduced against this build.
+- **Checked:** The account-role and AppSelect regressions passed (15/15). `tests/server/certificate-routes.test.js` and `tests/server/course-analytics.test.js` both passed. The in-app browser displayed a nonblank sign-in page at `http://127.0.0.1:5173/login`; the account-role interaction and browser console could not be checked.
+- **Needed to continue:** A signed-in account page on the current build. If a click beyond the visible trigger still opens the menu, provide a fresh screenshot and clicked position from that render.
+
 ## 2026-10-12 — Make certificate issuance an explicit action
 
 - **Reviewed:** Certificate lookup and issuance, version-specific idempotency, eligibility and profile-name checks, the certificate-page entry flow, and existing certificate backfill on course completion and profile updates.
