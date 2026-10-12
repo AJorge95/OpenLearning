@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Share connection protocol selector choices
+
+- **Reviewed:** First-run setup and admin-settings protocol selectors, form rerender paths, the shared `ConnectionProtocol` type, and session-cookie behavior driven by the saved setting.
+- **Improvement:** Define the HTTP/HTTPS options once beside the protocol type and reuse the same stable array in both forms.
+- **Why it helps:** Editing other setup or branding fields no longer recreates these option objects or reruns `AppSelect` option validation; the choices remain consistent across both screens.
+- **Backend review:** Session-cookie selection still follows the persisted connection protocol; no API or storage change was needed.
+- **Checked:** Focused selector tests passed (13/13), session-cookie and reset tests passed (11/11), `npm run build` passed TypeScript and Vite, and `git diff --check` passed. Protected settings rendering was not checked in the signed-out browser session.
+
 ## 2026-10-12 — Recheck shared SQL search semantics
 
 - **Reviewed:** Literal wildcard escaping, Unicode normalization and case handling, query-value binding, single-value validation, and the admin/user/course-access search callers.
