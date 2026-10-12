@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Cover fresh-install and downgrade-protection migrations
+
+- **Reviewed:** Startup’s automatic SQLite migrations through version 35, migration transaction boundaries, the existing upgrades from version 15 and version 30, and the future-schema guard.
+- **Improvement:** Add a dedicated isolated server test for a clean startup through every migration, expected baseline settings and key current tables, foreign-key consistency, and an idempotent rerun. Also verify a version-36 database is rejected before application tables or migration rows are modified.
+- **Why it helps:** Self-hosted installs have a direct regression check for the full first-start schema, while operators’ data stays protected if they accidentally run an older application against a newer database.
+- **Interface review:** No interface behavior changed; migration startup runs before the user-facing setup and sign-in flows.
+- **Checked:** `node --test tests/server/database-migrations.test.js` passed (2/2) against isolated temporary databases. The full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed. Test cleanup closes the configured database before removing the fixture directory.
+
 ## 2026-10-12 — Verify the standalone SQLite backup before copying media
 
 - **Reviewed:** The portable backup command’s SQLite snapshot and media-copy sequence, its failure cleanup, the platform-reset backup verification path, and the existing backup and restore tests.
