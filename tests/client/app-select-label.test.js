@@ -230,8 +230,9 @@ test('the administrator role selector keeps its custom trigger and menu at the v
   assert.match(componentSource, /aria-labelledby=\{ariaLabelledBy\}/);
   assert.match(styles, /\.account-role-control\s*\{[^}]*flex:\s*0\s+0\s+8\.5rem;[^}]*width:\s*8\.5rem;/);
   assert.match(styles, /\.account-role-control\s*\{[^}]*pointer-events:\s*none;/);
-  assert.match(styles, /\.account-role-select-control\s*\{[^}]*width:\s*8\.5rem;[^}]*pointer-events:\s*auto;/);
-  assert.match(styles, /\.account-role-select-control \.app-select\s*\{[^}]*width:\s*100%;[^}]*pointer-events:\s*auto;/);
+  assert.match(styles, /\.account-role-select-control\s*\{[^}]*width:\s*8\.5rem;[^}]*pointer-events:\s*none;/);
+  assert.match(styles, /\.account-role-select-control \.app-select\s*\{[^}]*width:\s*100%;[^}]*pointer-events:\s*none;/);
+  assert.match(styles, /\.account-role-select-control \.app-select-trigger\s*\{[^}]*pointer-events:\s*auto;/);
   assert.match(styles, /\.account-control-row \.account-role-select-control, \.account-control-row \.account-role-select-control \.app-select \{\s*width:\s*100%;\s*max-width:\s*none;\s*\}/);
 });
 

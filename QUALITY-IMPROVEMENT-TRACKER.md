@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Limit account role clicks to the visible trigger
+
+- **Reviewed:** The reported role-control click boundary, the account-detail markup and responsive styles, custom-select pointer activation, and the server's role update validation.
+- **Improvement:** Pass pointer events through the account role control's sizing wrappers and enable pointer input only on the visible select trigger. The desktop field stays narrow and the existing mobile rule still expands it to the available width.
+- **Why it helps:** Clicking empty space beside or within a layout wrapper can no longer activate the role menu; the field itself remains keyboard accessible.
+- **Backend review:** The account update route validates roles and prevents demoting or disabling the last active administrator inside its transaction, so no API change was needed.
+- **Checked:** Focused role hit-area, custom-select label, and activation tests passed (16/16); the full `npm test -- --test-reporter=dot` suite, `npm run build` (TypeScript and Vite), and `git diff --check` passed. The available browser session was signed out and redirected the protected account URL to login, so the updated control could not be interaction-tested in the rendered account page.
+
 ## 2026-10-12 — Review completion deadlines after prerequisite rollback
 
 - **Reviewed:** The README's completion-window contract, path unlock-state creation, lesson-completion undo, calendar visibility checks, and the learner path-card status and due-date display.
