@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Announce the empty-course first-module disclosure state
+
+- **Reviewed:** The empty curriculum state, both module-form triggers, the inline form's focus and cancel behavior, the module-creation route, and its audit rollback coverage.
+- **Improvement:** Give “Add first module” the same `aria-expanded` state and conditional `aria-controls` reference as the toolbar “Add module” button.
+- **Why it helps:** Assistive technology can now tell when the inline form is open and which form the first-module action controls; canceling returns focus to the invoking button.
+- **Backend review:** Module creation validates the title, requires staff and course-manager access, and writes the module and audit event in one immediate transaction. No backend change was needed.
+- **Checked:** Focused course-editor tests passed (25/25), the module-creation audit rollback test passed (1/1), `npm run build` (TypeScript and Vite), and `git diff --check` passed. In the signed-in isolated browser at `http://127.0.0.1:6174`, the control changed from collapsed to expanded with `aria-controls="add-module-form"`, the title field received focus, and Cancel closed the form and restored trigger focus. Console errors/warnings: none. At 390px, the document had no horizontal overflow.
+
 ## 2026-10-12 — Verify the account role selector in a signed-in browser
 
 - **Reviewed:** The current account-detail markup, role-control pointer-event boundaries, dropdown positioning, keyboard activation, and the administrator account-update route.

@@ -33,9 +33,12 @@ test('course details form is exposed as a named region', () => {
 
 test('the empty-course action distinguishes adding the first module', () => {
   const source = fs.readFileSync(editorPath, 'utf8');
+  const firstModuleAction = source.match(/title="Start with a module"[\s\S]*?<Button(?<props>[\s\S]*?)><Plus[\s\S]*?Add first module<\/Button>/)?.groups?.props || '';
 
   assert.match(source, /title="Start with a module"[\s\S]*?Add first module<\/Button>/);
   assert.match(source, /className="curriculum-editor-actions"[\s\S]*?aria-expanded=\{addingModule\}[\s\S]*?Add module<\/Button>/);
+  assert.match(firstModuleAction, /aria-expanded=\{addingModule\}/);
+  assert.match(firstModuleAction, /aria-controls=\{addingModule \? 'add-module-form' : undefined\}/);
 });
 
 test('pending review identifies the staff member who submitted the revision', () => {
