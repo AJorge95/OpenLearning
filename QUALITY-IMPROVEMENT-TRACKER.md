@@ -5,7 +5,7 @@
 - **Reviewed:** The supplied screenshot's target markup, the current administrator role-control JSX and hit-area rules, the focused regressions, and the browser surfaces available in this session.
 - **Result:** No additional runtime change. The screenshot targets the earlier wrapping-label structure; current source gives the caption its own element and bounds pointer input to the native select. The existing menu width follows that control.
 - **Why no change:** The reported right-side activation is already addressed in source and covered by the role-control regressions. A second CSS change needs a fresh reproduction against the current build to avoid changing a working hit area speculatively.
-- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js` passed (11/11), and `git diff --check` passed. The available in-app browser is at sign-in and Chrome is at registration, so the protected account route could not be rechecked in this session.
+- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js` passed (11/11), and `git diff --check` passed. The protected route was unavailable in the browser, but the local Vite module responded 200 and served the separate control markup without the old wrapping-label structure.
 - **Needed to revisit:** A fresh authenticated current-build reproduction showing the menu open from outside the visible trigger, with the viewport and click position.
 
 ## 2026-10-12 — Recheck API response and request-failure handling
@@ -15,6 +15,14 @@
 - **Why no change:** Existing behavior and focused tests cover the reviewed failure boundaries; no reproducible response mismatch or backend failure appeared.
 - **Checked:** `node --test tests/client/api.test.js tests/server/last-login.test.js` passed (32/32).
 - **Needed to revisit:** A concrete API response mismatch, duplicated write after a CSRF retry, cancellation edge case, or request-body parser failure outside these cases.
+
+## 2026-10-12 — Recheck learner catalog filters and pagination recovery
+
+- **Reviewed:** The catalog search form and filter controls, empty and loading announcements, stale-request cancellation, duplicate-page and catalog-drift recovery, plus the public course route's parameterized filters, access checks, and bounded pagination.
+- **Result:** No runtime change. Search, category, and sort controls retain accessible names; clearing filters returns focus to search. Stale page requests are aborted, overlapping IDs or changed totals restart the listing, and the server uses a 24-course page with access-aware results.
+- **Why no change:** The UI and backend already cover the reviewed interaction and concurrent-catalog boundaries; no reproducible mismatch or uncovered access case appeared.
+- **Checked:** `node --test tests/client/course-catalog-filters.test.js tests/server/course-analytics.test.js` passed (119/119).
+- **Needed to revisit:** A reproduced missing/duplicate course after a catalog change, a keyboard or screen-reader failure in the filter flow, or an access-filter mismatch.
 
 ## 2026-10-12 — Omit unused quiz questions from course overview and lesson payloads
 
