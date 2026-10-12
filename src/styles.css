@@ -522,9 +522,11 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .course-table td, .user-table td { height: 78px; padding: 10px 16px; border-bottom: 1px solid var(--line); color: #3e4352; font-size: 13px; }
 /* Keep semantic account row headers visually aligned with the table's data cells. */
 .user-table tbody th { height: 78px; padding: 10px 16px; border-bottom: 1px solid var(--line); color: #3e4352; background: transparent; font-size: 13px; font-weight: 400; text-align: left; }
+/* Course titles identify each row while retaining the table's existing data-cell appearance. */
+.course-table tbody th { height: 78px; padding: 10px 16px; border-bottom: 1px solid var(--line); color: #3e4352; background: transparent; font-size: 13px; font-weight: 400; text-align: left; }
 .course-list-status { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .course-list-action-status { color: var(--muted); font-size: 11px; font-weight: 600; }
-.course-table tbody tr:last-child td, .user-table tbody tr:last-child td, .user-table tbody tr:last-child th { border-bottom: 0; }
+.course-table tbody tr:last-child td, .course-table tbody tr:last-child th, .user-table tbody tr:last-child td, .user-table tbody tr:last-child th { border-bottom: 0; }
 .course-table tbody tr:hover, .user-table tbody tr:hover { background: var(--purple-hover-bg); }
 .table-course { display: flex; align-items: center; gap: 13px; min-width: 235px; }
 .table-thumb { width: 82px; height: 52px; display: grid; place-items: center; flex: 0 0 auto; overflow: hidden; background: var(--purple-soft); color: var(--purple); }

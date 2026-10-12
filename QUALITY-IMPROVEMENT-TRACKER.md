@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Expose course titles as row headers in the admin list
+
+- **Reviewed:** The management course table's caption, scoped column headers, first-column course identity, responsive spacing, hover and bottom-border rules, and the paginated `/api/manage/courses` response.
+- **Improvement:** Mark the course identity cell as `<th scope="row">` so assistive technology can announce the course while navigating its owner, visibility, status, update time, and actions. Match its styling to the existing data cells, including the narrow-screen padding and last-row border.
+- **Why it helps:** Screen-reader users get stable course context while moving across each row's metadata and controls, consistent with the account table's row headers.
+- **Backend review:** The existing endpoint already supplies the course ID and title used as the row identity; search, pagination, and response data remain unchanged.
+- **Checked:** Added a client regression for the row-header markup and matching desktop/responsive styling. The focused course and account identity tests passed (4/4), related course-pagination and account-list refresh tests passed (3/3), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict typechecking and Vite bundling, and `git diff --check` passed. The local browser showed `/login`, so authenticated course-table rendering could not be checked; no credentials or course data were changed.
+
 ## 2026-10-12 — Parse API timestamps consistently across timezones
 
 - **Reviewed:** Server responses for account, audit/system log, course review/version, certificate, and lesson-comment timestamps; their SQLite `CURRENT_TIMESTAMP` source; and every UI renderer that formats those values.

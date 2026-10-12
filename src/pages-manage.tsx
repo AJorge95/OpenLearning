@@ -331,7 +331,7 @@ export function CourseManagementPage() {
       {courses.map((course) => {
         const busyAction = busyActions[course.id];
         return <tr key={course.id}>
-        <td><div className="table-course"><span className="table-thumb"><ImageWithFallback src={course.coverUrl} className="table-cover-image" alt="" loading="lazy" decoding="async" fallback={<BookOpen size={20} />} /></span><div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category}</small></div></div></td>
+        <th scope="row"><div className="table-course"><span className="table-thumb"><ImageWithFallback src={course.coverUrl} className="table-cover-image" alt="" loading="lazy" decoding="async" fallback={<BookOpen size={20} />} /></span><div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category}</small></div></div></th>
         <td><span className="owner-cell"><UserInitial username={course.owner || ''} />{course.owner}</span></td>
         <td><VisibilityLabel visibility={course.visibility} /></td>
         <td><div className="course-list-status"><CourseStatus status={course.status} />{course.hasUnpublishedChanges && <CourseRevisionBadge status={course.reviewStatus} />}{busyAction && <span className="course-list-action-status" role="status" aria-live="polite" aria-atomic="true">{courseRowActionStatus(busyAction)}</span>}</div></td>
