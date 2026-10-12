@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck the reported role-selector click area
+
+- **Reviewed:** The supplied selector target path, current administrator account markup, the 8.5rem desktop width and pointer-event rules, and the custom trigger's coordinate guard.
+- **Result:** No runtime change. Current source renders the role caption separately from the `AppSelect`, bounds the desktop control to 8.5rem, and rejects pointer activations outside the visible trigger. The screenshot target path identifies a wrapping `<label>`, which does not match the current source.
+- **Why no code change:** The reported behavior is already covered by the existing fix and focused regressions; another width or click-handler change would duplicate it without a current-build reproduction.
+- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js` passed (11/11), and the local Vite server returned the current `pages-manage.tsx` module (HTTP 200). The available browser tabs are signed out, and Playwright is not installed, so the protected account interaction could not be replayed. No account data changed.
+- **Needed to continue:** A hard reload of the authenticated account page to confirm it renders the current markup; if the click still opens the menu from outside the trigger, provide the clicked location and viewport so it can be reproduced against the current build.
+
 ## 2026-10-12 — Recheck learner video watch progress and recovery
 
 - **Reviewed:** Server heartbeat timing and watched-position bounds, lesson-completion thresholds, client progress serialization and rejected-seek resynchronization, background-tab resume, and the reduced-motion scroll behavior.
