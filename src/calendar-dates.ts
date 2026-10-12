@@ -4,6 +4,10 @@ export function currentCalendarMonth(now = new Date()) {
   return new Date(now.getFullYear(), now.getMonth(), 1);
 }
 
+export function isSameCalendarMonth(first: Date, second: Date) {
+  return first.getFullYear() === second.getFullYear() && first.getMonth() === second.getMonth();
+}
+
 export function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
