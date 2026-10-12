@@ -1395,6 +1395,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Keep hover feedback without shifting interactive cards for motion-sensitive users. */
+  .course-card:hover, .palette-option:hover { transform: none !important; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
 
