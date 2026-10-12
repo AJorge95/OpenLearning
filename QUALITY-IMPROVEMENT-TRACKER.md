@@ -9927,3 +9927,10 @@
 - **Result:** No code change. The UI's native constraints and answer types agree with server-side checks for required values, valid dates, configured select choices, checkbox values, and changed field schemas.
 - **Why no change:** Client and server already reject the same invalid answers, while the server remains authoritative if the form schema changes between load and submit.
 - **Checked:** Registration-field client tests passed (13/13); focused server validation, persistence, and stale-schema tests passed (7/7). `git diff --check` passed.
+
+## 2026-10-12 — Recheck learner quiz-result recovery and access
+
+- **Reviewed:** Quiz result semantics, saved-score fallback when answer details fail, retry behavior, focus after submission, course payload trimming, and the attempt-detail API's learner and course scoping.
+- **Result:** No code change. The attempt endpoint verifies course access and selects by attempt ID, quiz ID, and current learner ID. The client keeps the saved aggregate score visible when the question breakdown is unavailable and only retries transient detail failures.
+- **Why no change:** Existing server and client behavior cover the data boundary and recovery path; changing the response would duplicate or weaken the saved result handling.
+- **Checked:** Focused quiz-result UI and API tests passed (13/13), including malformed stored snapshots, learner scoping, trimmed payloads, and accessible retry/status feedback. `git diff --check` passed.
