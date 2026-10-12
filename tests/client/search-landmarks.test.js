@@ -46,7 +46,7 @@ function courseAndManagementSearchForms() {
 test('course and management search forms are named search landmarks', () => {
   const forms = courseAndManagementSearchForms();
 
-  assert.equal(forms.length, 7, 'expected to review every course and management search form');
+  assert.equal(forms.length, 8, 'expected to review every course and management search form');
   for (const form of forms) {
     assert.equal(form.role, 'search', `${form.fileName} ${form.className} should expose the search landmark`);
     assert.ok(form.label?.trim(), `${form.fileName} ${form.className} should name its search landmark`);

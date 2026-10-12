@@ -1588,6 +1588,66 @@ test('learning-path lists paginate staff and learner results with stable boundar
   }
 });
 
+test('learning-path search matches titles and descriptions within each role visibility boundary', async () => {
+  const paths = [
+    { id: 'path-search-title-draft', title: 'Regional support path', description: 'Support curriculum', status: 'draft' },
+    { id: 'path-search-description-draft', title: 'Guided sequence', description: 'Regional literacy sequence', status: 'draft' },
+    { id: 'path-search-published', title: 'Regional published path', description: '', status: 'published' },
+    { id: 'path-search-archived', title: 'Regional archived path', description: '', status: 'archived' },
+    { id: 'path-search-percent', title: 'Progress 50% path', description: '', status: 'draft' },
+    { id: 'path-search-wildcard-decoy', title: 'Progress 50X path', description: '', status: 'draft' },
+  ];
+  const insertPath = database.prepare(`INSERT INTO learning_paths (id, title, description, status, self_enrollment, created_by, updated_by)
+    VALUES (?, ?, ?, ?, ?, 'admin-1', 'admin-1')`);
+  for (const path of paths) insertPath.run(path.id, path.title, path.description, path.status, path.id === 'path-search-published' ? 1 : 0);
+  database.prepare(`INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+    VALUES ('path-search-public-course', 'path-search-published', 'course-empty', 0, 0)`).run();
+
+  const searchPaths = async (params, userId = 'admin-1') => {
+    const query = new URLSearchParams(params);
+    return fetch(apiUrl(`/learning-paths?${query}`), { headers: userHeaders(userId) });
+  };
+
+  try {
+    const titleAndStatusResponse = await searchPaths({ q: 'regional', status: 'draft', page: '99' });
+    assert.equal(titleAndStatusResponse.status, 200);
+    const titleAndStatus = await titleAndStatusResponse.json();
+    assert.equal(titleAndStatus.total, 2);
+    assert.equal(titleAndStatus.page, 1);
+    assert.equal(titleAndStatus.hasMore, false);
+    assert.deepEqual(new Set(titleAndStatus.paths.map((path) => path.id)), new Set([
+      'path-search-title-draft', 'path-search-description-draft',
+    ]));
+
+    const descriptionResponse = await searchPaths({ q: 'literacy', status: 'all' });
+    assert.equal(descriptionResponse.status, 200);
+    const descriptionMatches = await descriptionResponse.json();
+    assert.deepEqual(descriptionMatches.paths.map((path) => path.id), ['path-search-description-draft']);
+
+    const activeStatusResponse = await searchPaths({ q: 'regional', status: 'all' });
+    assert.equal(activeStatusResponse.status, 200);
+    const activeStatusMatches = await activeStatusResponse.json();
+    assert.equal(activeStatusMatches.total, 3);
+    assert.equal(activeStatusMatches.paths.some((path) => path.id === 'path-search-archived'), false);
+
+    const wildcardResponse = await searchPaths({ q: '50%', status: 'all' });
+    assert.equal(wildcardResponse.status, 200);
+    const wildcardMatches = await wildcardResponse.json();
+    assert.deepEqual(wildcardMatches.paths.map((path) => path.id), ['path-search-percent']);
+
+    const learnerResponse = await searchPaths({ q: 'regional' }, 'learner-active');
+    assert.equal(learnerResponse.status, 200);
+    const learnerMatches = await learnerResponse.json();
+    assert.deepEqual(learnerMatches.paths.map((path) => path.id), ['path-search-published']);
+
+    const overlongResponse = await searchPaths({ q: 'x'.repeat(121), status: 'all' });
+    assert.equal(overlongResponse.status, 400);
+    assert.equal((await overlongResponse.json()).code, 'validation_error');
+  } finally {
+    database.prepare(`DELETE FROM learning_paths WHERE id IN (${paths.map(() => '?').join(', ')})`).run(...paths.map((path) => path.id));
+  }
+});
+
 test('staff learning-path page queries use indexes for their update ordering', () => {
   function queryPlan(sql, params = []) {
     return database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params).map((row) => row.detail).join('\n');
@@ -1597,6 +1657,12 @@ test('staff learning-path page queries use indexes for their update ordering', (
     ORDER BY updated_at DESC, id LIMIT ? OFFSET ?`, [20, 0]);
   assert.match(activePlan, /learning_paths_active_updated/);
   assert.doesNotMatch(activePlan, /USE TEMP B-TREE FOR ORDER BY/);
+
+  const searchedActivePlan = queryPlan(`SELECT p.* FROM learning_paths p WHERE status != 'archived'
+    AND (p.title LIKE ? ESCAPE '!' OR p.description LIKE ? ESCAPE '!')
+    ORDER BY p.updated_at DESC, p.id LIMIT ? OFFSET ?`, ['%path%', '%path%', 20, 0]);
+  assert.match(searchedActivePlan, /learning_paths_active_updated/);
+  assert.doesNotMatch(searchedActivePlan, /USE TEMP B-TREE FOR ORDER BY/);
 
   for (const status of ['published', 'archived']) {
     const statusPlan = queryPlan(`SELECT * FROM learning_paths WHERE status = ?

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Search learning paths by name or description
+
+- **Reviewed:** Staff and learner learning-path lists, existing status filters and pagination, the path visibility rules in the API, and the shared management-search form and SQL search helper.
+- **Improvement:** Add an accessible search form to both path lists. Search matches path titles and descriptions, works with staff status filters and pagination, and offers a clear-search action with focus returned to the input when there are no matches.
+- **Why it helps:** Staff and learners can find a path without paging through and scanning unrelated cards. Search results retain the current role's visibility rules, and staff can combine a query with a draft, published, or archived filter.
+- **Backend review:** The API bounds search text at 120 characters and applies parameterized, wildcard-escaped matching before counting and paging. Learner access conditions and staff status filters stay in the query; the existing staff ordering index still serves searched pages.
+- **Checked:** Client search/filter tests passed (5/5); the API regression passed for title and description matches, staff status filters, learner visibility, literal `%`, and over-limit input. The full `npm test -- --test-reporter=dot` suite and `npm run build` passed, as did `git diff --check`. Vite served the updated page module. The connected browser remains signed out at `/login`, so authenticated rendered interaction could not be checked.
+
 ## 2026-10-12 — Revalidate the account-role click boundary report
 
 - **Reviewed:** The supplied screenshot target, current account-detail markup and width rules, the Vite-served modules, the shared AppSelect activation guard, and the account-update route.
