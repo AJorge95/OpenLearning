@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Report video read failures clearly and let learners retry
+
+- **Reviewed:** Verified MP4 duration reads, malformed-media handling, watch-progress loading, request cancellation, and the learner player’s error states.
+- **Improvement:** Distinguish filesystem read failures from invalid duration metadata: return a retryable 503 and structured diagnostic log for read failures while keeping malformed media at 422. Add a guarded “Retry video check” action for that specific temporary response; it cancels any prior request and keeps playback unready until verification succeeds.
+- **Why it helps:** Operators can diagnose missing or unreadable media, and learners can retry a transient file-access problem without reloading the lesson. Invalid media remains a clear validation error.
+- **Checked:** Added server regressions for `ENOENT` logging/503 and malformed-media 422, plus client regressions for retry eligibility and player wiring. Focused video-recovery tests passed (9/9); the full `npm test -- --test-reporter=dot` suite, `npm run build` (including TypeScript checking), and `git diff --check` passed. The local browser is signed out, so the protected lesson retry interaction was not rendered in-browser.
+
 ## 2026-10-12 — Cache verified video durations in bounded memory
 
 - **Reviewed:** The MP4 reader's in-flight request coalescing, unavailable-result TTL, database-backed duration cache, and the fallback for cache-write failures.

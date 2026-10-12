@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownUp, ArrowLeft, ArrowRight, Award, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, LockKeyhole, Maximize, MessageSquare, Minimize, Pause, Play, Printer, RotateCcw, Search, Send, ThumbsDown, ThumbsUp, Trash2, Volume2, VolumeX, X } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
@@ -16,7 +16,7 @@ import { updatePendingRequestKeys } from './pending-request-keys';
 import { lessonCommentRemovalConfirmation } from './lesson-comment-confirmation';
 import { tryToggleFullscreen } from './video-fullscreen';
 import { selectVideoCaptionTrack } from './video-captions';
-import { getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
+import { canRetryVideoWatchProgressLoad, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
 import type { PendingVideoResume } from './video-recovery';
 import { useAuth } from './auth-context';
 import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt, QuizAttemptPreview } from './types';
@@ -605,6 +605,8 @@ export function CoursePlayerPage() {
   });
   const [rewindSaving, setRewindSaving] = useState(false);
   const [watchError, setWatchError] = useState('');
+  const [canRetryWatchProgressLoad, setCanRetryWatchProgressLoad] = useState(false);
+  const [retryingWatchProgressLoad, setRetryingWatchProgressLoad] = useState(false);
   const [feedback, setFeedback] = useState<LessonFeedback | null>(null);
   const [feedbackLoading, setFeedbackLoading] = useState(true);
   const [feedbackRefreshVersion, setFeedbackRefreshVersion] = useState(0);
@@ -640,6 +642,44 @@ export function CoursePlayerPage() {
   const focusRailAfterOpenRef = useRef(false);
   const lessonHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const commentSectionTitleRef = useRef<HTMLHeadingElement | null>(null);
+
+  const loadWatchProgress = useCallback((requestedLessonId: string, controller: AbortController) => {
+    void api.get<Omit<LessonWatchProgress, 'lessonId' | 'ready' | 'started'>>(
+      `/api/lessons/${requestedLessonId}/watch-progress`, { signal: controller.signal },
+    ).then((result) => {
+      if (controller.signal.aborted || routeLessonIdRef.current !== requestedLessonId) return;
+      const resumeAt = result.complete ? 0 : result.watchedUntilSeconds;
+      playbackPositionRef.current = resumeAt;
+      setVideoPosition(resumeAt);
+      setWatchProgress({ lessonId: requestedLessonId, ready: true, required: result.required, started: false,
+        complete: result.complete, watchedUntilSeconds: result.watchedUntilSeconds, lastPositionSeconds: result.lastPositionSeconds, durationSeconds: result.durationSeconds });
+      setWatchError('');
+      setCanRetryWatchProgressLoad(false);
+      setRetryingWatchProgressLoad(false);
+      const video = videoRef.current;
+      if (video && video.readyState >= 1) video.currentTime = resumeAt;
+    }).catch((cause) => {
+      if (controller.signal.aborted || routeLessonIdRef.current !== requestedLessonId) return;
+      const apiError = cause instanceof ApiError ? cause : null;
+      setWatchError(apiError?.message ?? 'Video watch progress could not be loaded.');
+      setCanRetryWatchProgressLoad(Boolean(apiError
+        && canRetryVideoWatchProgressLoad(apiError.status, apiError.code)));
+      setRetryingWatchProgressLoad(false);
+    });
+  }, []);
+
+  function retryWatchProgressLoad() {
+    if (!canRetryWatchProgressLoad || retryingWatchProgressLoad || !watchRequired || !current || current.locked) return;
+    const requestedLessonId = lessonId;
+    watchRequestControllerRef.current?.abort();
+    const controller = new AbortController();
+    watchRequestControllerRef.current = controller;
+    setRetryingWatchProgressLoad(true);
+    setWatchProgress((previous) => previous.lessonId === requestedLessonId ? { ...previous, ready: false } : previous);
+    videoRef.current?.pause();
+    setVideoPlaying(false);
+    loadWatchProgress(requestedLessonId, controller);
+  }
 
   useEffect(() => {
     function syncVideoFullscreenState() {
@@ -796,6 +836,8 @@ export function CoursePlayerPage() {
     setVideoRecovering(false);
     setVideoStalled(false);
     setWatchError('');
+    setCanRetryWatchProgressLoad(false);
+    setRetryingWatchProgressLoad(false);
     setVideoPlaying(false);
     setVideoPosition(0);
     setVideoDuration(0);
@@ -812,30 +854,16 @@ export function CoursePlayerPage() {
     videoRef.current?.pause();
     if (!watchRequired || !current || current.locked) {
       return () => {
-        controller.abort();
-        if (watchRequestControllerRef.current === controller) watchRequestControllerRef.current = null;
+        watchRequestControllerRef.current?.abort();
+        watchRequestControllerRef.current = null;
       };
     }
-    api.get<Omit<LessonWatchProgress, 'lessonId' | 'ready' | 'started'>>(`/api/lessons/${requestedLessonId}/watch-progress`, { signal: controller.signal })
-      .then((result) => {
-        if (controller.signal.aborted || routeLessonIdRef.current !== requestedLessonId) return;
-        const resumeAt = result.complete ? 0 : result.watchedUntilSeconds;
-        playbackPositionRef.current = resumeAt;
-        setVideoPosition(resumeAt);
-        setWatchProgress({ lessonId: requestedLessonId, ready: true, required: result.required, started: false,
-          complete: result.complete, watchedUntilSeconds: result.watchedUntilSeconds, lastPositionSeconds: result.lastPositionSeconds, durationSeconds: result.durationSeconds });
-        const video = videoRef.current;
-        if (video && video.readyState >= 1) video.currentTime = resumeAt;
-      })
-      .catch((cause) => {
-        if (controller.signal.aborted || routeLessonIdRef.current !== requestedLessonId) return;
-        setWatchError(cause instanceof ApiError ? cause.message : 'Video watch progress could not be loaded.');
-      });
+    loadWatchProgress(requestedLessonId, controller);
     return () => {
-      controller.abort();
-      if (watchRequestControllerRef.current === controller) watchRequestControllerRef.current = null;
+      watchRequestControllerRef.current?.abort();
+      watchRequestControllerRef.current = null;
     };
-  }, [courseId, lessonId, watchRequired, current?.locked, current?.completed]);
+  }, [courseId, lessonId, watchRequired, current?.locked, current?.completed, loadWatchProgress]);
 
   useEffect(() => {
     const routeKey = `${courseId}:${lessonId}`;
@@ -1481,7 +1509,7 @@ export function CoursePlayerPage() {
       {videoRecovering && <p className="video-watch-guidance" role="status" aria-live="polite">{getVideoRecoveryStatusMessage('reconnecting', watchRequired)}</p>}
       {videoStalled && !videoRecovering && !videoError && <div className="player-video-error" role="alert"><p>Playback is still waiting for video data. Retry from your saved position.</p><Button type="button" variant="secondary" onClick={() => retryVideo(true)}>Retry playback</Button></div>}
       {videoError && <div className="player-video-error" role="alert"><p>The video could not be loaded. Retry, or contact your course administrator if it still will not play.</p><Button type="button" variant="secondary" onClick={() => retryVideo(true)}>Retry video</Button></div>}
-      {watchError && <div className="player-video-error" role="alert">{watchError}</div>}
+      {watchError && <div className="player-video-error" role="alert"><p>{watchError}</p>{canRetryWatchProgressLoad && <Button type="button" variant="secondary" disabled={retryingWatchProgressLoad} aria-busy={retryingWatchProgressLoad} onClick={retryWatchProgressLoad}>{retryingWatchProgressLoad ? 'Checking video…' : 'Retry video check'}</Button>}</div>}
       <div className="player-controls-row">
         <button className="button button-secondary" type="button" disabled={!previous} onClick={() => previous && navigate(`/courses/${course.id}/learn/${previous.id}`)}><ArrowLeft size={17} />Previous lesson</button>
         <Button variant={current.completed ? 'secondary' : 'primary'} disabled={saving || !lessonCanBeCompleted} aria-busy={saving} onClick={toggleCompleted}>{saving ? 'Saving progress…' : current.completed ? <><Check size={17} />Completed</> : 'Mark lesson complete'}</Button>

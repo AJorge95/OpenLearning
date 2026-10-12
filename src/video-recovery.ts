@@ -13,6 +13,10 @@ export type PendingVideoResume = {
   resumePlayback: boolean;
 };
 
+export function canRetryVideoWatchProgressLoad(status: number, code?: string) {
+  return status === 503 && code === 'video_duration_read_unavailable';
+}
+
 export function videoRecoveryMadeProgress({
   lessonId,
   recoveryLessonId,

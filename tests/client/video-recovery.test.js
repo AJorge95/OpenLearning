@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from '../../src/video-recovery.ts';
+import { canRetryVideoWatchProgressLoad, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from '../../src/video-recovery.ts';
 
 const emptyProgress = {
   lessonId: '',
@@ -10,6 +10,12 @@ const emptyProgress = {
   watchedUntilSeconds: 0,
   lastPositionSeconds: 0,
 };
+
+test('watch progress offers retry only for temporary video file read failures', () => {
+  assert.equal(canRetryVideoWatchProgressLoad(503, 'video_duration_read_unavailable'), true);
+  assert.equal(canRetryVideoWatchProgressLoad(422, 'video_duration_unavailable'), false);
+  assert.equal(canRetryVideoWatchProgressLoad(500, 'internal_error'), false);
+});
 
 test('ordinary video retries resume from their captured position', () => {
   const pendingResume = { lessonId: 'lesson-1', position: 34, resumePlayback: true };

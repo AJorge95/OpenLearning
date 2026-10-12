@@ -186,8 +186,18 @@ async function verifiedVideoDuration(lesson) {
   const filePath = path.resolve(base, media.file_name);
   if (!filePath.startsWith(`${base}${path.sep}`)) fail(404, 'Lesson video is not available.', 'not_found');
   let duration;
-  try { duration = await readCachedVideoDuration(media.id, filePath); }
-  catch { fail(422, 'This video duration could not be verified. Contact your course administrator.', 'video_duration_unavailable'); }
+  try {
+    duration = await readCachedVideoDuration(media.id, filePath);
+  } catch (error) {
+    // The MP4 reader returns null for invalid metadata; a thrown error means the file could not be read.
+    writeSystemLog('warn', 'video-duration', 'Video duration could not be read', {
+      mediaId: media.id,
+      errorName: String(error?.name || 'Error').slice(0, 100),
+      ...(typeof error?.code === 'string' ? { errorCode: error.code.slice(0, 100) } : {}),
+    });
+    fail(503, 'The video file could not be read. Retry, or contact your course administrator if the problem continues.',
+      'video_duration_read_unavailable');
+  }
   if (!Number.isFinite(duration) || duration <= 0) {
     fail(422, 'This video duration could not be verified. Contact your course administrator.', 'video_duration_unavailable');
   }
