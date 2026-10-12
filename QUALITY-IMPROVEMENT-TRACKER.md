@@ -13,7 +13,8 @@
 - **Improvement:** Derive backup command defaults from `DATA_DIR`, honor explicit `DB_PATH` and `MEDIA_ROOT` shell values, and explain that `.env` is not loaded automatically by the shell. Add a documentation regression under `tests/server` so future edits keep using the configured storage paths.
 - **Why it helps:** Installations using custom database or media locations no longer risk copying the default files while leaving their actual course data unprotected. The SQLite online-backup operation remains WAL-safe, and the media copy still requires pausing edits/uploads for a consistent pair.
 - **Checked:** `node --test tests/server/backup-documentation.test.js` passed (1/1); the README shell example passed `bash -n` using Git Bash; a shell-stub run confirmed an overridden `DATA_DIR` and `BACKUP_DIR` expand to the same database and media paths used by the commands; `git diff --check` passed. The SQLite CLI is not installed here, so the online backup command itself was not executed.
-- **Needed to continue:** A real backup/restore check against an installation configured with non-default paths; the source-level example now follows the documented configuration rules.
+- **Additional check:** Added `tests/server/backup-restore.test.js`; `node --test tests/server/backup-restore.test.js` passed (1/1). The test used the application's resolved non-default `DB_PATH` and `MEDIA_ROOT`, created a SQLite online backup while the database used WAL mode, copied the media tree, restored both into the configured paths, and verified SQLite integrity plus platform settings, course metadata, media metadata, and file contents.
+- **Needed to continue:** Execute the README's exact `sqlite3` CLI command on an environment with the SQLite CLI installed. The app's bundled SQLite driver's online backup and a complete isolated restore are now verified.
 
 ## 2026-10-12 — Verify the reported role-selector hit area in a signed-in build
 
