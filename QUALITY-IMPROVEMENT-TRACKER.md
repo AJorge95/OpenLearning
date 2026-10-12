@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Omit unused quiz questions from course overview and lesson payloads
+
+- **Reviewed:** The shared course payload, quiz question/choice queries, and data used by the course overview, lesson player, quiz page, and course editor.
+- **Improvement:** Add a validated `includeQuizQuestions=0` course-read option. The overview and lesson player use it, so the server skips both quiz-question and choice queries and returns an empty `questions` array while preserving quiz titles, pass state, and latest-attempt status. Quiz and editor screens retain the full payload by default.
+- **Why it helps:** Course views that only need curriculum and quiz status avoid fetching and serializing unused question prompts and answer choices; the transfer savings increase with course quiz content.
+- **Checked:** Added route coverage proving the compact response is smaller, keeps quiz status, preserves the full default response, and rejects invalid option values. Client wiring/navigation tests passed (15/15), quiz route tests passed (3/3), the full `npm test -- --test-reporter=dot` suite passed, and `npm run build` passed TypeScript checking and Vite bundling.
+
 ## 2026-10-12 — Recheck lesson-resource navigation and recovery
 
 - **Reviewed:** Learner resource list semantics and link cues, responsive wrapping, shared HTTP(S) URL validation, resource-write authorization/audit handling, and application-level error recovery.
