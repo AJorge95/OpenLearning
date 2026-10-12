@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck administrative log bounds and error handling
+
+- **Reviewed:** Admin and system log pagination, filter parsing and binding, search limits, retention, credential redaction, and rollback behavior for log writes.
+- **Result:** No runtime change. Both routes require an administrator, cap requests at 200 pages of 50 rows, bind search/filter values, and return at most 10,000 audit or 5,000 system rows. Log writes reuse prepared statements and retain bounded history; sensitive-keyed detail fields are redacted in both stores, system-log text also redacts credential assignments, and cached counts are invalidated when an enclosing transaction rolls back.
+- **Why no change:** The inspected routes and storage paths already have bounded reads, indexed newest-first ordering, and focused coverage. No representative workload showed a remaining query or reliability problem.
+- **Checked:** Read `server/routes-admin.js`, `server/log-store.js`, the log schema/index migrations, and the focused route/storage tests. `node --test tests/server/admin-logs.test.js tests/server/log-store.test.js` passed (7/7); the working tree was clean at cycle start.
+- **Needed to continue:** A production-sized log dataset or concrete filter/retention failure that shows behavior beyond the existing bounded and indexed paths.
+
 ## 2026-10-12 — Keep username entry neutral on mobile
 
 - **Reviewed:** Username fields in first-run setup, sign-in, public registration, and staff account creation, plus the browser's default mobile capitalization and spellcheck behavior.
