@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Align first-run setup required-field cues
+
+- **Reviewed:** The two-step setup wizard, its native required constraints, shared password-label treatment, field-level validation focus, and the existing auth-page required indicator pattern.
+- **Improvement:** Add the same decorative visual “Required” cue to every required setup field, including the administrator identity fields, one-time token, and registered-account cap. Preserve the native `required` attributes and the existing accessible field names.
+- **Why it helps:** Operators can scan the first-run wizard before submitting and distinguish required configuration from optional branding choices, while browser validation and assistive-technology semantics remain unchanged.
+- **Backend review:** Setup request validation, token handling, account creation, and configuration bounds are unchanged; this is a presentation-only correction.
+- **Checked:** Added a focused setup-indicator regression under `tests/client`; the setup source retains all seven native required constraints and hides only the duplicated visual cues from accessible names. The local API and Vite development endpoints remained available during the change. Full rendered setup interaction was not exercised because Browser is unavailable and Playwright is not installed in the repository.
+
 ## 2026-10-12 — Align sign-in required-field cues
 
 - **Reviewed:** The rendered sign-in form, shared `PasswordField` label treatment, login field semantics, existing authentication regressions, and the current auth-page styling.
