@@ -2,12 +2,22 @@ export const COMPLETION_WINDOW_ERROR = 'Completion time must be between 1 and 3,
 export const MAX_COURSE_TITLE_LENGTH = 160;
 export const COURSE_TITLE_REQUIRED_ERROR = 'Course title is required.';
 export const COURSE_TITLE_TOO_LONG_ERROR = `Course title must be ${MAX_COURSE_TITLE_LENGTH} characters or fewer.`;
+export const MAX_COURSE_CATEGORY_LENGTH = 100;
+export const COURSE_CATEGORY_REQUIRED_ERROR = 'Category is required.';
+export const COURSE_CATEGORY_TOO_LONG_ERROR = `Category must be ${MAX_COURSE_CATEGORY_LENGTH} characters or fewer.`;
 
 export function validateCourseTitle(rawValue: string): { value: string; error: null } | { value: null; error: string } {
   // Match the server's trim-before-limit rule so toolbar and curriculum saves can preflight the title consistently.
   const value = rawValue.trim();
   if (!value) return { value: null, error: COURSE_TITLE_REQUIRED_ERROR };
   if (value.length > MAX_COURSE_TITLE_LENGTH) return { value: null, error: COURSE_TITLE_TOO_LONG_ERROR };
+  return { value, error: null };
+}
+
+export function validateCourseCategory(rawValue: string): { value: string; error: null } | { value: null; error: string } {
+  const value = rawValue.trim();
+  if (!value) return { value: null, error: COURSE_CATEGORY_REQUIRED_ERROR };
+  if (value.length > MAX_COURSE_CATEGORY_LENGTH) return { value: null, error: COURSE_CATEGORY_TOO_LONG_ERROR };
   return { value, error: null };
 }
 
