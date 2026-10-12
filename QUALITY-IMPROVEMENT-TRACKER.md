@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck learning-path list batching and assignment controls
+
+- **Reviewed:** Path payload query batches and page bounds, staff learner-directory search/pagination, assignment and removal status labels, confirmation copy, and the panel's narrow-screen control layout.
+- **Result:** No runtime change. Path/course payload reads use parameter-safe batches and the staff/learner path lists are paginated; assignment controls retain their path-specific names, clear/retry states, confirmation, and narrow-screen stacking.
+- **Why no change:** The current backend and interface behavior match the existing access and assignment flow, and tests cover growing path counts and stable page boundaries. No query bottleneck or rendered mismatch appeared in source/test review.
+- **Checked:** Focused path-list and assignment route tests passed (3/3); assignment accessibility, search, confirmation, and card-layout tests passed (15/15).
+- **Needed to revisit:** Measured latency with a representative large catalog or a reproduced assignment-panel accessibility/responsive defect.
+
 ## 2026-10-12 — Reuse the module media cleanup statement
 
 - **Reviewed:** The course editor's destructive module-removal confirmation, the route's transactional lesson/media-row deletion, and post-commit video/document/caption file cleanup.
