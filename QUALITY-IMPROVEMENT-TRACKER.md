@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck the account role selector hit area
+
+- **Reviewed:** The reported account-detail click area, role-field markup, width and pointer-event rules, `AppSelect` activation bounds, and the current local browser session.
+- **Result:** No runtime change. The selector wrapper and trigger remain bounded to 8.5rem at desktop widths, the surrounding role label ignores pointer input, and activation outside the visible trigger is rejected while keyboard activation remains available.
+- **Why no change:** The current source and focused tests already enforce the requested hit-area boundary. The rendered account route could not be checked because this browser session is signed out and the installed Playwright CLI has no Chromium executable.
+- **Checked:** Account-role hit-area and `AppSelect` label, activation, and positioning tests passed (20/20). The browser session was on `/register`; Playwright reported its Chromium executable missing, so no rendered interaction or screenshot was verified.
+- **Needed to revisit:** A signed-in account-detail session that still opens the menu when clicked outside the visible trigger.
+
 ## 2026-10-12 — Batch nested content reads when cloning course revisions
 
 - **Reviewed:** The versioned-course copy path for lessons, resources, captions, quizzes, questions, and answer choices across modules.
