@@ -54,6 +54,20 @@ test('course title errors are attached to the field and checked before both edit
   assert.match(saveDetails, /title: validatedTitle/);
 });
 
+test('saved course details sync server normalization without overwriting edits made in flight', () => {
+  const source = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
+  const saveCourse = source.slice(source.indexOf('async function saveCourse('), source.indexOf('async function saveCourseDetailsIfChanged('));
+  const saveDetails = source.slice(source.indexOf('async function saveCourseDetailsIfChanged('), source.indexOf('async function loadGovernance('));
+  const syncDetails = source.slice(source.indexOf('function syncCourseDetailsAfterSave('), source.indexOf('function showCourseTitleApiError('));
+
+  for (const field of ['title', 'description', 'category', 'visibility', 'completionWindowDays']) {
+    assert.match(syncDetails, new RegExp(`set${field[0].toUpperCase()}${field.slice(1)}\\(\\(current\\) => current === submitted\\.${field} \\?`));
+  }
+  assert.match(saveCourse, /syncCourseDetailsAfterSave\(response\.course, submittedDetails\)/);
+  assert.match(saveDetails, /syncCourseDetailsAfterSave\(response\.course, submittedDetails\)/);
+  assert.match(saveDetails, /syncCourseDetailsAfterSave\(course, submittedDetails\)/);
+});
+
 test('course editor describes invalid completion-window values and validates before save requests', () => {
   const source = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
   assert.match(source, /step="1"[^>]*aria-invalid=\{completionWindow\.error \? true : undefined\}/);
