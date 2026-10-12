@@ -243,3 +243,51 @@ test('certificate backfill skips inactive catalog courses beyond a batch boundar
   assert.equal(manyAdditionalCourses, oneAdditionalCourse,
     `Expected courses without learner activity to be skipped, got ${oneAdditionalCourse} then ${manyAdditionalCourses} prepared statements.`);
 });
+
+test('certificate backfill streams learner course candidates in bounded batches', () => {
+  const userId = 'certificate-batch-learner';
+  database.prepare(`INSERT INTO users (id, username, email, first_name, last_name, password_hash, role)
+    VALUES (?, 'certificate_batch', 'batch@example.invalid', 'Sam', 'Rivera', 'not-used', 'learner')`).run(userId);
+  const addCourse = database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, ?, 'published', 'certificate-learner', 'certificate-learner')`);
+  const addModule = database.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, 0)');
+  const addLessons = database.prepare(`INSERT INTO lessons (id, module_id, title, position)
+    VALUES (?, ?, 'Completed lesson', 0), (?, ?, 'Remaining lesson', 1)`);
+  const addVersion = database.prepare(`INSERT INTO course_versions
+    (id, course_id, storage_course_id, version_number, published_by)
+    VALUES (?, ?, ?, 1, 'certificate-learner')`);
+  const addProgress = database.prepare('INSERT INTO lesson_progress (user_id, lesson_id) VALUES (?, ?)');
+  database.transaction(() => {
+    for (let position = 1; position <= 201; position += 1) {
+      const suffix = String(position).padStart(3, '0');
+      const courseId = `certificate-batch-course-${suffix}`;
+      const moduleId = `certificate-batch-module-${suffix}`;
+      const firstLessonId = `certificate-batch-lesson-${suffix}-1`;
+      addCourse.run(courseId, `Batch course ${suffix}`);
+      addModule.run(moduleId, courseId, 'Module');
+      addLessons.run(firstLessonId, moduleId, `certificate-batch-lesson-${suffix}-2`, moduleId);
+      addVersion.run(`certificate-batch-version-${suffix}`, courseId, courseId);
+      addProgress.run(userId, firstLessonId);
+    }
+  })();
+
+  const originalPrepare = database.prepare;
+  const candidateBatchSizes = [];
+  database.prepare = (sql) => {
+    const statement = originalPrepare.call(database, sql);
+    if (!sql.includes('SELECT * FROM courses c') || !sql.includes('FROM lesson_progress p')) return statement;
+    return {
+      all(...parameters) {
+        const rows = statement.all(...parameters);
+        candidateBatchSizes.push(rows.length);
+        return rows;
+      },
+    };
+  };
+  try {
+    assert.deepEqual(certificates.issueCompletedCertificatesForUser(userId), []);
+  } finally {
+    delete database.prepare;
+  }
+  assert.deepEqual(candidateBatchSizes, [200, 1, 0]);
+});
