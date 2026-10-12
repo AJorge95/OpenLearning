@@ -113,26 +113,15 @@ The media upload accepts MP4 video, JPG, PNG, or WebP course covers, and WebVTT 
 
 ## Back up and restore
 
-Back up both the SQLite database and the complete media root. Platform identity, connection, and registration settings and the optional icon are stored in SQLite, so they are included in the database backup. SQLite uses write-ahead logging, so use SQLite's online backup command or stop the application and include any `-wal` and `-shm` files when making a raw file copy.
-
-Example online backup while the app is running:
+Back up both the SQLite database and the complete media root. Platform identity, connection, and registration settings and the optional icon are stored in SQLite, so they are included in the database backup. The app includes a portable online-backup command that uses the same `DATA_DIR`, `DB_PATH`, and `MEDIA_ROOT` configuration as the server:
 
 ```sh
-# These defaults mirror config.js when no storage-path overrides are set.
-# Export values from .env or edit them here when the running service uses overrides.
-DATA_DIR=${DATA_DIR:-./data}
-DB_PATH=${DB_PATH:-"$DATA_DIR/openlearning.sqlite"}
-MEDIA_ROOT=${MEDIA_ROOT:-"$DATA_DIR/course-media"}
-BACKUP_DIR=${BACKUP_DIR:-./backup}
-
-mkdir -p "$BACKUP_DIR"
-sqlite3 "$DB_PATH" ".backup '$BACKUP_DIR/openlearning.sqlite'"
-cp -a "$MEDIA_ROOT" "$BACKUP_DIR/course-media"
+npm run backup
 ```
 
-The shell does not load `.env` automatically. If `DB_PATH` or `MEDIA_ROOT` is set there, export those values before running the example; when only `DATA_DIR` is overridden, export it and the example derives both default paths from it. Run the commands from the same working directory used by OpenLearning, since relative storage paths are resolved from that directory, or replace them with their absolute paths. Pause course edits and uploads while copying the media tree so the database backup and media files describe the same point in time. The `sqlite3` command is the SQLite CLI; the app itself uses its bundled Node SQLite driver.
+Each run creates a new timestamped directory under `./backup` containing `openlearning.sqlite` and `course-media`. Set `BACKUP_DIR` to use another destination root; for example, in PowerShell run `$env:BACKUP_DIR = '.\backups'` before `npm run backup`. The command reads the project `.env` file and resolves relative paths from the same working directory used by OpenLearning. It uses the bundled SQLite driver, so the SQLite CLI is not required. The database snapshot can run while the app is online; pause course edits and uploads during the media copy so the database and files describe the same point in time. The command rejects backup destinations inside the media root and removes incomplete output when a backup fails.
 
-To restore, stop OpenLearning, restore the database to `DB_PATH` and the media tree to `MEDIA_ROOT`, then start the app again. Keep the directory layout and course folders intact. Restoring only one of the database or media tree can leave course records without their uploaded files, or files without their course records.
+To restore, stop OpenLearning, choose a timestamped backup directory, restore its database to `DB_PATH` and its media tree to `MEDIA_ROOT`, then start the app again. Keep the directory layout and course folders intact. Restoring only one of the database or media tree can leave course records without their uploaded files, or files without their course records.
 
 ## License
 

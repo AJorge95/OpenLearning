@@ -159,14 +159,13 @@
 - **Why it helps:** Repeated teardown can no longer underflow the shared subscriber count and silently prevent later AppSelect controls from tracking pointer origins.
 - **Checked:** The focused AppSelect activation tests passed (6/6), the full `npm test -- --test-reporter=dot` suite passed, `npm run typecheck` and `npm run build` passed, and `git diff --check` passed. No rendered layout changed; the active browser session is signed out, so authenticated selector interaction was not rechecked in-browser.
 
-## 2026-10-12 — Back up the configured database and media paths
+## 2026-10-12 — Provide a portable database and media backup command
 
-- **Reviewed:** The backup example, SQLite WAL mode, `DATA_DIR`/`DB_PATH`/`MEDIA_ROOT` resolution, the running reset-backup implementation, and existing test organization.
-- **Improvement:** Derive backup command defaults from `DATA_DIR`, honor explicit `DB_PATH` and `MEDIA_ROOT` shell values, and explain that `.env` is not loaded automatically by the shell. Add a documentation regression under `tests/server` so future edits keep using the configured storage paths.
-- **Why it helps:** Installations using custom database or media locations no longer risk copying the default files while leaving their actual course data unprotected. The SQLite online-backup operation remains WAL-safe, and the media copy still requires pausing edits/uploads for a consistent pair.
-- **Checked:** `node --test tests/server/backup-documentation.test.js` passed (1/1); the README shell example passed `bash -n` using Git Bash; a shell-stub run confirmed an overridden `DATA_DIR` and `BACKUP_DIR` expand to the same database and media paths used by the commands; `git diff --check` passed. The SQLite CLI is not installed here, so the online backup command itself was not executed.
-- **Additional check:** Added `tests/server/backup-restore.test.js`; `node --test tests/server/backup-restore.test.js` passed (1/1). The test used the application's resolved non-default `DB_PATH` and `MEDIA_ROOT`, created a SQLite online backup while the database used WAL mode, copied the media tree, restored both into the configured paths, and verified SQLite integrity plus platform settings, course metadata, media metadata, and file contents.
-- **Needed to continue:** Execute the README's exact `sqlite3` CLI command on an environment with the SQLite CLI installed. The app's bundled SQLite driver's online backup and a complete isolated restore are now verified.
+- **Reviewed:** The backup instructions, SQLite WAL mode, `DATA_DIR`/`DB_PATH`/`MEDIA_ROOT` resolution, bundled online-backup API, reset-backup implementation, and existing restore tests.
+- **Improvement:** Add `npm run backup`, using the bundled SQLite driver and configured storage paths to write a database snapshot and complete media copy into a new timestamped directory. Reject destinations that overlap the media root, clean up incomplete output on failure, handle `--help` without writing files, and document the portable workflow.
+- **Why it helps:** Windows and other self-hosted operators can make a WAL-safe backup without installing the SQLite CLI; timestamped output avoids replacing older snapshots, and path checks prevent recursive media copies.
+- **Checked:** The backup command, README contract, and existing restore suites passed (6/6), covering custom independent database/media paths, WAL data, database integrity, media contents, unsafe destinations, partial-output cleanup, and no-write help. The full `npm test -- --test-reporter=dot` suite and `npm run build` passed; `node --check` passed for the script and its integration test; `git diff --check` passed. `npm run backup -- --help` printed usage without creating output.
+- **Operational note:** Pause course edits and uploads during the media-tree copy so the database snapshot and files describe the same point in time.
 
 ## 2026-10-12 — Verify the reported role-selector hit area in a signed-in build
 
