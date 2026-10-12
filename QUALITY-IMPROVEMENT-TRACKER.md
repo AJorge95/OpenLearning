@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck readiness and startup recovery
+
+- **Reviewed:** The documented `/healthz` and `/readyz` contract, readiness checks and shutdown behavior, focused readiness tests, and the frontend startup and page-error recovery states.
+- **Result:** No runtime change. Liveness remains independent from readiness; readiness requires a migrated schema, completed setup, and an enabled administrator, returns not-ready on database errors, and short-circuits while shutting down. Startup and page failures expose retry or reload actions.
+- **Why no change:** The implementation matches its operational documentation and existing failure coverage; no reproduced startup, readiness, or recovery issue surfaced.
+- **Checked:** `node --test tests/server/readiness.test.js` passed (3/3); read the server readiness and shutdown paths, the client recovery states, and their existing tracker coverage.
+- **Needed to continue:** A concrete readiness false positive/negative, a reproducible shutdown hang, or representative workload measurements that show a specific reliability or performance bottleneck.
+
 ## 2026-10-12 — Review shared button names and account role constraints
 
 - **Reviewed:** Shared `Button` behavior, native and shared button call sites across the JSX source, recent accessibility tracker entries, and the account-role update transaction.
