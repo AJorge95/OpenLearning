@@ -238,7 +238,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .analytics-section-heading p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .analytics-section-heading > span { flex: 0 0 auto; padding: 5px 8px; color: #666c7a; background: #f5f5f8; border-radius: 3px; font-size: 11px; font-weight: 650; }
 .analytics-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; }
-.analytics-learners-table-wrap { container-type: inline-size; container-name: learner-table; }
+.analytics-table-wrap { container-type: inline-size; container-name: analytics-table; }
+.analytics-learners-table-wrap { container-name: analytics-table learner-table; }
 .analytics-table { width: 100%; min-width: 780px; border-collapse: collapse; text-align: left; }
 .analytics-table th { height: 43px; padding: 0 12px; border-bottom: 1px solid var(--line); color: #5d6372; background: #f9f9fc; font-size: 11px; font-weight: 650; white-space: nowrap; }
 /* Keep metric-table row headers visually consistent with their data cells. */
@@ -546,9 +547,27 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .management-search { max-width: none; margin-bottom: 22px; }
 .management-search button { min-width: 54px; padding: 7px; border: 0; background: transparent; color: var(--purple); font-size: 13px; font-weight: 650; }
 .course-table-wrap, .user-table-wrap { width: 100%; overflow-x: auto; contain: layout; border: 1px solid var(--line); border-radius: 4px; }
+.course-table-wrap { container-type: inline-size; container-name: course-table; }
+.user-table-wrap { container-type: inline-size; container-name: user-table; }
 .course-table, .user-table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; }
-/* Show table-scroll guidance only where narrow layouts crop columns. */
-.table-scroll-hint { display: none; }
+/* Keep guidance styled while hidden; each wrapper reveals it when its table can overflow. */
+.table-scroll-hint { display: none; align-items: center; min-height: 34px; margin: 0; padding: 0 11px; border-bottom: 1px solid var(--line); color: var(--muted); background: #fff; font-size: 11px; }
+/* Match each scroll cue to the minimum width of the table it describes. */
+@container course-table (max-width: 850px) {
+  .course-table-wrap > .table-scroll-hint { display: flex; }
+}
+@container user-table (max-width: 690px) {
+  .user-table-wrap > .table-scroll-hint { display: flex; }
+}
+@container analytics-table (max-width: 780px) {
+  .analytics-table-wrap:not(.analytics-learners-table-wrap) > .table-scroll-hint { display: flex; }
+}
+@container analytics-table (max-width: 940px) {
+  .analytics-learners-table-wrap > .table-scroll-hint { display: flex; }
+}
+@container log-table (max-width: 850px) {
+  .log-table-wrap > .table-scroll-hint { display: flex; }
+}
 .course-table th, .user-table th { height: 49px; padding: 0 16px; color: #5d6372; background: #f9f9fc; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 650; }
 .course-table td, .user-table td { height: 78px; padding: 10px 16px; border-bottom: 1px solid var(--line); color: #3e4352; font-size: 13px; }
 /* Keep semantic account row headers visually aligned with the table's data cells. */
@@ -1037,7 +1056,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .log-filters .role-filter .app-select { width: 100%; }
 .log-filters .log-role-filter { flex-direction: column; align-items: stretch; gap: 6px; }
 .log-filters .log-role-filter .app-select { min-width: 0; }
-.log-table-wrap { position: relative; width: 100%; min-height: 150px; overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; }
+.log-table-wrap { position: relative; width: 100%; min-height: 150px; overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; container-type: inline-size; container-name: log-table; }
 .log-table { width: 100%; min-width: 850px; border-collapse: collapse; text-align: left; }
 .log-table th { height: 48px; padding: 0 15px; border-bottom: 1px solid var(--line); color: #5d6372; background: #f9f9fc; font-size: 12px; font-weight: 650; white-space: nowrap; }
 .log-table td { padding: 15px; border-bottom: 1px solid var(--line); color: #414657; font-size: 12px; vertical-align: top; }
@@ -1316,7 +1335,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .management-tabs button { font-size: 12px; white-space: nowrap; }
   .course-table { min-width: 850px; }
   .user-table { min-width: 690px; }
-  .table-scroll-hint { display: flex; align-items: center; min-height: 34px; margin: 0; padding: 0 11px; border-bottom: 1px solid var(--line); color: var(--muted); background: #fff; font-size: 11px; }
+  .table-scroll-hint { display: flex; }
   .editor-topbar { align-items: flex-start; flex-direction: column; }
   .editor-topbar h1 { font-size: 27px; }
   .editor-actions { width: 100%; flex-wrap: wrap; }

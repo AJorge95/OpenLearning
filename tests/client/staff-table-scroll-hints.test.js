@@ -6,6 +6,8 @@ const source = fs.readFileSync(new URL('../../src/pages-manage.tsx', import.meta
 const styles = fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
 
 const scrollableStaffTables = [
+  ['Scrollable course list', 'Scroll horizontally to see all course columns.'],
+  ['Scrollable account list', 'Scroll horizontally to see all account columns.'],
   ['Scrollable lesson completion metrics', 'Scroll horizontally to see all lesson metrics.'],
   ['Scrollable quiz performance metrics', 'Scroll horizontally to see all quiz metrics.'],
   ['Scrollable learner progress', 'Scroll horizontally to see all learner progress columns.'],
@@ -26,10 +28,36 @@ test('wide staff tables explain horizontal scrolling inside their named regions'
   }
 });
 
-test('table scroll hints appear only at the narrow-screen breakpoint', () => {
-  assert.match(styles, /\.table-scroll-hint\s*\{\s*display:\s*none;\s*\}/);
+test('table scroll hints follow the width of each scroll region', () => {
+  assert.match(styles, /\.table-scroll-hint\s*\{[^}]*display:\s*none;[^}]*min-height:\s*34px;/);
+  assert.match(styles, /\.course-table-wrap\s*\{\s*container-type:\s*inline-size;\s*container-name:\s*course-table;\s*\}/);
+  assert.match(styles, /\.user-table-wrap\s*\{\s*container-type:\s*inline-size;\s*container-name:\s*user-table;\s*\}/);
+  assert.match(styles, /\.analytics-table-wrap\s*\{\s*container-type:\s*inline-size;\s*container-name:\s*analytics-table;\s*\}/);
+  assert.match(styles, /\.analytics-learners-table-wrap\s*\{\s*container-name:\s*analytics-table learner-table;\s*\}/);
+  assert.match(styles, /\.log-table-wrap\s*\{[^}]*container-type:\s*inline-size;[^}]*container-name:\s*log-table;/);
+
+  const containerRules = Array.from(styles.matchAll(/@container ([\w-]+) \(max-width: (\d+)px\)\s*\{([^}]+)\}/g), (match) => ({
+    name: match[1],
+    maxWidth: Number(match[2]),
+    rules: match[3],
+  }));
+  // Keep each query threshold aligned with the table's minimum width.
+  const expectedContainerQueries = [
+    ['course-table', 850, '.course-table-wrap'],
+    ['user-table', 690, '.user-table-wrap'],
+    ['analytics-table', 780, '.analytics-table-wrap:not(.analytics-learners-table-wrap)'],
+    ['analytics-table', 940, '.analytics-learners-table-wrap'],
+    ['log-table', 850, '.log-table-wrap'],
+  ];
+  for (const [name, maxWidth, selector] of expectedContainerQueries) {
+    const query = containerRules.find((rule) => rule.name === name && rule.maxWidth === maxWidth);
+    assert.ok(query, `${name} should reveal its hint at ${maxWidth}px or less`);
+    assert.ok(query.rules.includes(`${selector} > .table-scroll-hint`), `${name} should target only its own hint`);
+    assert.match(query.rules, /display:\s*flex;/);
+  }
+
   const mobileRules = Array.from(styles.matchAll(/@media \(max-width: 720px\)\s*\{([\s\S]*?)\n\}/g), (match) => match[1])
     .find((rules) => rules.includes('.table-scroll-hint')) ?? '';
-  assert.notEqual(mobileRules, '', 'narrow layouts should define the scroll-hint presentation');
+  assert.notEqual(mobileRules, '', 'older browsers should retain a narrow-screen fallback');
   assert.match(mobileRules, /\.table-scroll-hint\s*\{[^}]*display:\s*flex;/);
 });
