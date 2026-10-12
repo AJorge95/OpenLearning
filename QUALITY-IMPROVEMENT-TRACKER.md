@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Make lesson comment authors navigable headings
+
+- **Reviewed:** The learner feedback section heading, individual comment article structure, existing comment pagination/moderation behavior, and responsive comment layout.
+- **Improvement:** Use a level-three heading for each comment author beneath the feedback section's level-two heading, preserving the existing 13px visual treatment.
+- **Why it helps:** Screen-reader users can navigate between individual comments with heading commands and identify each comment by its author.
+- **Backend review:** Comment authorization, ordering, pagination, and removal auditing remain unchanged.
+- **Checked:** Focused lesson-comment client and moderation route tests passed (22/22); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. The connected browser is signed out, so authenticated lesson rendering was not replayed.
+
 ## 2026-10-12 — Resolve built client assets independently of the launch directory
 
 - **Reviewed:** Native Node startup guidance, Vite's `dist/client` output, Express static serving and fallback behavior, and the isolated server-configuration tests.

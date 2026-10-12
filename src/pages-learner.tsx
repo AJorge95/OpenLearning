@@ -1513,7 +1513,7 @@ export function CoursePlayerPage() {
             {visibleFeedback.comments.map((comment) => {
               const timestamp = commentTimestamp(comment.createdAt);
               const removing = commentRemovalIds.has(comment.id);
-              return <article className="lesson-comment" key={comment.id}><span className="comment-avatar" aria-hidden="true">{comment.username.slice(0, 1).toUpperCase()}</span><div><header><strong>{comment.username}</strong><time dateTime={timestamp.dateTime}>{timestamp.label}</time>{isCourseManager && <Button type="button" variant="quiet" className="lesson-comment-remove" aria-label={`Remove comment by ${comment.username}`} disabled={removing} onClick={() => requestCommentRemoval(comment)}>{removing ? 'Removing…' : <><Trash2 size={14} />Remove</>}</Button>}</header><p>{comment.body}</p></div></article>;
+              return <article className="lesson-comment" key={comment.id}><span className="comment-avatar" aria-hidden="true">{comment.username.slice(0, 1).toUpperCase()}</span><div><header><h3>{comment.username}</h3><time dateTime={timestamp.dateTime}>{timestamp.label}</time>{isCourseManager && <Button type="button" variant="quiet" className="lesson-comment-remove" aria-label={`Remove comment by ${comment.username}`} disabled={removing} onClick={() => requestCommentRemoval(comment)}>{removing ? 'Removing…' : <><Trash2 size={14} />Remove</>}</Button>}</header><p>{comment.body}</p></div></article>;
             })}
             {!visibleFeedback.comments.length && <p className="comments-empty">{isCourseManager ? 'No learner comments yet.' : 'No comments yet. Start the conversation.'}</p>}
           </div>

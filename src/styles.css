@@ -849,7 +849,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .comment-avatar { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%; color: var(--purple); background: var(--purple-soft); font-size: 13px; font-weight: 700; }
 .lesson-comment > div { min-width: 0; flex: 1; }
 .lesson-comment header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 9px; }
-.lesson-comment header strong { color: var(--ink); font-size: 13px; }
+.lesson-comment header h3 { margin: 0; color: var(--ink); font-size: 13px; font-weight: 650; }
 .lesson-comment header time { color: var(--muted); font-size: 11px; }
 .lesson-comment-remove { min-height: 28px; flex: 0 0 auto; gap: 5px; margin-left: auto; padding: 0 7px; font-size: 11px; }
 .lesson-comment p { margin: 7px 0 0; color: #4c5261; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
