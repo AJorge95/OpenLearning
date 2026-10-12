@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — List all accepted document upload formats
+
+- **Reviewed:** The lesson-document picker extensions, visible format help, server MIME/extension allowlist, and invalid-upload response.
+- **Improvement:** Name TXT, Markdown, and RTF explicitly in the visible help and mirror that list in the server's invalid-type message.
+- **Why it helps:** Authors can see that `.md` and `.rtf` documents are accepted before choosing a file or interpreting an upload error.
+- **Backend review:** The existing extension/MIME checks, file-signature validation, size limits, and cleanup remain unchanged; only the rejection message was clarified.
+- **Checked:** Updated the client regression to match the supported extensions and added a server response assertion for an unsupported file. The focused client test passed (1/1), media-route tests passed (20/20), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed. The local browser remains at `/login`, so authenticated lesson-editor rendering could not be checked.
+
 ## 2026-10-12 — Keep pruned audit filters identifiable
 
 - **Reviewed:** Audit-action filter state across refreshes, the action options returned by the admin API, and the 10,000-row audit retention behavior.

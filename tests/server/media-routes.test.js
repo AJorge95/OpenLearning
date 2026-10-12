@@ -221,6 +221,23 @@ async function uploadCourseCover(filename, contents, mimeType) {
   });
 }
 
+test('unsupported document uploads list the supported document formats', async () => {
+  const form = new FormData();
+  form.set('lessonId', 'lesson-caption-audit');
+  form.set('file', new File(['unsupported'], 'unsupported.gif', { type: 'image/gif' }));
+
+  const response = await fetch(apiUrl('/manage/courses/course-caption-audit/lesson-documents'), {
+    method: 'POST',
+    headers: { 'x-test-user': 'admin-media', connection: 'close' },
+    body: form,
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.code, 'invalid_media_type');
+  assert.equal(payload.error, 'Upload a PDF, TXT, Markdown, RTF, Word, PowerPoint, Excel, CSV, TSV, or OpenDocument file.');
+});
+
 test('rejects a truncated PNG cover and removes the temporary upload', async () => {
   const courseMediaDirectory = path.dirname(captionPath);
   const originalFiles = (await fs.readdir(courseMediaDirectory)).sort();
