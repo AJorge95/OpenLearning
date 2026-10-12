@@ -8,6 +8,15 @@
 - **Backend review:** The existing course-summary response already includes the plain-text description and remains access-scoped; no API or persistence change was needed.
 - **Checked:** Added a client regression for optional description rendering and the two-line clamp. The local `/courses` page rendered the description in the existing card; at 1280px the card remained 280px wide with a two-line, 38px preview and no document overflow. Focused client checks passed (10/10), the full `npm test` suite passed (843/843), `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed.
 
+## 2026-10-12 — Recheck backend lifecycle and query bounds
+
+- **Reviewed:** Readiness and shutdown draining, startup configuration bounds, session cleanup, log retention and redaction, orphaned-media cleanup, certificate ordering, course and competency pagination, and existing course-access query-plan regressions.
+- **Result:** No runtime change. The reviewed server paths already fail readiness closed during shutdown or database faults, validate operational limits before startup, stop maintenance timers before closing SQLite, retain bounded/redacted logs, protect referenced media, and use bounded/indexed list queries.
+- **Why no change:** The focused regressions and source review did not show a reproducible reliability defect or a measured performance bottleneck. Further backend tuning would be speculative without representative workload data or a concrete failure case.
+- **Interface review:** The prior cycle’s course-card improvement was rendered and verified separately; no second interface change was indicated by this backend pass.
+- **Checked:** Focused backend lifecycle/storage/index tests passed (37/37). No server behavior, API contract, database schema, or data changed.
+- **Needed to continue:** A reproducible backend failure, representative slow-query profile, or new product requirement that identifies a specific safe server-side improvement.
+
 ## 2026-10-12 — Reconfirm public registration cues and validation
 
 - **Reviewed:** The rendered signup form, its visual required indicators and accessible field names, the native required constraints, and the server registration checks for email, names, credentials, and configured fields.
