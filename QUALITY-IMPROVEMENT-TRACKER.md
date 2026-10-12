@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Announce learner video volume in percentages
+
+- **Reviewed:** The watch-tracked lesson controls, normalized volume state and mute behavior, existing player recovery logic, and server-side watch verification.
+- **Improvement:** Add a percentage `aria-valuetext` to the native volume slider, matching the controlled value and reporting muted playback as 0%.
+- **Why it helps:** Screen-reader users hear an understandable volume such as “65%” instead of a normalized decimal such as “0.65”.
+- **Backend review:** The lesson-watch routes continue to validate verified progress and persist completion atomically; this accessibility improvement does not require a backend change.
+- **Checked:** `node --test tests/client/video-volume.test.js`, full `npm test -- --test-reporter=dot`, `npm run build` (TypeScript and Vite), and `git diff --check` passed. The full suite includes lesson-watch route tests. The protected lesson route redirected to `/login`, so signed-in playback rendering could not be verified in the browser.
+
 ## 2026-10-12 — Keep malformed stored dates from breaking the learning calendar
 
 - **Reviewed:** Calendar deadline rows are stored as nullable text, the route's UTC timestamp normalization and serialization, existing deadline visibility filtering, the learner calendar's empty state, and the system-log diagnostic path.
