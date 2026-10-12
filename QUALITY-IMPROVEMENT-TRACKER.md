@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck learner sign-in and session handling
+
+- **Reviewed:** Sign-in form labels, autocomplete, error announcement, and responsive width; failed-login rate limiting; session regeneration; account/approval rechecks; last-login and audit updates.
+- **Result:** No runtime change. Failed login requests use the auth limiter while successful logins do not consume its allowance. The route rechecks account state after session regeneration and commits last-login/audit updates together; failures destroy the newly created session. The form already exposes the error as an alert and uses the username/current-password autocomplete values.
+- **Why no change:** Existing UI and route behavior covers the reviewed states; no reproduced sign-in, session, audit, or narrow-screen problem surfaced.
+- **Checked:** Authentication client tests passed (2/2); auth rate-limit and last-login server tests passed (18/18). The signed-in form was not rendered in a browser during this review.
+- **Needed to revisit:** A reproduced session surviving a failed sign-in, a successful request consuming the failure limit, audit/history divergence, or a desktop/mobile form usability issue.
+
 ## 2026-10-12 — Recheck learner quiz payload and result states
 
 - **Reviewed:** Quiz-page load cancellation and retry, current-quiz question/choice filtering, latest-attempt lookup and indexes, saved-score fallback, focus behavior, and responsive quiz layout.
