@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep administrator log filters easy to clear
+
+- **Reviewed:** Audit-log search and action filters, system-log search and severity filters, the existing empty-state reset, paging and error recovery, responsive filter layout, and the admin-only API routes.
+- **Improvement:** Keep a **Clear filters** button beside the filter controls on both log pages whenever a search or filter is active. The reset clears the draft and applied query and action or severity, returns to page one, and restores focus to the search field. Keep empty-state copy focused on the result message.
+- **Why it helps:** Administrators can return from a restrictive search while matching rows remain visible and preserve keyboard focus after resetting.
+- **Backend review:** Both existing endpoints validate and apply search and selected filters before pagination, and remain administrator-only. No API or persistence change was needed.
+- **Checked:** Audit/system log UI and route tests passed (8/8); the full `npm test -- --test-reporter=dot` suite and `npm run build` passed; and `git diff --check` passed. The connected browser is signed out at `/login`, so authenticated rendered log interaction was not replayed.
+
 ## 2026-10-12 — Keep administrator filters easy to clear
 
 - **Reviewed:** The account list's search draft and applied query, role and registration filters, empty-state recovery action, responsive filter row, and `/api/admin/users` validation and pagination.
