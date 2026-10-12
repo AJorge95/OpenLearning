@@ -1667,15 +1667,15 @@ test('My learning streams indexed user memberships into bounded stable pages', a
   const addFixtures = database.transaction(() => {
     database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
       VALUES (?, 'my_learning_pager', 'my-learning-pager@example.invalid', 'not-used', 'learner', 0)`).run(userId);
-    const addCourse = database.prepare(`INSERT INTO courses (id, title, status, visibility, created_by, updated_by)
-      VALUES (?, ?, 'published', 'public', 'admin-1', 'admin-1')`);
+    const addCourse = database.prepare(`INSERT INTO courses (id, title, description, status, visibility, created_by, updated_by)
+      VALUES (?, ?, ?, 'published', 'public', 'admin-1', 'admin-1')`);
     const addEnrollment = database.prepare(`INSERT INTO enrollments (id, course_id, user_id, enrolled_at)
       VALUES (?, ?, ?, ?)`);
     const addGrant = database.prepare(`INSERT INTO course_grants (id, course_id, user_id, granted_by, granted_at)
       VALUES (?, ?, ?, 'admin-1', ?)`);
     for (let position = 1; position <= count; position += 1) {
       const courseId = `${coursePrefix}${String(position).padStart(2, '0')}`;
-      addCourse.run(courseId, `My learning page course ${position}`);
+      addCourse.run(courseId, `My learning page course ${position}`, `My learning description ${position}`);
       addEnrollment.run(`my-learning-pager-enrollment-${position}`, courseId, userId,
         `2026-10-11 00:${String(position).padStart(2, '0')}:00`);
     }
@@ -1725,6 +1725,10 @@ test('My learning streams indexed user memberships into bounded stable pages', a
     assert.equal(firstPage.hasMore, true);
     assert.deepEqual(firstPage.courses.map((course) => course.id),
       Array.from({ length: pageSize }, (_, index) => `${coursePrefix}${String(count - index).padStart(2, '0')}`));
+    assert.equal(firstPage.courses[0].description, `My learning description ${count}`,
+      'the selected page should still include full course display data');
+    assert.match(candidateSql, /SELECT c\.id, c\.logical_course_id, c\.status, c\.visibility FROM activity_by_course/);
+    assert.doesNotMatch(candidateSql, /SELECT\s+c\.\*/i, 'the membership scan should not load display columns');
     assert.equal(candidateIterateCount, 1, 'the membership query should be consumed incrementally');
     assert.equal(candidateAllCount, 0, 'the membership query should not materialize every candidate row');
 

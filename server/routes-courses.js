@@ -114,8 +114,8 @@ function accessibleLearningCoursePage(user, requestedPageValue) {
   const requestedPage = pageQuery(requestedPageValue, MAX_COURSE_PAGE);
   const requestedOffset = (requestedPage - 1) * COURSE_PAGE_SIZE;
   const requestedEnd = requestedOffset + COURSE_PAGE_SIZE;
-  const pageCandidates = [];
-  const trailingCandidates = [];
+  const pageCandidateIds = [];
+  const trailingCandidateIds = [];
   let total = 0;
   const canViewCourse = createCourseAccessChecker(user);
   const candidates = db.prepare(`WITH course_activity(course_id, activity_at, precedence) AS (
@@ -135,22 +135,30 @@ function accessibleLearningCoursePage(user, requestedPageValue) {
       ) AS activity_at
       FROM course_activity GROUP BY course_id
     )
-    SELECT c.* FROM activity_by_course a JOIN courses c ON c.id = a.course_id
+    SELECT c.id, c.logical_course_id, c.status, c.visibility FROM activity_by_course a JOIN courses c ON c.id = a.course_id
     WHERE c.status = 'published'
     ORDER BY a.activity_at DESC, c.id ASC`).iterate(user.id, user.id, user.id);
 
   for (const course of candidates) {
     if (!canViewCourse(course)) continue;
-    if (total >= requestedOffset && total < requestedEnd) pageCandidates.push(course);
-    if (trailingCandidates.length === COURSE_PAGE_SIZE) trailingCandidates.shift();
-    trailingCandidates.push(course);
+    if (total >= requestedOffset && total < requestedEnd) pageCandidateIds.push(course.id);
+    if (trailingCandidateIds.length === COURSE_PAGE_SIZE) trailingCandidateIds.shift();
+    trailingCandidateIds.push(course.id);
     total += 1;
   }
 
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / COURSE_PAGE_SIZE)));
   const lastPageSize = total === 0 ? 0 : (total - 1) % COURSE_PAGE_SIZE + 1;
+  const selectedCourseIds = page === requestedPage
+    ? pageCandidateIds
+    : trailingCandidateIds.slice(-lastPageSize);
+  // Access checks need only the narrow candidate rows; fetch display fields for this page afterward.
+  const coursesById = selectedCourseIds.length
+    ? new Map(db.prepare(`SELECT * FROM courses WHERE id IN (${selectedCourseIds.map(() => '?').join(', ')})`)
+      .all(...selectedCourseIds).map((course) => [course.id, course]))
+    : new Map();
   return {
-    courses: page === requestedPage ? pageCandidates : trailingCandidates.slice(-lastPageSize),
+    courses: selectedCourseIds.map((courseId) => coursesById.get(courseId)).filter(Boolean),
     total,
     page,
     pageSize: COURSE_PAGE_SIZE,
