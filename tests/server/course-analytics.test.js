@@ -3475,6 +3475,34 @@ test('course access learner search matches email and remains limited to learners
   assert.equal(result.users[0].granted, false);
 });
 
+test('staff can revoke an existing course grant while a learner account is disabled', async () => {
+  const courseId = 'course-analytics';
+  const learnerId = 'learner-disabled';
+  const grantId = 'grant-disabled-learner-revocation';
+  database.prepare('INSERT INTO course_grants (id, course_id, user_id, granted_by) VALUES (?, ?, ?, ?)')
+    .run(grantId, courseId, learnerId, 'admin-1');
+
+  try {
+    const listResponse = await fetch(apiUrl(`/manage/courses/${courseId}/access?q=${encodeURIComponent('disabled@example.invalid')}`), {
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(listResponse.status, 200);
+    const list = await listResponse.json();
+    assert.equal(list.total, 1);
+    assert.deepEqual(list.users.map((user) => [user.id, user.disabled, user.granted]), [[learnerId, true, true]]);
+
+    const revokeResponse = await fetch(apiUrl(`/manage/courses/${courseId}/access/${learnerId}`), {
+      method: 'DELETE',
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(revokeResponse.status, 204);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_grants WHERE id = ?').get(grantId).count, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM enrollments WHERE course_id = ? AND user_id = ?').get(courseId, learnerId).count, 1);
+  } finally {
+    database.prepare('DELETE FROM course_grants WHERE id = ?').run(grantId);
+  }
+});
+
 test('private course grants and revocations roll back when audit persistence fails', async () => {
   const courseId = 'course-access-audit';
   const learnerId = 'learner-unassigned';

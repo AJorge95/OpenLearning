@@ -12,6 +12,7 @@ import { formatCountLabel } from './count-label';
 import { parseApiTimestamp } from './api-timestamp';
 import { accountCourseAssignmentLabel } from './account-course-activity';
 import { accountDisableConfirmation } from './account-disable-confirmation';
+import { courseAccessAction } from './course-access-action';
 import { courseDeletionConfirmation } from './course-deletion-confirmation';
 import { courseRowActionStatus } from './course-row-action-status';
 import { isCourseCreationEditorState } from './course-editor-state';
@@ -2160,11 +2161,18 @@ export function CourseAccessPage() {
     <div className="access-list">
       <div className="access-list-head"><span>Learner</span><span>Assignment</span><span>Action</span></div>
       {!failedRequest && users.length ? <ul className="access-rows" aria-label="Learner access">
-        {users.map((learner) => <li className="access-row" key={learner.id}>
-          <div className="access-user"><UserInitial username={learner.username} /><div><strong>{learner.username}</strong>{learner.granted && learner.grantedAt && <small>Assigned <DateText value={learner.grantedAt} />{learner.grantedBy ? ` by ${learner.grantedBy}` : ''}</small>}</div></div>
-          <span className={learner.granted ? 'access-state access-state-granted' : 'access-state'}>{learner.granted ? 'Assigned' : 'Not assigned'}</span>
-          <div>{learner.disabled ? <span className="muted">Account disabled</span> : <button type="button" className={learner.granted ? 'text-action danger-text' : 'text-action'} aria-label={learner.granted ? `Unassign ${learner.username} from ${course?.title || 'this course'}` : `Assign ${learner.username} to ${course?.title || 'this course'}`} disabled={savingIds.has(learner.id)} onClick={() => toggle(learner)}>{learner.granted ? 'Unassign' : 'Assign course'}</button>}</div>
-        </li>)}
+        {users.map((learner) => {
+          const assignmentAction = courseAccessAction(learner);
+          const unassign = assignmentAction === 'unassign';
+          return <li className="access-row" key={learner.id}>
+            <div className="access-user"><UserInitial username={learner.username} /><div><strong>{learner.username}</strong>{learner.granted && learner.grantedAt && <small>Assigned <DateText value={learner.grantedAt} />{learner.grantedBy ? ` by ${learner.grantedBy}` : ''}</small>}</div></div>
+            <span className={learner.granted ? 'access-state access-state-granted' : 'access-state'}>{learner.granted ? 'Assigned' : 'Not assigned'}</span>
+            <div className="access-row-actions">
+              {learner.disabled && <span className="muted">Account disabled</span>}
+              {assignmentAction && <button type="button" className={unassign ? 'text-action danger-text' : 'text-action'} aria-label={unassign ? `Unassign ${learner.username} from ${course?.title || 'this course'}` : `Assign ${learner.username} to ${course?.title || 'this course'}`} disabled={savingIds.has(learner.id)} onClick={() => toggle(learner)}>{unassign ? 'Unassign' : 'Assign course'}</button>}
+            </div>
+          </li>;
+        })}
       </ul> : !failedRequest && <div className="access-empty">{appliedQuery ? 'No learners match that search.' : user?.role === 'admin' ? <>No learner accounts are available. <Link className="text-action" to="/admin/users/new">Create a learner account.</Link></> : 'No learner accounts are available. Registered learners and accounts created by an administrator will appear here.'}</div>}
     </div>
     {!failedRequest && total > 0 && <LogPagination ariaLabel="Course access pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(appliedQuery, nextPage)} />}
