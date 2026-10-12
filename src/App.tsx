@@ -49,8 +49,25 @@ function CourseEditorRoute() {
   return <CourseEditorPage key={pathname} />;
 }
 
+class LearnerPageBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <div className="page-loading" role="alert"><p>This learning page could not be loaded. You can try another page or reload.</p><Button type="button" onClick={() => window.location.reload()}>Reload page</Button></div>;
+    }
+    return this.props.children;
+  }
+}
+
 function LearnerPageOutlet() {
-  return <Suspense fallback={<div className="page-loading" role="status" aria-live="polite">Loading learning page…</div>}><Outlet /></Suspense>;
+  const { pathname } = useLocation();
+  // Reset a failed chunk state after navigation so the rest of the app stays usable.
+  return <LearnerPageBoundary key={pathname}><Suspense fallback={<div className="page-loading" role="status" aria-live="polite">Loading learning page…</div>}><Outlet /></Suspense></LearnerPageBoundary>;
 }
 
 class ManagementPageBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {

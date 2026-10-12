@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep learner navigation available after a chunk error
+
+- **Reviewed:** The new learner lazy-route boundary, the existing app-wide and staff-page error boundaries, and navigation behavior after a failed dynamic import.
+- **Improvement:** Catch learner page chunk errors inside the app frame, show an alert with a reload action, and reset the boundary when the route changes.
+- **Why it helps:** A failed course-page download no longer replaces the whole signed-in app; learners keep the shared navigation and can move to another page.
+- **Backend review:** No API or server behavior changed.
+- **Checked:** Added a route-boundary source regression (2/2 code-splitting tests passed), full `npm test -- --test-reporter=dot`, `npm run build` (TypeScript and Vite), and `git diff --check` passed. Signed-in chunk failure was not injected in the browser because the available session is signed out.
+
 ## 2026-10-12 — Defer learner pages until a signed-in route needs them
 
 - **Reviewed:** The production entry bundle, the static imports in `App.tsx`, existing staff/program lazy routes, and the learner route layout and loading announcements.

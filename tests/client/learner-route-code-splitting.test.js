@@ -29,3 +29,17 @@ test('learner pages load on demand inside a polite route-level fallback', () => 
   }
   assert.match(appSource, /<Route path="\/account\/security" element=\{<AccountSecurityPage \/>} \/>/);
 });
+
+test('learner chunk failures preserve the app shell and reset after navigation', () => {
+  const boundary = appSource.match(/class LearnerPageBoundary[\s\S]*?\n\}/)?.[0];
+  assert.ok(boundary, 'Expected a route-level boundary for learner page chunks.');
+  assert.match(boundary, /getDerivedStateFromError/);
+  assert.match(boundary, /role="alert"/);
+  assert.match(boundary, /This learning page could not be loaded\. You can try another page or reload\./);
+  assert.match(boundary, /window\.location\.reload\(\)/);
+
+  const outlet = appSource.match(/function LearnerPageOutlet\(\) \{[\s\S]*?\n\}/)?.[0];
+  assert.match(outlet, /const \{ pathname \} = useLocation\(\)/);
+  assert.match(outlet, /<LearnerPageBoundary key=\{pathname\}>/);
+  assert.match(appSource, /<Route element=\{<AppFrame \/>}>([\s\S]*?)<Route element=\{<LearnerPageOutlet \/>}>([\s\S]*?)<\/Route>/);
+});
