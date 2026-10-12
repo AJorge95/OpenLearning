@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Strengthen palette state indicators
+
+- **Reviewed:** Palette contrast coverage and the hover/selected borders for secondary actions, quiz answers, and calendar dates and events.
+- **Improvement:** Use the existing high-contrast palette accent for these state borders and outlines. Extend the contrast regression to check the accent against the tinted palette surfaces used by those states.
+- **Why it helps:** Selected answers, today’s date, hovered calendar events, and hovered secondary actions remain easier to distinguish across all five palettes.
+- **Checked:** Contrast calculations found the old pale accent was only 1.86:1–2.66:1 against white; the existing strong accent ranges from 5.32:1–8.01:1. The focused contrast tests passed (4/4), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript and Vite, and `git diff --check` passed. Rendered state QA remains unverified because the available browser is signed out and Playwright's Chromium executable is not installed.
+
 ## 2026-10-12 — Avoid retries for permanently damaged quiz breakdowns
 
 - **Reviewed:** The learner's saved-score fallback, the structured `quiz_attempt_details_unavailable` API response, and the shared error notice's optional retry action.

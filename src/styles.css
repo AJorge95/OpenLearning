@@ -328,7 +328,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .button-primary { color: #fff; background: var(--purple); border-color: var(--purple); }
 .button-primary:hover:not(:disabled) { background: var(--purple-dark); border-color: var(--purple-dark); }
 .button-secondary { color: #292d3d; background: #fff; border-color: var(--line-strong); }
-.button-secondary:hover:not(:disabled) { color: var(--purple); border-color: var(--purple-border); background: var(--purple-hover-bg); }
+.button-secondary:hover:not(:disabled) { color: var(--purple); border-color: var(--purple-border-strong); background: var(--purple-hover-bg); }
 .button-quiet { color: var(--purple); background: transparent; border-color: transparent; }
 .button-quiet:hover:not(:disabled) { background: var(--purple-soft); }
 .button-danger { color: #fff; background: var(--danger); border-color: var(--danger); }
@@ -484,7 +484,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .quiz-choice input { position: absolute; opacity: 0; }
 .choice-letter { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: #f0eff5; color: #565b6b; font-size: 12px; font-weight: 650; flex: 0 0 auto; }
 .quiz-choice > span:last-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.choice-selected { color: var(--purple-contrast); border-color: var(--purple-border); background: var(--purple-hover-bg); }
+.choice-selected { color: var(--purple-contrast); border-color: var(--purple-border-strong); background: var(--purple-hover-bg); }
 .choice-selected .choice-letter { color: #fff; background: var(--purple); }
 .quiz-choice:has(input:focus-visible) { outline: 3px solid var(--purple); outline-offset: 2px; }
 /* Keep answer selection visible when a forced palette replaces the quiz colors. */
@@ -683,11 +683,11 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .calendar-day-content { display: grid; align-content: start; gap: 5px; min-width: 0; min-height: 96px; }
 .calendar-day-empty { background: #f8f9fb; }
 .calendar-day time { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; color: #444a59; font-size: 11px; font-weight: 650; }
-.calendar-day time[aria-current="date"] { color: var(--purple-dark); background: var(--purple-soft); outline: 1px solid var(--purple-border); }
+.calendar-day time[aria-current="date"] { color: var(--purple-dark); background: var(--purple-soft); outline: 1px solid var(--purple-border-strong); }
 .calendar-event { display: grid; gap: 3px; min-width: 0; padding: 6px 7px; border-radius: 4px; color: var(--purple-dark); background: var(--purple-soft); font-size: 10px; line-height: 1.3; }
 .calendar-event > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
 .calendar-event small { color: inherit; font-size: 9px; opacity: .8; }
-.calendar-event:hover { outline: 2px solid var(--purple-border); outline-offset: 1px; }
+.calendar-event:hover { outline: 2px solid var(--purple-border-strong); outline-offset: 1px; }
 .calendar-event.completed { color: #176b40; background: var(--green-soft); }
 .calendar-event.overdue { color: #972d3c; background: var(--danger-soft); }
 .calendar-empty-note { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 14px 0 0; color: var(--muted); font-size: 12px; }
