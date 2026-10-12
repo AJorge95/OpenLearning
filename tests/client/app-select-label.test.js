@@ -118,8 +118,8 @@ function accountRoleControls(sourceFile) {
   const controls = [];
 
   function findRoleSelect(node) {
-    if (ts.isJsxElement(node) && jsxTagName(node.openingElement.tagName) === 'select') return node.openingElement;
-    if (ts.isJsxSelfClosingElement(node) && jsxTagName(node.tagName) === 'select') return node;
+    if (ts.isJsxElement(node) && jsxTagName(node.openingElement.tagName) === 'AppSelect') return node.openingElement;
+    if (ts.isJsxSelfClosingElement(node) && jsxTagName(node.tagName) === 'AppSelect') return node;
     let found;
     ts.forEachChild(node, (child) => {
       if (!found) found = findRoleSelect(child);
@@ -141,9 +141,12 @@ function accountRoleControls(sourceFile) {
             container: jsxTagName(field.openingElement.tagName),
             visibleLabel: label.children.filter(ts.isJsxText).map((child) => child.text).join(' ').trim(),
             labelId: stringJsxAttribute(label.openingElement, 'id'),
-            controlId: stringJsxAttribute(select, 'id'),
-            accessibleName: stringJsxAttribute(select, 'aria-labelledby') === 'account-platform-role-label' ? 'Platform role' : '',
-            labelledBy: stringJsxAttribute(select, 'aria-labelledby'),
+            controlId: stringJsxAttribute(select, 'controlId'),
+            accessibleName: stringJsxAttribute(select, 'ariaLabelledBy') === 'account-platform-role-label' ? 'Platform role' : '',
+            labelledBy: stringJsxAttribute(select, 'ariaLabelledBy'),
+            matchTriggerWidth: select.attributes.properties.some((property) => (
+              ts.isJsxAttribute(property) && property.name.text === 'matchTriggerWidth'
+            )),
           });
         }
         return;
@@ -198,7 +201,7 @@ test('AppSelect ignores pointer clicks forwarded from outside its trigger', () =
   assert.match(componentSource, /if \(!isAppSelectActivationWithinTrigger\(event\.nativeEvent, event\.currentTarget\.getBoundingClientRect\(\)\)\) return;/);
 });
 
-test('the administrator role selector keeps its native click area at the visible field width', () => {
+test('the administrator role selector keeps its custom trigger and menu at the visible field width', () => {
   const pageSource = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
   const sourceFile = ts.createSourceFile('pages-manage.tsx', pageSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const controls = accountRoleControls(sourceFile);
@@ -212,19 +215,18 @@ test('the administrator role selector keeps its native click area at the visible
     controlId: 'account-platform-role',
     accessibleName: 'Platform role',
     labelledBy: 'account-platform-role-label',
+    matchTriggerWidth: true,
   }]);
-  assert.match(pageSource, /<select id="account-platform-role" className="account-role-select" aria-labelledby="account-platform-role-label"/);
-  assert.match(pageSource, /onChange=\{\(event\) => updateAccount\(\{ role: event\.currentTarget\.value as Role \}\)\}/);
-  assert.match(pageSource, /<option value="learner">Learner<\/option><option value="moderator">Moderator<\/option><option value="admin">Administrator<\/option>/);
+  assert.match(pageSource, /<AppSelect<Role> controlId="account-platform-role" ariaLabel="Platform role" ariaLabelledBy="account-platform-role-label"/);
+  assert.match(pageSource, /onChange=\{\(role\) => updateAccount\(\{ role \}\)\}/);
+  assert.match(pageSource, /const ACCOUNT_ROLE_OPTIONS: AppSelectOption<Role>\[\] = \[\s*\{ value: 'learner', label: 'Learner' \},\s*\{ value: 'moderator', label: 'Moderator' \},\s*\{ value: 'admin', label: 'Administrator' \},\s*\];/);
   assert.match(componentSource, /app-select-menu--match-trigger/);
   assert.match(componentSource, /aria-labelledby=\{ariaLabelledBy\}/);
   assert.match(styles, /\.account-role-control\s*\{[^}]*flex:\s*0\s+0\s+8\.5rem;[^}]*width:\s*8\.5rem;/);
   assert.match(styles, /\.account-role-control\s*\{[^}]*pointer-events:\s*none;/);
   assert.match(styles, /\.account-role-select-control\s*\{[^}]*width:\s*8\.5rem;[^}]*pointer-events:\s*auto;/);
-  assert.match(styles, /\.account-role-select\s*\{[^}]*width:\s*100%;[^}]*appearance:\s*none;/);
-  assert.match(styles, /\.account-role-select-chevron\s*\{[^}]*pointer-events:\s*none;/);
-  assert.match(styles, /\.account-role-select:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--purple\);/);
-  assert.match(styles, /\.account-control-row \.account-role-select-control, \.account-control-row \.account-role-select \{\s*width:\s*100%;\s*max-width:\s*none;\s*\}/);
+  assert.match(styles, /\.account-role-select-control \.app-select\s*\{[^}]*width:\s*100%;[^}]*pointer-events:\s*auto;/);
+  assert.match(styles, /\.account-control-row \.account-role-select-control, \.account-control-row \.account-role-select-control \.app-select \{\s*width:\s*100%;\s*max-width:\s*none;\s*\}/);
 });
 
 test('account details explain and disable controls for the last active administrator', () => {
@@ -232,8 +234,8 @@ test('account details explain and disable controls for the last active administr
 
   assert.match(pageSource, /isLastActiveAdmin: boolean/);
   assert.equal((pageSource.match(/disabled=\{saving \|\| user\.isLastActiveAdmin\}/g) || []).length, 2);
-  assert.match(pageSource, /aria-labelledby="account-platform-role-label" aria-describedby=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\}/);
-  assert.match(pageSource, /disabled=\{saving \|\| user\.isLastActiveAdmin\} aria-describedby=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\}/);
+  assert.match(pageSource, /ariaLabelledBy="account-platform-role-label" describedBy=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\}/);
+  assert.match(pageSource, /disabled=\{saving \|\| user\.isLastActiveAdmin\} onChange=\{\(role\) => updateAccount\(\{ role \}\)\}/);
   assert.match(pageSource, /user\.isLastActiveAdmin && <p className="account-admin-protection" id=\{lastAdminHelpId\}>This is the only active administrator\./);
 });
 

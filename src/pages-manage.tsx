@@ -53,6 +53,11 @@ const ADMIN_USER_ROLE_OPTIONS: AppSelectOption<Role>[] = [
   { value: 'moderator', label: 'Moderator' },
   { value: 'learner', label: 'Learner' },
 ];
+const ACCOUNT_ROLE_OPTIONS: AppSelectOption<Role>[] = [
+  { value: 'learner', label: 'Learner' },
+  { value: 'moderator', label: 'Moderator' },
+  { value: 'admin', label: 'Administrator' },
+];
 const USER_ROLE_FILTER_OPTIONS: AppSelectOption<UserRoleFilter>[] = [
   { value: 'all', label: 'All roles' },
   { value: 'admin', label: 'Administrators' },
@@ -2745,7 +2750,7 @@ export function AdminUserDetailsPage() {
         </form>
         {registrationFields.length > 0 && <section className="account-registration-fields"><h3>Registration details</h3><dl>{registrationFields.map((field) => <div key={field.id}><dt>{field.label}</dt><dd>{typeof field.value === 'boolean' ? field.value ? 'Yes' : 'No' : field.value || 'Not provided'}</dd></div>)}</dl></section>}
         <div className="account-control-row" aria-busy={savingAction === 'account'}>
-          <div className="account-role-control"><span id="account-platform-role-label">Platform role</span><div className="account-role-select-control"><select id="account-platform-role" className="account-role-select" aria-labelledby="account-platform-role-label" aria-describedby={user.isLastActiveAdmin ? lastAdminHelpId : undefined} value={user.role} disabled={saving || user.isLastActiveAdmin} onChange={(event) => updateAccount({ role: event.currentTarget.value as Role })}><option value="learner">Learner</option><option value="moderator">Moderator</option><option value="admin">Administrator</option></select><ChevronDown className="account-role-select-chevron" size={16} aria-hidden="true" /></div></div>
+          <div className="account-role-control"><span id="account-platform-role-label">Platform role</span><div className="account-role-select-control"><AppSelect<Role> controlId="account-platform-role" ariaLabel="Platform role" ariaLabelledBy="account-platform-role-label" describedBy={user.isLastActiveAdmin ? lastAdminHelpId : undefined} value={user.role} disabled={saving || user.isLastActiveAdmin} onChange={(role) => updateAccount({ role })} options={ACCOUNT_ROLE_OPTIONS} matchTriggerWidth /></div></div>
           {user.registrationStatus === 'pending' && <Button variant="secondary" onClick={approveRegistration} disabled={saving} aria-busy={savingAction === 'approval'}>{savingAction === 'approval' ? 'Approving registration…' : 'Approve registration'}</Button>}
           <Button variant={user.disabled ? 'secondary' : 'danger'} onClick={() => updateAccount({ disabled: !user.disabled })} disabled={saving || user.isLastActiveAdmin} aria-describedby={user.isLastActiveAdmin ? lastAdminHelpId : undefined} aria-busy={savingAction === 'account'}>{savingAction === 'account' ? 'Saving account…' : user.disabled ? 'Enable account' : 'Disable account'}</Button>
           {savingAction && <span className="sr-only" role="status" aria-live="polite">{savingAction === 'approval' ? 'Approving registration…' : savingAction === 'account' ? 'Saving account settings…' : 'Resetting password…'}</span>}
