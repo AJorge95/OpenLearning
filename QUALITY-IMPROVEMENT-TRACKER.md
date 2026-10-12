@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck learning-path assignment paging and actions
+
+- **Reviewed:** The assignment endpoint's split paging for enrolled and unassigned learners, its published-path and active-learner validation, audit transaction, the assignment panel's search, paging, empty and error states, and responsive control layout.
+- **Result:** No runtime change. Enrolled learners remain grouped ahead of unassigned learners across pages, self-enrollment races preserve their source, and assignment failures roll back enrollment and course state. The panel names its search, select, paging navigation, assignment and removal actions, and keeps the picker usable at narrow widths.
+- **Why no change:** The route and interface agree on the assignment contract, and existing focused regressions cover malformed IDs, draft paths, audit rollback, self-enrollment races, and accessible action names. A signed-in staff session is not available for a current rendered check.
+- **Checked:** `node --test --test-name-pattern="assigned learners first|path assignment|path assignments|admin assignment" tests/server/course-analytics.test.js tests/client/path-assignment-accessibility.test.js tests/client/path-assignment-confirmation.test.js` passed (7/7). Reviewed the assignment route, client flow, and responsive CSS; no account or course data was changed.
+- **Needed to continue:** A signed-in staff render at a narrow viewport that shows a layout or interaction mismatch, a reproducible paging/assignment failure outside existing cases, or representative learner counts that expose a query bottleneck.
+
 ## 2026-10-12 — Recheck registration controls and backend failure boundaries
 
 - **Reviewed:** The public registration form's names, password hint and visibility control; admin search-field limits against their route parsers; saved quiz-result recovery; SQLite session error handling; and bounded administrator log queries.
