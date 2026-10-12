@@ -1440,11 +1440,13 @@ test('learning-path state synchronization reuses loaded course states', () => {
   assert.equal(repeatedStateInitializationQueries, 0);
 });
 
-test('learning-path state synchronization prepares one insert for multiple newly unlocked courses', () => {
+test('learning-path state synchronization batches state writes below SQLite parameter limits', () => {
   const pathId = 'path-sync-batched-state-inserts';
-  const courseIds = [1, 2, 3, 4, 5].map((number) => `${pathId}-course-${number}`);
+  const courseIds = Array.from({ length: MAX_LEARNING_PATH_COURSES }, (_, index) => `${pathId}-course-${index + 1}`);
   const originalPrepare = database.prepare;
   let stateInsertPreparations = 0;
+  let stateInsertRuns = 0;
+  const stateInsertParameterCounts = [];
   let perCourseStateLookups = 0;
   database.exec(`
     INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
@@ -1461,9 +1463,19 @@ test('learning-path state synchronization prepares one insert for multiple newly
   }
 
   database.prepare = (sql) => {
-    if (sql.includes('INSERT OR IGNORE INTO course_learning_state')) stateInsertPreparations += 1;
+    const insertStatement = originalPrepare.call(database, sql);
+    if (sql.includes('INSERT OR IGNORE INTO course_learning_state')) {
+      stateInsertPreparations += 1;
+      stateInsertParameterCounts.push((sql.match(/\?/g) ?? []).length);
+      // Count statement executions too, so the test catches a return to one write per course.
+      const originalRun = insertStatement.run.bind(insertStatement);
+      insertStatement.run = (...parameters) => {
+        stateInsertRuns += 1;
+        return originalRun(...parameters);
+      };
+    }
     if (sql.includes('FROM courses c LEFT JOIN course_learning_state s')) perCourseStateLookups += 1;
-    return originalPrepare.call(database, sql);
+    return insertStatement;
   };
   let states = [];
   try {
@@ -1477,7 +1489,9 @@ test('learning-path state synchronization prepares one insert for multiple newly
     database.prepare(`DELETE FROM courses WHERE id IN (${courseIds.map(() => '?').join(', ')})`).run(...courseIds);
   }
 
-  assert.equal(stateInsertPreparations, 1);
+  assert.equal(stateInsertPreparations, 2);
+  assert.equal(stateInsertRuns, 2);
+  assert.deepEqual(stateInsertParameterCounts, [600, 600]);
   assert.equal(perCourseStateLookups, 0);
   assert.equal(states.length, courseIds.length);
   assert.ok(states.every((state) => state.deadline_at && state.deadline_window_days === 7 && state.started_at));

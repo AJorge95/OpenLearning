@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Batch learning-path state writes
+
+- **Reviewed:** The path-assignment panel's search, learner selector, loading and retry feedback, pagination labels, and narrow-screen layout; the learner-state write path and its 200-course limit.
+- **Improvement:** Insert newly unlocked course states with bounded multi-row statements of up to 100 rows. A maximum-size path now needs at most two database executions, each below SQLite's traditional 999 bind-variable limit. The assignment interface already has accessible status and navigation feedback plus a single-column narrow-screen layout, so no UI change was warranted.
+- **Why it helps:** Path synchronization no longer sends one write call per unlocked course, while the batch size remains safe for SQLite builds with the traditional parameter limit.
+- **Checked:** The 200-course integration regression verified two executions, 600 parameters per execution, all 200 persisted states, and valid deadlines; focused path-sync regressions passed (4/4); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript and Vite; `git diff --check` passed. Tests remain under `tests/server/`.
+
 ## 2026-10-12 — Reuse loaded learner states when unlocking path courses
 
 - **Reviewed:** Learning-path state synchronization, batched course summaries, completion deadlines, and version-specific recompletion behavior.
