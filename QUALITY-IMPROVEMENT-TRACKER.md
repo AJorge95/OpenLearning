@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reject malformed page query values consistently
+
+- **Reviewed:** The shared `pageQuery` parser and its use across administrator, course, learning-path, and comment pagination routes. Repeated page keys already return a structured 400, but malformed single values silently selected page one.
+- **Improvement:** Keep an omitted page at page one, require supplied values to be positive safe decimal integers, and continue clamping valid large pages to each route's configured maximum. Add unit and Express-level regressions under `tests/server`.
+- **Why it helps:** A typo such as `?page=abc` no longer looks like a successful first-page response; API consumers receive a clear validation error, and valid pagination remains bounded.
+- **Checked:** `node --test tests/server/http-pagination.test.js` passed (3/3); the Express fixture confirmed malformed input returns `400 validation_error` and an omitted page still returns page one. The full test suite, `npm run typecheck`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-12 — Keep AppSelect pointer tracking safe across repeated cleanup
 
 - **Reviewed:** The shared document-level pointer listener, subscriber reference count, React effect teardown, and the selector's outside-label activation guard.
