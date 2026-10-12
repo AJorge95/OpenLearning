@@ -235,7 +235,14 @@ export const api = {
               return;
             }
           }
-          reject(new ApiError(xhr.status, data?.error || `Upload failed (${xhr.status}).`, data?.code));
+          // Node can return a timeout response before the request reaches Express's JSON error handler.
+          const timeoutMessage = 'The upload exceeded the server request timeout. Ask the platform administrator to increase REQUEST_TIMEOUT_MS for slower large uploads, then retry.';
+          const isRequestTimeout = xhr.status === 408;
+          reject(new ApiError(
+            xhr.status,
+            data?.error || (isRequestTimeout ? timeoutMessage : `Upload failed (${xhr.status}).`),
+            data?.code || (isRequestTimeout ? 'request_timeout' : undefined),
+          ));
           return;
         }
         if (!isJsonContentType(contentType)) {

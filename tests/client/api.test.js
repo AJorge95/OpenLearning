@@ -264,6 +264,26 @@ test('reports upload connection loss consistently and warns that completion is u
   assert.ok(sentBody instanceof FormData);
 });
 
+test('explains how to recover when the server request timeout stops an upload', async (t) => {
+  restoreFetch(t);
+  globalThis.fetch = async () => jsonResponse({ token: 'upload-token' });
+  const requests = installFakeXhr(t, (xhr) => {
+    xhr.status = 408;
+    xhr.responseContentType = 'text/plain';
+    xhr.responseText = '';
+    xhr.onload();
+  });
+
+  await assert.rejects(
+    api.upload('/api/manage/courses/course-1/media', { kind: 'video' }, new Blob(['video bytes']), () => {}),
+    (error) => error instanceof ApiError
+      && error.status === 408
+      && error.code === 'request_timeout'
+      && error.message === 'The upload exceeded the server request timeout. Ask the platform administrator to increase REQUEST_TIMEOUT_MS for slower large uploads, then retry.',
+  );
+  assert.equal(requests.length, 1);
+});
+
 test('does not construct or send an upload when its signal is already aborted', async (t) => {
   restoreFetch(t);
   const originalFormData = globalThis.FormData;
