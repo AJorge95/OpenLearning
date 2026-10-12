@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Restore certificate metadata readability in the current styles
+
+- **Reviewed:** The certificate's earlier readability rules, the later design-system overrides, responsive layout, and print stylesheet cascade.
+- **Improvement:** Restore 12px award/ID labels and certificate-code text, plus a 10px completion-seal label, in the active certificate rules.
+- **Why it helps:** The modern certificate styling no longer silently shrinks the metadata sizes that were raised for screen and printed readability.
+- **Checked:** Extended the certificate stylesheet regression to inspect the active style block; focused test passed (2/2). The full test suite, `npm run build` (including TypeScript), and `git diff --check` passed. Rendered print preview remains unverified because the current browser session is signed out.
+
 ## 2026-10-12 — Reuse account select options across list updates
 
 - **Reviewed:** The 50-row admin account table, its three shared selects, and the option-validation effect in `AppSelect`.
