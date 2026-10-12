@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide decorative search icons from assistive technology
+
+- **Reviewed:** The learner catalog, staff course and access searches, administrator user search, audit and system log filters, and the existing search-landmark semantics in the live client.
+- **Improvement:** Mark each decorative `Search` icon in the six affected forms as `aria-hidden`, matching the three program search forms that already hide their visual icon.
+- **Why it helps:** Screen-reader users hear the named search landmark and field without an extra generic image announcement, while the visible search cue and form behavior remain unchanged.
+- **Backend review:** Search query handling, validation, filtering, pagination, authorization, and log endpoints are unchanged; no server change was indicated.
+- **Checked:** Extended `tests/client/search-landmarks.test.js` to require one hidden decorative search icon in every one of the nine course, learner, program, and staff search landmarks. The live signed-in catalog and staff course page now expose the named search landmark and field without the generic icon image. Focused checks passed (3/3), the full `npm test` suite passed (856/856), `npm run typecheck`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-12 — Expose account-menu disclosure state
 
 - **Reviewed:** The shared learner header, native account-menu disclosure, keyboard dismissal behavior, responsive account-menu layout, and the live browser accessibility tree.
