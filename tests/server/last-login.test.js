@@ -862,6 +862,25 @@ test('admin user list returns the final page and clamps requests beyond the sear
   }
 });
 
+test('admin user list rejects unknown and repeated role and approval filters', async () => {
+  await ensureLastLoginAdmin();
+  const invalidFilters = [
+    { query: 'role=owner', error: 'Choose a valid role.' },
+    { query: 'role=admin&role=learner', error: 'Choose a valid role.' },
+    { query: 'registrationStatus=archived', error: 'Choose a valid registration status.' },
+    { query: 'registrationStatus=pending&registrationStatus=approved', error: 'Choose a valid registration status.' },
+  ];
+
+  for (const filter of invalidFilters) {
+    const response = await fetch(apiUrl(`/admin/users?${filter.query}`), { headers: { connection: 'close' } });
+    assert.equal(response.status, 400, filter.query);
+    assert.deepEqual(await response.json(), {
+      error: filter.error,
+      code: 'validation_error',
+    }, filter.query);
+  }
+});
+
 test('admin account course activity includes published paths and deduplicates overlapping access', async () => {
   const admin = await ensureLastLoginAdmin();
   const adminId = admin.id;
