@@ -65,6 +65,13 @@ test('config defaults are stable and derived paths follow DATA_DIR', () => {
   assert.equal(readConfig({ NODE_ENV: 'test' }).nodeEnv, 'test');
 });
 
+test('built client assets resolve from the project even when launched outside it', () => {
+  const config = readConfig();
+
+  assert.equal(config.clientDir, path.join(workspaceRoot, 'dist', 'client'));
+  assert.notEqual(config.clientDir, path.join(workingDirectory, 'dist', 'client'));
+});
+
 test('config accepts documented upper boundaries and normalizes a valid production setup', () => {
   const config = readConfig({
     NODE_ENV: 'production',

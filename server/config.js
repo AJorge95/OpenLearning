@@ -1,7 +1,10 @@
 import 'dotenv/config';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const baseDir = process.cwd();
+// Locate built frontend assets beside the server source, even when a service starts from another working directory.
+const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = path.resolve(baseDir, process.env.DATA_DIR || './data');
 const nodeEnv = process.env.NODE_ENV?.trim() || 'development';
 if (!['development', 'test', 'production'].includes(nodeEnv)) {
@@ -45,7 +48,7 @@ export const config = {
   sessionSecret,
   setupToken,
   trustProxy: rawTrustProxy === 'true',
-  clientDir: path.resolve(baseDir, 'dist/client'),
+  clientDir: path.join(projectDir, 'dist', 'client'),
 };
 
 if (config.nodeEnv === 'production' && ([defaultSessionSecret, exampleSessionSecret].includes(sessionSecret) || sessionSecret.length < 32)) {

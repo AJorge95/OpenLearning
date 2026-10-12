@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Resolve built client assets independently of the launch directory
+
+- **Reviewed:** Native Node startup guidance, Vite's `dist/client` output, Express static serving and fallback behavior, and the isolated server-configuration tests.
+- **Improvement:** Resolve the built client directory from the server configuration module's project location instead of the process working directory. Leave `DATA_DIR`, `DB_PATH`, and `MEDIA_ROOT` resolution unchanged.
+- **Why it helps:** Starting the documented Node entrypoint from a service manager or another working directory still serves the built learning interface instead of silently falling back to the API-only response.
+- **Backend review:** Configuration overrides and data-storage paths retain their existing working-directory semantics; no database or API contract changes.
+- **Checked:** The isolated config tests passed (7/7), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. A server started from an isolated temporary working directory returned the built `dist/client/index.html` at `/` rather than the API-only fallback.
+
 ## 2026-10-12 — Keep administrator log filters easy to clear
 
 - **Reviewed:** Audit-log search and action filters, system-log search and severity filters, the existing empty-state reset, paging and error recovery, responsive filter layout, and the admin-only API routes.
