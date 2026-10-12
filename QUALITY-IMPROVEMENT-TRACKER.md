@@ -8,13 +8,13 @@
 - **Checked:** `node --test tests/server/backup-documentation.test.js` passed (1/1); the README shell example passed `bash -n` using Git Bash; a shell-stub run confirmed an overridden `DATA_DIR` and `BACKUP_DIR` expand to the same database and media paths used by the commands; `git diff --check` passed. The SQLite CLI is not installed here, so the online backup command itself was not executed.
 - **Needed to continue:** A real backup/restore check against an installation configured with non-default paths; the source-level example now follows the documented configuration rules.
 
-## 2026-10-12 — Compare the reported role-selector hit area with the current build
+## 2026-10-12 — Verify the reported role-selector hit area in a signed-in build
 
-- **Reviewed:** The browser comment's selected `label` target, the current account-detail markup, the desktop/mobile selector widths, click activation guards, and the live Vite module served at `http://127.0.0.1:5173`.
-- **Result:** No runtime change. Current source and the live Vite module render a separate `span` caption and an 8.5rem role selector. Pointer events are disabled on the sizing wrappers and enabled only on the visible trigger; the popup matches that trigger width. The supplied screenshot's wrapping `label` target is absent from the current module, so it does not show the current implementation.
-- **Why no change:** The current source already bounds the hit area and rejects label-forwarded clicks. A second CSS adjustment without a current-build reproduction would duplicate the existing fix.
-- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js tests/client/app-select-activation.test.js tests/client/app-select-position.test.js` passed (21/21); the live Vite module and styles were inspected; `git diff --check` passed. Available browser tabs were signed out, so the protected account page could not be freshly rendered in this check.
-- **Needed to continue:** Reload the signed-in account page and confirm whether a click beyond the visible trigger still opens the menu; if it does, capture the current DOM target and trigger bounds.
+- **Reviewed:** The browser comment's selected `label` target, the current account-detail markup, desktop/mobile selector widths, click activation guards, and role-update validation.
+- **Result:** No runtime change. The current page uses a separate caption and an 8.5rem desktop trigger; pointer input reaches only the trigger, and the popup matches its width. The screenshot's wrapping `label` target is absent from current source.
+- **Why no change:** A signed-in check of a fresh build confirmed the existing fix; another CSS adjustment would duplicate it.
+- **Checked:** `npm run typecheck`, a Vite production build to an isolated temporary output directory, and all 25 focused account-role and AppSelect label, activation, layout, and positioning tests passed. On the isolated current build at `http://127.0.0.1:6184`, at 1265×713 the trigger and menu measured about 134px. A click 10px to the right left the menu closed; the trigger opened its three options; the same outside click closed the menu. No role value was changed. `git diff --check` passed.
+- **Needed to revisit:** A refreshed signed-in session on the affected instance that still opens the menu from outside the visible trigger; capture that instance's viewport, click coordinates, and served bundle for comparison.
 
 ## 2026-10-12 — Review session retention and catalog-query tuning evidence
 
