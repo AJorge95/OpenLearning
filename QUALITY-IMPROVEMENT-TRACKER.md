@@ -28,6 +28,8 @@
 - **Why no change:** The adjacent-click fix is already present and covered; changing the width again would duplicate it. The current browser session is signed out, and the supplied DOM path does not match the current markup.
 - **Checked:** The local Vite module returned HTTP 200 and contained the current role-control markup. The focused role hit-area and custom-select activation tests passed (5/5).
 - **Needed to revisit:** If the issue remains after refreshing the page, inspect the current rendered markup and pointer coordinates against the current local Vite bundle.
+- **Follow-up:** The user reported the right-side activation again. The supplied page still targets the former wide `<label>` markup; the current Vite JSX and stylesheet serve the separate 8.5rem selector and non-interactive parent area. Navigating to the protected account route in the available browser redirects to sign-in, so the current rendered hit area could not be exercised. The expanded focused selector suite passed (11/11); no duplicate runtime change was made.
+- **Next check:** Sign in and refresh the account page. If the current selector still opens from outside its visible field, capture the current rendered DOM and click coordinates for a targeted fix.
 
 ## 2026-10-12 — Use published-version quiz counts in account activity
 
