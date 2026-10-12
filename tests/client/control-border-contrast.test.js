@@ -52,3 +52,29 @@ test('select hover and expanded borders keep 3:1 contrast in every palette', () 
     }
   }
 });
+
+test('palette state indicators keep 3:1 contrast on their tinted surfaces', () => {
+  for (const { palette, tokens } of palettes) {
+    const accent = resolveColor(tokens, '--purple-border-strong');
+    for (const surface of ['--purple-soft', '--purple-hover-bg', '--purple-selected']) {
+      const ratio = contrastRatio(accent, resolveColor(tokens, surface));
+      assert.ok(ratio >= 3, `${palette} state indicator has only ${ratio.toFixed(2)}:1 contrast on ${surface}`);
+    }
+  }
+});
+
+test('interactive palette states use the contrast-safe accent border', () => {
+  const selectors = [
+    '.button-secondary:hover:not(:disabled)',
+    '.choice-selected',
+    '.calendar-day time[aria-current="date"]',
+    '.calendar-event:hover',
+  ];
+
+  for (const selector of selectors) {
+    const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rule = styles.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`));
+    assert.ok(rule, `Expected a CSS rule for ${selector}`);
+    assert.match(rule[1], /(?:border-color|outline):[^;]*var\(--purple-border-strong\)/, `${selector} should use the contrast-safe palette accent`);
+  }
+});
