@@ -3,6 +3,7 @@ import { ArrowDownUp, ArrowLeft, ArrowRight, Award, BookOpen, CalendarDays, Chec
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
 import { AppSelect, Button, ConfirmationDialog, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
+import type { AppSelectOption } from './components';
 import { formatCountLabel } from './count-label';
 import { parseApiTimestamp } from './api-timestamp';
 import { courseCatalogCategoryOptions, courseCatalogParams, hasCourseCatalogFilters } from './course-catalog-filters';
@@ -24,6 +25,10 @@ import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeed
 type CourseListResponse = { courses: Course[]; categories?: string[]; certificates?: CourseCertificate[]; certificatesTotal?: number; certificatesPage?: number; certificatesPageSize?: number; certificatesHasMore?: boolean; total?: number; page?: number; pageSize?: number; hasMore?: boolean };
 type CertificateListResponse = { certificates: CourseCertificate[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type PendingCommentRemoval = { courseId: string; lessonId: string; commentId: string; username: string };
+const COURSE_CATALOG_SORT_OPTIONS: AppSelectOption<string>[] = [
+  { value: 'recent', label: 'Recently updated' },
+  { value: 'title', label: 'Course title' },
+];
 
 function hasQuizAttemptBreakdown(attempt: QuizAttempt | QuizAttemptPreview): attempt is QuizAttempt {
   return 'correctCount' in attempt && 'questionCount' in attempt;
@@ -190,6 +195,8 @@ export function CatalogPage() {
   }, [category, sort]);
 
   const hasAppliedFilters = hasCourseCatalogFilters(filtersRef.current);
+  // Keep AppSelect's option validation out of search-input rerenders.
+  const categoryOptions = useMemo(() => courseCatalogCategoryOptions(categories), [categories]);
   const emptyCatalogState = hasAppliedFilters
     ? { title: 'No matching courses', detail: 'Try a different search or category.' }
     : { title: 'No courses are available yet', detail: 'When courses are published for your learning space, they will appear here.' };
@@ -199,8 +206,8 @@ export function CatalogPage() {
     <PageHeading title="Browse courses" subtitle="Find a course to build your skills." />
     <div className="catalog-tools">
       <div className="filter-controls">
-        <div className="select-wrap catalog-filter-control"><span className="catalog-filter-label">Category</span><AppSelect className="app-select--filter" ariaLabel="Course category" leadingIcon={<Filter size={16} />} value={category} onChange={(nextCategory) => applyCatalogControlChange(nextCategory, sort)} options={courseCatalogCategoryOptions(categories)} /></div>
-        <div className="select-wrap catalog-filter-control catalog-filter-control--sort"><span className="catalog-filter-label">Sort by</span><AppSelect className="app-select--filter" ariaLabel="Sort by" leadingIcon={<ArrowDownUp size={16} />} value={sort} onChange={(nextSort) => applyCatalogControlChange(category, nextSort)} options={[{ value: 'recent', label: 'Recently updated' }, { value: 'title', label: 'Course title' }]} /></div>
+        <div className="select-wrap catalog-filter-control"><span className="catalog-filter-label">Category</span><AppSelect className="app-select--filter" ariaLabel="Course category" leadingIcon={<Filter size={16} />} value={category} onChange={(nextCategory) => applyCatalogControlChange(nextCategory, sort)} options={categoryOptions} /></div>
+        <div className="select-wrap catalog-filter-control catalog-filter-control--sort"><span className="catalog-filter-label">Sort by</span><AppSelect className="app-select--filter" ariaLabel="Sort by" leadingIcon={<ArrowDownUp size={16} />} value={sort} onChange={(nextSort) => applyCatalogControlChange(category, nextSort)} options={COURSE_CATALOG_SORT_OPTIONS} /></div>
       </div>
       <form role="search" aria-label="Search courses" className="search-field" onSubmit={(event) => { event.preventDefault(); load({ query: query.trim(), category, sort }); }}>
         <Search size={19} /><input ref={searchInputRef} aria-label="Search courses" placeholder="Search courses" maxLength={120} value={query} onChange={(event) => setQuery(event.target.value)} />
