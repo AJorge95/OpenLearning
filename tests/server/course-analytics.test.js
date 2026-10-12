@@ -1184,6 +1184,68 @@ test('course and learning-path detail GETs are read-only while protected actions
   }
 });
 
+test('path edits prepare shared course summary reads once for all enrolled learners', async () => {
+  const pathId = 'path-summary-preload';
+  const addedCourseId = 'course-path-summary-preload';
+  const learners = ['learner-path-preload-a', 'learner-path-preload-b', 'learner-path-preload-c'];
+  const originalPrepare = database.prepare;
+  const sharedReadCounts = new Map([
+    ['versions', 'SELECT v.course_id, v.id'],
+    ['counts', 'AS module_count,'],
+    ['lessons', 'SELECT m.course_id, l.id'],
+    ['quizzes', 'SELECT m.course_id, q.id'],
+  ].map(([name, fragment]) => [name, { fragment, count: 0 }]));
+  database.exec(`
+    INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES
+      ('learner-path-preload-a', 'path_preload_a', 'path.preload.a@example.invalid', 'not-used', 'learner', 0),
+      ('learner-path-preload-b', 'path_preload_b', 'path.preload.b@example.invalid', 'not-used', 'learner', 0),
+      ('learner-path-preload-c', 'path_preload_c', 'path.preload.c@example.invalid', 'not-used', 'learner', 0);
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('${addedCourseId}', 'Path summary preload', 'published', 'admin-1', 'admin-1');
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('${pathId}', 'Path summary preload', 'published', 0, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+      VALUES ('path-summary-preload-step', '${pathId}', 'course-empty', 0, 0);
+    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source) VALUES
+      ('path-summary-preload-enrollment-a', '${pathId}', 'learner-path-preload-a', 'assigned'),
+      ('path-summary-preload-enrollment-b', '${pathId}', 'learner-path-preload-b', 'assigned'),
+      ('path-summary-preload-enrollment-c', '${pathId}', 'learner-path-preload-c', 'assigned');
+  `);
+  database.prepare = function countSharedSummaryReads(sql, ...parameters) {
+    if (typeof sql === 'string') {
+      for (const query of sharedReadCounts.values()) {
+        if (sql.includes(query.fragment)) query.count += 1;
+      }
+    }
+    return originalPrepare.call(this, sql, ...parameters);
+  };
+
+  try {
+    const response = await fetch(apiUrl(`/manage/learning-paths/${pathId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ courses: [
+        { courseId: 'course-empty', requiresPrevious: false },
+        { courseId: addedCourseId, requiresPrevious: true },
+      ] }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual([...sharedReadCounts.values()].map(({ count }) => count), [2, 2, 2, 2]);
+    for (const learner of learners) {
+      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE user_id = ? AND course_id = ?')
+        .get(learner, 'course-empty').count, 1);
+      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE user_id = ? AND course_id = ?')
+        .get(learner, addedCourseId).count, 0);
+    }
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run(pathId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(addedCourseId);
+    for (const learner of learners) database.prepare('DELETE FROM users WHERE id = ?').run(learner);
+  }
+});
+
 test('course enrollment rejects staff roles without creating learner activity', async () => {
   const courseId = 'course-enrollment-staff-boundary';
   database.exec(`

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireObjectBody, requireStaff } from './http.js';
-import { courseSummaries, courseSummary, ensureCourseLearningStateWithStatus } from './course-service.js';
+import { courseSummaries, courseSummary, ensureCourseLearningStateWithStatus, prepareCourseSummaryData } from './course-service.js';
 import { courseVersionHistoryPage, logicalCourseId, logicalCourseIds, publishRevision, restoreCourseVersion } from './course-versioning.js';
 import { writeAuditLog } from './log-store.js';
 import { textSearchPredicate } from './sql.js';
@@ -91,12 +91,12 @@ function splitIntoBatches(values, size) {
   return batches;
 }
 
-export function syncUnlockedPathStates(pathIds, userId, pathRowsById = new Map()) {
+export function syncUnlockedPathStates(pathIds, userId, pathRowsById = new Map(), summaryDataByPathId = new Map()) {
   const user = { id: userId, role: 'learner', disabled: false };
   const statesByCourse = new Map();
   for (const pathId of pathIds) {
     const rows = pathRowsById.get(pathId) ?? pathCourseRows(pathId);
-    const summaries = courseSummaries(rows, user);
+    const summaries = courseSummaries(rows, user, undefined, summaryDataByPathId.get(pathId));
     let allEarlierCoursesCompleted = true;
     for (const [index, row] of rows.entries()) {
       const unlocked = !row.requires_previous || row.position === 0 || allEarlierCoursesCompleted;
@@ -122,10 +122,12 @@ export function syncUnlockedPathStates(pathIds, userId, pathRowsById = new Map()
 
 function syncUnlockedPathStatesForEnrollments(pathId, enrollments) {
   if (!enrollments.length) return;
-  // Path order is shared by every learner, so load it once before per-user progress checks.
-  const pathRowsById = new Map([[pathId, pathCourseRows(pathId)]]);
+  // Path order and course structure are shared by every learner, so prepare them once.
+  const rows = pathCourseRows(pathId);
+  const pathRowsById = new Map([[pathId, rows]]);
+  const summaryDataByPathId = new Map([[pathId, prepareCourseSummaryData(rows)]]);
   for (const enrollment of enrollments) {
-    syncUnlockedPathStates([pathId], enrollment.user_id, pathRowsById);
+    syncUnlockedPathStates([pathId], enrollment.user_id, pathRowsById, summaryDataByPathId);
   }
 }
 

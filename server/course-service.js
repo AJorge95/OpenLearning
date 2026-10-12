@@ -32,8 +32,8 @@ function progressForStorage(logicalId, contentId, user, version) {
   return { completedLessonIds, passedQuizIds };
 }
 
-function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloadedContentCoursesById) {
-  if (!courses.length) return [];
+export function prepareCourseSummaryData(courses, preloadedVersionsByCourse, preloadedContentCoursesById = new Map()) {
+  if (!courses.length) return null;
   // Batch related reads across the requested page to avoid per-course summary queries.
   const logicalIdsByCourse = courses.map((course) => course.logical_course_id || course.id);
   const logicalIds = [...new Set(logicalIdsByCourse)];
@@ -84,6 +84,25 @@ function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloade
     quizzes.push(row);
     quizzesByCourse.set(row.course_id, quizzes);
   }
+  return {
+    logicalIdsByCourse,
+    logicalIds,
+    latestVersionsByCourse,
+    contentIdByCourse,
+    contentCoursesById,
+    countsByCourse,
+    lessonsByCourse,
+    quizzesByCourse,
+  };
+}
+
+function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloadedContentCoursesById, preloadedCourseSummaryData) {
+  if (!courses.length) return [];
+  // Path edits can reuse immutable course metadata while loading each learner's progress separately.
+  const summaryData = preloadedCourseSummaryData
+    ?? prepareCourseSummaryData(courses, preloadedVersionsByCourse, preloadedContentCoursesById);
+  const { logicalIdsByCourse, logicalIds, latestVersionsByCourse, contentIdByCourse, contentCoursesById, countsByCourse, lessonsByCourse, quizzesByCourse } = summaryData;
+  const logicalPlaceholders = logicalIds.map(() => '?').join(', ');
   const learningStateByCourse = new Map();
   const lessonHistoryByCourse = new Map();
   const quizHistoryByCourse = new Map();
@@ -171,8 +190,8 @@ function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloade
   });
 }
 
-export function courseSummaries(courses, user, preloadedVersionsByCourse) {
-  return courseSummaryDetails(courses, user, preloadedVersionsByCourse).map(({ summary }) => summary);
+export function courseSummaries(courses, user, preloadedVersionsByCourse, preloadedCourseSummaryData) {
+  return courseSummaryDetails(courses, user, preloadedVersionsByCourse, undefined, preloadedCourseSummaryData).map(({ summary }) => summary);
 }
 
 export function courseSummary(course, user, preloadedVersionsByCourse) {
