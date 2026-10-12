@@ -303,6 +303,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .account-password-form .password-field { display: grid; font-size: 11px; }
 .password-field small { color: var(--muted); font-size: 11px; font-weight: 450; }
 .form-stack .password-input-control input, .account-password-form .password-input-control input { padding-inline-end: 64px; }
+.account-settings-page .form-stack input[aria-invalid="true"] { border-color: var(--danger); }
 .password-visibility-toggle { position: absolute; top: 50%; right: 5px; min-width: 44px; min-height: 36px; padding: 0 6px; transform: translateY(-50%); border: 0; border-radius: 4px; color: var(--purple-dark); background: transparent; font-size: 12px; font-weight: 650; }
 .password-visibility-toggle:hover:not(:disabled) { background: var(--purple-soft); }
 .password-visibility-toggle:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; }
