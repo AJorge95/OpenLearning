@@ -91,6 +91,74 @@ function collectInputNameViolations(sourceFile) {
   });
 }
 
+function buttonExpressionHasName(expression) {
+  if (ts.isStringLiteralLike(expression)) return Boolean(expression.text.trim());
+  if (ts.isNumericLiteral(expression)) return true;
+  if (ts.isIdentifier(expression) && expression.text === 'undefined') return false;
+  if (expression.kind === ts.SyntaxKind.NullKeyword
+    || expression.kind === ts.SyntaxKind.FalseKeyword
+    || expression.kind === ts.SyntaxKind.TrueKeyword) return false;
+  if (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression) || ts.isNonNullExpression(expression)) {
+    return buttonExpressionHasName(expression.expression);
+  }
+  if (ts.isConditionalExpression(expression)) {
+    // Every rendered branch needs a name; loading states must not become icon-only buttons.
+    return buttonExpressionHasName(expression.whenTrue) && buttonExpressionHasName(expression.whenFalse);
+  }
+  if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) return false;
+  if (ts.isBinaryExpression(expression)
+    && [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(expression.operatorToken.kind)) {
+    return buttonExpressionHasName(expression.left) && buttonExpressionHasName(expression.right);
+  }
+  return true;
+}
+
+function buttonChildrenHaveName(children) {
+  return children.some((child) => {
+    if (ts.isJsxText(child)) return Boolean(child.getText().trim());
+    if (ts.isJsxExpression(child)) return Boolean(child.expression && buttonExpressionHasName(child.expression));
+    if (ts.isJsxElement(child)) {
+      if (jsxAttributeValue(child.openingElement, 'aria-hidden') === 'true') return false;
+      if (jsxTagName(child.openingElement.tagName) === 'img') {
+        return Boolean(jsxAttributeValue(child.openingElement, 'alt'));
+      }
+      return buttonChildrenHaveName(child.children);
+    }
+    if (ts.isJsxSelfClosingElement(child)) {
+      if (jsxAttributeValue(child, 'aria-hidden') === 'true') return false;
+      return jsxTagName(child.tagName) === 'img' && Boolean(jsxAttributeValue(child, 'alt'));
+    }
+    if (ts.isJsxFragment(child)) return buttonChildrenHaveName(child.children);
+    return false;
+  });
+}
+
+function collectButtonNameViolations(sourceFile) {
+  const violations = [];
+  const buttonTags = new Set(['button', 'Button']);
+
+  function inspect(element, children) {
+    const hasExplicitName = Boolean(jsxAttributeValue(element, 'aria-label', sourceFile)
+      || jsxAttributeValue(element, 'aria-labelledby', sourceFile));
+    if (hasExplicitName || buttonChildrenHaveName(children)) return;
+    const { line } = sourceFile.getLineAndCharacterOfPosition(element.getStart(sourceFile));
+    violations.push(`${sourceFile.fileName}:${line + 1}`);
+  }
+
+  function visit(node) {
+    if (ts.isJsxElement(node)) {
+      if (buttonTags.has(jsxTagName(node.openingElement.tagName))) inspect(node.openingElement, node.children);
+      ts.forEachChild(node, visit);
+      return;
+    }
+    if (ts.isJsxSelfClosingElement(node) && buttonTags.has(jsxTagName(node.tagName))) inspect(node, []);
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return violations;
+}
+
 function collectTsxFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = path.join(directory, entry.name);
@@ -141,4 +209,26 @@ test('all project inputs with an accessible-name requirement have a label or ARI
   });
 
   assert.deepEqual(violations, [], `Inputs need a wrapping or matching label or an explicit ARIA name:\n${violations.join('\n')}`);
+});
+
+test('the button label check detects icon-only controls and empty conditional branches', () => {
+  const sourceFile = ts.createSourceFile(
+    'fixture.tsx',
+    'const iconOnly = <button><span aria-hidden="true"><Icon /></span></button>;\nconst visibleText = <button><Icon aria-hidden="true" />Continue</button>;\nconst changingText = <Button>{busy ? \'Saving…\' : \'Save\'}</Button>;\nconst ariaNamed = <button aria-label="Close"><Icon aria-hidden="true" /></button>;\nconst sometimesEmpty = <button>{busy ? \'Saving…\' : null}</button>;\nconst shortCircuitedText = <button>{busy && \'Saving…\'}</button>;',
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+
+  assert.deepEqual(collectButtonNameViolations(sourceFile), ['fixture.tsx:1', 'fixture.tsx:5', 'fixture.tsx:6']);
+});
+
+test('all project buttons expose text or an explicit accessible name', () => {
+  const violations = collectTsxFiles(sourceDirectory).flatMap((filePath) => {
+    const source = fs.readFileSync(filePath, 'utf8');
+    const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    return collectButtonNameViolations(sourceFile);
+  });
+
+  assert.deepEqual(violations, [], `Buttons need visible text or an explicit ARIA name:\n${violations.join('\n')}`);
 });
