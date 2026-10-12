@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Explain horizontally scrollable staff tables on mobile
+
+- **Reviewed:** The responsive table styles, existing mobile-only scroll hint, and named, keyboard-scrollable analytics, account-activity, audit-log, and system-log table regions.
+- **Improvement:** Reuse the existing scroll hint in the six wide analytics and log table regions, with concise instructions for each table. Document why the hint stays hidden at wider sizes and add client regressions for region placement and the mobile breakpoint.
+- **Why it helps:** Staff on narrow screens can tell that more columns are available off-screen and how to reach them; wide layouts keep their existing uncluttered presentation.
+- **Checked:** `node --test tests/client/staff-table-scroll-hints.test.js` passed; `npm run build` passed TypeScript and Vite; `git diff --check` passed. Rendered admin-table QA was unavailable because the browser session is signed out and local Playwright packages are not installed.
+
 ## 2026-10-12 — Preserve search focus in forced-colors mode
 
 - **Reviewed:** The shared catalog, management, and access search wrappers, their palette-based focus ring, and existing forced-colors treatments for other shared controls.
