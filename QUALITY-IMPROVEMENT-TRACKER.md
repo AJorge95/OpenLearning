@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck server validation and readiness boundaries
+
+- **Reviewed:** Environment limits, API page parsing, setup readiness, session-data parsing and expiry handling, registration-field normalization, and bounded/redacted audit and system logs.
+- **Result:** No runtime change. The inspected paths already reject malformed or out-of-range values, keep readiness closed until setup is complete, discard malformed sessions, validate registration answers, and bound log retention while redacting credentials.
+- **Why no change:** The behavior matches the current contracts and each boundary has focused server coverage. No reproduced failure or missing requirement justified changing the API or persistence behavior.
+- **Checked:** Seven focused suites passed (59/59): `config`, `http-pagination`, `readiness`, `session-data`, `session-store`, `registration-fields`, and `log-store`. `git diff --check` passed.
+- **Needed to continue:** A source-backed failing case or a changed product contract for one of these server paths.
+
 ## 2026-10-12 — Explain horizontal scrolling when staff tables overflow
 
 - **Reviewed:** The minimum widths of staff course/account, analytics, and log tables; their named keyboard-scroll regions; and the available content width after the staff sidebar and page padding.
