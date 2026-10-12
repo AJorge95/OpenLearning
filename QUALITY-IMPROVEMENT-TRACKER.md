@@ -8,6 +8,14 @@
 - **Backend review:** The route validates note length and completion policy within its transaction; no API or persistence change was needed.
 - **Checked:** Course-editor route-state tests passed (13/13); the server publication/review note-boundary test passed (1/1); `npm run build` passed TypeScript and Vite; `git diff --check` passed. The signed-in review page was not rendered because the available local browser session is signed out.
 
+## 2026-10-12 — Recheck public registration form and dynamic fields
+
+- **Reviewed:** The rendered desktop signup form, field labels and autocomplete semantics, name-field layout, password guidance, validation focus, registration-approval response, and dynamic-field loading, retry, and stale-schema recovery.
+- **Result:** No runtime change. The current form presents its required fields with appropriate autocomplete and validation feedback; custom fields must finish loading before submission, and stale schemas are refreshed before learners can retry.
+- **Why no change:** The rendered desktop form and source-backed responsive rules showed no unclear or broken state; existing tests cover field refresh and signup rollback without a reproduced failure.
+- **Checked:** The local `/register` page rendered at the available desktop viewport with accessible names for all fields. Registration client tests passed (7/7); `tests/server/registration-fields.test.js` passed (31/31); `git diff --check` passed. A mobile viewport was not rendered in this cycle.
+- **Needed to revisit:** A reproduced registration validation, dynamic-field refresh, or narrow-screen layout failure.
+
 ## 2026-10-12 — Reconcile the supplied role-selector screenshot with current code
 
 - **Reviewed:** The screenshot's selected DOM path, current account-detail markup and CSS hit bounds, shared `AppSelect` pointer-coordinate guard, and existing selector regressions.
