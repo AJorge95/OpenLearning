@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep custom select states visible in forced-colors mode
+
+- **Reviewed:** `AppSelect` trigger, portaled listbox, selected and active options, disabled choices, and the quiz's existing forced-colors treatment.
+- **Improvement:** Use system colors for the custom select trigger, popup, selection and keyboard-focus states, and keep disabled controls from fading in forced-colors mode.
+- **Why it helps:** Keyboard and pointer users can still distinguish the open control, active option, selected value, and disabled options when the operating system replaces the normal palette.
+- **Checked:** Focused custom-select accessibility and navigation tests passed (22/22), `npm run build` passed TypeScript and Vite, and `git diff --check` passed. Rendered forced-colors QA was not run in this cycle.
+
 ## 2026-10-12 — Preserve quiz answer cues in forced-colors mode
 
 - **Reviewed:** Native radio markup, selected-card and keyboard-focus styling, and forced-color overrides to author colors.
