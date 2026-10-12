@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Read full course rows only for the My Learning page
+
+- **Reviewed:** My Learning's indexed enrollment, grant, and path membership scan, its request-scoped course-access checks, stable page clamping, and the fields consumed by course summaries.
+- **Improvement:** Scan candidate courses using only ID, logical-course ID, status, and visibility; fetch the full course rows only for the selected page (or the clamped last page).
+- **Why it helps:** Page totals and access filtering still cover every membership, while large descriptions and other display fields are read only for the 24 courses returned to the learner.
+- **Backend review:** Access decisions, ordering, counts, last-page recovery, and the response shape stay unchanged; the complete display rows are restored before course summaries are built.
+- **Checked:** The regression in `tests/server/course-analytics.test.js` verifies the narrow candidate projection and full description data on the returned page. The focused route test passed (1/1), the full `npm test -- --test-reporter=dot` suite and `npm run build` passed, and `git diff --check` passed.
+
 ## 2026-10-12 — Recheck the reported role-selector click boundary
 
 - **Reviewed:** The browser comment's highlighted target, the current account-details markup, the AppSelect pointer-origin guard, selector and menu sizing, and the Vite-served source and styles.
