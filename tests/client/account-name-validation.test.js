@@ -9,6 +9,10 @@ const source = fs.readFileSync(
   path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/pages-auth.tsx'),
   'utf8',
 );
+const manageSource = fs.readFileSync(
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/pages-manage.tsx'),
+  'utf8',
+);
 
 test('account names normalize whitespace and preserve the server length and control-character rules', () => {
   assert.equal(MAX_ACCOUNT_NAME_LENGTH, 80);
@@ -34,4 +38,13 @@ test('registration rejects invalid names and submits normalized values', () => {
   assert.match(registerPage, /accountNameError\(firstName, 'First name'\)[\s\S]*firstNameInputRef\.current\?\.focus\(\)[\s\S]*accountNameError\(lastName, 'Last name'\)/);
   assert.match(registerPage, /signUp\(email, normalizedFirstName, normalizedLastName/);
   assert.match(registerPage, /aria-invalid=\{invalidNameField === 'lastName' \|\| undefined\} aria-describedby=\{invalidNameField === 'lastName' \? 'registration-form-error' : undefined\}/);
+});
+
+test('certificate-name editing validates before saving and identifies the field to correct', () => {
+  const accountPage = manageSource.slice(manageSource.indexOf('export function AdminUserDetailsPage()'), manageSource.indexOf('export function AdminSettingsPage()'));
+  assert.match(accountPage, /accountNameError\(profileFirstName, 'First name'\)[\s\S]*profileFirstNameInputRef\.current\?\.focus\(\)[\s\S]*accountNameError\(profileLastName, 'Last name'\)[\s\S]*profileLastNameInputRef\.current\?\.focus\(\)/);
+  assert.match(accountPage, /firstName: normalizeAccountName\(profileFirstName\),\s*lastName: normalizeAccountName\(profileLastName\)/);
+  assert.match(accountPage, /aria-invalid=\{invalidCertificateNameField === 'firstName' \|\| undefined\} aria-describedby=\{invalidCertificateNameField === 'firstName' \? certificateNameErrorId : undefined\}/);
+  assert.match(accountPage, /aria-invalid=\{invalidCertificateNameField === 'lastName' \|\| undefined\} aria-describedby=\{invalidCertificateNameField === 'lastName' \? certificateNameErrorId : undefined\}/);
+  assert.match(accountPage, /cause\.code === 'invalid_name'[\s\S]*setCertificateNameError\(cause\.message\)[\s\S]*profileLastNameInputRef\.current : profileFirstNameInputRef\.current\)\?\.focus\(\)/);
 });

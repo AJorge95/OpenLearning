@@ -22,7 +22,7 @@ import type { BrandingPalette, ConnectionProtocol } from './branding';
 import { useAuth } from './auth-context';
 import { canonicalCaptionLanguageTag, captionFileSizeError, captionLanguageErrorMessage } from './caption-validation';
 import { uploadSizeError } from './upload-size-validation';
-import { normalizeAccountName } from './account-name-validation';
+import { accountNameError, MAX_ACCOUNT_NAME_LENGTH, normalizeAccountName } from './account-name-validation';
 import { courseEditingNote } from './course-editing-note';
 import { COMPLETION_WINDOW_ERROR, validateCompletionWindowDays } from './course-editor-validation';
 import { isCourseCoverDimensionAllowed, MAX_COURSE_COVER_DIMENSION } from './course-cover-validation';
@@ -2376,6 +2376,7 @@ export function AdminUserDetailsPage() {
   const passwordHintId = `${passwordInputId}-hint`;
   const passwordConfirmationErrorId = `${passwordInputId}-confirmation-error`;
   const lastAdminHelpId = `${passwordInputId}-last-admin-help`;
+  const certificateNameErrorId = `${passwordInputId}-certificate-name-error`;
   const routeUserIdRef = useRef(userId);
   const actionSequenceRef = useRef(0);
   if (routeUserIdRef.current !== userId) {
@@ -2395,6 +2396,10 @@ export function AdminUserDetailsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [profileFirstName, setProfileFirstName] = useState('');
   const [profileLastName, setProfileLastName] = useState('');
+  const [certificateNameError, setCertificateNameError] = useState('');
+  const [invalidCertificateNameField, setInvalidCertificateNameField] = useState<'firstName' | 'lastName' | null>(null);
+  const profileFirstNameInputRef = useRef<HTMLInputElement>(null);
+  const profileLastNameInputRef = useRef<HTMLInputElement>(null);
   const [profileNamesUserId, setProfileNamesUserId] = useState('');
   const [pendingDisableAccountId, setPendingDisableAccountId] = useState<string | null>(null);
 
@@ -2420,7 +2425,8 @@ export function AdminUserDetailsPage() {
     setProfileNamesUserId(account.user.id);
   }, [account?.user.id, account?.user.firstName, account?.user.lastName, userId]);
   useEffect(() => {
-    setError(''); setSuccess(''); setSavingAction(null); setPassword(''); setConfirmPassword(''); setPendingDisableAccountId(null);
+    setError(''); setSuccess(''); setSavingAction(null); setPassword(''); setConfirmPassword('');
+    setCertificateNameError(''); setInvalidCertificateNameField(null); setPendingDisableAccountId(null);
   }, [userId]);
 
   async function updateAccount(changes: { role?: Role; disabled?: boolean; firstName?: string; lastName?: string }, successMessage = 'Account settings were updated.', disableConfirmed = false) {
@@ -2471,7 +2477,14 @@ export function AdminUserDetailsPage() {
           setCanRetryLoad(!(refreshCause instanceof ApiError) || [0, 408, 429].includes(refreshCause.status) || refreshCause.status >= 500);
         }
       } else {
-        setError(cause instanceof ApiError ? cause.message : 'Account settings could not be updated.');
+        if (cause instanceof ApiError && cause.code === 'invalid_name'
+          && (changes.firstName !== undefined || changes.lastName !== undefined)) {
+          // Keep authoritative server validation beside the certificate-name field that needs correction.
+          const invalidField = cause.message.startsWith('Last name') ? 'lastName' : 'firstName';
+          setInvalidCertificateNameField(invalidField);
+          setCertificateNameError(cause.message);
+          window.requestAnimationFrame(() => (invalidField === 'lastName' ? profileLastNameInputRef.current : profileFirstNameInputRef.current)?.focus());
+        } else setError(cause instanceof ApiError ? cause.message : 'Account settings could not be updated.');
       }
     }
     finally { if (isCurrentAction()) setSavingAction(null); }
@@ -2479,7 +2492,25 @@ export function AdminUserDetailsPage() {
 
   async function saveAccountName(event: React.FormEvent) {
     event.preventDefault();
-    await updateAccount({ firstName: profileFirstName, lastName: profileLastName }, 'Certificate name was updated.');
+    setError(''); setSuccess(''); setCertificateNameError(''); setInvalidCertificateNameField(null);
+    const firstNameError = accountNameError(profileFirstName, 'First name');
+    if (firstNameError) {
+      setInvalidCertificateNameField('firstName');
+      setCertificateNameError(firstNameError);
+      window.requestAnimationFrame(() => profileFirstNameInputRef.current?.focus());
+      return;
+    }
+    const lastNameError = accountNameError(profileLastName, 'Last name');
+    if (lastNameError) {
+      setInvalidCertificateNameField('lastName');
+      setCertificateNameError(lastNameError);
+      window.requestAnimationFrame(() => profileLastNameInputRef.current?.focus());
+      return;
+    }
+    await updateAccount({
+      firstName: normalizeAccountName(profileFirstName),
+      lastName: normalizeAccountName(profileLastName),
+    }, 'Certificate name was updated.');
   }
 
   async function approveRegistration() {
@@ -2538,7 +2569,15 @@ export function AdminUserDetailsPage() {
     <section className="account-detail-grid">
       <article className="account-detail-card account-overview-card" aria-labelledby="account-overview-heading"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><h2 id="account-overview-heading" className="account-overview-title">Account overview</h2></div></div><span className={`account-state ${user.registrationStatus === 'pending' ? 'account-pending' : user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.registrationStatus === 'pending' ? 'Pending approval' : user.disabled ? 'Disabled' : 'Active'}</span></div>
         <dl className="account-meta-list"><div><dt>Email</dt><dd>{user.email || 'Not provided'}</dd></div><div><dt>Registration approval</dt><dd>{user.registrationStatus === 'pending' ? 'Pending' : 'Approved'}</dd></div><div><dt>User ID</dt><dd>{user.id}</dd></div><div><dt>Created</dt><dd><DateText value={user.createdAt} /></dd></div><div><dt>Last login</dt><dd>{user.lastLoginAt ? <DateTimeText value={user.lastLoginAt} /> : 'Not recorded'}</dd></div><div><dt>Last updated</dt><dd><DateText value={user.updatedAt} /></dd></div><div><dt>Courses assigned or enrolled</dt><dd>{account.total}</dd></div></dl>
-        <form className="account-profile-form form-stack" onSubmit={saveAccountName} aria-busy={savingAction === 'account'}><div><h3>Certificate name</h3><p>Set the first and last name shown on this user’s certificates.</p></div><div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={profileFirstName} onChange={(event) => setProfileFirstName(event.target.value)} disabled={saving} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={profileLastName} onChange={(event) => setProfileLastName(event.target.value)} disabled={saving} /></label></div><Button type="submit" variant="secondary" disabled={saving || !certificateNameReady || !certificateNameChanged}>{savingAction === 'account' ? 'Saving…' : !certificateNameReady ? 'Loading…' : certificateNameChanged ? 'Save certificate name' : 'No changes'}</Button></form>
+        <form className="account-profile-form form-stack" onSubmit={saveAccountName} aria-busy={savingAction === 'account'}>
+          <div><h3>Certificate name</h3><p>Set the first and last name shown on this user’s certificates.</p></div>
+          <div className="account-name-fields">
+            <label>First name<input ref={profileFirstNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="given-name" aria-invalid={invalidCertificateNameField === 'firstName' || undefined} aria-describedby={invalidCertificateNameField === 'firstName' ? certificateNameErrorId : undefined} value={profileFirstName} onChange={(event) => { setProfileFirstName(event.target.value); if (invalidCertificateNameField === 'firstName') { setInvalidCertificateNameField(null); setCertificateNameError(''); } }} disabled={saving} /></label>
+            <label>Last name<input ref={profileLastNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="family-name" aria-invalid={invalidCertificateNameField === 'lastName' || undefined} aria-describedby={invalidCertificateNameField === 'lastName' ? certificateNameErrorId : undefined} value={profileLastName} onChange={(event) => { setProfileLastName(event.target.value); if (invalidCertificateNameField === 'lastName') { setInvalidCertificateNameField(null); setCertificateNameError(''); } }} disabled={saving} /></label>
+          </div>
+          {certificateNameError && <p id={certificateNameErrorId} className="form-error" role="alert">{certificateNameError}</p>}
+          <Button type="submit" variant="secondary" disabled={saving || !certificateNameReady || !certificateNameChanged}>{savingAction === 'account' ? 'Saving…' : !certificateNameReady ? 'Loading…' : certificateNameChanged ? 'Save certificate name' : 'No changes'}</Button>
+        </form>
         {registrationFields.length > 0 && <section className="account-registration-fields"><h3>Registration details</h3><dl>{registrationFields.map((field) => <div key={field.id}><dt>{field.label}</dt><dd>{typeof field.value === 'boolean' ? field.value ? 'Yes' : 'No' : field.value || 'Not provided'}</dd></div>)}</dl></section>}
         <div className="account-control-row" aria-busy={savingAction === 'account'}>
           <div className="account-role-control"><span id="account-platform-role-label">Platform role</span><AppSelect<Role> className="account-role-select" controlId="account-platform-role" ariaLabel="Platform role" ariaLabelledBy="account-platform-role-label" describedBy={user.isLastActiveAdmin ? lastAdminHelpId : undefined} matchTriggerWidth value={user.role} disabled={saving || user.isLastActiveAdmin} onChange={(role) => updateAccount({ role })} options={[{ value: 'learner', label: 'Learner' }, { value: 'moderator', label: 'Moderator' }, { value: 'admin', label: 'Administrator' }]} /></div>
