@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import express from 'express';
 import { after, before, test } from 'node:test';
 import { MAX_LEARNING_PATH_COURSES } from '../../shared/learning-path-limits.js';
-import { COMPETENCY_PROGRESS_PAGE_SIZE } from '../../shared/competency-progress.js';
+import { COMPETENCY_ACHIEVEMENT_BATCH_SIZE, COMPETENCY_PROGRESS_PAGE_SIZE } from '../../shared/competency-progress.js';
 
 const isolatedConfig = {
   NODE_ENV: 'test',
@@ -2232,6 +2232,79 @@ test('competency progress pages course details while retaining an overall achiev
     database.prepare('DELETE FROM course_competencies WHERE competency_id IN (' + ids.map(() => '?').join(', ') + ')').run(...ids);
     database.prepare('DELETE FROM competencies WHERE id IN (' + ids.map(() => '?').join(', ') + ')').run(...ids);
     database.prepare("DELETE FROM courses WHERE id = 'competency-partial-course'").run();
+  }
+});
+
+test('competency achievement candidates are processed in bounded pages', async () => {
+  const baselineResponse = await fetch(apiUrl('/competencies?page=1'), { headers: userHeaders('learner-active') });
+  assert.equal(baselineResponse.status, 200);
+  const baseline = await baselineResponse.json();
+  const candidateCount = 201;
+  const competencyId = 'competency-achievement-batch';
+  const courseIds = Array.from({ length: candidateCount }, (_, index) => `achievement-batch-course-${String(index).padStart(3, '0')}`);
+  const insertCourse = database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, ?, 'published', 'admin-1', 'admin-1')`);
+  const insertModule = database.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, 0)');
+  const insertLesson = database.prepare('INSERT INTO lessons (id, module_id, title, position) VALUES (?, ?, ?, 0)');
+  const insertMapping = database.prepare('INSERT INTO course_competencies (course_id, competency_id, created_by) VALUES (?, ?, ?)');
+  const insertProgress = database.prepare('INSERT INTO lesson_progress (user_id, lesson_id) VALUES (?, ?)');
+
+  database.prepare(`INSERT INTO competencies (id, title, description, active, created_by)
+    VALUES (?, 'ZZ batched achievements', '', 1, 'admin-1')`).run(competencyId);
+  const addCandidates = database.transaction(() => {
+    courseIds.forEach((courseId, index) => {
+      const moduleId = `${courseId}-module`;
+      const lessonId = `${courseId}-lesson`;
+      insertCourse.run(courseId, `Achievement batch course ${index}`);
+      insertModule.run(moduleId, courseId, 'Module');
+      insertLesson.run(lessonId, moduleId, 'Lesson');
+      insertMapping.run(courseId, competencyId, 'admin-1');
+      insertProgress.run('learner-active', lessonId);
+    });
+  });
+
+  try {
+    addCandidates();
+    const candidateBatchSizes = [];
+    const candidateSql = [];
+    const originalPrepare = database.prepare;
+    database.prepare = (sql) => {
+      const statement = originalPrepare.call(database, sql);
+      if (!sql.includes('course_competencies') || !sql.includes('lesson_progress') || !sql.includes('quiz_attempts')) return statement;
+      candidateSql.push(sql);
+      return new Proxy(statement, {
+        get(target, property) {
+          const value = Reflect.get(target, property, target);
+          if (property === 'all') return (...args) => {
+            const rows = value.apply(target, args);
+            candidateBatchSizes.push(rows.length);
+            return rows;
+          };
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    };
+
+    let response;
+    try {
+      response = await fetch(apiUrl('/competencies?page=1'), { headers: userHeaders('learner-active') });
+    } finally {
+      database.prepare = originalPrepare;
+    }
+
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.achievedTotal, baseline.achievedTotal + 1);
+    assert.equal(candidateSql.length, 1, 'the keyset query should be prepared once and reused');
+    assert.ok(candidateBatchSizes.length >= 3, `Expected multiple bounded candidate batches, got ${candidateBatchSizes.join(', ')}`);
+    assert.equal(candidateBatchSizes.at(-1), 0, 'the final keyset page should prove there are no more candidates');
+    assert.ok(candidateBatchSizes.slice(0, -1).every((size) => size > 0 && size <= COMPETENCY_ACHIEVEMENT_BATCH_SIZE), candidateBatchSizes.join(', '));
+    assert.match(candidateSql[0], /c\.id > \?/);
+    assert.match(candidateSql[0], /ORDER BY c\.id ASC LIMIT \?/);
+  } finally {
+    database.prepare('DELETE FROM course_competencies WHERE competency_id = ?').run(competencyId);
+    database.prepare('DELETE FROM competencies WHERE id = ?').run(competencyId);
+    database.prepare(`DELETE FROM courses WHERE id IN (${courseIds.map(() => '?').join(', ')})`).run(...courseIds);
   }
 });
 

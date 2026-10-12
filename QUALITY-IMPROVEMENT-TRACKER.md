@@ -1,5 +1,19 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep account role menu activation and width inside its visible control
+
+- **Reviewed:** The administrator account detail role field, its wider clickable label behavior, shared `AppSelect` pointer-boundary guard, and menu positioning.
+- **Improvement:** Use `AppSelect` for the account detail role field, preserve the existing option order and account update/disabled behavior, constrain its trigger to the role field, and match the popup width to the trigger.
+- **Why it helps:** Clicking blank space beside the visible field can no longer activate a native select through a wide label, and the opened role menu stays aligned to the field width.
+- **Checked:** Added/updated selector and hit-area regression checks; focused client checks passed (15/15). The full test suite, `npm run build` (TypeScript and Vite), and `git diff --check` passed. Rendered admin-page QA remains unavailable because the available local browser is signed out and Playwright is not installed.
+
+## 2026-10-12 — Bound first-page competency achievement scans
+
+- **Reviewed:** The learner competency summary route, completed-course history matching across published versions, and the query that calculated the overall achieved competency count.
+- **Improvement:** Scan eligible courses in stable ID keyset batches of at most 200, summarize only visible candidates, then load active competency mappings for completed candidates in bounded groups.
+- **Why it helps:** Large learner histories no longer materialize every candidate course at once or exceed SQLite's parameter limit while keeping the first-page achieved count and private-course access rules intact.
+- **Checked:** Added a 201-course regression that observed candidate batches of 200, 1, and 0 and verified the achieved count. The focused route suite passed (131/131); the full test suite, `npm run build` (TypeScript and Vite), and `git diff --check` passed.
+
 ## 2026-10-12 — Reuse registration select options while learners edit
 
 - **Reviewed:** Public registration's custom-field renderer, the 30-field and 30-choice limits, and `AppSelect`'s validation effect, which depends on the options array reference.

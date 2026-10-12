@@ -7,7 +7,7 @@ import { courseVersionHistoryPage, logicalCourseId, publishRevision, restoreCour
 import { writeAuditLog } from './log-store.js';
 import { textSearchPredicate } from './sql.js';
 import { MAX_LEARNING_PATH_COURSES } from '../shared/learning-path-limits.js';
-import { COMPETENCY_PROGRESS_PAGE_SIZE } from '../shared/competency-progress.js';
+import { COMPETENCY_ACHIEVEMENT_BATCH_SIZE, COMPETENCY_PROGRESS_PAGE_SIZE } from '../shared/competency-progress.js';
 
 export const programsRouter = Router();
 programsRouter.use(requireAuth);
@@ -478,26 +478,9 @@ programsRouter.get('/competencies', (req, res) => {
     WHERE competency.active = 1 AND c.status = 'published'
       AND cc.competency_id IN (${summaryIds.map(() => '?').join(', ')})
     ORDER BY cc.competency_id, c.title COLLATE NOCASE, c.id ASC`).all(...summaryIds) : [];
-  const achievementCandidates = page === 1 ? db.prepare(`SELECT DISTINCT cc.competency_id, c.* FROM course_competencies cc
-    JOIN competencies competency ON competency.id = cc.competency_id
-    JOIN courses c ON c.id = cc.course_id
-    WHERE competency.active = 1 AND c.status = 'published' AND (
-      EXISTS (SELECT 1 FROM lesson_progress p
-        JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id
-        JOIN courses progress_course ON progress_course.id = m.course_id
-        WHERE p.user_id = ? AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
-          OR progress_course.logical_course_id = COALESCE(c.logical_course_id, c.id)))
-      OR EXISTS (SELECT 1 FROM quiz_attempts a
-        JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id
-        JOIN courses progress_course ON progress_course.id = m.course_id
-        WHERE a.user_id = ? AND a.passed = 1 AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
-          OR progress_course.logical_course_id = COALESCE(c.logical_course_id, c.id)))
-    )`).all(req.currentUser.id, req.currentUser.id) : [];
   const canView = createCourseAccessChecker(req.currentUser);
   const visiblePageCourses = pageCourses.filter((course) => course.visibility === 'public' || canView(course));
-  const visibleAchievementCandidates = achievementCandidates.filter((course) => course.visibility === 'public' || canView(course));
-  const summaryCourses = [...new Map([...visiblePageCourses, ...visibleAchievementCandidates]
-    .map((course) => [course.id, course])).values()];
+  const summaryCourses = [...new Map(visiblePageCourses.map((course) => [course.id, course])).values()];
   const summaries = courseSummaries(summaryCourses, req.currentUser);
   const summariesByCourseId = new Map(summaryCourses.map((course, index) => [course.id, summaries[index]]));
   const coursesByCompetency = new Map(pageRows.map((item) => [item.id, []]));
@@ -514,9 +497,49 @@ programsRouter.get('/competencies', (req, res) => {
     return { id: item.id, title: item.title, description: item.description, achieved: mapped.some((course) => course.completed),
       completedCourses, courseCount: mapped.length, courses: mapped };
   });
-  const achievedCompetencyIds = new Set(visibleAchievementCandidates
-    .filter((course) => summariesByCourseId.get(course.id)?.completed)
-    .map((course) => course.competency_id));
+  const achievedCompetencyIds = new Set();
+  if (page === 1) {
+    // Keyset batches keep history scans and course-summary IN lists bounded on large accounts.
+    const achievementCandidates = db.prepare(`SELECT c.* FROM courses c
+      WHERE c.status = 'published' AND (? IS NULL OR c.id > ?)
+        AND EXISTS (SELECT 1 FROM course_competencies cc JOIN competencies competency ON competency.id = cc.competency_id
+          WHERE cc.course_id = c.id AND competency.active = 1)
+        AND (
+          EXISTS (SELECT 1 FROM lesson_progress p
+            JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id
+            JOIN courses progress_course ON progress_course.id = m.course_id
+            WHERE p.user_id = ? AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
+              OR progress_course.logical_course_id = COALESCE(c.logical_course_id, c.id)))
+          OR EXISTS (SELECT 1 FROM quiz_attempts a
+            JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id
+            JOIN courses progress_course ON progress_course.id = m.course_id
+            WHERE a.user_id = ? AND a.passed = 1 AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
+              OR progress_course.logical_course_id = COALESCE(c.logical_course_id, c.id)))
+        )
+      ORDER BY c.id ASC LIMIT ?`);
+    let lastCourseId = null;
+    while (true) {
+      const candidateBatch = achievementCandidates.all(lastCourseId, lastCourseId, req.currentUser.id,
+        req.currentUser.id, COMPETENCY_ACHIEVEMENT_BATCH_SIZE);
+      if (!candidateBatch.length) break;
+      lastCourseId = candidateBatch.at(-1).id;
+
+      const visibleCandidates = candidateBatch.filter((course) => course.visibility === 'public' || canView(course));
+      const uncachedCourses = visibleCandidates.filter((course) => !summariesByCourseId.has(course.id));
+      const candidateSummaries = courseSummaries(uncachedCourses, req.currentUser);
+      uncachedCourses.forEach((course, index) => summariesByCourseId.set(course.id, candidateSummaries[index]));
+
+      const completedCourseIds = visibleCandidates
+        .filter((course) => summariesByCourseId.get(course.id)?.completed)
+        .map((course) => course.id);
+      if (!completedCourseIds.length) continue;
+      const mappedCompetencies = db.prepare(`SELECT DISTINCT cc.competency_id FROM course_competencies cc
+        JOIN competencies competency ON competency.id = cc.competency_id
+        WHERE competency.active = 1 AND cc.course_id IN (${completedCourseIds.map(() => '?').join(', ')})`)
+        .all(...completedCourseIds);
+      mappedCompetencies.forEach((item) => achievedCompetencyIds.add(item.competency_id));
+    }
+  }
   res.json({
     competencies: mappedCompetencies,
     total,

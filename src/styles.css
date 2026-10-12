@@ -292,12 +292,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 /* Keep the selector narrower than the gap to adjacent actions so blank space cannot activate it. */
 .account-role-control { display: flex; flex-direction: column; align-items: flex-start; flex: 0 0 8.5rem; width: 8.5rem; gap: 6px; min-width: 0; max-width: min(240px, 100%); pointer-events: none; color: #303443; font-size: 11px; font-weight: 650; }
 .account-control-row .app-select { width: 100%; max-width: 240px; }
-.account-role-select-control { position: relative; flex: 0 0 8.5rem; width: 8.5rem; max-width: 100%; pointer-events: auto; }
-.account-role-select { display: block; width: 100%; max-width: 100%; min-height: 44px; padding: 9px 34px 9px 11px; appearance: none; border: 1px solid var(--line-strong); border-radius: 8px; color: #222634; background: #fff; font-size: 13px; font-weight: 500; line-height: 1.35; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
-.account-role-select:hover:not(:disabled) { border-color: var(--purple-border-strong); }
-.account-role-select:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; border-color: var(--purple); }
-.account-role-select:disabled { cursor: not-allowed; opacity: .65; }
-.account-role-select-chevron { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); color: #656b7b; pointer-events: none; }
+.account-role-select-control { flex: 0 0 8.5rem; width: 8.5rem; max-width: 100%; pointer-events: auto; }
+.account-role-select-control .app-select { width: 100%; max-width: none; pointer-events: auto; }
 .account-admin-protection { margin: 9px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .account-password-form { gap: 12px; }
 .account-password-form label { font-size: 11px; }
@@ -1455,7 +1451,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .account-form-card, .account-detail-card { padding: 15px; }
   .account-control-row { align-items: stretch; flex-direction: column; }
   .account-control-row .account-role-control { flex-basis: auto; width: 100%; max-width: none; }
-  .account-control-row .account-role-select-control, .account-control-row .account-role-select { width: 100%; max-width: none; }
+  .account-control-row .account-role-select-control, .account-control-row .account-role-select-control .app-select { width: 100%; max-width: none; }
   .account-control-row > .button { width: 100%; }
   .confirmation-dialog { padding: 20px; }
   .confirmation-dialog-actions { flex-direction: column; align-items: stretch; }
