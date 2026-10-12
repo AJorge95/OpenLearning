@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Explain email changes on issued certificates
+
+- **Reviewed:** Administrator email editing, certificate issuance snapshots, the account details form, and existing client/server regression coverage.
+- **Improvement:** Explain beneath the email field that new certificates use the current address while issued certificates retain their saved address. Associate the helper text with the input and keep it linked when an email validation error appears. Document the behavior in the account-management guide and extend the server regression to assert issued certificate email snapshots remain unchanged after an account email update.
+- **Why it helps:** Administrators can understand the effect of an email correction before saving, and the persisted certificate behavior is protected against accidental future changes.
+- **Checked:** Focused account-email and registration-field tests passed; the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript and Vite; `git diff --check` passed. The built account page rendered the helper below the email input in a disposable signed-in browser session. The temporary server and database were stopped and removed.
+
 ## 2026-10-12 — Verify role-selector boundary in a current signed-in build
 
 - **Reviewed:** The latest account-role click report against the current selector JSX, pointer guard, desktop width rules, existing regression tests, and a fresh signed-in account page.
