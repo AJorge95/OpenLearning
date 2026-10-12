@@ -2154,6 +2154,7 @@
 - **Improvement:** Start from the learner's indexed enrollments, grants, and published-path memberships instead of scanning every published course. Stream eligible rows, retain only the requested page and a bounded tail for exact totals and out-of-range clamping, and avoid caching streamed canonical course rows. Preserve direct-enrollment, grant, then path activity precedence and existing access checks.
 - **Why it helps:** The query work follows each learner's relationships as the catalog grows, and application memory no longer holds all matching course rows just to return one page. Learners keep stable ordering and exact pagination metadata.
 - **Checked:** Added regression coverage for 53 memberships, page boundaries, a partial final-page clamp, mixed membership precedence, incremental iteration, and indexed query-plan paths. The focused pager check passed; the full project test suite, TypeScript check, production build, syntax checks, and `git diff --check` all passed.
+- **Rechecked 2026-10-12:** The route still streams the indexed membership query and retains only the requested page plus a bounded tail. The focused stream/cache regressions passed (2/2); the existing 53-membership fixture confirms the query stays incremental. A larger production-like workload is unavailable, so no additional pagination rewrite is justified.
 
 ## 2026-10-11 — Recheck course media uploads and delivery
 
