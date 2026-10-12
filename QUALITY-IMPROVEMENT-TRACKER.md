@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck quiz retry and duplicate-attempt boundaries
+
+- **Reviewed:** The learner's per-quiz submission lock, retained answers after errors, saved-score recovery, transactional attempt creation, and per-user attempt throttling.
+- **Result:** No runtime change. Overlapping submissions are guarded in the client, while each valid retry is stored as a separate attempt by the current product flow.
+- **Why no change:** Adding server idempotency for a response lost after commit could collapse an intentional retry. No product rule currently distinguishes a transport retry from a learner choosing to submit another attempt.
+- **Checked:** Focused quiz locking, result/retry, attempt-route, and rate-limit tests passed (24/24).
+- **Needed to revisit:** A defined idempotency policy for submissions with an unknown commit result, or a reproduced duplicate caused by one learner action.
+
 ## 2026-10-12 — Recheck sign-in and public registration boundaries
 
 - **Reviewed:** Sign-in and registration field semantics, password visibility and autocomplete, registration-field loading/retry, server credential validation, identifier conflicts, approval enforcement, and audit/session rollback paths.
