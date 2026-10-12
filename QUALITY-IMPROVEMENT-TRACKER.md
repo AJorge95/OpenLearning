@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Preserve focus after joining a learning path
+
+- **Reviewed:** The learner's self-enrollment button lifecycle, the path-list refresh, the route's transactional enrollment behavior, and existing focus-management patterns.
+- **Improvement:** Restore focus to the join button when it remains after the request, and move focus to the path heading when successful enrollment replaces the button with the enrolled status. Skip focus restoration after leaving the learning-path page.
+- **Why it helps:** Keyboard users remain oriented after joining a path or receiving an enrollment error instead of losing focus when the temporary button state changes.
+- **Backend review:** Self-enrollment remains transactional and idempotent; duplicate requests do not add a second enrollment or audit event. No backend change was needed.
+- **Checked:** The focused regression passed (1/1), full `npm test -- --test-reporter=dot`, `npm run build` (TypeScript and Vite), and `git diff --check` passed. The available local browser session is signed out at `/login`, so a signed-in learner interaction could not be replayed.
+
 ## 2026-10-12 — Identify the staff member who submitted a course revision
 
 - **Reviewed:** The course revision's original author, the separate `submitted_by` identity, the versions API response, and the course editor's “Submitted by” status.
