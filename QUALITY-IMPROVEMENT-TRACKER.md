@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep staff navigation reachable on short screens
+
+- **Reviewed:** The administrator and moderator sidebar structure, its seven-link maximum, fixed desktop viewport height, back and account actions, and the existing mobile rule that moves navigation into normal page flow.
+- **Improvement:** Keep the desktop sidebar at the visible viewport height with `100vh` fallback plus `100dvh`, and allow its contents to scroll vertically when they exceed that height. Reset overflow on mobile so the horizontal top navigation remains part of the page flow.
+- **Why it helps:** Administrators using short browser windows can reach the lower “Back to learning” and account/sign-out controls without relying on document overflow outside the sticky sidebar.
+- **Checked:** `node --test tests/client/responsive-viewport.test.js` passed (5/5), including desktop scroll and mobile reset rules; `npm run build` passed TypeScript and Vite; `git diff --check` passed. The authenticated management route redirects to sign-in in the available browser, so sidebar rendering at a short viewport remains unverified.
+- **Backend review:** Navigation authorization and route behavior are unchanged; no backend change was indicated.
+
 ## 2026-10-12 — Keep auth forms centered in the visible mobile viewport
 
 - **Reviewed:** The rendered public signup page and its accessible field names, shared auth/setup viewport styling, the existing responsive breakpoints, and the dynamic viewport-unit pattern already used elsewhere in the stylesheet.

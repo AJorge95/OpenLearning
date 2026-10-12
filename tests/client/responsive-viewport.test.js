@@ -27,6 +27,19 @@ test('authentication and setup screens follow the dynamic visible viewport heigh
   assert.ok(authRule[1].indexOf('min-height: 100vh') < authRule[1].indexOf('min-height: 100dvh'));
 });
 
+test('desktop staff navigation scrolls at short viewport heights and returns to page flow on mobile', () => {
+  const styles = fs.readFileSync(stylesPath, 'utf8');
+  const sidebarRule = styles.match(/^\.staff-sidebar\s*\{([^}]*)\}/m);
+  const mobileRule = styles.match(/\.staff-sidebar\s*\{ position: static; height: auto; overflow-y: visible;[^}]*\}/);
+
+  assert.ok(sidebarRule, 'expected desktop staff sidebar styling');
+  assert.match(sidebarRule[1], /height:\s*100vh;/, 'keep a fallback for older browsers');
+  assert.match(sidebarRule[1], /height:\s*100dvh;/, 'follow the visible viewport height');
+  assert.match(sidebarRule[1], /overflow-y:\s*auto;/, 'keep lower navigation actions reachable');
+  assert.ok(sidebarRule[1].indexOf('height: 100vh') < sidebarRule[1].indexOf('height: 100dvh'));
+  assert.ok(mobileRule, 'mobile navigation should remain in normal page flow');
+});
+
 test('course catalog filters stack before the sort value is truncated', () => {
   const styles = fs.readFileSync(stylesPath, 'utf8');
   const breakpointStart = styles.indexOf('@media (max-width: 450px)');
