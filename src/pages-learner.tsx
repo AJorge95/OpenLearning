@@ -806,6 +806,11 @@ export function CoursePlayerPage() {
   const watchReadyForCurrent = watchProgress.lessonId === lessonId && watchProgress.ready;
   const watchedForCurrent = watchProgress.lessonId === lessonId && watchProgress.complete;
   const activeCaptionId = current?.captions.some((caption) => caption.id === selectedCaptionId) ? selectedCaptionId : '';
+  // Playback progress rerenders this page frequently; keep options stable until tracks change.
+  const captionOptions = useMemo(() => [
+    { value: '', label: 'Captions off' },
+    ...(current?.captions ?? []).map((caption) => ({ value: caption.id, label: `${caption.label} (${caption.language})` })),
+  ], [current?.captions]);
   const videoWatchProgressDisplay = getVideoWatchProgressDisplay({
     watchedUntilSeconds: watchProgress.lessonId === lessonId ? watchProgress.watchedUntilSeconds : 0,
     durationSeconds: videoDuration,
@@ -1507,7 +1512,7 @@ export function CoursePlayerPage() {
         <button className="video-control-button" type="button" aria-label={videoMuted ? 'Unmute video' : 'Mute video'} aria-pressed={videoMuted} onClick={() => updateVolume(videoMuted ? videoVolume || 1 : 0)}>{videoMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
         <input className="video-volume-control" type="range" min="0" max="1" step="0.05" value={videoMuted ? 0 : videoVolume} aria-label="Video volume" onChange={(event) => updateVolume(Number(event.target.value))} />
         <button className="video-control-button video-fullscreen-button" type="button" aria-label={videoFullscreen ? 'Exit full screen' : 'Enter full screen'} onClick={() => { void toggleVideoFullscreen(); }}>{videoFullscreen ? <Minimize size={17} /> : <Maximize size={17} />}</button>
-        {current.captions.length > 0 && <AppSelect className="video-caption-select" ariaLabel="Captions" portalContainer={videoPlayerFrameRef.current} value={activeCaptionId} onChange={(captionId) => { setSelectedCaptionId(captionId); selectVideoCaptionTrack(videoRef.current, captionId); }} options={[{ value: '', label: 'Captions off' }, ...current.captions.map((caption) => ({ value: caption.id, label: `${caption.label} (${caption.language})` }))]} />}
+        {current.captions.length > 0 && <AppSelect className="video-caption-select" ariaLabel="Captions" portalContainer={videoPlayerFrameRef.current} value={activeCaptionId} onChange={(captionId) => { setSelectedCaptionId(captionId); selectVideoCaptionTrack(videoRef.current, captionId); }} options={captionOptions} />}
       </div>}
       {fullscreenError && <div className="player-video-error" role="alert">{fullscreenError}</div>}
       </div>

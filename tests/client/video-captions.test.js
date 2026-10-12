@@ -64,6 +64,8 @@ test('watch-tracked lessons expose an accessible selector for available captions
   assert.match(source, /data-caption-id=\{caption\.id\}/);
   assert.match(source, /current\.captions\.length > 0 && <AppSelect className="video-caption-select" ariaLabel="Captions"/);
   assert.match(source, /label: 'Captions off'/);
+  assert.match(source, /const captionOptions = useMemo\(\(\) => \[[\s\S]*?\], \[current\?\.captions\]\)/);
+  assert.match(source, /ariaLabel="Captions"[^\n]*options=\{captionOptions\}/);
   assert.match(source, /setSelectedCaptionId\(captionId\); selectVideoCaptionTrack\(videoRef\.current, captionId\)/);
   assert.match(source, /selectVideoCaptionTrack\(videoRef\.current, activeCaptionId\)/);
   assert.match(styles, /\.lesson-video-controls\.has-caption-tracks \.video-caption-select \{ grid-column: 1 \/ 4; grid-row: 2;/);
