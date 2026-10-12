@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Explain empty learning paths in staff cards
+
+- **Reviewed:** Learning-path card rendering for draft, published, and archived paths; zero-course progress handling; and server validation when creating or publishing a path.
+- **Improvement:** Replace a blank course list with a short empty-state message when a path currently has no courses, using the existing muted surface styling.
+- **Why it helps:** Staff can tell an empty draft or archived path is intentionally awaiting course selection instead of interpreting the blank area as a loading or rendering failure.
+- **Backend review:** The server rejects publishing paths with no courses, so the empty state applies to staff-visible drafts or archived paths; no API change was needed.
+- **Checked:** The new learning-path card regression and existing path behavior tests passed in the full `npm test -- --test-reporter=dot` suite; `npm run build` and `git diff --check` passed. The protected `/manage/learning-paths` route redirected to `/login`, so signed-in rendering was not checked.
+
 ## 2026-10-12 — Recheck lesson feedback page races
 
 - **Reviewed:** Comment paging alongside new posts and moderation, stale-page detection after concurrent feed changes, out-of-range page recovery, lesson access checks, comment validation, and audit-backed removal.

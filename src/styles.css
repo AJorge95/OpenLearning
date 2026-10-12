@@ -642,6 +642,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .program-progress-line strong { color: var(--ink); font-size: 12px; }
 .program-card .progress-line { height: 7px; margin-top: -10px; }
 .path-course-list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.path-course-list-empty { margin: 0; padding: 10px; border-radius: 6px; color: var(--muted); background: var(--subtle); font-size: 12px; line-height: 1.5; }
 .path-course-list > li { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
 .path-course-list > li.locked { color: var(--muted); background: var(--subtle); }
 .path-course-list > li > div { display: grid; gap: 4px; min-width: 0; }
