@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Wait for certificate history before showing the combined empty state
+
+- **Reviewed:** My Learning's independent course and certificate requests, the certificate loading/error panel, and the empty-state announcement and action.
+- **Improvement:** Show the combined “Your learning starts here” empty state only after certificate loading finishes and no certificates are available.
+- **Why it helps:** Learners with saved certificates no longer see a temporary empty prompt that disappears when certificate history arrives.
+- **Backend review:** Separate course and certificate endpoints already preserve course availability when certificate history is delayed or fails; no API change was needed.
+- **Checked:** Added a regression that failed before the fix and now verifies the visible empty-state gate; focused loading/pagination tests passed (4/4). The full test suite, `npm run build` (TypeScript and Vite), and `git diff --check` passed.
+
 ## 2026-10-12 — Reuse learner catalog filter options between searches
 
 - **Reviewed:** The course catalog's search draft, submitted filters, category and sort selectors, `AppSelect` option-validation effect, and the server's access-aware filtering and paging.
