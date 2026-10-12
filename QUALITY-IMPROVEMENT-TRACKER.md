@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Enlarge quiz-editor correct-answer radios
+
+- **Reviewed:** Correct-answer radio markup and accessibility names, its answer-row layout and responsive sizing, existing quiz-editor tests, and server-side quiz validation.
+- **Improvement:** Increase each course-editor correct-answer radio from 16px to a 24px square target, retain its native radio behavior, document the layout intent beside the CSS, and add a regression under `tests/client`.
+- **Why it helps:** Course authors can select the correct answer with less pointer precision while the answer field and remove control remain in the same row. The target meets WCAG 2.2 SC 2.5.8's 24px size threshold.
+- **Backend review:** Quiz validation already requires exactly one correct answer and bounds choice counts and text lengths; no server change was needed.
+- **Checked:** Course-editor structure, forced-colors, and new target-size tests passed (7/7); `npm run build` passed TypeScript and Vite; `git diff --check` passed. The built course editor rendered at 1265×714 in a disposable signed-in session, and selecting the second radio moved the checked state from the first choice to the second without saving. The Browser plugin and Playwright are unavailable, so rendered validation used the in-app computer-use browser. The temporary server and database were stopped and removed.
+
 ## 2026-10-12 — Enlarge the learning-path prerequisite target
 
 - **Reviewed:** The prerequisite checkbox markup and styles in the learning-path editor, focused path editor regressions, and existing server-side prerequisite access checks.
