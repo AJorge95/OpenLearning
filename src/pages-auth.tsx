@@ -103,6 +103,8 @@ export function SetupPage() {
   const setupErrorId = useId();
   const setupEmailErrorId = useId();
   const setupPlatformNameErrorId = useId();
+  const setupUsernameInputId = useId();
+  const setupUsernameHelpId = `${setupUsernameInputId}-help`;
   const setupPlatformNameInputRef = useRef<HTMLInputElement>(null);
   const setupEmailInputRef = useRef<HTMLInputElement>(null);
   const setupFirstNameInputRef = useRef<HTMLInputElement>(null);
@@ -247,7 +249,7 @@ export function SetupPage() {
             <label>Admin email<input ref={setupEmailInputRef} required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? setupEmailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} /></label>
             {emailError && <p id={setupEmailErrorId} className="form-error" role="alert">{emailError}</p>}
             <div className="account-name-fields"><label>First name<input ref={setupFirstNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="given-name" aria-invalid={invalidNameField === 'firstName' || undefined} aria-describedby={invalidNameField === 'firstName' ? setupErrorId : undefined} value={firstName} onChange={(event) => { setFirstName(event.target.value); if (invalidNameField === 'firstName') { setInvalidNameField(null); setError(''); } }} /></label><label>Last name<input ref={setupLastNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="family-name" aria-invalid={invalidNameField === 'lastName' || undefined} aria-describedby={invalidNameField === 'lastName' ? setupErrorId : undefined} value={lastName} onChange={(event) => { setLastName(event.target.value); if (invalidNameField === 'lastName') { setInvalidNameField(null); setError(''); } }} /></label></div>
-            <label>Admin username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+            <div className="form-stack-username-field"><label htmlFor={setupUsernameInputId}>Admin username</label><input id={setupUsernameInputId} aria-describedby={setupUsernameHelpId} required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} /><small id={setupUsernameHelpId}>Letters, numbers, dots, underscores, and hyphens.</small></div>
             <PasswordField label="Password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} hint="Use at least 12 characters." />
             <PasswordField label="Confirm password" inputRef={confirmPasswordInputRef} {...passwordConfirmationFieldProps(error, setupErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} />
             <label>One-time setup token<input required minLength={32} maxLength={256} type="password" autoComplete="off" value={setupToken} onChange={(event) => setSetupToken(event.target.value)} /><small>Enter the private bootstrap credential configured by the server operator.</small></label>
@@ -317,6 +319,8 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const postLoginPath = getPostLoginPath(location.state?.from);
   const emailErrorId = useId();
+  const usernameInputId = useId();
+  const usernameHelpId = `${usernameInputId}-help`;
   const emailInputRef = useRef<HTMLInputElement>(null);
   const firstNameInputRef = useRef<HTMLInputElement>(null);
   const lastNameInputRef = useRef<HTMLInputElement>(null);
@@ -444,7 +448,7 @@ export function RegisterPage() {
       <label>Email<input ref={emailInputRef} required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? emailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} disabled={saving} /></label>
       {emailError && <p id={emailErrorId} className="form-error" role="alert">{emailError}</p>}
       <div className="account-name-fields"><label>First name <small>Required · used on certificates</small><input ref={firstNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="given-name" aria-invalid={invalidNameField === 'firstName' || undefined} aria-describedby={invalidNameField === 'firstName' ? 'registration-form-error' : undefined} value={firstName} onChange={(event) => { setFirstName(event.target.value); if (invalidNameField === 'firstName') { setInvalidNameField(null); setError(''); } }} disabled={saving} /></label><label>Last name <small>Required · used on certificates</small><input ref={lastNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="family-name" aria-invalid={invalidNameField === 'lastName' || undefined} aria-describedby={invalidNameField === 'lastName' ? 'registration-form-error' : undefined} value={lastName} onChange={(event) => { setLastName(event.target.value); if (invalidNameField === 'lastName') { setInvalidNameField(null); setError(''); } }} disabled={saving} /></label></div>
-      <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>Letters, numbers, dots, underscores, and hyphens.</small></label>
+      <div className="form-stack-username-field"><label htmlFor={usernameInputId}>Username</label><input id={usernameInputId} aria-describedby={usernameHelpId} required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small id={usernameHelpId}>Letters, numbers, dots, underscores, and hyphens.</small></div>
       {registrationFieldsLoading ? <p className="registration-fields-loading" role="status">Loading registration details…</p> : registrationFieldsError
         ? <div className="registration-fields-load-error"><p className="form-error" role="alert">{registrationFieldsError}</p><Button type="button" variant="secondary" onClick={() => setRegistrationFieldsRetryVersion((version) => version + 1)}>Retry</Button></div>
         : <RegistrationFieldsForm fields={registrationFields} values={registrationFieldValues} disabled={saving} invalidFieldId={invalidRegistrationFieldId} onChange={(id, value) => { setRegistrationFieldValues((current) => ({ ...current, [id]: value })); setRegistrationFieldsChanged(false); if (id === invalidRegistrationFieldId) { setInvalidRegistrationFieldId(''); setError(''); } }} />}

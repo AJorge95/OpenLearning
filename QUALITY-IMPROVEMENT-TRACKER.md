@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Separate username guidance from its accessible name
+
+- **Reviewed:** The setup and public registration username labels, browser patterns, adjacent helper text, and the shared server-side credential rule.
+- **Improvement:** Give each username input a direct label and a unique `aria-describedby` link to its format guidance. Add the same guidance to first-run administrator setup so both forms explain the accepted characters.
+- **Why it helps:** Assistive technology receives the concise field name “Username” and the accepted-character instructions as a separate description; invalid entries remain easy to correct.
+- **Backend review:** The 3–32 character username rule and accepted characters remain unchanged and match `validateCredentials`.
+- **Checked:** Added a client structure regression for both forms (1/1). The rendered registration accessibility tree shows “Username” as the field name and the format guidance separately. Full `npm test -- --test-reporter=dot`, `npm run build` (TypeScript and Vite), and `git diff --check` passed.
+
 ## 2026-10-12 — Keep the joined path accurate if its refresh fails
 
 - **Reviewed:** The learner enrollment handler, the route's learner-specific path payload, focus restoration after enrollment, and existing idempotency coverage.
