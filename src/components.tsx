@@ -379,7 +379,17 @@ export function PasswordField({ label, hint, hintId, inputRef, id, disabled, 'ar
     <label htmlFor={inputId}>{label}</label>
     <div className="password-input-control">
       <input {...inputProps} ref={inputRef} id={inputId} type={visible ? 'text' : 'password'} disabled={disabled} aria-describedby={describedByIds} onChange={handlePasswordChange} />
-      <button type="button" className="password-visibility-toggle" aria-label={`${visible ? 'Hide' : 'Show'} ${label.toLowerCase()}`} aria-controls={inputId} aria-pressed={visible} disabled={disabled} onClick={() => setVisible((current) => !current)}>{visible ? 'Hide' : 'Show'}</button>
+      {/* The label names the next action (Show/Hide), so this button intentionally has no pressed toggle state. */}
+      <button
+        type="button"
+        className="password-visibility-toggle"
+        aria-label={`${visible ? 'Hide' : 'Show'} ${label.toLowerCase()}`}
+        aria-controls={inputId}
+        disabled={disabled}
+        onClick={() => setVisible((current) => !current)}
+      >
+        {visible ? 'Hide' : 'Show'}
+      </button>
     </div>
     {hint && <small id={visibleHintId}>{hint}</small>}
   </div>;

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Match password visibility labels to button semantics
+
+- **Reviewed:** The shared password-visibility control used by setup, sign-in, registration, account settings, account creation, and password resets; its changing Show/Hide labels and state announcement.
+- **Improvement:** Keep the field-specific Show/Hide action label and remove `aria-pressed`. The button's accessible name describes the action available, so it should not also expose a toggle state with a changing label.
+- **Why it helps:** Assistive technology receives a native action button whose name matches the visible action, without an inconsistent pressed state.
+- **Backend review:** Password handling, validation, form submission, and server contracts are unchanged.
+- **Checked:** Updated the password-field regression (4/4 passed), full `npm test -- --test-reporter=dot`, `npm run build` (TypeScript and Vite), and `git diff --check` passed. The rendered local login page exposes “Show password” and “Hide password” as button names; the input changes between `password` and `text`, and `aria-pressed` is absent. The Browser plugin and screenshot API were unavailable; the in-app browser DOM snapshot and interaction were used instead.
+
 ## 2026-10-12 — Separate username guidance from its accessible name
 
 - **Reviewed:** The setup and public registration username labels, browser patterns, adjacent helper text, and the shared server-side credential rule.
