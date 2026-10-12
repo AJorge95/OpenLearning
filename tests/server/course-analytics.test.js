@@ -36,6 +36,8 @@ let readCourseById;
 let requireCourseManagerForTests;
 let logicalCourseId;
 let publishedVersionForLogicalCourse;
+let trackQuizChoiceReads = false;
+let quizChoiceReadExecutions = 0;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -293,6 +295,74 @@ test('editing a versioned course clones caption references to shared media files
     assert.notEqual(clonedCaption.id, 'caption-version-source');
     assert.ok(database.prepare('SELECT 1 FROM course_revisions WHERE course_id = ? AND revision_course_id = ?').get(courseId, revision.id));
   } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
+test('editing a versioned course loads quiz choices once per quiz', async () => {
+  const courseId = 'course-choice-clone-batch';
+  const moduleId = 'module-choice-clone-batch';
+  const quizId = 'quiz-choice-clone-batch';
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('${courseId}', 'Quiz choice clone fixture', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('${moduleId}', '${courseId}', 'Question module', 0);
+    INSERT INTO quizzes (id, module_id, title, pass_mark)
+      VALUES ('${quizId}', '${moduleId}', 'Knowledge check', 70);
+    INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+      VALUES ('version-choice-clone-batch', '${courseId}', '${courseId}', 1, 'admin-1');
+  `);
+  const insertQuestion = database.prepare(`INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position)
+    VALUES (?, ?, ?, ?, ?)`);
+  const insertChoice = database.prepare(`INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position)
+    VALUES (?, ?, ?, ?, ?)`);
+  for (let questionIndex = 0; questionIndex < 4; questionIndex += 1) {
+    const questionId = `question-choice-clone-${questionIndex + 1}`;
+    insertQuestion.run(questionId, quizId, `Question ${questionIndex + 1}?`, '', questionIndex);
+    for (let choiceIndex = 0; choiceIndex < 3; choiceIndex += 1) {
+      insertChoice.run(`choice-clone-${questionIndex + 1}-${choiceIndex + 1}`, questionId,
+        `Answer ${choiceIndex + 1}`, choiceIndex === 1 ? 1 : 0, choiceIndex);
+    }
+  }
+
+  const originalPrepare = database.prepare;
+  try {
+    database.prepare = (sql) => {
+      const statement = originalPrepare.call(database, sql);
+      if (!/^\s*SELECT\b[\s\S]*\bFROM\s+quiz_choices\b/i.test(sql)) return statement;
+      return new Proxy(statement, {
+        get(target, property) {
+          const value = Reflect.get(target, property, target);
+          if (property === 'all') {
+            return (...parameters) => {
+              if (trackQuizChoiceReads) quizChoiceReadExecutions += 1;
+              return value.apply(target, parameters);
+            };
+          }
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    };
+
+    quizChoiceReadExecutions = 0;
+    trackQuizChoiceReads = true;
+    const revision = editableCourse(courseId, { id: 'admin-1' });
+    trackQuizChoiceReads = false;
+
+    assert.ok(revision?.id);
+    assert.equal(quizChoiceReadExecutions, 1);
+    const clonedQuestions = database.prepare(`SELECT qq.prompt, qc.choice_text, qc.is_correct, qc.position
+      FROM quiz_questions qq JOIN quiz_choices qc ON qc.question_id = qq.id
+      JOIN quizzes q ON q.id = qq.quiz_id JOIN course_modules m ON m.id = q.module_id
+      WHERE m.course_id = ? ORDER BY qq.position, qc.position`).all(revision.id);
+    assert.deepEqual(clonedQuestions.map((row) => [row.prompt, row.choice_text, row.is_correct, row.position]),
+      Array.from({ length: 4 }, (_, questionIndex) => Array.from({ length: 3 }, (_, choiceIndex) => [
+        `Question ${questionIndex + 1}?`, `Answer ${choiceIndex + 1}`, choiceIndex === 1 ? 1 : 0, choiceIndex,
+      ])).flat());
+  } finally {
+    trackQuizChoiceReads = false;
+    database.prepare = originalPrepare;
     database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
   }
 });
