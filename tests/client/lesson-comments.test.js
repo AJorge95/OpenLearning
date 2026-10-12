@@ -42,6 +42,15 @@ test('loading another comment page announces progress to assistive technology', 
   assert.match(source, /<p className="sr-only" role="status" aria-live="polite" aria-atomic="true">\{commentsLoading \? 'Loading more comments\.' : ''\}<\/p>/);
 });
 
+test('lesson comment authors are headings within the feedback section', () => {
+  const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
+  const styles = fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
+
+  assert.match(source, /<section className="lesson-feedback" aria-labelledby="lesson-feedback-title">[\s\S]*?<h2[^>]*id="lesson-feedback-title"/);
+  assert.match(source, /return <article className="lesson-comment" key=\{comment\.id\}>[\s\S]*?<header><h3>\{comment\.username\}<\/h3>/);
+  assert.match(styles, /\.lesson-comment header h3 \{ margin: 0; color: var\(--ink\); font-size: 13px; font-weight: 650; \}/);
+});
+
 test('a newly posted comment follows server order without growing the loaded page', () => {
   const existing = Array.from({ length: 40 }, (_, index) => comment(`comment-${String(40 - index).padStart(3, '0')}`));
   const posted = comment('comment-new');
