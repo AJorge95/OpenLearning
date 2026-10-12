@@ -9991,3 +9991,12 @@
 - **Backend review:** The default request timeout is five minutes and is configurable within Node's timer range; shutdown has a 30-second drain deadline. No missing server behavior surfaced in the inspected paths.
 - **Checked:** `node --test tests/client/api.test.js tests/server/config.test.js` passed (25/25); `node --test tests/server/last-login.test.js tests/server/media-routes.test.js` passed (43/43), including structured request errors and interrupted uploads. `git diff --check` passed.
 - **Needed to continue:** A reproducible request that stays pending or reports the wrong recovery action, an unsafe duplicate after retry, or a shutdown trace showing open resources after the grace period.
+
+## 2026-10-12 — Recheck learner course catalog filters and paging
+
+- **Reviewed:** Catalog search and filter state, request cancellation and sequence guards, page-drift recovery, empty/loading/error announcements, responsive filter and card-grid rules, and the learner catalog API's validation, access filters, stable ordering, and bounded pagination.
+- **Result:** No runtime change. Filter changes apply the visible search draft and restart at page one; additional pages deduplicate IDs and refresh when totals, ordering, or page boundaries drift. The API applies the same role-aware visibility rules to results and category options.
+- **Why no change:** The client and server contracts align, and the reviewed empty, retry, cancellation, access, and pagination paths already have regression coverage. No current-build visual mismatch or data-backed performance issue was found.
+- **Backend review:** Search, category, sort, and page inputs are validated; regular learners only receive public or explicitly granted courses, while staff may browse private courses. Result pages use bounded limits and deterministic tie-break ordering.
+- **Checked:** `node --test tests/client/course-catalog-filters.test.js tests/client/course-pagination-announcements.test.js tests/server/course-analytics.test.js` passed (134/134); `git diff --check` passed.
+- **Needed to continue:** A reproducible current-build catalog mismatch, an inaccessible filter or paging interaction, or representative catalog size/latency data showing a specific query bottleneck. Rendered responsive catalog behavior was not rechecked in this cycle.
