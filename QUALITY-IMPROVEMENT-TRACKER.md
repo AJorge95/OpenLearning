@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck the role selector’s right-side click boundary
+
+- **Reviewed:** The reported screenshot’s label-wrapped DOM path, the current account-details markup and CSS, and the role selector in the authenticated local build.
+- **Result:** No runtime change was needed. The current selector is rendered outside a label, its wrapper disables pointer input except on the visible trigger, and the menu is sized to the trigger.
+- **Why no change:** On an enabled learner account, the trigger and wrapper both measured 136px and the menu measured 136px. Clicking the trigger opened the menu; clicking six pixels to its right closed it and left it closed. The account in the screenshot is currently the sole active administrator, so its selector is disabled by the existing safeguard. The screenshot’s target path identifies the older label-wrapped markup.
+- **Backend review:** Role-change authorization and the last-active-administrator guard are unchanged; no backend change was indicated.
+- **Checked:** In the local browser at 1280×720, an enabled account’s selector opened from its trigger and ignored a click in the adjacent right-side gap without changing the selected role. Existing selector interaction and structure tests passed. If the reported page still shows the old label after a hard reload, capture the fresh page and click position so the served build can be distinguished from cached markup.
+
 ## 2026-10-12 — Prevent touch-browser focus zoom in form fields
 
 - **Reviewed:** Text input and textarea font sizes across registration, account settings, lesson comments, and management forms, including the existing mobile breakpoints and native checkbox, radio, file, and range controls.
