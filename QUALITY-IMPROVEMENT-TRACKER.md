@@ -10050,3 +10050,11 @@
 - **Why it helps:** Publishing a private course no longer sounds like it became available to every learner; the notice states the access conditions at the moment of publication.
 - **Backend review:** `canViewCourse` already grants private-course access only to admins/moderators, learners with a course grant, or learners with access through an enrolled unlocked path. The API contract already returns the saved visibility; no backend change was needed.
 - **Checked:** Added `tests/client/course-published-notice.test.js` under the dedicated client-test folder. Focused publication/editor tests passed (20/20), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript and Vite, and `git diff --check` passed. The live publish action was not submitted to avoid changing an existing development course.
+
+## 2026-10-12 — Recheck learner progress and certificate issuance
+
+- **Reviewed:** Client course-progress summaries, server video-watch credit and rewind behavior, and certificate eligibility, version snapshots, access routes, and bounded backfill.
+- **Result:** No runtime change. The learner progress helper counts lessons and passed quizzes consistently; the watch service credits movement only within server elapsed time, preserves the high-water mark across rewinds, and commits paired progress/telemetry writes atomically. Certificate issuance remains learner-only, completion-gated, version-specific, and bounded during profile-name backfill.
+- **Why no change:** The reviewed UI and backend contracts align, and the inspected failure, boundary, and recovery paths already have focused coverage. No current mismatch or measured workload issue justified an additional implementation.
+- **Checked:** `node --test tests/server/lesson-watch.test.js tests/server/certificate-service.test.js tests/server/certificate-routes.test.js tests/client/course-progress.test.js` passed (27/27). No runtime source changed, so the build was not rerun; `git diff --check` passed.
+- **Needed to continue:** A reproducible learner playback or progress mismatch, an incorrectly issued or inaccessible certificate, or representative production-size workload data identifying a specific performance bottleneck.
