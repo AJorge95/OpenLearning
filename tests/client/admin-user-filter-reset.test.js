@@ -21,7 +21,7 @@ test('filtered account lists can clear all filters with or without matching user
   assert.match(page, /const userListSearchInputRef = useRef<HTMLInputElement>\(null\)/);
   assert.match(page, /const hasAppliedUserFilters = Boolean\(appliedQuery \|\| roleFilter !== 'all' \|\| approvalFilter !== 'all'\)/);
   assert.match(page, /function clearUserListFilters\(\) \{\s*const filterSelectionChanged = roleFilter !== 'all' \|\| approvalFilter !== 'all';\s*setQuery\(''\);\s*setAppliedQuery\(''\);\s*setRoleFilter\('all'\);\s*setApprovalFilter\('all'\);\s*setPage\(1\);\s*if \(!filterSelectionChanged\) void load\(1, '', 'all', 'all'\);\s*userListSearchInputRef\.current\?\.focus\(\);\s*\}/);
-  assert.match(page, /<input ref=\{userListSearchInputRef\} value=\{query\}/);
+  assert.match(page, /<input ref=\{userListSearchInputRef\} type="search" value=\{query\}/);
   assert.match(page, /userListEmptyMessage\(appliedQuery, roleFilter, approvalFilter\)/);
   const filterRowStart = page.indexOf('<div className="user-filter-row">');
   const filterRowEnd = page.indexOf('\n    {error && !resetUser', filterRowStart);

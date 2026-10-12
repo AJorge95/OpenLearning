@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Use native search controls across learner and staff views
+
+- **Reviewed:** Learner catalog search, course-management search, administrator user/log filters, learning-path searches, and the course-access learner search landmark and control semantics.
+- **Improvement:** Use native `type="search"` inputs for the visible search landmarks and name the course-access form as `Search course learners`.
+- **Why it helps:** Browsers and assistive technologies can identify these controls as searches, while touch users gain the platform’s native search affordances without changing query text, paging, or filter behavior.
+- **Backend review:** Search endpoints and their validation, filtering, ordering, and pagination are unchanged; only the existing form semantics and input type were standardized.
+- **Checked:** Extended `tests/client/search-landmarks.test.js` to require named search landmarks with native search inputs and updated the affected source-contract regressions. Focused checks passed (11/11), the full `npm test` suite passed (850/850), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The signed-in local course-access page rendered the named `Search course learners` landmark and exposed a `search text field` at 1280×720; no assignment mutation was submitted.
+
 ## 2026-10-12 — Communicate administrator account action progress
 
 - **Reviewed:** The administrator user list and account-detail role controls, shared `AppSelect` semantics, inline approval/reset/status actions, disabled-state behavior, and existing account-management regressions.
