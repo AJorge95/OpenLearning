@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Preview course descriptions in learner cards
+
+- **Reviewed:** The rendered learner course catalog, shared `CourseCard` markup, responsive card layouts, the course-summary payload, and existing catalog/search regressions.
+- **Improvement:** Show a trimmed course description beneath each card title when one exists, with a two-line visual clamp so the catalog remains scannable. Keep the full description available on the course detail page and leave cards without descriptions unchanged.
+- **Why it helps:** Learners can judge a course’s relevance from the catalog without opening every course, while long author-written descriptions cannot make the card grid excessively tall.
+- **Backend review:** The existing course-summary response already includes the plain-text description and remains access-scoped; no API or persistence change was needed.
+- **Checked:** Added a client regression for optional description rendering and the two-line clamp. The local `/courses` page rendered the description in the existing card; at 1280px the card remained 280px wide with a two-line, 38px preview and no document overflow. Focused client checks passed (10/10), the full `npm test` suite passed (843/843), `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed.
+
 ## 2026-10-12 — Reconfirm public registration cues and validation
 
 - **Reviewed:** The rendered signup form, its visual required indicators and accessible field names, the native required constraints, and the server registration checks for email, names, credentials, and configured fields.
