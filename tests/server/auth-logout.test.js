@@ -141,7 +141,9 @@ test('sign-out destroys the session and records an audit event', async () => {
     headers: { cookie: auth.cookie, connection: 'close' },
   });
   assert.equal(currentUserResponse.status, 200);
-  assert.equal((await currentUserResponse.json()).user, null);
+  const currentUser = await currentUserResponse.json();
+  assert.equal(currentUser.user, null);
+  assert.equal(currentUser.maxUploadBytes, 2 * 1024 ** 3);
 });
 
 test('sign-out still destroys the session when its audit write fails', async () => {

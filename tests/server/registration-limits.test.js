@@ -127,6 +127,7 @@ test('concurrent registrations cannot exceed the account limit', async () => {
     platformName: '',
     platformIcon: null,
     themePalette: 'violet',
+    maxUploadBytes: 2 * 1024 ** 3,
     connectionProtocol: 'http',
     registrationEnabled: true,
     registrationApprovalRequired: false,

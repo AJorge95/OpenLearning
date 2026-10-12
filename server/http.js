@@ -45,7 +45,7 @@ function formatUploadLimit(bytes) {
   const size = unitIndex === 0
     ? `${value.toLocaleString('en-US')} ${value === 1 ? 'byte' : 'bytes'}`
     : `${Number.isInteger(value) ? value : value.toFixed(1)} ${units[unitIndex]}`;
-  return `${size} (${bytes.toLocaleString('en-US')} bytes)`;
+  return `${size} (${bytes.toLocaleString('en-US')} ${bytes === 1 ? 'byte' : 'bytes'})`;
 }
 
 export function fail(status, message, code) {
