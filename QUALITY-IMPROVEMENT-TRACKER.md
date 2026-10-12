@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Name learning-path learner pagination landmarks
+
+- **Reviewed:** The learning-path assignment panel, its page controls, the matching learner-directory API response, and the shared responsive pagination styles.
+- **Improvement:** Expose the enrolled/unassigned learner pager as a navigation landmark named for the learning path, so multiple open assignment panels remain distinguishable.
+- **Why it helps:** Screen-reader users can jump directly to the right learner page controls when managing several learning paths.
+- **Backend review:** The learner-directory route already applies bounded pagination and returns page metadata; its query and response contract remain unchanged.
+- **Checked:** Learning-path assignment UI tests passed (8/8); the learner-directory route pagination test passed (1/1); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed.
+
 ## 2026-10-12 — Expose admin pagination as named navigation landmarks
 
 - **Reviewed:** The shared page controls across course lists, learner progress, course access, user accounts, account course activity, audit logs, and system logs; existing result-count announcements and responsive pagination styles.

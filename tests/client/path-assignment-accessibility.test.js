@@ -10,6 +10,12 @@ test('learning-path assignment removal names identify the learner and path', () 
   assert.match(pageSource, /\{removingLearnerId === learner\.id \? 'Removing…' : 'Remove assignment'\}<\/button>/);
 });
 
+test('learning-path learner paging is a landmark named for its path', () => {
+  assert.match(pageSource, /<nav className="log-pagination path-learner-pagination" aria-label=\{`Learner assignment pages for \$\{path\.title\}`\}>/);
+  assert.match(pageSource, /assignmentPage <= 1 \|\| assignmentBusy/);
+  assert.match(pageSource, /!assignmentHasMore \|\| assignmentBusy/);
+});
+
 test('assignment confirmation describes the enrollment outcome', () => {
   assert.match(pageSource, /setNotice\('Learner is enrolled in the path\.'\)/);
 });
