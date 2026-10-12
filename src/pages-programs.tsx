@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArrowDown, ArrowUp, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Plus, RotateCcw, Search, UsersRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from './api';
-import { calendarMonthRequestRange, currentCalendarMonth, groupCalendarDeadlines, isSameCalendarMonth, localDateKey, shouldShowCalendarEmptyState } from './calendar-dates';
+import { calendarMonthRequestRange, currentCalendarMonth, getCalendarDeadlineRefreshDelay, groupCalendarDeadlines, isSameCalendarMonth, localDateKey, markCalendarDeadlinesOverdue, shouldShowCalendarEmptyState } from './calendar-dates';
 import { pathAssignmentRemovalConfirmation } from './path-assignment-confirmation';
 import { pathArchiveConfirmation } from './path-archive-confirmation';
 import { AppSelect, Button, ConfirmationDialog, EmptyState, PageHeading, ProgressBar } from './components';
@@ -664,6 +664,7 @@ export function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadSequence, setReloadSequence] = useState(0);
+  const [deadlineTimerRevision, setDeadlineTimerRevision] = useState(0);
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
   const todayKey = localDateKey(new Date());
@@ -694,6 +695,17 @@ export function CalendarPage() {
     () => groupCalendarDeadlines(items, year, monthIndex),
     [items, year, monthIndex],
   );
+  useEffect(() => {
+    const delay = getCalendarDeadlineRefreshDelay(monthItems);
+    if (delay === null) return;
+    const timer = window.setTimeout(() => {
+      const now = Date.now();
+      setItems((currentItems) => markCalendarDeadlinesOverdue(currentItems, now));
+      // Recheck long deadlines after the browser's maximum timeout interval.
+      setDeadlineTimerRevision((revision) => revision + 1);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [monthItems, deadlineTimerRevision]);
   const days = [...Array(firstDay).fill(null), ...Array.from({ length: dayCount }, (_, index) => index + 1)];
   const cells = [...days, ...Array((7 - days.length % 7) % 7).fill(null)];
   const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

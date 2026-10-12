@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Update calendar deadline status while the page stays open
+
+- **Reviewed:** Calendar deadline status from the API, local-month grouping, the My Learning due-boundary timer, completed-course state, and the calendar's month-load lifecycle.
+- **Improvement:** Schedule one cancellable timer for the nearest upcoming calendar deadline and mark passed, incomplete items overdue in place. Recheck distant deadlines at the browser timer limit; completed, invalid, and already-overdue entries do not schedule work.
+- **Why it helps:** Learners who keep the calendar open see a deadline change from “Upcoming” to “Overdue” at the due boundary without reloading the page or making another API request.
+- **Backend review:** The API already returns canonical UTC deadline instants and completion state; no route or storage change was needed.
+- **Checked:** `node --test tests/client/calendar-dates.test.js` passed (10/10), covering the exact timer boundary, earliest-deadline selection, invalid/completed entries, status transitions, and timer cleanup wiring. `npm run build` passed TypeScript and Vite; `git diff --check` passed. The protected calendar was not rendered because the available browser session is signed out.
+
 ## 2026-10-12 — Recheck the account-role hit area and quiz submission flow
 
 - **Reviewed:** The annotated role-selector target against current markup and bounded CSS, the shared select's pointer-coordinate guard, learner quiz readiness and feedback, route-scoped attempt state, and server-side answer validation and result scoping.

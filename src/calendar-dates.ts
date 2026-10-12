@@ -1,4 +1,5 @@
 import type { CourseDeadline } from './types';
+import { getLearningDeadlineRefreshDelay } from './learning-deadline.ts';
 
 export function currentCalendarMonth(now = new Date()) {
   return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -32,6 +33,29 @@ export function groupCalendarDeadlines(items: CourseDeadline[], year: number, mo
     monthItems.push(item);
   }
   return { monthItems, itemsByLocalDay };
+}
+
+export function getCalendarDeadlineRefreshDelay(items: CourseDeadline[], now = Date.now()) {
+  let nextDelay: number | null = null;
+  for (const item of items) {
+    if (item.status !== 'upcoming' || item.completed) continue;
+    const deadlineAt = new Date(item.dueAt).getTime();
+    if (!Number.isFinite(deadlineAt)) continue;
+    const delay = deadlineAt < now ? 0 : getLearningDeadlineRefreshDelay(item.dueAt, now);
+    if (delay !== null && (nextDelay === null || delay < nextDelay)) nextDelay = delay;
+  }
+  return nextDelay;
+}
+
+export function markCalendarDeadlinesOverdue(items: CourseDeadline[], now = Date.now()) {
+  let changed = false;
+  const nextItems = items.map((item) => {
+    const deadlineAt = new Date(item.dueAt).getTime();
+    if (item.status !== 'upcoming' || item.completed || !Number.isFinite(deadlineAt) || deadlineAt >= now) return item;
+    changed = true;
+    return { ...item, status: 'overdue' as const };
+  });
+  return changed ? nextItems : items;
 }
 
 export function shouldShowCalendarEmptyState(loading: boolean, error: string, itemCount: number) {
