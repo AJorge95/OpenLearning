@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { calendarMonthRequestRange, currentCalendarMonth, groupCalendarDeadlines, shouldShowCalendarEmptyState } from '../../src/calendar-dates.ts';
+import { calendarMonthRequestRange, currentCalendarMonth, groupCalendarDeadlines, isSameCalendarMonth, shouldShowCalendarEmptyState } from '../../src/calendar-dates.ts';
 
 test('current-month navigation returns to the first day of the local month', () => {
   const month = currentCalendarMonth(new Date(2026, 9, 11, 14, 30));
@@ -10,6 +10,12 @@ test('current-month navigation returns to the first day of the local month', () 
   assert.equal(month.getMonth(), 9);
   assert.equal(month.getDate(), 1);
   assert.equal(month.getHours(), 0);
+});
+
+test('calendar month navigation recognizes the same local month across different days', () => {
+  assert.equal(isSameCalendarMonth(new Date(2026, 9, 1), new Date(2026, 9, 12)), true);
+  assert.equal(isSameCalendarMonth(new Date(2026, 9, 1), new Date(2026, 10, 1)), false);
+  assert.equal(isSameCalendarMonth(new Date(2025, 9, 1), new Date(2026, 9, 1)), false);
 });
 
 test('calendar ranges include UTC dates whose deadlines belong to an adjacent local month', () => {
@@ -55,7 +61,10 @@ test('calendar page uses the successful-empty-state guard', () => {
   const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
 
   assert.match(pageSource, /shouldShowCalendarEmptyState\(loading, error, monthItems\.length\)/);
-  assert.match(pageSource, /className="calendar-current-month" onClick=\{\(\) => \{ setItems\(\[\]\); setMonth\(currentCalendarMonth\(\)\); \}\}>This month<\/Button>/);
+  assert.match(pageSource, /function navigateToMonth\(requestedMonth: Date\) \{\s*\/\/ Keep the loaded deadlines when the current-month control targets the displayed month\.\s*if \(isSameCalendarMonth\(month, requestedMonth\)\) return;\s*setLoading\(true\);\s*setError\(''\);\s*setItems\(\[\]\);\s*setMonth\(currentCalendarMonth\(requestedMonth\)\);\s*\}/);
+  assert.match(pageSource, /aria-label="Previous month" onClick=\{\(\) => navigateToMonth\(new Date\(year, monthIndex - 1, 1\)\)\}/);
+  assert.match(pageSource, /aria-label="Next month" onClick=\{\(\) => navigateToMonth\(new Date\(year, monthIndex \+ 1, 1\)\)\}/);
+  assert.match(pageSource, /className="calendar-current-month" onClick=\{\(\) => navigateToMonth\(currentCalendarMonth\(\)\)\}>This month<\/Button>/);
 });
 
 test('calendar weekday headers keep short visual labels and expose full names to assistive tech', () => {

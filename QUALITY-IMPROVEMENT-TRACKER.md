@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Preserve deadlines when returning to the current calendar month
+
+- **Reviewed:** The learner calendar's month controls, the fetch effect's date-range dependencies, the selected-month deadline state, and the existing date grouping and loading states.
+- **Improvement:** Route previous, next, and current-month actions through one navigation function. It keeps the loaded deadlines when the requested month is already displayed; when the month changes, it starts loading immediately, clears stale results, and lets the existing date-range effect fetch the new month.
+- **Why it helps:** Clicking “This month” while already viewing the current month no longer erases the deadlines without triggering a fetch. Month changes also show the loading state immediately instead of briefly presenting a false empty calendar.
+- **Backend review:** The calendar endpoint already validates and bounds date ranges and returns the user-visible deadlines; its query and response contract remain unchanged.
+- **Checked:** Added same-month and cross-month cases plus a regression for navigation wiring in `tests/client/calendar-dates.test.js`. The focused calendar tests passed (6/6), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. The local browser remains at `/login`, so the authenticated calendar interaction could not be rendered for visual verification.
+
 ## 2026-10-12 — List all accepted document upload formats
 
 - **Reviewed:** The lesson-document picker extensions, visible format help, server MIME/extension allowlist, and invalid-upload response.
