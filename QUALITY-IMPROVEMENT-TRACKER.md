@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck registration controls and backend failure boundaries
+
+- **Reviewed:** The public registration form's names, password hint and visibility control; admin search-field limits against their route parsers; saved quiz-result recovery; SQLite session error handling; and bounded administrator log queries.
+- **Result:** No runtime change. The current Chrome accessibility tree exposes the registration fields by name, the password hint is connected to its field, form and server search limits agree, and the reviewed backend routes preserve their structured error and fallback behavior.
+- **Why no change:** The reported admin account page is not available in the current browser session, the protected route is not authenticated, and the inspected source and focused regressions show no separate mismatch to fix.
+- **Checked:** `node --test tests/client/password-field.test.js tests/server/quiz-attempt-results.test.js tests/server/session-store.test.js tests/server/admin-logs.test.js` passed (16/16). The local `/register` accessibility tree showed named email, first name, last name, username, password, and confirm-password controls. The working tree was clean at cycle start.
+- **Needed to continue:** A signed-in current-build admin-account view that contradicts the existing selector hit-area checks, a reproduced registration/session/log failure outside the focused cases, or representative workload data identifying a backend bottleneck.
+
 ## 2026-10-12 — Distinguish caption read failures from invalid WebVTT uploads
 
 - **Reviewed:** Caption upload size and WebVTT validation, the signature validator's caption-specific file reads, temporary-upload cleanup, and the route's existing invalid-format response.
