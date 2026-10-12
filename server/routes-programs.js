@@ -190,19 +190,24 @@ programsRouter.get('/learning-paths', (req, res) => {
   const staff = ['admin', 'moderator'].includes(req.currentUser.role);
   const requestedPage = pageQuery(req.query.page);
   const statusFilter = staff ? staffPathStatusFilter(req.query.status) : null;
+  const searchText = text(req.query.q, 'Search', 120);
+  const search = searchText ? textSearchPredicate(['p.title', 'p.description'], searchText) : null;
+  const searchClause = search ? ` AND (${search.sql})` : '';
+  const searchParams = search?.params || [];
   const total = staff
-    ? db.prepare(`SELECT COUNT(*) AS count FROM learning_paths WHERE ${statusFilter.sql}`).get(...statusFilter.params).count
+    ? db.prepare(`SELECT COUNT(*) AS count FROM learning_paths p WHERE ${statusFilter.sql}${searchClause}`).get(...statusFilter.params, ...searchParams).count
     : db.prepare(`SELECT COUNT(DISTINCT p.id) AS count FROM learning_paths p
       LEFT JOIN learning_path_enrollments e ON e.path_id = p.id AND e.user_id = ?
-      WHERE p.status = 'published' AND (e.id IS NOT NULL OR (${SELF_ENROLLMENT_PATH_COURSE_FILTER}))`).get(req.currentUser.id).count;
+      WHERE p.status = 'published' AND (e.id IS NOT NULL OR (${SELF_ENROLLMENT_PATH_COURSE_FILTER}))${searchClause}`)
+      .get(req.currentUser.id, ...searchParams).count;
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / LEARNING_PATH_PAGE_SIZE)));
   const paths = staff
-    ? db.prepare(`SELECT * FROM learning_paths WHERE ${statusFilter.sql} ORDER BY updated_at DESC, id LIMIT ? OFFSET ?`)
-      .all(...statusFilter.params, LEARNING_PATH_PAGE_SIZE, (page - 1) * LEARNING_PATH_PAGE_SIZE)
+    ? db.prepare(`SELECT p.* FROM learning_paths p WHERE ${statusFilter.sql}${searchClause} ORDER BY p.updated_at DESC, p.id LIMIT ? OFFSET ?`)
+      .all(...statusFilter.params, ...searchParams, LEARNING_PATH_PAGE_SIZE, (page - 1) * LEARNING_PATH_PAGE_SIZE)
     : db.prepare(`SELECT DISTINCT p.* FROM learning_paths p LEFT JOIN learning_path_enrollments e ON e.path_id = p.id AND e.user_id = ?
-      WHERE p.status = 'published' AND (e.id IS NOT NULL OR (${SELF_ENROLLMENT_PATH_COURSE_FILTER}))
+      WHERE p.status = 'published' AND (e.id IS NOT NULL OR (${SELF_ENROLLMENT_PATH_COURSE_FILTER}))${searchClause}
       ORDER BY p.title COLLATE NOCASE, p.id LIMIT ? OFFSET ?`)
-      .all(req.currentUser.id, LEARNING_PATH_PAGE_SIZE, (page - 1) * LEARNING_PATH_PAGE_SIZE);
+      .all(req.currentUser.id, ...searchParams, LEARNING_PATH_PAGE_SIZE, (page - 1) * LEARNING_PATH_PAGE_SIZE);
   res.json({ paths: pathPayloads(paths, req.currentUser), total, page, pageSize: LEARNING_PATH_PAGE_SIZE,
     hasMore: page * LEARNING_PATH_PAGE_SIZE < total });
 });

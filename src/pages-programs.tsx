@@ -192,6 +192,9 @@ export function LearningPathsPage() {
   const [pathTotal, setPathTotal] = useState(0);
   const [pathHasMore, setPathHasMore] = useState(false);
   const [pathStatus, setPathStatus] = useState<LearningPathStatusFilter>('all');
+  const [pathSearch, setPathSearch] = useState('');
+  const [appliedPathSearch, setAppliedPathSearch] = useState('');
+  const pathSearchInputRef = useRef<HTMLInputElement>(null);
   const pathStatusFilterButtonsRef = useRef<Partial<Record<LearningPathStatusFilter, HTMLButtonElement>>>({});
   const pendingPathStatusFocusRef = useRef<LearningPathStatusFilter | null>(null);
   const pathEditorReturnFocusRef = useRef<HTMLButtonElement | null>(null);
@@ -281,7 +284,7 @@ export function LearningPathsPage() {
     pathStatusFilterButtonsRef.current[status]?.focus();
   }, [loading, saving]);
 
-  async function load(requestedPage = pathPage, requestedStatus = pathStatus) {
+  async function load(requestedPage = pathPage, requestedStatus = pathStatus, requestedSearch = appliedPathSearch) {
     if (!pathsPageActiveRef.current) return;
     pathsRequestControllerRef.current?.abort();
     const requestController = new AbortController();
@@ -293,6 +296,7 @@ export function LearningPathsPage() {
     try {
       const params = new URLSearchParams({ page: String(requestedPage) });
       if (staff) params.set('status', requestedStatus);
+      if (requestedSearch) params.set('q', requestedSearch);
       const result = await api.get<LearningPathListPage>(`/api/learning-paths?${params}`, { signal: requestController.signal });
       if (!isCurrentRequest()) return;
       setPaths(result.paths);
@@ -325,6 +329,32 @@ export function LearningPathsPage() {
     };
   }, [staff]);
 
+  function submitPathSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (loading || saving || assignmentBusy) return;
+    const nextSearch = pathSearch.trim();
+    setPathSearch(nextSearch);
+    setAppliedPathSearch(nextSearch);
+    setPendingPathArchive(null);
+    clearAssignmentPanel();
+    setPaths([]);
+    setPathPage(1);
+    setPathTotal(0);
+    setPathHasMore(false);
+    void load(1, pathStatus, nextSearch);
+  }
+
+  function clearPathSearch() {
+    setPathSearch('');
+    setAppliedPathSearch('');
+    setPathPage(1);
+    setPendingPathArchive(null);
+    clearAssignmentPanel();
+    void load(1, pathStatus, '');
+    // The empty-result action disappears after clearing, so return focus to the persistent search field.
+    pathSearchInputRef.current?.focus();
+  }
+
   function changePathPage(page: number) {
     if (loading || assignmentBusy || page < 1) return;
     setPendingPathArchive(null);
@@ -334,6 +364,9 @@ export function LearningPathsPage() {
 
   function changePathStatus(status: LearningPathStatusFilter) {
     if (loading || saving || assignmentBusy || status === pathStatus) return;
+    const nextSearch = pathSearch.trim();
+    setPathSearch(nextSearch);
+    setAppliedPathSearch(nextSearch);
     setPendingPathArchive(null);
     clearAssignmentPanel();
     setPaths([]);
@@ -341,7 +374,7 @@ export function LearningPathsPage() {
     setPathTotal(0);
     setPathHasMore(false);
     setPathStatus(status);
-    void load(1, status);
+    void load(1, status, nextSearch);
   }
 
   async function savePath(value: Parameters<NonNullable<React.ComponentProps<typeof PathEditor>['onSave']>>[0]): Promise<boolean> {
@@ -351,7 +384,7 @@ export function LearningPathsPage() {
       if (editing) await api.patch(`/api/manage/learning-paths/${editing.id}`, value);
       else await api.post('/api/manage/learning-paths', value);
       if (editing && !canAssignLearningPathLearners(value.status) && assignmentPathRef.current === editing.id) clearAssignmentPanel();
-      setEditing(null); setPathStatus('all'); setNotice(editing ? 'Learning path updated.' : 'Learning path created.'); await load(1, 'all');
+      setEditing(null); setPathSearch(''); setAppliedPathSearch(''); setPathStatus('all'); setNotice(editing ? 'Learning path updated.' : 'Learning path created.'); await load(1, 'all', '');
       restorePathEditorFocus();
       return true;
     } catch (cause) { setError(requestMessage(cause, 'Learning path could not be saved.')); return false; }
@@ -543,11 +576,16 @@ export function LearningPathsPage() {
 
   const assignableLearners = learners.filter((learner) => !learner.enrolled);
   const enrolledLearners = learners.filter((learner) => learner.enrolled);
-  const emptyPathState = staff
-    ? pathStatus === 'all'
-      ? { title: 'No learning paths yet', detail: 'Create a path from published courses to give learners a guided route.' }
-      : { title: `No ${pathStatus} learning paths`, detail: pathStatus === 'archived' ? 'Archived paths are kept here and can be restored as drafts.' : 'Try another status filter or create a learning path.' }
-    : { title: 'No learning paths available', detail: 'When a path is published or assigned to you, it will appear here.' };
+  const emptyPathState = appliedPathSearch
+    ? { title: 'No matching learning paths', detail: 'Try another name or description, or clear the search.' }
+    : staff
+      ? pathStatus === 'all'
+        ? { title: 'No learning paths yet', detail: 'Create a path from published courses to give learners a guided route.' }
+        : { title: `No ${pathStatus} learning paths`, detail: pathStatus === 'archived' ? 'Archived paths are kept here and can be restored as drafts.' : 'Try another status filter or create a learning path.' }
+      : { title: 'No learning paths available', detail: 'When a path is published or assigned to you, it will appear here.' };
+  const emptyPathAction = appliedPathSearch
+    ? <Button type="button" variant="secondary" onClick={clearPathSearch}>Clear search</Button>
+    : undefined;
   const hasEmptyPathResult = !loading && !loadFailed && !error && paths.length === 0;
   const pendingRemovalPath = pendingAssignmentRemoval && paths.find((path) => path.id === pendingAssignmentRemoval.pathId && path.title === pendingAssignmentRemoval.pathTitle && canAssignLearningPathLearners(path.status));
   const pendingRemovalLearner = pendingAssignmentRemoval && learners.find((learner) => learner.id === pendingAssignmentRemoval.learnerId && learner.username === pendingAssignmentRemoval.learnerUsername && learner.enrolled && learner.source === 'assigned');
@@ -558,6 +596,7 @@ export function LearningPathsPage() {
     {hasEmptyPathResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyPathState.title}. {emptyPathState.detail}</p>}
     {staff && <PathEditor key={editing?.id || 'new'} existing={editing} busy={saving} onSave={savePath} onCancel={cancelPathEdit} onDirtyChange={updatePathEditorDirty} />}
     {staff && <div className="management-tabs" role="group" aria-label="Filter learning paths by status">{learningPathStatusFilters.map((filter) => <button type="button" key={filter.value} ref={(button) => { if (button) pathStatusFilterButtonsRef.current[filter.value] = button; else delete pathStatusFilterButtonsRef.current[filter.value]; }} aria-pressed={pathStatus === filter.value} className={pathStatus === filter.value ? 'active' : ''} disabled={loading || saving || assignmentBusy} onClick={() => changePathStatus(filter.value)}>{filter.label}</button>)}</div>}
+    <form role="search" aria-label="Search learning paths" className="management-search" onSubmit={submitPathSearch}><Search size={19} aria-hidden="true" /><input ref={pathSearchInputRef} type="search" value={pathSearch} onChange={(event) => setPathSearch(event.target.value)} placeholder="Search by name or description" aria-label="Search learning paths" maxLength={120} /><button type="submit" disabled={loading || saving || assignmentBusy}>Search</button></form>
     {loading && !paths.length ? <div className="page-loading" role="status">Loading learning paths…</div> : paths.length ? <>
       {loading && <div className="log-loading" role="status">Loading learning paths…</div>}
       <div className="program-list" aria-busy={loading}>
@@ -600,7 +639,7 @@ export function LearningPathsPage() {
           <span>Page {pathPage} of {Math.max(1, Math.ceil(pathTotal / pathPageSize))}</span>
           <Button variant="secondary" disabled={!pathHasMore || loading || assignmentBusy} onClick={() => changePathPage(pathPage + 1)}>Next</Button></div>
       </nav>}
-    </> : loadFailed ? null : <EmptyState title={emptyPathState.title} detail={emptyPathState.detail} />}
+    </> : loadFailed ? null : <EmptyState title={emptyPathState.title} detail={emptyPathState.detail} action={emptyPathAction} />}
     {pendingAssignmentRemoval && assignmentPath === pendingAssignmentRemoval.pathId && pendingRemovalPath && pendingRemovalLearner && <ConfirmationDialog {...pathAssignmentRemovalConfirmation(pendingAssignmentRemoval.learnerUsername, pendingAssignmentRemoval.pathTitle)} confirmLabel="Remove assignment" onCancel={() => setPendingAssignmentRemoval(null)} onConfirm={() => void confirmAssignmentRemoval()} />}
     {pendingPathArchive && paths.some((path) => path.id === pendingPathArchive.id && path.title === pendingPathArchive.title && path.status !== 'archived') && <ConfirmationDialog {...pathArchiveConfirmation(pendingPathArchive.title, pendingPathArchive.discardEditorChanges)} confirmLabel="Archive path" onCancel={() => setPendingPathArchive(null)} onConfirm={confirmPathArchive} />}
     {pendingPathEdit && <ConfirmationDialog title="Discard unsaved path changes?" description={`Your current path changes will be lost if you switch to editing “${pendingPathEdit.title}”.`} confirmLabel="Discard and edit" onCancel={() => setPendingPathEdit(null)} onConfirm={confirmPathEdit} />}

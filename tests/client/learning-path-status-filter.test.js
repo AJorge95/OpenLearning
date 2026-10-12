@@ -21,13 +21,13 @@ test('changing learning-path status clears previous results and pager before loa
   const changePathStatus = handlers.get('changePathStatus');
   assert.ok(changePathStatus, 'expected the learning-path status handler');
 
-  const loadIndex = changePathStatus.indexOf('void load(1, status);');
+  const loadIndex = changePathStatus.indexOf('void load(1, status, nextSearch);');
   assert.ok(loadIndex >= 0, 'expected the selected status to load from page one');
   for (const reset of ['setPaths([]);', 'setPathPage(1);', 'setPathTotal(0);', 'setPathHasMore(false);']) {
     const resetIndex = changePathStatus.indexOf(reset);
     assert.ok(resetIndex >= 0 && resetIndex < loadIndex, `${reset} should run before the filtered request`);
   }
-  assert.match(changePathStatus, /setPathStatus\(status\);[\s\S]*?void load\(1, status\);/);
+  assert.match(changePathStatus, /setPathStatus\(status\);[\s\S]*?void load\(1, status, nextSearch\);/);
 });
 
 test('same-filter pagination keeps the current learning-path results visible while loading', () => {

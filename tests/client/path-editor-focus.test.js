@@ -21,7 +21,7 @@ test('cancelling a path edit returns focus to its initiating row or the path fil
 
 test('saving a path restores focus after refreshing the list and falls back when its row moved', () => {
   assert.match(pageSource, /function restorePathEditorFocus\(\) \{[\s\S]*?window\.requestAnimationFrame\(\(\) => \{\s*if \(trigger\.isConnected\) trigger\.focus\(\);\s*else pathStatusFilterButtonsRef\.current\.all\?\.focus\(\);/);
-  assert.match(pageSource, /await load\(1, 'all'\);\s*restorePathEditorFocus\(\);/);
+  assert.match(pageSource, /await load\(1, 'all', ''\);\s*restorePathEditorFocus\(\);/);
 });
 
 test('switching away from a dirty path editor requires confirmation', () => {
