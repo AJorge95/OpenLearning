@@ -1,5 +1,19 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck the platform-role selector click boundary
+
+- **Reviewed:** The reported right-side click area, account-detail role markup and width rules, custom-select pointer forwarding, and keyboard activation.
+- **Result:** The current source already uses a bounded 8.5rem control, keeps the surrounding role container non-interactive, and rejects clicks forwarded from outside the visible trigger. No further UI code change was needed.
+- **Why no change:** Existing hit-area and activation regressions cover the reported interaction and keyboard access. The available browser session redirected the protected account route to sign-in, so the signed-in rendering could not be rechecked live.
+- **Checked:** Account-role and custom-select tests passed (41/41); `npm run build` and `git diff --check` passed. The browser reached `/login` when opening the account route.
+
+## 2026-10-12 — Share learner history matching in storage-version payloads
+
+- **Reviewed:** The storage-version progress payload and normal course summaries for duplicate lesson and quiz history queries and exact-ID/stable-ID matching.
+- **Improvement:** Reuse the grouped learner summary loader in `progressForStorage`, then derive completed lesson and passed quiz IDs from the same history maps used by normal course summaries.
+- **Why it helps:** Removes duplicate SQL and matching rules, so storage-version payloads and normal summaries apply the same exact-ID/stable-ID behavior and are less likely to drift apart.
+- **Checked:** Four version and progress regressions passed; the full `npm test -- --test-reporter=dot` suite passed; `npm run build` and `git diff --check` passed. Regression tests remain in `tests/server/`.
+
 ## 2026-10-12 — Recheck learner sign-in and session handling
 
 - **Reviewed:** Sign-in form labels, autocomplete, error announcement, and responsive width; failed-login rate limiting; session regeneration; account/approval rechecks; last-login and audit updates.

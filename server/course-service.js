@@ -9,26 +9,18 @@ function progressForStorage(logicalId, contentId, user, version) {
   const quizRows = db.prepare(`SELECT q.id, COALESCE(q.stable_id, q.id) AS stable_id FROM quizzes q
     JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?`).all(contentId);
   if (!user) return { completedLessonIds: new Set(), passedQuizIds: new Set() };
-  const state = db.prepare('SELECT target_version_id FROM course_learning_state WHERE user_id = ? AND course_id = ?').get(user.id, logicalId);
+  // Share the exact-ID and stable-ID history rules used by normal course summaries.
+  const learnerSummary = loadCourseLearnerSummaryData([logicalId], [user.id]).get(user.id);
+  const state = learnerSummary.learningStateByCourse.get(logicalId);
   const resetRequired = Boolean(version && state?.target_version_id === version.id);
-  const lessonHistory = db.prepare(`SELECT l.id, COALESCE(l.stable_id, l.id) AS stable_id FROM lesson_progress p
-    JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id
-    JOIN courses c ON c.id = m.course_id WHERE p.user_id = ? AND (c.id = ? OR c.logical_course_id = ?)`)
-    .all(user.id, logicalId, logicalId);
-  const quizHistory = db.prepare(`SELECT DISTINCT q.id, COALESCE(q.stable_id, q.id) AS stable_id FROM quiz_attempts a
-    JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = m.course_id
-    WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)`)
-    .all(user.id, logicalId, logicalId);
-  const lessonHistoryIds = new Set(lessonHistory.map((saved) => saved.id));
-  const lessonHistoryStableIds = new Set(lessonHistory.map((saved) => saved.stable_id));
-  const quizHistoryIds = new Set(quizHistory.map((saved) => saved.id));
-  const quizHistoryStableIds = new Set(quizHistory.map((saved) => saved.stable_id));
+  const lessonHistory = learnerSummary.lessonHistoryByCourse.get(logicalId);
+  const quizHistory = learnerSummary.quizHistoryByCourse.get(logicalId);
   const completedLessonIds = new Set(lessonRows.filter((active) => resetRequired
-    ? lessonHistoryIds.has(active.id)
-    : lessonHistoryStableIds.has(active.stable_id)).map((row) => row.id));
+    ? lessonHistory?.ids.has(active.id)
+    : lessonHistory?.stableIds.has(active.stable_id)).map((row) => row.id));
   const passedQuizIds = new Set(quizRows.filter((active) => resetRequired
-    ? quizHistoryIds.has(active.id)
-    : quizHistoryStableIds.has(active.stable_id)).map((row) => row.id));
+    ? quizHistory?.ids.has(active.id)
+    : quizHistory?.stableIds.has(active.stable_id)).map((row) => row.id));
   return { completedLessonIds, passedQuizIds };
 }
 
