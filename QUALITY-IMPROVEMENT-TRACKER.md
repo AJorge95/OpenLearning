@@ -1225,7 +1225,7 @@
 - **Reviewed:** Liveness and readiness route ordering, database/setup/admin readiness gates, shutdown draining and timeout, indexed session expiry cleanup, cleanup error reporting, and session-store close behavior.
 - **Result:** No runtime change. `/healthz` stays independent of SQLite and session middleware; `/readyz` fails closed during reset or shutdown and on missing or failing database checks. Expired sessions are indexed for cleanup, cleanup failures are reported without aborting store startup, and the timer is unreferenced and cleared during shutdown.
 - **Why no change:** The implementation matches the documented service-monitor contract, and the current tests cover readiness gates, database failures, shutdown short-circuiting, cleanup errors, session expiry, and store closure. No current deployment evidence points to a further reliability or performance gap.
-- **Checked:** `node --test --test-reporter=dot tests/server/readiness.test.js tests/server/session-store.test.js` passed (9/9), and `git diff --check` passed. The tests use isolated SQLite databases; no application data changed.
+- **Checked:** `node --test --test-reporter=dot tests/server/readiness.test.js tests/server/session-store.test.js` passed (9/9). On 2026-10-12, `node --test tests/server/readiness.test.js tests/client/auth-startup-parallel.test.js` also passed (5/5); `git diff --check` passed. The tests use isolated SQLite databases; no application data changed.
 - **Needed to continue:** A readiness mismatch during a real startup, reset, or shutdown, or deployment metrics showing an expired-session backlog that makes cleanup slow.
 
 ## 2026-10-12 — Recheck the reported role-selector click area
