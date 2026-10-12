@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Guard accessible names on textareas
+
+- **Reviewed:** Textarea markup across learner, course, lesson, quiz, path, and registration-field forms, including visible labels, visually hidden labels, matching `htmlFor`/`id`, and ARIA naming alternatives.
+- **Improvement:** Add a TypeScript JSX regression that inventories project textareas and flags controls without a wrapping or matching label or an explicit ARIA name. Add a fixture confirming the check catches an unlabeled field.
+- **Why it helps:** New or edited text areas cannot silently ship without a usable name for keyboard and screen-reader users; the current source inventory passes.
+- **Backend review:** Comment access, validation, pagination, and moderation behavior remain unchanged and covered by the focused server suite.
+- **Checked:** `node --test tests/client/textarea-accessible-name.test.js tests/client/lesson-comments.test.js` passed (13/13); `git diff --check` passed.
+
 ## 2026-10-12 — Protect the lesson comment field label
 
 - **Reviewed:** The learner comment textarea, its visible label, character/audience hint, associated description, and the existing comment client and moderation regressions.
