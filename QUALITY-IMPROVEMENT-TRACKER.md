@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck course-access and learning-path query bounds
+
+- **Reviewed:** Learner and staff course lists, learning-path payload construction, path assignment directories, prerequisite access checks, page sizes, course-count limits, and the progress batching strategy.
+- **Result:** No runtime change. Course and path lists are paginated; each path is capped at 200 courses; multi-path payloads and learner-progress reads use bounded batches rather than per-path/per-course lookups.
+- **Why no change:** The current query shapes already bound work and preserve stable ordering, and the related integration coverage checks query counts, page boundaries, ID limits, and role-specific visibility.
+- **Checked:** `tests/server/course-analytics.test.js` passed (126/126); related learning-path client tests passed (13/13); `git diff --check` passed. No additional query or UI issue was reproduced.
+
 ## 2026-10-12 — Recheck learner dialogs, quiz controls, and account limits
 
 - **Reviewed:** Quiz question grouping and result announcements, confirmation and password-reset dialog naming/focus behavior, project-wide input/button/link names, account-role selector bounds, request pagination, readiness, and concurrent registration limits.
