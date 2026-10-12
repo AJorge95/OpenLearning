@@ -22,6 +22,21 @@ function jsxAttributeValue(element, name, sourceFile) {
   return ts.isStringLiteralLike(expression) ? expression.text : expression.getText(sourceFile);
 }
 
+function jsxAttributeHasAccessibleName(element, name) {
+  const attribute = element.attributes.properties.find((property) => (
+    ts.isJsxAttribute(property) && property.name.text === name
+  ));
+  if (!attribute?.initializer) return false;
+  if (ts.isStringLiteralLike(attribute.initializer)) return Boolean(attribute.initializer.text.trim());
+  if (!ts.isJsxExpression(attribute.initializer) || !attribute.initializer.expression) return false;
+  const expression = attribute.initializer.expression;
+  if (ts.isStringLiteralLike(expression)) return Boolean(expression.text.trim());
+  if (expression.kind === ts.SyntaxKind.NullKeyword
+    || expression.kind === ts.SyntaxKind.FalseKeyword
+    || expression.kind === ts.SyntaxKind.TrueKeyword) return false;
+  return true;
+}
+
 function collectControlNameViolations(sourceFile, expectedTag, shouldInspect = () => true, hasNativeName = () => false) {
   const labelTargets = new Set();
   const violations = [];
@@ -94,7 +109,11 @@ function collectInputNameViolations(sourceFile) {
 function jsxExpressionHasAccessibleText(expression) {
   if (ts.isStringLiteralLike(expression)) return Boolean(expression.text.trim());
   if (ts.isNumericLiteral(expression)) return true;
-  if (ts.isIdentifier(expression) && expression.text === 'undefined') return false;
+  if (ts.isTemplateExpression(expression)) {
+    return Boolean(expression.head.text.trim()) || expression.templateSpans.some((span) => (
+      Boolean(span.literal.text.trim()) || jsxExpressionHasAccessibleText(span.expression)
+    ));
+  }
   if (expression.kind === ts.SyntaxKind.NullKeyword
     || expression.kind === ts.SyntaxKind.FalseKeyword
     || expression.kind === ts.SyntaxKind.TrueKeyword) return false;
@@ -110,7 +129,26 @@ function jsxExpressionHasAccessibleText(expression) {
     && [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(expression.operatorToken.kind)) {
     return jsxExpressionHasAccessibleText(expression.left) && jsxExpressionHasAccessibleText(expression.right);
   }
-  return true;
+  if (ts.isJsxElement(expression)) {
+    if (jsxAttributeValue(expression.openingElement, 'aria-hidden') === 'true') return false;
+    if (jsxTagName(expression.openingElement.tagName) === 'img') {
+      return Boolean(jsxAttributeValue(expression.openingElement, 'alt'));
+    }
+    return jsxChildrenHaveAccessibleText(expression.children);
+  }
+  if (ts.isJsxSelfClosingElement(expression)) {
+    if (jsxAttributeValue(expression, 'aria-hidden') === 'true') return false;
+    return jsxTagName(expression.tagName) === 'img' && Boolean(jsxAttributeValue(expression, 'alt'));
+  }
+  if (ts.isJsxFragment(expression)) return jsxChildrenHaveAccessibleText(expression.children);
+  if (ts.isIdentifier(expression)) {
+    // Trust label-like data fields, but never assume an arbitrary icon variable is text.
+    return /(?:children|label|title|name|text|username|caption)$/i.test(expression.text);
+  }
+  if (ts.isPropertyAccessExpression(expression)) {
+    return /^(?:label|title|name|text|username|caption)$/i.test(expression.name.text);
+  }
+  return false;
 }
 
 function jsxChildrenHaveAccessibleText(children) {
@@ -137,8 +175,8 @@ function collectElementNameViolations(sourceFile, elementTags) {
   const violations = [];
 
   function inspect(element, children) {
-    const hasExplicitName = Boolean(jsxAttributeValue(element, 'aria-label', sourceFile)
-      || jsxAttributeValue(element, 'aria-labelledby', sourceFile));
+    const hasExplicitName = jsxAttributeHasAccessibleName(element, 'aria-label')
+      || jsxAttributeHasAccessibleName(element, 'aria-labelledby');
     if (hasExplicitName || jsxChildrenHaveAccessibleText(children)) return;
     const { line } = sourceFile.getLineAndCharacterOfPosition(element.getStart(sourceFile));
     violations.push(`${sourceFile.fileName}:${line + 1}`);
@@ -218,16 +256,16 @@ test('all project inputs with an accessible-name requirement have a label or ARI
   assert.deepEqual(violations, [], `Inputs need a wrapping or matching label or an explicit ARIA name:\n${violations.join('\n')}`);
 });
 
-test('the button label check detects icon-only controls and empty conditional branches', () => {
+test('the button label check detects icon-only controls, empty branches, and blank ARIA names', () => {
   const sourceFile = ts.createSourceFile(
     'fixture.tsx',
-    'const iconOnly = <button><span aria-hidden="true"><Icon /></span></button>;\nconst visibleText = <button><Icon aria-hidden="true" />Continue</button>;\nconst changingText = <Button>{busy ? \'Saving…\' : \'Save\'}</Button>;\nconst ariaNamed = <button aria-label="Close"><Icon aria-hidden="true" /></button>;\nconst sometimesEmpty = <button>{busy ? \'Saving…\' : null}</button>;\nconst shortCircuitedText = <button>{busy && \'Saving…\'}</button>;',
+    'const iconOnly = <button><span aria-hidden="true"><Icon /></span></button>;\nconst visibleText = <button><Icon aria-hidden="true" />Continue</button>;\nconst changingText = <Button>{busy ? \'Saving…\' : `Load ${count} more`}</Button>;\nconst ariaNamed = <button aria-label="Close"><Icon aria-hidden="true" /></button>;\nconst sometimesEmpty = <button>{busy ? \'Saving…\' : null}</button>;\nconst shortCircuitedText = <button>{busy && \'Saving…\'}</button>;\nconst iconExpression = <button>{<Icon aria-hidden="true" />}</button>;\nconst iconVariable = <Button>{icon}</Button>;\nconst blankAriaName = <button aria-label="   "><Icon aria-hidden="true" /></button>;',
     ts.ScriptTarget.Latest,
     true,
     ts.ScriptKind.TSX,
   );
 
-  assert.deepEqual(collectButtonNameViolations(sourceFile), ['fixture.tsx:1', 'fixture.tsx:5', 'fixture.tsx:6']);
+  assert.deepEqual(collectButtonNameViolations(sourceFile), ['fixture.tsx:1', 'fixture.tsx:5', 'fixture.tsx:6', 'fixture.tsx:7', 'fixture.tsx:8', 'fixture.tsx:9']);
 });
 
 test('all project buttons expose text or an explicit accessible name', () => {
@@ -240,16 +278,16 @@ test('all project buttons expose text or an explicit accessible name', () => {
   assert.deepEqual(violations, [], `Buttons need visible text or an explicit ARIA name:\n${violations.join('\n')}`);
 });
 
-test('the link label check detects icon-only links and empty conditional branches', () => {
+test('the link label check detects icon-only links, empty branches, and blank ARIA names', () => {
   const sourceFile = ts.createSourceFile(
     'fixture.tsx',
-    'const iconOnly = <a href="/next"><Icon aria-hidden="true" /></a>;\nconst visibleText = <Link to="/courses"><Icon aria-hidden="true" />Browse courses</Link>;\nconst dynamicText = <Link to={course.url}>{course.title}</Link>;\nconst ariaNamed = <a href="/next" aria-label="Next item"><Icon aria-hidden="true" /></a>;\nconst sometimesEmpty = <Link to="/next">{isNext ? \'Next item\' : null}</Link>;',
+    'const iconOnly = <a href="/next"><Icon aria-hidden="true" /></a>;\nconst visibleText = <Link to="/courses"><Icon aria-hidden="true" />Browse courses</Link>;\nconst dynamicText = <Link to={course.url}>{course.title}</Link>;\nconst ariaNamed = <a href="/next" aria-label="Next item"><Icon aria-hidden="true" /></a>;\nconst sometimesEmpty = <Link to="/next">{isNext ? \'Next item\' : null}</Link>;\nconst iconExpression = <a href="/next">{<Icon aria-hidden="true" />}</a>;\nconst iconVariable = <Link to="/next">{icon}</Link>;\nconst blankAriaName = <Link to="/next" aria-label="   "><Icon aria-hidden="true" /></Link>;',
     ts.ScriptTarget.Latest,
     true,
     ts.ScriptKind.TSX,
   );
 
-  assert.deepEqual(collectLinkNameViolations(sourceFile), ['fixture.tsx:1', 'fixture.tsx:5']);
+  assert.deepEqual(collectLinkNameViolations(sourceFile), ['fixture.tsx:1', 'fixture.tsx:5', 'fixture.tsx:6', 'fixture.tsx:7', 'fixture.tsx:8']);
 });
 
 test('all project links expose text or an explicit accessible name', () => {
