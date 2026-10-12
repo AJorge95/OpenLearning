@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck admin user-list filtering and pagination
+
+- **Reviewed:** Search draft/application state, role and approval filters, clear and retry actions, table semantics, mobile filter stacking, bounded backend search input, validated filter values, stable ordering, and page clamping.
+- **Result:** No runtime change. The list already keeps filter changes synchronized with search, presents loading/error/empty feedback, labels the scrollable table, and clamps out-of-range pages. Search uses the shared parameterized predicate and validated role/status values.
+- **Why no change:** Existing UI and route tests cover the observed interactions and pagination boundary. No reproduced stale filter, keyboard issue, narrow-screen layout problem, or measured large-account delay surfaced.
+- **Checked:** Admin list UI regressions passed (12/12); the server pagination regression passed (1/1). The protected admin route remains unrendered in the current signed-out browser session.
+- **Needed to revisit:** A reproducible stale result after rapid filter changes, an accessibility or mobile-layout failure, or measured delay on a realistically large account list.
+
 ## 2026-10-12 — Recheck the platform-role selector click boundary
 
 - **Reviewed:** The reported right-side click area, account-detail role markup and width rules, custom-select pointer forwarding, and keyboard activation.
