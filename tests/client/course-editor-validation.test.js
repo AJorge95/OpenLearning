@@ -5,10 +5,14 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   COMPLETION_WINDOW_ERROR,
+  COURSE_CATEGORY_REQUIRED_ERROR,
+  COURSE_CATEGORY_TOO_LONG_ERROR,
+  MAX_COURSE_CATEGORY_LENGTH,
   COURSE_TITLE_REQUIRED_ERROR,
   COURSE_TITLE_TOO_LONG_ERROR,
   MAX_COURSE_TITLE_LENGTH,
   validateCompletionWindowDays,
+  validateCourseCategory,
   validateCourseTitle,
 } from '../../src/course-editor-validation.ts';
 
@@ -40,18 +44,46 @@ test('course titles are trimmed, required, and limited to the server maximum', (
   });
 });
 
+test('course categories are trimmed, required, and limited to the server maximum', () => {
+  assert.deepEqual(validateCourseCategory('  Safety  '), { value: 'Safety', error: null });
+  assert.deepEqual(validateCourseCategory('x'.repeat(MAX_COURSE_CATEGORY_LENGTH)), {
+    value: 'x'.repeat(MAX_COURSE_CATEGORY_LENGTH),
+    error: null,
+  });
+  assert.deepEqual(validateCourseCategory('   '), { value: null, error: COURSE_CATEGORY_REQUIRED_ERROR });
+  assert.deepEqual(validateCourseCategory('x'.repeat(MAX_COURSE_CATEGORY_LENGTH + 1)), {
+    value: null,
+    error: COURSE_CATEGORY_TOO_LONG_ERROR,
+  });
+});
+
 test('course title errors are attached to the field and checked before both editor save paths', () => {
   const source = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
   const saveCourse = source.slice(source.indexOf('async function saveCourse('), source.indexOf('async function saveCourseDetailsIfChanged('));
   const saveDetails = source.slice(source.indexOf('async function saveCourseDetailsIfChanged('), source.indexOf('async function loadGovernance('));
 
   assert.match(source, /<input ref=\{courseTitleInputRef\} required value=\{title\} maxLength=\{MAX_COURSE_TITLE_LENGTH\} aria-invalid=\{courseTitleError \? true : undefined\} aria-describedby=\{courseTitleError \? 'course-title-error' : undefined\}/);
-  assert.match(source, /id="course-title-error" className="course-title-error" role="alert">\{courseTitleError\}/);
+  assert.match(source, /id="course-title-error" className="course-detail-field-error" role="alert">\{courseTitleError\}/);
   assert.match(source, /function validatedCourseTitleForSave\(\)[\s\S]*?validateCourseTitle\(title\)[\s\S]*?courseTitleInputRef\.current\?\.focus\(\)/);
   assert.match(saveCourse, /const validatedTitle = validatedCourseTitleForSave\(\)/);
   assert.match(saveDetails, /const validatedTitle = validatedCourseTitleForSave\(\)/);
   assert.match(saveCourse, /title: validatedTitle/);
   assert.match(saveDetails, /title: validatedTitle/);
+});
+
+test('course category errors are attached to the field and checked before both editor save paths', () => {
+  const source = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
+  const saveCourse = source.slice(source.indexOf('async function saveCourse('), source.indexOf('async function saveCourseDetailsIfChanged('));
+  const saveDetails = source.slice(source.indexOf('async function saveCourseDetailsIfChanged('), source.indexOf('async function loadGovernance('));
+
+  assert.match(source, /<input ref=\{courseCategoryInputRef\} required value=\{category\} maxLength=\{MAX_COURSE_CATEGORY_LENGTH\} aria-invalid=\{courseCategoryError \? true : undefined\} aria-describedby=\{courseCategoryError \? 'course-category-error' : undefined\}/);
+  assert.match(source, /id="course-category-error" className="course-detail-field-error" role="alert">\{courseCategoryError\}/);
+  assert.match(source, /function validatedCourseCategoryForSave\(\)[\s\S]*?validateCourseCategory\(category\)[\s\S]*?courseCategoryInputRef\.current\?\.focus\(\)/);
+  assert.match(source, /error !== COMPLETION_WINDOW_ERROR && error !== courseTitleError && error !== courseCategoryError/);
+  assert.match(saveCourse, /const validatedCategory = validatedCourseCategoryForSave\(\)/);
+  assert.match(saveDetails, /const validatedCategory = validatedCourseCategoryForSave\(\)/);
+  assert.match(saveCourse, /category: validatedCategory/);
+  assert.match(saveDetails, /category: validatedCategory/);
 });
 
 test('saved course details sync server normalization without overwriting edits made in flight', () => {

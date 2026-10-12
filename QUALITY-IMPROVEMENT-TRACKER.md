@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Validate the required course category in the editor
+
+- **Reviewed:** The course create/update route's required, trimmed, 100-character category rule; the editor field; and both toolbar and curriculum-action save paths.
+- **Improvement:** Validate and normalize category values before either save path sends a request. Mark and describe the field, focus it, and show the server-compatible error beside it when invalid; handle the same authoritative server errors inline.
+- **Why it helps:** Clearing Category no longer produces a generic save failure after an editor action. Authors can correct the value at the field, and surrounding spaces are normalized to the value the server stores.
+- **Backend:** Existing route validation and error responses remain authoritative; no API or database change was needed.
+- **Checked:** Added category helper and editor-wiring coverage under `tests/client/`; focused course-editor tests passed (9/9), full `npm test -- --test-reporter=dot` passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. Playwright is not installed, and the connected browser is signed out, so the authenticated editor was not replayed.
+
 ## 2026-10-12 — Validate course titles before editor saves
 
 - **Reviewed:** Course-title persistence and limits in `server/routes-courses.js`, the course-details field, toolbar save/publish actions, and curriculum actions that save course details before continuing.

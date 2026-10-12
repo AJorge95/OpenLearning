@@ -25,7 +25,7 @@ import { uploadSizeError } from './upload-size-validation';
 import { accountNameError, MAX_ACCOUNT_NAME_LENGTH, normalizeAccountName } from './account-name-validation';
 import { MAX_PLATFORM_NAME_LENGTH, MIN_PLATFORM_NAME_LENGTH, normalizePlatformName, platformNameValidationError } from './platform-name-validation';
 import { courseEditingNote } from './course-editing-note';
-import { COMPLETION_WINDOW_ERROR, COURSE_TITLE_REQUIRED_ERROR, COURSE_TITLE_TOO_LONG_ERROR, MAX_COURSE_TITLE_LENGTH, validateCompletionWindowDays, validateCourseTitle } from './course-editor-validation';
+import { COMPLETION_WINDOW_ERROR, COURSE_CATEGORY_REQUIRED_ERROR, COURSE_CATEGORY_TOO_LONG_ERROR, COURSE_TITLE_REQUIRED_ERROR, COURSE_TITLE_TOO_LONG_ERROR, MAX_COURSE_CATEGORY_LENGTH, MAX_COURSE_TITLE_LENGTH, validateCompletionWindowDays, validateCourseCategory, validateCourseTitle } from './course-editor-validation';
 import { isCourseCoverDimensionAllowed, MAX_COURSE_COVER_DIMENSION } from './course-cover-validation';
 import { readImageDimensions } from './image-dimensions';
 import { firstQuizTextIssue } from './quiz-validation';
@@ -924,6 +924,7 @@ export function CourseEditorPage() {
   const { user: editorUser, maxUploadBytes } = useAuth();
   const coverHelpId = useId();
   const courseTitleInputRef = useRef<HTMLInputElement>(null);
+  const courseCategoryInputRef = useRef<HTMLInputElement>(null);
   const completionWindowInputRef = useRef<HTMLInputElement>(null);
   const createCourseRequestRef = useRef<Promise<{ course: Course }> | null>(null);
   const courseLoadSequenceRef = useRef(0);
@@ -938,6 +939,7 @@ export function CourseEditorPage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [title, setTitle] = useState('Untitled course');
   const [courseTitleError, setCourseTitleError] = useState('');
+  const [courseCategoryError, setCourseCategoryError] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('General');
   const [visibility, setVisibility] = useState<Course['visibility']>('public');
@@ -1221,6 +1223,18 @@ export function CourseEditorPage() {
     return validation.value;
   }
 
+  function validatedCourseCategoryForSave() {
+    // Category is required on the server even though the editor saves outside a native form submission.
+    const validation = validateCourseCategory(category);
+    if (validation.error) {
+      setCourseCategoryError(validation.error);
+      window.requestAnimationFrame(() => courseCategoryInputRef.current?.focus());
+      throw new ApiError(400, validation.error, 'validation_error');
+    }
+    setCourseCategoryError('');
+    return validation.value;
+  }
+
   function syncCourseDetailsAfterSave(savedCourse: Course, submitted: {
     title: string;
     description: string;
@@ -1245,6 +1259,13 @@ export function CourseEditorPage() {
     window.requestAnimationFrame(() => courseTitleInputRef.current?.focus());
   }
 
+  function showCourseCategoryApiError(cause: unknown) {
+    if (!(cause instanceof ApiError) || cause.code !== 'validation_error'
+      || ![COURSE_CATEGORY_REQUIRED_ERROR, COURSE_CATEGORY_TOO_LONG_ERROR].includes(cause.message)) return;
+    setCourseCategoryError(cause.message);
+    window.requestAnimationFrame(() => courseCategoryInputRef.current?.focus());
+  }
+
   async function saveCourse(status: 'draft' | 'published') {
     if (!courseId) return;
     const requestedCourseId = courseId;
@@ -1254,13 +1275,14 @@ export function CourseEditorPage() {
     let courseSaved = false;
     try {
       const validatedTitle = validatedCourseTitleForSave();
+      const validatedCategory = validatedCourseCategoryForSave();
       if (completionWindow.error) {
         completionWindowInputRef.current?.focus();
         throw new ApiError(400, completionWindow.error, 'validation_error');
       }
       const submittedDetails = { title, description, category, visibility, completionWindowDays };
       const response = await api.patch<{ course: Course }>(`/api/manage/courses/${requestedCourseId}`, {
-        title: validatedTitle, description, category, visibility,
+        title: validatedTitle, description, category: validatedCategory, visibility,
         completionWindowDays: completionWindow.value,
         ...(status ? { status } : {}),
       ...(status === 'published' ? { requiresRecompletion, changeNote } : {}),
@@ -1272,6 +1294,7 @@ export function CourseEditorPage() {
       if (status === 'published') { setRequiresRecompletion(false); setChangeNote(''); await loadGovernance(requestedCourseId); }
     } catch (cause) {
       showCourseTitleApiError(cause);
+      showCourseCategoryApiError(cause);
       if (routeCourseIdRef.current === requestedCourseId && requestSequence === courseLoadSequenceRef.current) {
         setError(courseSaved
           ? `Course was saved, but the editor settings could not be refreshed. ${cause instanceof ApiError ? cause.message : 'Retry loading course settings.'}`
@@ -1285,24 +1308,26 @@ export function CourseEditorPage() {
   async function saveCourseDetailsIfChanged() {
     if (!courseId || !course) return;
     const validatedTitle = validatedCourseTitleForSave();
+    const validatedCategory = validatedCourseCategoryForSave();
     if (completionWindow.error) {
       completionWindowInputRef.current?.focus();
       throw new ApiError(400, completionWindow.error, 'validation_error');
     }
     const submittedDetails = { title, description, category, visibility, completionWindowDays };
-    if (validatedTitle === course.title && description === course.description && category === course.category && visibility === course.visibility
+    if (validatedTitle === course.title && description === course.description && validatedCategory === course.category && visibility === course.visibility
       && (completionWindowDays ? Number(completionWindowDays) : null) === (course.completionWindowDays ?? null)) {
       syncCourseDetailsAfterSave(course, submittedDetails);
       return;
     }
     try {
       const response = await api.patch<{ course: Course }>(`/api/manage/courses/${courseId}`, {
-        title: validatedTitle, description, category, visibility,
+        title: validatedTitle, description, category: validatedCategory, visibility,
         completionWindowDays: completionWindow.value,
       });
       syncCourseDetailsAfterSave(response.course, submittedDetails);
     } catch (cause) {
       showCourseTitleApiError(cause);
+      showCourseCategoryApiError(cause);
       throw cause;
     }
   }
@@ -1823,7 +1848,7 @@ export function CourseEditorPage() {
 
   return <div className="editor-page">
     <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>{isNewCourseDraft ? 'Create course' : 'Edit course'}</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving || (review?.status === 'in_review' && review.submittedBy === editorUser?.id)} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
-    {error && error !== COMPLETION_WINDOW_ERROR && error !== courseTitleError && <Notice>{error}</Notice>}{notice && <Notice kind="success">{notice}</Notice>}
+    {error && error !== COMPLETION_WINDOW_ERROR && error !== courseTitleError && error !== courseCategoryError && <Notice>{error}</Notice>}{notice && <Notice kind="success">{notice}</Notice>}
     {navigationBlocker.state === 'blocked' && <ConfirmationDialog
       title={saving ? 'Course save in progress' : 'Discard unsaved course details?'}
       description={saving ? 'Wait for the current save to finish before leaving this page.' : 'Your unsaved course details will be lost if you leave this page.'}
@@ -1837,8 +1862,8 @@ export function CourseEditorPage() {
     <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{movingCurriculumItems.size ? 'Updating course content order…' : ''}</p>
     <p className="course-editing-note">{courseEditingNote(course.status, course.visibility)}</p>
     <section className="editor-section course-details-form" aria-label="Course details">
-      <div className="editor-field-grid"><label className="field-wide">Course title<input ref={courseTitleInputRef} required value={title} maxLength={MAX_COURSE_TITLE_LENGTH} aria-invalid={courseTitleError ? true : undefined} aria-describedby={courseTitleError ? 'course-title-error' : undefined} onChange={(event) => { setTitle(event.target.value); setCourseTitleError(''); setError((currentError) => currentError === courseTitleError ? '' : currentError); }} placeholder="Give your course a clear title" disabled={saving} />{courseTitleError && <small id="course-title-error" className="course-title-error" role="alert">{courseTitleError}</small>}</label>
-        <label>Category<input value={category} maxLength={100} onChange={(event) => setCategory(event.target.value)} placeholder="e.g. Professional development" disabled={saving} /></label>
+      <div className="editor-field-grid"><label className="field-wide">Course title<input ref={courseTitleInputRef} required value={title} maxLength={MAX_COURSE_TITLE_LENGTH} aria-invalid={courseTitleError ? true : undefined} aria-describedby={courseTitleError ? 'course-title-error' : undefined} onChange={(event) => { setTitle(event.target.value); setCourseTitleError(''); setError((currentError) => currentError === courseTitleError ? '' : currentError); }} placeholder="Give your course a clear title" disabled={saving} />{courseTitleError && <small id="course-title-error" className="course-detail-field-error" role="alert">{courseTitleError}</small>}</label>
+        <label>Category<input ref={courseCategoryInputRef} required value={category} maxLength={MAX_COURSE_CATEGORY_LENGTH} aria-invalid={courseCategoryError ? true : undefined} aria-describedby={courseCategoryError ? 'course-category-error' : undefined} onChange={(event) => { setCategory(event.target.value); setCourseCategoryError(''); setError((currentError) => currentError === courseCategoryError ? '' : currentError); }} placeholder="e.g. Professional development" disabled={saving} />{courseCategoryError && <small id="course-category-error" className="course-detail-field-error" role="alert">{courseCategoryError}</small>}</label>
         <fieldset className="visibility-field" disabled={saving}><legend>Visibility</legend><label><input type="radio" name="visibility" checked={visibility === 'public'} onChange={() => setVisibility('public')} />Public</label><label><input type="radio" name="visibility" checked={visibility === 'private'} onChange={() => setVisibility('private')} />Private</label></fieldset>
         <label className="completion-window-field">Completion window (optional)<input ref={completionWindowInputRef} type="number" min="1" max="3650" step="1" inputMode="numeric" value={completionWindowDays} aria-invalid={completionWindow.error ? true : undefined} aria-describedby={completionWindow.error ? 'completion-window-help completion-window-error' : 'completion-window-help'} onChange={(event) => { setCompletionWindowDays(event.target.value); setError((currentError) => currentError === COMPLETION_WINDOW_ERROR ? '' : currentError); }} placeholder="No deadline" disabled={saving} /><small id="completion-window-help">Days are 24-hour periods. Deadlines do not block course access.</small>{completionWindow.error && <small id="completion-window-error" className="completion-window-error">{completionWindow.error}</small>}</label>
         <label className="field-wide">Description
