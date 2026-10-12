@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck certificate history and issuance boundaries
+
+- **Reviewed:** Certificate-history links, owner-scoped certificate lookup, version-specific issuance, eligibility and name checks, route-change loading state, responsive certificate layout, and print overrides.
+- **Result:** No runtime change. Saved certificate IDs resolve only for their owner; course-based issuance remains explicit and idempotent; changing the route clears the previous certificate while the next request loads. Existing screen, mobile, and print rules retain readable certificate details.
+- **Why no change:** The route, service, and style regressions cover the reviewed correctness and presentation boundaries, with no new mismatch or failure identified.
+- **Checked:** Certificate service, route, issuance-flow, and print-style tests passed (14/14). The protected certificate page and print preview were not rendered because the available browser session is signed out and Playwright is not installed.
+- **Needed to revisit:** A signed-in learner certificate with long recipient/course names in screen and print layouts, or a reproduced lookup/issuance failure.
+
 ## 2026-10-12 — Recheck My Learning pagination and load recovery
 
 - **Reviewed:** The learner's independently loaded course and certificate lists, abort and retry behavior, page-drift recovery, duplicate filtering, responsive course-card layout, and the server's access-filtered membership stream.
