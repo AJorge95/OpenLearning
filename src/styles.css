@@ -547,6 +547,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .management-search button { min-width: 54px; padding: 7px; border: 0; background: transparent; color: var(--purple); font-size: 13px; font-weight: 650; }
 .course-table-wrap, .user-table-wrap { width: 100%; overflow-x: auto; contain: layout; border: 1px solid var(--line); border-radius: 4px; }
 .course-table, .user-table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; }
+/* Show table-scroll guidance only where narrow layouts crop columns. */
 .table-scroll-hint { display: none; }
 .course-table th, .user-table th { height: 49px; padding: 0 16px; color: #5d6372; background: #f9f9fc; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 650; }
 .course-table td, .user-table td { height: 78px; padding: 10px 16px; border-bottom: 1px solid var(--line); color: #3e4352; font-size: 13px; }
