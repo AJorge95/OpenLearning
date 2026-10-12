@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep course-review decision values stable while saving
+
+- **Reviewed:** Reviewer publication settings and change-request feedback against the asynchronous decision handler and server route.
+- **Improvement:** Disable the learner-completion option, publication note, and change-request text area while a review decision is saving.
+- **Why it helps:** The submitted payload is fixed at click time. Locking its source fields prevents the visible values from drifting away from the decision that is being published or sent to the editor.
+- **Backend review:** The route validates note length and completion policy within its transaction; no API or persistence change was needed.
+- **Checked:** Course-editor route-state tests passed (13/13); the server publication/review note-boundary test passed (1/1); `npm run build` passed TypeScript and Vite; `git diff --check` passed. The signed-in review page was not rendered because the available local browser session is signed out.
+
 ## 2026-10-12 — Let staff revoke course access from disabled learners
 
 - **Reviewed:** Disabled learner rows in course access management, the UI's grant/revoke actions, and the existing course-grant API and audit transaction.
