@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Limit quiz-page payloads to the active quiz
+
+- **Reviewed:** The quiz page's course-payload consumer, question and choice queries, latest-attempt loading, course-progress summary, and next-activity navigation.
+- **Improvement:** Include a validated `quizId` on quiz-page course reads and load prompts, choices, and latest-attempt metadata only for that quiz. Remove the redundant per-quiz passed-attempt existence check; the shared progress summary already supplies quiz pass states. Keep all course modules so progress, certificates, and next-activity navigation continue to work.
+- **Why it helps:** Starting a quiz no longer fetches and serializes every other quiz's prompts and answer choices, or repeats a passed-attempt check whose result is already available from the progress summary.
+- **Checked:** Added route coverage with two quizzes, verifying only the selected quiz's questions and attempt details load while course progress and pass states remain unchanged; unknown and empty quiz IDs return errors. Focused route/client tests passed (5/5), the full test suite passed, `npm run build` passed TypeScript and Vite, both server syntax checks passed, and `git diff --check` passed.
+
 ## 2026-10-12 — Explain startup cleanup diagnostics in the admin guide
 
 - **Reviewed:** The system-log writer's cleanup completion and failure details against the administrator-facing log documentation.

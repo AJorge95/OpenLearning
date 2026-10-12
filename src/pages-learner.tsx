@@ -1623,7 +1623,7 @@ export function QuizPage() {
     setCourse(null); setLoading(true); setError(''); setAttemptDetailsLoadFailed(false);
     void (async () => {
       try {
-        const { course: data } = await fetchCourse(courseId, false, { signal: requestController.signal });
+        const { course: data } = await fetchCourse(courseId, false, { signal: requestController.signal, quizId });
         if (!isCurrentRequest()) return;
         setCourse(data);
         const latestAttempt = data.modules?.find((module) => module.quiz?.id === quizId)?.quiz?.latestAttempt;

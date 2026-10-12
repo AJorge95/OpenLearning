@@ -251,12 +251,15 @@ export async function getMe() {
   return api.get<{ user: User | null } & PlatformConfiguration>('/api/auth/me');
 }
 
-export async function fetchCourse(courseId: string, managed = false, options: Pick<RequestInit, 'signal'> & { includeQuizQuestions?: boolean } = {}) {
-  const { includeQuizQuestions = true, ...requestOptions } = options;
+export async function fetchCourse(courseId: string, managed = false, options: Pick<RequestInit, 'signal'> & { includeQuizQuestions?: boolean; quizId?: string } = {}) {
+  const { includeQuizQuestions = true, quizId, ...requestOptions } = options;
   const path = managed ? `/api/manage/courses/${courseId}` : `/api/courses/${courseId}`;
-  // Keep the default full payload for quiz/editor screens; overview and lesson views can omit unused prompts.
-  const query = !managed && !includeQuizQuestions ? '?includeQuizQuestions=0' : '';
-  return api.get<{ course: Course }>(`${path}${query}`, requestOptions);
+  // Keep full questions by default; quiz screens can request only their own prompts and choices.
+  const params = new URLSearchParams();
+  if (!managed && !includeQuizQuestions) params.set('includeQuizQuestions', '0');
+  if (!managed && quizId) params.set('quizId', quizId);
+  const query = params.toString();
+  return api.get<{ course: Course }>(`${path}${query ? `?${query}` : ''}`, requestOptions);
 }
 
 export async function fetchAccess(courseId: string, query = '', page = 1, options: Pick<RequestInit, 'signal'> = {}) {
