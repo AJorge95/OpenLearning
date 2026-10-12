@@ -82,19 +82,23 @@ async function errorFromResponse(response: Response) {
   return new ApiError(response.status, data?.error || `Request failed (${response.status}).`, data?.code);
 }
 
-async function refreshCsrf(): Promise<string> {
-  if (csrfRefreshPromise) return csrfRefreshPromise;
+async function refreshCsrf(options: Pick<RequestInit, 'signal'> = {}): Promise<string> {
+  const { signal } = options;
+  if (signal?.aborted) throw requestAbortError();
+  if (!signal && csrfRefreshPromise) return csrfRefreshPromise;
   const generation = csrfGeneration;
   const pending = (async () => {
-    const response = await fetchResponse('/api/csrf', { credentials: 'same-origin' });
+    const response = await fetchResponse('/api/csrf', { credentials: 'same-origin', ...options });
     if (!response.ok) throw new ApiError(response.status, 'Unable to start a secure session. Refresh and try again.');
     if (!isJsonContentType(response.headers.get('content-type') || '')) throw invalidResponse(response.status);
     const data = parseJsonObject(await readResponseText(response), response.status);
     if (typeof data.token !== 'string' || !data.token) throw invalidResponse(response.status);
-    if (generation !== csrfGeneration) return ensureCsrf();
+    if (generation !== csrfGeneration) return signal ? refreshCsrf(options) : ensureCsrf();
     csrfToken = data.token;
     return csrfToken;
   })();
+  // A startup caller owns its abort signal; do not cache its request for unrelated callers.
+  if (signal) return waitForAbort(pending, signal);
   csrfRefreshPromise = pending;
   try {
     return await pending;
@@ -107,16 +111,20 @@ async function ensureCsrf(): Promise<string> {
   return csrfToken ?? refreshCsrf();
 }
 
+function requestAbortError() {
+  return new DOMException('Request cancelled.', 'AbortError');
+}
+
 function uploadAbortError() {
   return new DOMException('Upload cancelled.', 'AbortError');
 }
 
-function waitForAbort<T>(promise: Promise<T>, signal?: AbortSignal | null): Promise<T> {
+function waitForAbort<T>(promise: Promise<T>, signal?: AbortSignal | null, createAbortError = requestAbortError): Promise<T> {
   if (!signal) return promise;
-  if (signal.aborted) return Promise.reject(uploadAbortError());
+  if (signal.aborted) return Promise.reject(createAbortError());
   return new Promise<T>((resolve, reject) => {
     const cleanup = () => signal.removeEventListener('abort', abort);
-    const abort = () => { cleanup(); reject(uploadAbortError()); };
+    const abort = () => { cleanup(); reject(createAbortError()); };
     signal.addEventListener('abort', abort, { once: true });
     promise.then(
       (value) => { cleanup(); resolve(value); },
@@ -162,7 +170,7 @@ export const api = {
   put: <T>(path: string, body?: unknown) => request<T>(path, json('PUT', body)),
   patch: <T>(path: string, body?: unknown) => request<T>(path, json('PATCH', body)),
   delete: <T = void>(path: string) => request<T>(path, { method: 'DELETE' }),
-  refreshCsrf,
+  refreshCsrf: (options: Pick<RequestInit, 'signal'> = {}) => refreshCsrf(options),
   clearCsrf: () => {
     csrfGeneration += 1;
     csrfToken = null;
@@ -170,7 +178,7 @@ export const api = {
   },
   upload: async <T>(path: string, fields: Record<string, string>, file: File, onProgress: (value: number) => void, options: Pick<RequestInit, 'signal'> = {}): Promise<T> => {
     if (options.signal?.aborted) throw uploadAbortError();
-    const token = await waitForAbort(ensureCsrf(), options.signal);
+    const token = await waitForAbort(ensureCsrf(), options.signal, uploadAbortError);
     if (options.signal?.aborted) throw uploadAbortError();
     const body = new FormData();
     for (const [key, value] of Object.entries(fields)) body.append(key, value);
@@ -219,7 +227,7 @@ export const api = {
               }
               // The global CSRF guard runs before Multer, so a rejected token cannot have stored the file.
               // Replaying the body is safe here and remains limited to one retry.
-              void waitForAbort(refreshCsrf(), options.signal).then((freshToken) => {
+              void waitForAbort(refreshCsrf(), options.signal, uploadAbortError).then((freshToken) => {
                 if (options.signal?.aborted) throw uploadAbortError();
                 onProgress(0);
                 return send(freshToken, true);
@@ -243,12 +251,12 @@ export const api = {
   },
 };
 
-export async function getSetupStatus() {
-  return api.get<{ configured: boolean; setupAvailable: boolean } & PlatformConfiguration>('/api/setup/status');
+export async function getSetupStatus(options: Pick<RequestInit, 'signal'> = {}) {
+  return api.get<{ configured: boolean; setupAvailable: boolean } & PlatformConfiguration>('/api/setup/status', options);
 }
 
-export async function getMe() {
-  return api.get<{ user: User | null } & PlatformConfiguration>('/api/auth/me');
+export async function getMe(options: Pick<RequestInit, 'signal'> = {}) {
+  return api.get<{ user: User | null } & PlatformConfiguration>('/api/auth/me', options);
 }
 
 export async function fetchCourse(courseId: string, managed = false, options: Pick<RequestInit, 'signal'> & { includeQuizQuestions?: boolean; includeLatestAttempts?: boolean; includeLessonDetails?: boolean; quizId?: string } = {}) {

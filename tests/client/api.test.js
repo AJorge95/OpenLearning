@@ -101,6 +101,26 @@ test('clearing CSRF state during refresh prevents the old session token from bei
   assert.equal(csrfRequests, 2);
 });
 
+test('aborting a caller-owned CSRF refresh leaves later startup retries available', async (t) => {
+  restoreFetch(t);
+  const signals = [];
+  globalThis.fetch = async (input, options = {}) => {
+    assert.equal(String(input), '/api/csrf');
+    signals.push(options.signal);
+    if (signals.length === 1) return new Promise(() => {});
+    return jsonResponse({ token: 'retry-token' });
+  };
+
+  const controller = new AbortController();
+  const pendingRefresh = api.refreshCsrf({ signal: controller.signal });
+  controller.abort();
+
+  await assert.rejects(pendingRefresh, (error) => error?.name === 'AbortError');
+  assert.equal(signals[0], controller.signal);
+  assert.equal(await api.refreshCsrf(), 'retry-token');
+  assert.equal(signals.length, 2);
+});
+
 test('returns a repeated CSRF rejection after one retry instead of looping', async (t) => {
   restoreFetch(t);
   let csrfRequests = 0;

@@ -32,6 +32,7 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const STARTUP_REQUEST_TIMEOUT_MS = 20_000;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -49,18 +50,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [startupError, setStartupError] = useState<string | null>(null);
   const startupRequestId = useRef(0);
+  const startupController = useRef<AbortController | null>(null);
   const authStateRevision = useRef(0);
   const refreshRequestId = useRef(0);
   const lastBrandTitle = useRef('OpenLearning');
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options: Pick<RequestInit, 'signal'> = {}) => {
     const requestId = ++refreshRequestId.current;
     const stateRevision = authStateRevision.current;
     // Startup reads are independent, so load them together instead of adding a network round trip.
     const [setup, me] = await Promise.all([
-      getSetupStatus(),
-      getMe(),
-      api.refreshCsrf(),
+      getSetupStatus(options),
+      getMe(options),
+      api.refreshCsrf(options),
     ]);
     if (requestId !== refreshRequestId.current || stateRevision !== authStateRevision.current) return;
     authStateRevision.current += 1;
@@ -80,16 +82,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const retryStartup = useCallback(async () => {
     const requestId = ++startupRequestId.current;
+    startupController.current?.abort();
+    const controller = new AbortController();
+    startupController.current = controller;
+    let timedOut = false;
+    // Bound startup reads so a stalled connection can reach the existing retry screen.
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, STARTUP_REQUEST_TIMEOUT_MS);
     setLoading(true);
     setStartupError(null);
     try {
-      await refresh();
+      await refresh({ signal: controller.signal });
       if (requestId === startupRequestId.current) setStartupError(null);
     } catch (cause) {
       if (requestId === startupRequestId.current) {
-        setStartupError(cause instanceof ApiError ? cause.message : 'Could not reach the learning platform. Check your connection and try again.');
+        const error = timedOut
+          ? new ApiError(0, 'The learning platform took too long to respond. Check your connection and try again.', 'request_timeout')
+          : cause instanceof ApiError
+            ? cause
+            : new ApiError(0, 'Could not reach the learning platform. Check your connection and try again.', 'network_error');
+        setStartupError(error.message);
       }
     } finally {
+      window.clearTimeout(timeoutId);
+      if (startupController.current === controller) startupController.current = null;
       if (requestId === startupRequestId.current) setLoading(false);
     }
   }, [refresh]);
@@ -116,6 +134,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void retryStartup();
+    return () => {
+      startupRequestId.current += 1;
+      startupController.current?.abort();
+    };
   }, [retryStartup]);
 
   const signIn = useCallback(async (username: string, password: string) => {
