@@ -11,4 +11,6 @@ test('course-editor correct-answer radios have a 24px square pointer target', ()
   assert.match(radioRule, /width:\s*24px/);
   assert.match(radioRule, /height:\s*24px/);
   assert.match(radioRule, /min-height:\s*24px/);
+  assert.match(radioRule, /appearance:\s*auto/);
+  assert.match(radioRule, /padding:\s*0/);
 });
