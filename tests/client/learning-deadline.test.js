@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
@@ -20,6 +21,25 @@ test('deadline status keeps completed courses complete and separates due-time bo
   assert.equal(getLearningDeadlineStatus('2026-10-11T12:00:00Z', false, now), 'upcoming');
   assert.equal(getLearningDeadlineStatus('2026-10-11T12:00:01Z', false, now), 'upcoming');
   assert.equal(getLearningDeadlineStatus('2026-10-11T11:00:00Z', true, now), 'completed');
+});
+
+test('SQLite UTC deadlines remain consistent with UTC when the browser timezone is behind', () => {
+  const moduleUrl = new URL('../../src/learning-deadline.ts', import.meta.url).href;
+  const script = `
+    import assert from 'node:assert/strict';
+    import { formatLearningDeadlineDate, getLearningDeadlineRefreshDelay, getLearningDeadlineStatus } from ${JSON.stringify(moduleUrl)};
+    const deadline = '2026-10-12 00:00:00';
+    const now = Date.parse('2026-10-12T01:00:00Z');
+    assert.equal(getLearningDeadlineStatus(deadline, false, now), 'overdue');
+    assert.equal(getLearningDeadlineRefreshDelay(deadline, now), null);
+    assert.equal(formatLearningDeadlineDate(deadline), formatLearningDeadlineDate('2026-10-12T00:00:00Z'));
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    encoding: 'utf8',
+    env: { ...process.env, TZ: 'Pacific/Honolulu' },
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
 test('deadline formatting returns a readable localized date and time', () => {
