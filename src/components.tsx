@@ -354,9 +354,10 @@ type PasswordFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'typ
   label: string;
   hint?: string;
   hintId?: string;
+  inputRef?: React.Ref<HTMLInputElement>;
 };
 
-export function PasswordField({ label, hint, hintId, id, disabled, 'aria-describedby': describedBy, ...inputProps }: PasswordFieldProps) {
+export function PasswordField({ label, hint, hintId, inputRef, id, disabled, 'aria-describedby': describedBy, ...inputProps }: PasswordFieldProps) {
   const generatedId = useId().replaceAll(':', '');
   const inputId = id || `password-${generatedId}`;
   const visibleHintId = hint ? hintId || `${inputId}-hint` : undefined;
@@ -376,7 +377,7 @@ export function PasswordField({ label, hint, hintId, id, disabled, 'aria-describ
   return <div className="password-field">
     <label htmlFor={inputId}>{label}</label>
     <div className="password-input-control">
-      <input {...inputProps} id={inputId} type={visible ? 'text' : 'password'} disabled={disabled} aria-describedby={describedByIds} onChange={handlePasswordChange} />
+      <input {...inputProps} ref={inputRef} id={inputId} type={visible ? 'text' : 'password'} disabled={disabled} aria-describedby={describedByIds} onChange={handlePasswordChange} />
       <button type="button" className="password-visibility-toggle" aria-label={`${visible ? 'Hide' : 'Show'} ${label.toLowerCase()}`} aria-controls={inputId} aria-pressed={visible} disabled={disabled} onClick={() => setVisible((current) => !current)}>{visible ? 'Hide' : 'Show'}</button>
     </div>
     {hint && <small id={visibleHintId}>{hint}</small>}

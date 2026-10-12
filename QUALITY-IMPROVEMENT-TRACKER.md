@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Focus the password confirmation field after a mismatch
+
+- **Reviewed:** Password-confirmation validation in first-run setup, learner registration, account security, and three administrator account-management flows.
+- **Improvement:** When confirmation values do not match, move keyboard focus to the confirmation input in all six forms. The shared password field now accepts an optional input ref.
+- **Why it helps:** Keyboard and assistive-technology users land on the field that needs correction instead of remaining on the submit button, while the existing inline error stays available.
+- **Backend review:** Each mismatch returns before starting the account or password API request; no server behavior or credential handling changed.
+- **Checked:** Focus and confirmation tests passed (10/10); related password, auth, registration, and admin dialog tests passed (26/26); `npm run build` passed TypeScript and Vite; `git diff --check` passed. On local `/register`, a dummy mismatch displayed the error and focused “Confirm password”; the page was reloaded afterward to clear test values. Browser console logs and a mobile viewport were not checked.
+
 ## 2026-10-12 — Keep course-review decision values stable while saving
 
 - **Reviewed:** Reviewer publication settings and change-request feedback against the asynchronous decision handler and server route.
