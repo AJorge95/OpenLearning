@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck protected streaming and role-control behavior
+
+- **Reviewed:** Protected video authorization, byte-range and `HEAD` responses, response-close stream cleanup, and the current native platform-role field’s width, accessible name, help text, and focus styling.
+- **Result:** No runtime change. Media streaming already returns bounded partial responses, rejects unsatisfiable ranges, checks access before serving bytes, and stops reading after the client disconnects. The role selector’s native element remains confined to its visible width on desktop and expands only at the mobile breakpoint.
+- **Why no change:** Existing route behavior and UI rules match the intended access and interaction contracts; no uncovered regression appeared in source or focused tests.
+- **Checked:** Protected file-stream and media-route tests passed (25/25); role-selector and AppSelect accessibility/activation tests passed (15/15). The protected admin screen cannot be rendered in this signed-out browser session.
+- **Needed to revisit:** A reproduced range-stream interruption or authorization mismatch, or a signed-in current-build role-selector interaction that contradicts the focused hit-area checks.
+
 ## 2026-10-12 — Recheck media-cache identity and administrator updates
 
 - **Reviewed:** Media upload identity and cleanup, the bounded in-memory duration cache key, administrator account mutation handling, last-admin safeguards, and audit rollback behavior.
