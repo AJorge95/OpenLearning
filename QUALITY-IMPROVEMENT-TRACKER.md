@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Skip learner attempt reads in course-editor payloads
+
+- **Reviewed:** Course editor GET and save responses, every `getCoursePayload` call that includes answer keys, and client reads of `latestAttempt`.
+- **Improvement:** Default answer-key editor payloads to omit latest-attempt metadata while keeping the option explicitly available to callers that need it. The quiz editor still receives correct-answer flags and quiz pass state.
+- **Why it helps:** Staff editor reads and writes avoid a correlated latest-attempt lookup for every quiz and do not return current-user attempt details that the editor never displays.
+- **UI review:** The editor has no `latestAttempt` consumer, so its current labels, controls, responsive layout, and keyboard behavior need no markup or CSS change for this payload optimization.
+- **Checked:** Added a staff-route regression proving no latest-attempt query is prepared while correct-answer data and pass state remain available. Focused quiz-attempt tests passed (6/6); the full test suite, `npm run build`, and `git diff --check` also passed.
+
 ## 2026-10-12 — Limit quiz-page payloads to the active quiz
 
 - **Reviewed:** The quiz page's course-payload consumer, question and choice queries, latest-attempt loading, course-progress summary, and next-activity navigation.

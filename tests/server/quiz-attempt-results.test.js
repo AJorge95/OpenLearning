@@ -238,6 +238,34 @@ test('course payload can omit latest attempts without querying or losing quiz pa
   });
 });
 
+test('staff editor payload keeps answer keys without querying user attempts', async () => {
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const originalPrepare = database.prepare;
+  let latestAttemptQueryCount = 0;
+  database.prepare = (sql) => {
+    if (sql.includes('SELECT q.id AS quiz_id, a.id, a.score, a.passed, a.submitted_at')) latestAttemptQueryCount += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  let response;
+  let payload;
+  try {
+    response = await fetch(`http://127.0.0.1:${address.port}/api/manage/courses/course-1`, {
+      headers: { 'x-test-user': 'admin-1', connection: 'close' },
+    });
+    payload = await response.json();
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.equal(response.status, 200);
+  assert.equal(latestAttemptQueryCount, 0);
+  assert.equal(payload.course.modules[0].quiz.latestAttempt, null);
+  assert.equal(payload.course.modules[0].quiz.passed, false);
+  assert.equal(payload.course.modules[0].quiz.questions[0].choices[0].isCorrect, true);
+});
+
 test('quiz-specific course payload keeps progress but omits other quiz questions and attempts', async () => {
   const address = server.address();
   assert(address && typeof address !== 'string');
