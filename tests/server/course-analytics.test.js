@@ -536,6 +536,53 @@ test('watch progress remains available when verified video duration cannot be ca
   }
 });
 
+test('watch progress distinguishes video read failures from invalid duration metadata', async () => {
+  const unreadableMediaId = 'media-watch-duration-read-failure';
+  const malformedMediaId = 'media-watch-duration-malformed';
+  const malformedFileName = 'malformed-duration.mp4';
+  const malformedPath = path.join(process.env.MEDIA_ROOT, 'course-analytics', malformedFileName);
+  fs.mkdirSync(path.dirname(malformedPath), { recursive: true });
+  fs.writeFileSync(malformedPath, Buffer.from('not-an-mp4'));
+  database.prepare(`INSERT INTO media_files
+    (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+    VALUES (?, 'course-analytics', 'missing.mp4', 'missing-duration.mp4', 'video/mp4', 32, 'video')`).run(unreadableMediaId);
+  database.prepare(`INSERT INTO media_files
+    (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+    VALUES (?, 'course-analytics', ?, ?, 'video/mp4', 10, 'video')`).run(malformedMediaId, malformedFileName, malformedFileName);
+
+  try {
+    database.prepare('UPDATE lessons SET media_id = ? WHERE id = ?').run(unreadableMediaId, 'lesson-analytics');
+    const unreadableResponse = await fetch(apiUrl('/lessons/lesson-analytics/watch-progress'), {
+      headers: userHeaders('learner-active'),
+    });
+    assert.equal(unreadableResponse.status, 503);
+    assert.deepEqual(await unreadableResponse.json(), {
+      error: 'The video file could not be read. Retry, or contact your course administrator if the problem continues.',
+      code: 'video_duration_read_unavailable',
+    });
+    const readFailureLog = database.prepare(`SELECT details_json FROM system_logs
+      WHERE source = 'video-duration' AND message = 'Video duration could not be read' ORDER BY id DESC LIMIT 1`).get();
+    assert.deepEqual(JSON.parse(readFailureLog.details_json), {
+      mediaId: unreadableMediaId, errorName: 'Error', errorCode: 'ENOENT',
+    });
+
+    database.prepare('UPDATE lessons SET media_id = ? WHERE id = ?').run(malformedMediaId, 'lesson-analytics');
+    const malformedResponse = await fetch(apiUrl('/lessons/lesson-analytics/watch-progress'), {
+      headers: userHeaders('learner-active'),
+    });
+    assert.equal(malformedResponse.status, 422);
+    assert.equal((await malformedResponse.json()).code, 'video_duration_unavailable');
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM system_logs
+      WHERE source = 'video-duration' AND message = 'Video duration could not be read'`).get().count, 1);
+  } finally {
+    database.prepare('UPDATE lessons SET media_id = NULL WHERE id = ?').run('lesson-analytics');
+    database.prepare('DELETE FROM media_files WHERE id IN (?, ?)').run(unreadableMediaId, malformedMediaId);
+    database.prepare(`DELETE FROM system_logs
+      WHERE source = 'video-duration' AND message = 'Video duration could not be read'`).run();
+    fs.rmSync(malformedPath, { force: true });
+  }
+});
+
 test('course analytics use published version content without creating an edit revision', async () => {
   const courseId = 'course-analytics-current-version';
   const storageCourseId = 'course-analytics-current-storage';
