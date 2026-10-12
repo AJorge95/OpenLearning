@@ -388,24 +388,48 @@ export function CourseCertificatePage() {
   const [certificate, setCertificate] = useState<CourseCertificate | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [issueAvailable, setIssueAvailable] = useState(false);
+  const [issuing, setIssuing] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
 
   useEffect(() => {
     const requestSequence = ++requestSequenceRef.current;
     const requestController = new AbortController();
-    setCertificate(null); setError(''); setLoading(true);
+    setCertificate(null); setError(''); setIssueAvailable(false); setIssuing(false); setLoading(true);
     api.get<{ certificate: CourseCertificate }>(`/api/certificates/${certificateRef}`, { signal: requestController.signal }).then((result) => {
       if (requestSequence === requestSequenceRef.current) setCertificate(result.certificate);
     }).catch((cause) => {
-      if (requestSequence === requestSequenceRef.current) setError(cause instanceof ApiError ? cause.message : 'Your certificate could not be loaded.');
+      if (requestSequence !== requestSequenceRef.current) return;
+      if (cause instanceof ApiError && cause.code === 'certificate_not_issued') {
+        setIssueAvailable(true);
+        return;
+      }
+      setError(cause instanceof ApiError ? cause.message : 'Your certificate could not be loaded.');
     }).finally(() => {
       if (requestSequence === requestSequenceRef.current) setLoading(false);
     });
     return () => { requestSequenceRef.current += 1; requestController.abort(); };
   }, [certificateRef, refreshVersion]);
 
+  async function issueCertificate() {
+    if (issuing || !issueAvailable) return;
+    const requestSequence = requestSequenceRef.current;
+    setIssuing(true); setError('');
+    try {
+      const result = await api.post<{ certificate: CourseCertificate }>(`/api/certificates/${certificateRef}/issue`, {});
+      if (requestSequence === requestSequenceRef.current) {
+        setCertificate(result.certificate);
+        setIssueAvailable(false);
+      }
+    } catch (cause) {
+      if (requestSequence === requestSequenceRef.current) setError(cause instanceof ApiError ? cause.message : 'Your certificate could not be issued.');
+    } finally {
+      if (requestSequence === requestSequenceRef.current) setIssuing(false);
+    }
+  }
+
   if (loading) return <div className="page-loading" role="status" aria-live="polite">Preparing your certificate…</div>;
-  if (!certificate) return <div className="certificate-page"><div className="breadcrumbs"><Link to="/my-learning">My learning</Link><span>/</span><span>Certificate</span></div>{error && <ErrorNotice message={error} onRetry={() => setRefreshVersion((version) => version + 1)} />}<Link className="back-link" to="/my-learning"><ArrowLeft size={17} />Back to my learning</Link></div>;
+  if (!certificate) return <div className="certificate-page"><div className="breadcrumbs"><Link to="/my-learning">My learning</Link><span>/</span><span>Certificate</span></div>{error && <ErrorNotice message={error} onRetry={() => setRefreshVersion((version) => version + 1)} />}{issueAvailable && <><p role="status">Your certificate is ready to issue.</p><Button type="button" disabled={issuing} onClick={() => void issueCertificate()}>{issuing ? 'Issuing certificate…' : 'Issue certificate'}</Button></>}<Link className="back-link" to="/my-learning"><ArrowLeft size={17} />Back to my learning</Link></div>;
 
   const formattedDate = formatCertificateDate(certificate.issuedAt, certificateIssueDateFormatter);
   return <div className="certificate-page">

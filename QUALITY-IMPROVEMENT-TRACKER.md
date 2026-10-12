@@ -1,5 +1,20 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Make certificate issuance an explicit action
+
+- **Reviewed:** Certificate lookup and issuance, version-specific idempotency, eligibility and profile-name checks, the certificate-page entry flow, and existing certificate backfill on course completion and profile updates.
+- **Improvement:** Keep `GET /certificates/:ref` read-only. When a completed learner has the required profile name but no certificate for the current version, return `certificate_not_issued`; add transactional `POST /certificates/:ref/issue`, and show an “Issue certificate” action on that page state. Repeated POST requests return the already-issued certificate.
+- **Why it helps:** Reloads, crawlers, and speculative GET requests cannot create a certificate. Learners still have a clear action for legacy completions that do not yet have a saved certificate.
+- **Checked:** The certificate-route regression verifies GET creates no row, POST returns 201, retry returns the same certificate with 200, and incomplete or unnamed learners cannot issue one. Focused service, route, client-flow, and print tests passed (12/12). The full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; `node --check` and `git diff --check` passed. The connected browser is signed out, so the protected certificate page could not be rendered in this session.
+
+## 2026-10-12 — Preserve staff course-preview progress
+
+- **Reviewed:** Course-manager access to later lessons, video watch tracking, lesson completion and removal, quiz attempts, and the prior staff-preview contract.
+- **Result:** No runtime change. Course managers can preview later lessons and the existing route regression requires verified video playback before a manager can record lesson completion. Applying learner-only guards would break this intended preview flow.
+- **Why no change:** Existing coverage documents and verifies the staff preview behavior; no separate access or analytics defect was established in this review.
+- **Checked:** `node --test tests/server/course-analytics.test.js` passed (112/112), including the manager watch-before-completion regression.
+- **Needed to revisit:** A product-policy change to remove staff progress during previews, or concrete evidence that staff preview activity is polluting learner-facing reports.
+
 ## 2026-10-12 — Recheck the reported role-selector click area
 
 - **Reviewed:** The supplied account-page screenshot and target path, current account-role markup and CSS width, the custom-select pointer-coordinate guard, and the existing hit-area regressions.
