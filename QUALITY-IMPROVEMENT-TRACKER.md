@@ -1,12 +1,20 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Guard accessible names on native inputs
+
+- **Reviewed:** Native inputs across every TSX page, including labels, IDs, ARIA names, hidden fields, image buttons, and submit/reset controls with browser-provided names.
+- **Improvement:** Extend the JSX accessibility inventory to check all user-facing `<input>` controls; keep it in `tests/client/form-control-accessible-name.test.js` beside the textarea coverage and include fixtures for wrapped labels, hidden inputs, native button names, and unnamed controls.
+- **Why it helps:** New text, search, checkbox, radio, file, and other input controls cannot silently ship without an accessible name; the current source inventory has no unnamed inputs.
+- **Backend review:** Public registration still validates submitted custom-field types, required values, choices, and current field versions on the server. No API change was needed.
+- **Checked:** `node --test tests/client/form-control-accessible-name.test.js` passed (4/4); `node --test tests/server/registration-fields.test.js` passed (31/31); `git diff --check` passed. The test fixture confirms that placeholder text alone is not counted as an accessible name.
+
 ## 2026-10-12 — Guard accessible names on textareas
 
 - **Reviewed:** Textarea markup across learner, course, lesson, quiz, path, and registration-field forms, including visible labels, visually hidden labels, matching `htmlFor`/`id`, and ARIA naming alternatives.
 - **Improvement:** Add a TypeScript JSX regression that inventories project textareas and flags controls without a wrapping or matching label or an explicit ARIA name. Add a fixture confirming the check catches an unlabeled field.
 - **Why it helps:** New or edited text areas cannot silently ship without a usable name for keyboard and screen-reader users; the current source inventory passes.
 - **Backend review:** Comment access, validation, pagination, and moderation behavior remain unchanged and covered by the focused server suite.
-- **Checked:** `node --test tests/client/textarea-accessible-name.test.js tests/client/lesson-comments.test.js` passed (13/13); `git diff --check` passed.
+- **Checked:** `node --test tests/client/form-control-accessible-name.test.js tests/client/lesson-comments.test.js` passed (15/15); `git diff --check` passed.
 
 ## 2026-10-12 — Protect the lesson comment field label
 
