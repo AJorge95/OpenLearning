@@ -803,9 +803,16 @@ test('an administrator can be disabled while another active administrator remain
 
 test('administrator email changes validate addresses, reject case-insensitive duplicates, and record the change', async () => {
   const userId = 'registration-fields-email-target';
+  const courseId = 'registration-fields-email-course';
   const oldEmail = 'email-target@example.invalid';
   database.prepare(`INSERT INTO users (id, username, email, password_hash, role)
     VALUES (?, ?, ?, ?, 'learner')`).run(userId, 'registration_fields_email_target', oldEmail, 'not-used');
+  database.prepare(`INSERT INTO courses (id, title, created_by, updated_by)
+    VALUES (?, 'Email Snapshot', 'registration-fields-admin', 'registration-fields-admin')`).run(courseId);
+  database.prepare(`INSERT INTO course_certificates
+    (id, certificate_code, user_id, course_id, recipient_name, recipient_email, course_title, platform_name)
+    VALUES (?, ?, ?, ?, 'Email Snapshot Learner', ?, 'Email Snapshot', 'OpenLearning')`)
+    .run('registration-fields-email-certificate', 'REG-FIELDS-EMAIL-SNAPSHOT', userId, courseId, oldEmail);
   const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
     WHERE action = 'account.updated' AND entity_id = ?`).get(userId).count;
 
@@ -837,12 +844,15 @@ test('administrator email changes validate addresses, reject case-insensitive du
     assert.equal(savedResponse.status, 200);
     assert.equal((await savedResponse.json()).user.email, 'new.address@example.invalid');
     assert.equal(database.prepare('SELECT email FROM users WHERE id = ?').get(userId).email, 'new.address@example.invalid');
+    assert.equal(database.prepare('SELECT recipient_email FROM course_certificates WHERE id = ?')
+      .get('registration-fields-email-certificate').recipient_email, oldEmail);
     const audit = database.prepare(`SELECT details_json FROM audit_logs
       WHERE action = 'account.updated' AND entity_id = ? ORDER BY id DESC LIMIT 1`).get(userId);
     assert.deepEqual(JSON.parse(audit.details_json).email, { from: oldEmail, to: 'new.address@example.invalid' });
   } finally {
     database.prepare("DELETE FROM audit_logs WHERE action = 'account.updated' AND entity_id = ?").run(userId);
     database.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
   }
 });
 

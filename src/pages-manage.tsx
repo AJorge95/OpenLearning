@@ -2592,6 +2592,7 @@ export function AdminUserDetailsPage() {
   const passwordHintId = `${passwordInputId}-hint`;
   const passwordConfirmationErrorId = `${passwordInputId}-confirmation-error`;
   const lastAdminHelpId = `${passwordInputId}-last-admin-help`;
+  const accountEmailHelpId = `${passwordInputId}-account-email-help`;
   const certificateNameErrorId = `${passwordInputId}-certificate-name-error`;
   const accountEmailErrorId = `${passwordInputId}-account-email-error`;
   const routeUserIdRef = useRef(userId);
@@ -2813,7 +2814,8 @@ export function AdminUserDetailsPage() {
     <section className="account-detail-grid">
       <article className="account-detail-card account-overview-card" aria-labelledby="account-overview-heading"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><h2 id="account-overview-heading" className="account-overview-title">Account overview</h2></div></div><span className={`account-state ${user.registrationStatus === 'pending' ? 'account-pending' : user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.registrationStatus === 'pending' ? 'Pending approval' : user.disabled ? 'Disabled' : 'Active'}</span></div>
         <form className="account-profile-form account-email-form form-stack" onSubmit={saveAccountEmail} noValidate aria-busy={savingAction === 'account'}>
-          <label>Email address<input ref={accountEmailInputRef} name="email" type="email" required maxLength={254} autoComplete="email" aria-invalid={Boolean(accountEmailError) || undefined} aria-describedby={accountEmailError ? accountEmailErrorId : undefined} value={accountEmail} onChange={(event) => { setAccountEmail(event.target.value); setAccountEmailError(''); }} disabled={saving} /></label>
+          <label>Email address<input ref={accountEmailInputRef} name="email" type="email" required maxLength={254} autoComplete="email" aria-invalid={Boolean(accountEmailError) || undefined} aria-describedby={accountEmailError ? `${accountEmailHelpId} ${accountEmailErrorId}` : accountEmailHelpId} value={accountEmail} onChange={(event) => { setAccountEmail(event.target.value); setAccountEmailError(''); }} disabled={saving} /></label>
+          <small id={accountEmailHelpId}>New certificates use this address; issued certificates keep their saved email.</small>
           {accountEmailError && <p id={accountEmailErrorId} className="form-error" role="alert">{accountEmailError}</p>}
           <Button type="submit" variant="secondary" disabled={saving || !accountEmailReady || !accountEmailChanged}>{accountEmailReady ? 'Save email address' : 'Loading…'}</Button>
         </form>
