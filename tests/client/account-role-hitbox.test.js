@@ -32,3 +32,14 @@ test('account role caption stays separate from the clickable custom selector', (
   assert.match(roleField, /<div className="account-role-select-control"><AppSelect<Role>[\s\S]*ariaLabelledBy="account-platform-role-label"[\s\S]*matchTriggerWidth/);
   assert.doesNotMatch(roleField, /<label\b/, 'the caption must not forward clicks from blank space into the selector');
 });
+
+test('a mounted label-wrapped role selector stays bounded during a stylesheet update', () => {
+  const legacyLabelRules = rulesFor('.account-control-row > label');
+  const legacySelectRules = rulesFor('.account-control-row > label > .app-select');
+  const legacyTriggerRules = rulesFor('.account-control-row > label .app-select-trigger');
+
+  assert.ok(legacyLabelRules.some((rule) => /flex:\s*0 0 8\.5rem/.test(rule) && /width:\s*8\.5rem/.test(rule) && /pointer-events:\s*none/.test(rule)));
+  assert.ok(legacySelectRules.some((rule) => /width:\s*100%/.test(rule) && /pointer-events:\s*none/.test(rule)));
+  assert.ok(legacyTriggerRules.some((rule) => /pointer-events:\s*auto/.test(rule)));
+  assert.ok(legacyLabelRules.some((rule) => /flex-basis:\s*auto/.test(rule) && /width:\s*100%/.test(rule) && /max-width:\s*none/.test(rule)), 'the mobile layout should keep its full-width selector');
+});
