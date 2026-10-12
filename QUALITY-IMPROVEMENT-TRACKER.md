@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck single-page route focus and announcements
+
+- **Reviewed:** Learner and staff application shells, skip-link targets, main-content focus, route-derived document titles, and page-heading live announcements.
+- **Result:** No runtime change. Both shells provide a skip link and a focusable `main-content` region; route changes move focus there, then update the document title and polite announcement from the rendered page heading.
+- **Why no change:** The shared source path covers both layout families and accounts for pages whose heading renders after the initial route fallback. No code mismatch surfaced in this review.
+- **Checked:** Read `src/App.tsx`, the learner and staff shells in `src/components.tsx`, `index.html`, and the focus/skip-link rules in `src/styles.css`; `git diff --check` passed. Rendered keyboard and screen-reader behavior was not exercised because the connected browser is signed out and Playwright is not installed.
+- **Needed to revisit:** A signed-in keyboard or screen-reader run where focus fails to reach main content, the page title disagrees with its heading, or the live announcement is missed after navigation.
+
 ## 2026-10-12 — Reuse course summary reads while syncing path learners
 
 - **Reviewed:** The learning-path edit transaction, enrollment state synchronization, and the shared course-summary loader.
