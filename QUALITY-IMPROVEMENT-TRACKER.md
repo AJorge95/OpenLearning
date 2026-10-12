@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck lesson-resource navigation and recovery
+
+- **Reviewed:** Learner resource list semantics and link cues, responsive wrapping, shared HTTP(S) URL validation, resource-write authorization/audit handling, and application-level error recovery.
+- **Result:** No runtime change. Lesson resources are grouped in a labelled section and list; external links identify their new-tab behavior; long titles and URLs wrap; and the application and staff-page error boundaries provide a reload action.
+- **Why no change:** The inspected interface and route behavior already cover the current navigation, validation, and recovery contracts. No reproduced screen-reader, responsive, or resource-write failure indicates a missing behavior.
+- **Checked:** Client URL validation tests passed (3/3); server resource rejection and audit-rollback regressions passed (2/2). No external link was opened and no resource was written.
+- **Needed to revisit:** A current screen-reader or narrow-screen mismatch, a changed URL policy, or a reproducible resource authorization/audit failure.
+
 ## 2026-10-12 — Recheck protected streaming and role-control behavior
 
 - **Reviewed:** Protected video authorization, byte-range and `HEAD` responses, response-close stream cleanup, and the current native platform-role field’s width, accessible name, help text, and focus styling.
