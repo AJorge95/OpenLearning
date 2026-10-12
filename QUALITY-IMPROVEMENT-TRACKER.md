@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck the reported role-selector click area
+
+- **Reviewed:** The supplied account-page screenshot and target path, current account-role markup and CSS width, the custom-select pointer-coordinate guard, and the existing hit-area regressions.
+- **Result:** No runtime change. Current source uses a separate `span` caption, an 8.5rem desktop trigger, pointer events only on the trigger, and a guard that rejects pointer activations outside its visible bounds. The screenshot target is a wrapping `<label>`, which is absent from current source.
+- **Why no code change:** The width and forwarded-click behavior are already addressed in the current branch. The available local browser redirects the protected account route to sign-in, so this session cannot establish whether the screenshot reflects a stale page or a current rendered regression; another CSS width change would duplicate the existing fix without a reproduction.
+- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-activation.test.js tests/client/app-select-label.test.js` passed (15/15). Navigating the available local browser to the reported account route redirected to `/login`; no account data changed.
+- **Needed to continue this report:** A hard reload of the signed-in account page to load the current markup. If the right-side click still opens the menu, capture the viewport and clicked location from that current render.
+
 ## 2026-10-12 — Restrict course enrollment to learners
 
 - **Reviewed:** The read-only course-detail GET, the learner Start learning flow, the transactional enrollment endpoint, and the mismatch between the client role check and server authorization.
