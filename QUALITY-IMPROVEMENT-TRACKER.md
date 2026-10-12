@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Preserve image alternatives when media fails to load
+
+- **Reviewed:** The shared image fallback component, every `ImageWithFallback` call site, the screen-reader-only utility, and the existing media upload type/size validation and route coverage.
+- **Improvement:** When a meaningful image fails to load, keep its alternative text available as a visually hidden image name alongside the existing visual fallback. Decorative images with `alt=""` stay unnamed and visually unchanged. Extend the focused image-alt regression in `tests/client/image-alt-text.test.js`.
+- **Why it helps:** A network or storage failure no longer removes useful image context from screen-reader output, while sighted users keep the established fallback icon or placeholder.
+- **Backend review:** Upload extension/MIME checks and media replacement rollback paths are already validated; no server change was needed.
+- **Checked:** `node --test tests/client/image-alt-text.test.js` passed (3/3); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript and Vite; `git diff --check` passed.
+
 ## 2026-10-12 — Guard accessible names on native inputs
 
 - **Reviewed:** Native inputs across every TSX page, including labels, IDs, ARIA names, hidden fields, image buttons, and submit/reset controls with browser-provided names.
