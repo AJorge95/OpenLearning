@@ -11,9 +11,11 @@ test('quiz results provide an accessible aggregate score without answer review',
   assert.doesNotMatch(source, /Review your answers|Correct answer:|Your answer is (?:correct|incorrect)/);
 });
 
-test('a failed attempt-detail request preserves the saved score and offers a retry', () => {
-  assert.match(source, /catch \{\s*if \(isCurrentRequest\(\) && !requestController\.signal\.aborted\) \{\s*setAttemptDetailsLoadFailed\(true\);[\s\S]*?setResult\(latestAttempt\);\s*setResultRouteKey\(requestedRouteKey\);/);
-  assert.match(source, /attemptDetailsLoadFailed && <ErrorNotice message=\{error\} onRetry=\{\(\) => setCourseLoadRetryVersion/);
+test('failed attempt-detail requests preserve the saved score and only retry transient errors', () => {
+  assert.match(source, /catch \(cause\) \{\s*if \(isCurrentRequest\(\) && !requestController\.signal\.aborted\) \{\s*const unavailable = cause instanceof ApiError && cause\.code === 'quiz_attempt_details_unavailable';\s*setAttemptDetailsFailure\(unavailable \? 'unavailable' : 'retryable'\);/);
+  assert.match(source, /Your saved score is available, but its question breakdown could not be read\. Contact your course administrator\./);
+  assert.match(source, /setResult\(latestAttempt\);\s*setResultRouteKey\(requestedRouteKey\);/);
+  assert.match(source, /attemptDetailsFailure && <ErrorNotice message=\{error\} onRetry=\{attemptDetailsFailure === 'retryable' \? \(\) => setCourseLoadRetryVersion/);
   assert.match(source, /function hasQuizAttemptBreakdown\(attempt: QuizAttempt \| QuizAttemptPreview\): attempt is QuizAttempt/);
 });
 

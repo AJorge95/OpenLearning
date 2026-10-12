@@ -1666,7 +1666,7 @@ export function QuizPage() {
   const [resultRouteKey, setResultRouteKey] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [attemptDetailsLoadFailed, setAttemptDetailsLoadFailed] = useState(false);
+  const [attemptDetailsFailure, setAttemptDetailsFailure] = useState<'retryable' | 'unavailable' | null>(null);
   const [courseLoadRetryVersion, setCourseLoadRetryVersion] = useState(0);
   useEffect(() => {
     const requestSequence = ++loadSequenceRef.current;
@@ -1677,7 +1677,7 @@ export function QuizPage() {
     const isCurrentRequest = () => requestSequence === loadSequenceRef.current
       && routeCourseIdRef.current === courseId
       && routeKeyRef.current === requestedRouteKey;
-    setCourse(null); setLoading(true); setError(''); setAttemptDetailsLoadFailed(false);
+    setCourse(null); setLoading(true); setError(''); setAttemptDetailsFailure(null);
     void (async () => {
       try {
         const { course: data } = await fetchCourse(courseId, false, { signal: requestController.signal, quizId, includeLessonDetails: false });
@@ -1688,15 +1688,18 @@ export function QuizPage() {
           try {
             const response = await api.get<{ attempt: QuizAttempt }>(`/api/quizzes/${quizId}/attempts/${latestAttempt.id}`, { signal: requestController.signal });
             if (isCurrentRequest()) {
-              setAttemptDetailsLoadFailed(false);
+              setAttemptDetailsFailure(null);
               focusResultRef.current = true;
               setResult(response.attempt);
               setResultRouteKey(requestedRouteKey);
             }
-          } catch {
+          } catch (cause) {
             if (isCurrentRequest() && !requestController.signal.aborted) {
-              setAttemptDetailsLoadFailed(true);
-              setError('Your saved score is available, but the question breakdown could not be loaded.');
+              const unavailable = cause instanceof ApiError && cause.code === 'quiz_attempt_details_unavailable';
+              setAttemptDetailsFailure(unavailable ? 'unavailable' : 'retryable');
+              setError(unavailable
+                ? 'Your saved score is available, but its question breakdown could not be read. Contact your course administrator.'
+                : 'Your saved score is available, but the question breakdown could not be loaded.');
               focusResultRef.current = true;
               // Keep the user-scoped score from the course payload visible if only its breakdown failed.
               setResult(latestAttempt);
@@ -1719,7 +1722,7 @@ export function QuizPage() {
   }, [courseId, quizId, courseLoadRetryVersion]);
   useEffect(() => {
     focusFirstAnswerRef.current = false; focusResultRef.current = false;
-    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setAttemptDetailsLoadFailed(false);
+    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setAttemptDetailsFailure(null);
   }, [courseId, quizId]);
   const quiz = course?.modules?.find((module) => module.quiz?.id === quizId)?.quiz;
   const saving = pendingQuizRouteKeys.has(routeKey);
@@ -1759,7 +1762,7 @@ export function QuizPage() {
       if (isCurrentSubmission()) {
         focusResultRef.current = true;
         setResult(response.attempt); setAvailableCertificate(response.certificate); setResultRouteKey(requestedRouteKey);
-        setAttemptDetailsLoadFailed(false);
+        setAttemptDetailsFailure(null);
         setCourse((currentCourse) => {
           if (!currentCourse?.modules || routeKeyRef.current !== requestedRouteKey) return currentCourse;
           let updatedQuiz = false;
@@ -1797,7 +1800,7 @@ export function QuizPage() {
   function retryQuiz() {
     focusFirstAnswerRef.current = true;
     setChoiceShuffleGeneration((generation) => generation + 1);
-    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setAttemptDetailsLoadFailed(false);
+    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setAttemptDetailsFailure(null);
   }
 
   return <div className="quiz-page">
@@ -1819,7 +1822,7 @@ export function QuizPage() {
             <Button type="submit" aria-describedby={quiz.questions.length > 0 ? 'quiz-submit-hint' : undefined} disabled={!allAnswered || saving}>{saving ? 'Checking answers…' : 'Submit answers'}<ArrowRight size={17} /></Button>
           </form>
         </> : <div className="quiz-results">
-          {attemptDetailsLoadFailed && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}
+          {attemptDetailsFailure && <ErrorNotice message={error} onRetry={attemptDetailsFailure === 'retryable' ? () => setCourseLoadRetryVersion((version) => version + 1) : undefined} />}
           <div className={`score-panel ${currentResult.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{currentResult.passed ? <Check size={22} /> : <Clock3 size={22} />}</span><div><span className="score-label">{currentResult.passed ? 'Quiz passed' : 'Quiz not passed'}</span><strong>{hasQuizAttemptBreakdown(currentResult) ? `${currentResult.correctCount} of ${currentResult.questionCount} correct` : 'Question breakdown unavailable'}</strong><small>Score {currentResult.score}% · {currentResult.passed ? `Pass mark: ${quiz.passMark}%.` : `You need ${quiz.passMark}% to pass.`}</small></div></div>
           <h2 ref={resultHeadingRef} tabIndex={-1}>Quiz result</h2>
           <div className="quiz-result-actions">
