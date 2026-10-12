@@ -32,6 +32,31 @@ export function logicalCourseId(courseId) {
   return row ? (row.logical_course_id || row.id) : null;
 }
 
+export function logicalCourseIds(courseIds) {
+  const ids = [...new Set(courseIds.filter((id) => typeof id === 'string' && id))];
+  if (!ids.length) return new Map();
+
+  // Resolve the bounded path selection in one statement instead of four lookups per unknown ID.
+  const requestedIds = ids.map(() => '(?)').join(', ');
+  const rows = db.prepare(`WITH requested(id) AS (VALUES ${requestedIds})
+    SELECT requested.id AS input_id,
+      COALESCE(direct_course.logical_course_id, direct_course.id,
+        module_course.logical_course_id, module_course.id,
+        lesson_course.logical_course_id, lesson_course.id,
+        quiz_course.logical_course_id, quiz_course.id) AS logical_course_id
+    FROM requested
+    LEFT JOIN courses direct_course ON direct_course.id = requested.id
+    LEFT JOIN course_modules module ON module.id = requested.id
+    LEFT JOIN courses module_course ON module_course.id = module.course_id
+    LEFT JOIN lessons lesson ON lesson.id = requested.id
+    LEFT JOIN course_modules lesson_module ON lesson_module.id = lesson.module_id
+    LEFT JOIN courses lesson_course ON lesson_course.id = lesson_module.course_id
+    LEFT JOIN quizzes quiz ON quiz.id = requested.id
+    LEFT JOIN course_modules quiz_module ON quiz_module.id = quiz.module_id
+    LEFT JOIN courses quiz_course ON quiz_course.id = quiz_module.course_id`).all(...ids);
+  return new Map(rows.filter((row) => row.logical_course_id).map((row) => [row.input_id, row.logical_course_id]));
+}
+
 export function publishedVersionForLogicalCourse(logicalCourseIdValue) {
   return publishedVersionLookupStatement.get(logicalCourseIdValue) ?? null;
 }

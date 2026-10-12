@@ -2839,6 +2839,47 @@ test('learning-path course selection rejects requests over the shared limit', as
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_paths WHERE title = ?').get(title).count, 0);
 });
 
+test('learning-path course identity validation uses one batch lookup for its maximum selection', async () => {
+  const title = 'Batched path identity validation';
+  const originalPrepare = database.prepare;
+  let identityLookupExecutions = 0;
+  database.prepare = (sql) => {
+    const statement = originalPrepare.call(database, sql);
+    if (!/^\s*WITH requested\(id\) AS \(VALUES/i.test(sql)) return statement;
+    return new Proxy(statement, {
+      get(target, property) {
+        const value = Reflect.get(target, property, target);
+        if (property === 'all') {
+          return (...parameters) => {
+            identityLookupExecutions += 1;
+            return value.apply(target, parameters);
+          };
+        }
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+  };
+
+  try {
+    const response = await fetch(apiUrl('/manage/learning-paths'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        courses: Array.from({ length: MAX_LEARNING_PATH_COURSES }, (_, index) => ({ courseId: `missing-path-course-${index}` })),
+      }),
+    });
+
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'invalid_path_course');
+    assert.equal(identityLookupExecutions, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_paths WHERE title = ?').get(title).count, 0);
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM learning_paths WHERE title = ?').run(title);
+  }
+});
+
 test('learning-path creation rejects falsey non-array course lists', async () => {
   const invalidCourseLists = [null, false, 0, ''];
 
@@ -5044,6 +5085,36 @@ test('logical course ID resolution reuses its prepared course and content lookup
   }
 
   assert.equal(lookupPreparations, 0, 'course identity lookups should be prepared once when the module loads');
+});
+
+test('batched course identity lookup maps direct and nested IDs to logical courses', async () => {
+  const rootId = 'logical-identity-batch-root';
+  const snapshotId = 'logical-identity-batch-snapshot';
+  const moduleId = 'logical-identity-batch-module';
+  const lessonId = 'logical-identity-batch-lesson';
+  const quizId = 'logical-identity-batch-quiz';
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Batched identity root', 'published', 'admin-1', 'admin-1')`).run(rootId);
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by, logical_course_id)
+    VALUES (?, 'Batched identity snapshot', 'published', 'admin-1', 'admin-1', ?)`).run(snapshotId, rootId);
+  database.prepare(`INSERT INTO course_modules (id, course_id, title, position)
+    VALUES (?, ?, 'Batched identity module', 0)`).run(moduleId, rootId);
+  database.prepare(`INSERT INTO lessons (id, module_id, title, position)
+    VALUES (?, ?, 'Batched identity lesson', 0)`).run(lessonId, moduleId);
+  database.prepare(`INSERT INTO quizzes (id, module_id, title, pass_mark)
+    VALUES (?, ?, 'Batched identity quiz', 70)`).run(quizId, moduleId);
+
+  try {
+    const { logicalCourseIds: resolveLogicalCourseIds } = await import('../../server/course-versioning.js');
+    const resolved = resolveLogicalCourseIds([rootId, snapshotId, moduleId, lessonId, quizId, 'missing-batch-course', '']);
+    assert.equal(resolved.size, 5);
+    for (const id of [rootId, snapshotId, moduleId, lessonId, quizId]) assert.equal(resolved.get(id), rootId);
+    assert.equal(resolved.has('missing-batch-course'), false);
+    assert.equal(resolved.has(''), false);
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(snapshotId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(rootId);
+  }
 });
 
 test('published version lookup reuses its statement while reading the latest live version', () => {
