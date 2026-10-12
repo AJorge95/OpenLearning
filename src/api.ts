@@ -251,13 +251,14 @@ export async function getMe() {
   return api.get<{ user: User | null } & PlatformConfiguration>('/api/auth/me');
 }
 
-export async function fetchCourse(courseId: string, managed = false, options: Pick<RequestInit, 'signal'> & { includeQuizQuestions?: boolean; includeLatestAttempts?: boolean; quizId?: string } = {}) {
-  const { includeQuizQuestions = true, includeLatestAttempts = true, quizId, ...requestOptions } = options;
+export async function fetchCourse(courseId: string, managed = false, options: Pick<RequestInit, 'signal'> & { includeQuizQuestions?: boolean; includeLatestAttempts?: boolean; includeLessonDetails?: boolean; quizId?: string } = {}) {
+  const { includeQuizQuestions = true, includeLatestAttempts = true, includeLessonDetails = true, quizId, ...requestOptions } = options;
   const path = managed ? `/api/manage/courses/${courseId}` : `/api/courses/${courseId}`;
-  // Keep full quiz data by default; course screens omit unused details and quiz pages scope prompts to one quiz.
+  // Keep full course data by default; learner summaries omit unused questions, attempts, or lesson content.
   const params = new URLSearchParams();
   if (!managed && !includeQuizQuestions) params.set('includeQuizQuestions', '0');
   if (!managed && !includeLatestAttempts) params.set('includeLatestAttempts', '0');
+  if (!managed && !includeLessonDetails) params.set('includeLessonDetails', '0');
   if (!managed && quizId) params.set('quizId', quizId);
   const query = params.toString();
   return api.get<{ course: Course }>(`${path}${query ? `?${query}` : ''}`, requestOptions);

@@ -13,10 +13,12 @@ test('overview and lesson player request compact metadata while quiz pages reque
   const playerSource = learnerPageSource.slice(playerStart, quizStart);
   const quizSource = learnerPageSource.slice(quizStart);
 
-  assert.match(overviewSource, /fetchCourse\(courseId, false, \{ signal: requestController\.signal, includeQuizQuestions: false, includeLatestAttempts: false \}\)/);
+  assert.match(overviewSource, /fetchCourse\(courseId, false, \{ signal: requestController\.signal, includeQuizQuestions: false, includeLatestAttempts: false, includeLessonDetails: false \}\)/);
   assert.match(playerSource, /fetchCourse\(requestedCourseId, false, \{ signal: requestController\.signal, includeQuizQuestions: false, includeLatestAttempts: false \}\)/);
-  assert.match(quizSource, /fetchCourse\(courseId, false, \{ signal: requestController\.signal, quizId \}\)/);
+  assert.match(quizSource, /fetchCourse\(courseId, false, \{ signal: requestController\.signal, quizId, includeLessonDetails: false \}\)/);
   assert.match(apiSource, /params\.set\('quizId', quizId\)/);
   assert.match(apiSource, /params\.set\('includeQuizQuestions', '0'\)/);
   assert.match(apiSource, /params\.set\('includeLatestAttempts', '0'\)/);
+  assert.match(apiSource, /params\.set\('includeLessonDetails', '0'\)/);
+  assert.match(apiSource, /includeLessonDetails\?: boolean/);
 });
