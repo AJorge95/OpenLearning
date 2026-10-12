@@ -9974,3 +9974,11 @@
 - **Result:** No code change. The attempt endpoint verifies course access and selects by attempt ID, quiz ID, and current learner ID. The client keeps the saved aggregate score visible when the question breakdown is unavailable and only retries transient detail failures.
 - **Why no change:** Existing server and client behavior cover the data boundary and recovery path; changing the response would duplicate or weaken the saved result handling.
 - **Checked:** Focused quiz-result UI and API tests passed (13/13), including malformed stored snapshots, learner scoping, trimmed payloads, and accessible retry/status feedback. `git diff --check` passed.
+
+## 2026-10-12 — Verify the live account-role selector boundary
+
+- **Reviewed:** The reported admin account page, its current role-selector markup and width rules, pointer activation guard, and the server's role-update validation, audit, and last-active-administrator protection.
+- **Result:** No runtime change was needed. A fresh load uses the corrected separate caption and selector container; the supplied screenshot shows the older label-wrapped structure. The selector trigger and popup both measure 136px, and only the visible trigger opens the menu.
+- **Why no change:** On an enabled learner account, clicking the 13px gap to the right of the selector left a closed menu closed; the same click closed an open menu without changing the selected role. The reported account's selector is disabled by the last-active-administrator safeguard.
+- **Backend review:** Role values remain allow-listed and updates run transactionally with audit logging; the last active administrator cannot be demoted or disabled. No backend change was indicated.
+- **Checked:** The signed-in local account page rendered at 1264×710 with no console warnings or errors. Trigger and popup widths matched at 136px; trigger activation opened the menu, while the adjacent-gap click did not activate it. Focused account-role and AppSelect suites passed (24/24), and `git diff --check` passed. Reload the reported page to pick up the current markup.
