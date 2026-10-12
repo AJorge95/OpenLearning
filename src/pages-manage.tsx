@@ -396,7 +396,7 @@ export function CourseAnalyticsPage() {
       <section className="analytics-section analytics-learners-section">
         <div className="analytics-section-heading"><div><h2>Learner progress</h2><p>Per-person lesson completion, quiz attempts, and course completion.</p></div><span>{formatCountLabel(data.summary.learnerCount, 'learner', 'learners')}</span></div>
         {data.learners.length ? <div className="analytics-table-wrap analytics-learners-table-wrap" role="region" aria-label="Scrollable learner progress" tabIndex={0}><table className="analytics-table analytics-learners-table"><caption className="sr-only">Learner-level course progress</caption><thead><tr><th scope="col">Learner</th><th scope="col">Progress</th><th scope="col">Lessons</th><th scope="col">Quizzes passed</th><th scope="col">Last activity</th><th scope="col">Status</th></tr></thead><tbody>{data.learners.map((learner) => <tr key={learner.id}>
-          <td>
+          <th scope="row">
             <strong>{learner.username}</strong>
             {learner.disabled && <small className="analytics-disabled-label">Disabled account</small>}
             <details className="analytics-learner-details">
@@ -424,7 +424,7 @@ export function CourseAnalyticsPage() {
                 </section>
               </div>
             </details>
-          </td>
+          </th>
           <td><div className="analytics-rate-cell"><ProgressBar value={learner.progress} label={`Course progress for ${learner.username}`} /><Percentage value={learner.progress} /></div></td>
           <td>{learner.completedLessonCount} / {learner.lessonCount}</td>
           <td>{learner.passedQuizCount} / {learner.quizCount}</td>

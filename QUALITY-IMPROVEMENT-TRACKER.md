@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Expose learner identities as analytics row headers
+
+- **Reviewed:** The learner-progress table's identity and metric columns, existing row-header styles, and the course analytics payload that supplies each learner's stable ID, username, and progress values.
+- **Improvement:** Mark the learner identity cell as `<th scope="row">` so assistive technology keeps the learner's name in context while navigating progress, lesson, quiz, activity, and status values.
+- **Why it helps:** Screen-reader users can identify whose progress is being announced across the row, including when inspecting the learner's expandable activity details.
+- **Backend review:** The existing analytics response already provides the learner identity and metrics; no API or query changes were needed.
+- **Checked:** Added a client regression for lesson, quiz, and learner row identities and their shared cell styling. The focused test passed (1/1), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed. The local browser remains at `/login`, so authenticated analytics rendering could not be checked; no account or course data was changed.
+
 ## 2026-10-12 — Identify lessons and quizzes in analytics rows
 
 - **Reviewed:** Course analytics lesson-completion and quiz-performance tables, their scoped column headers and responsive data-cell styles, and the route's lesson/quiz metric payloads.
