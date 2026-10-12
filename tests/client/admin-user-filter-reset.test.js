@@ -15,7 +15,7 @@ function adminUsersPage() {
   return declaration.body.getText(sourceFile);
 }
 
-test('filtered empty account lists can clear all filters and reload unfiltered results', () => {
+test('filtered account lists can clear all filters with or without matching users', () => {
   const page = adminUsersPage();
 
   assert.match(page, /const userListSearchInputRef = useRef<HTMLInputElement>\(null\)/);
@@ -23,7 +23,21 @@ test('filtered empty account lists can clear all filters and reload unfiltered r
   assert.match(page, /function clearUserListFilters\(\) \{\s*const filterSelectionChanged = roleFilter !== 'all' \|\| approvalFilter !== 'all';\s*setQuery\(''\);\s*setAppliedQuery\(''\);\s*setRoleFilter\('all'\);\s*setApprovalFilter\('all'\);\s*setPage\(1\);\s*if \(!filterSelectionChanged\) void load\(1, '', 'all', 'all'\);\s*userListSearchInputRef\.current\?\.focus\(\);\s*\}/);
   assert.match(page, /<input ref=\{userListSearchInputRef\} value=\{query\}/);
   assert.match(page, /userListEmptyMessage\(appliedQuery, roleFilter, approvalFilter\)/);
-  assert.match(page, /hasAppliedUserFilters && <Button type="button" variant="secondary" onClick=\{clearUserListFilters\}>Clear filters<\/Button>/);
+  const filterRowStart = page.indexOf('<div className="user-filter-row">');
+  const filterRowEnd = page.indexOf('\n    {error && !resetUser', filterRowStart);
+  assert.notEqual(filterRowStart, -1, 'expected the account filter row');
+  assert.notEqual(filterRowEnd, -1, 'expected the account filters to end before the result state');
+  const filterRow = page.slice(filterRowStart, filterRowEnd);
+  assert.match(filterRow, /hasAppliedUserFilters && <Button type="button" variant="secondary" onClick=\{clearUserListFilters\}>Clear filters<\/Button>/);
+  assert.match(page, /<div className="access-empty user-list-empty"><p>\{userListEmptyMessage\(appliedQuery, roleFilter, approvalFilter\)\}<\/p><\/div>/);
+});
+
+test('account filter reset remains stacked with controls at mobile widths', () => {
+  const styles = fs.readFileSync(path.resolve('src/styles.css'), 'utf8');
+  const filterRule = styles.indexOf('.users-page .user-filter-row { flex-direction: column; align-items: stretch; }');
+  assert.notEqual(filterRule, -1, 'expected the mobile account filter layout');
+  const mobileBreakpoint = styles.lastIndexOf('@media (max-width: 720px)', filterRule);
+  assert.notEqual(mobileBreakpoint, -1, 'expected account filters to stack at the mobile breakpoint');
 });
 
 test('role and registration changes apply the visible user search draft', () => {

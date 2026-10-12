@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep administrator filters easy to clear
+
+- **Reviewed:** The account list's search draft and applied query, role and registration filters, empty-state recovery action, responsive filter row, and `/api/admin/users` validation and pagination.
+- **Improvement:** Keep a **Clear filters** button in the filter row whenever a search, role, or registration filter is active. Reuse the current handler to clear all three, reload the unfiltered first page, and return focus to the search field; remove the duplicate button from the empty state.
+- **Why it helps:** Administrators can return from a narrowed list even when matching accounts remain visible, without changing search and both selectors separately.
+- **Backend review:** The existing endpoint validates and combines the search, role, and registration filters before counting and paging. No server or API change was needed.
+- **Checked:** Account reset and responsive client tests passed (6/6); the full `npm test -- --test-reporter=dot` suite and `npm run build` passed; `git diff --check` passed. The connected browser is signed out at `/login`, so authenticated list rendering was not replayed.
+
 ## 2026-10-12 — Review learner playback and session delivery
 
 - **Reviewed:** Learner playback controls and responsive layouts; session expiry, malformed-row cleanup and callback errors; protected media, document and caption authorization; byte-range and `HEAD` handling; and response-close cleanup for file streams.
