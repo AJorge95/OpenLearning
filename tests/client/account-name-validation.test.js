@@ -48,3 +48,12 @@ test('certificate-name editing validates before saving and identifies the field 
   assert.match(accountPage, /aria-invalid=\{invalidCertificateNameField === 'lastName' \|\| undefined\} aria-describedby=\{invalidCertificateNameField === 'lastName' \? certificateNameErrorId : undefined\}/);
   assert.match(accountPage, /cause\.code === 'invalid_name'[\s\S]*setCertificateNameError\(cause\.message\)[\s\S]*profileLastNameInputRef\.current : profileFirstNameInputRef\.current\)\?\.focus\(\)/);
 });
+
+test('administrator account creation validates names before sending and handles server name errors', () => {
+  const createPage = manageSource.slice(manageSource.indexOf('export function AdminUserCreatePage()'), manageSource.indexOf('export function AdminUserDetailsPage()'));
+  assert.match(createPage, /accountNameError\(firstName, 'First name'\)[\s\S]*firstNameInputRef\.current\?\.focus\(\)[\s\S]*accountNameError\(lastName, 'Last name'\)[\s\S]*lastNameInputRef\.current\?\.focus\(\)/);
+  assert.match(createPage, /firstName: normalizeAccountName\(firstName\),\s*lastName: normalizeAccountName\(lastName\)/);
+  assert.match(createPage, /aria-invalid=\{invalidNameField === 'firstName' \|\| undefined\} aria-describedby=\{invalidNameField === 'firstName' \? accountNameErrorId : undefined\}/);
+  assert.match(createPage, /aria-invalid=\{invalidNameField === 'lastName' \|\| undefined\} aria-describedby=\{invalidNameField === 'lastName' \? accountNameErrorId : undefined\}/);
+  assert.match(createPage, /cause\.code === 'invalid_name'[\s\S]*setNameError\(cause\.message\)[\s\S]*lastNameInputRef\.current : firstNameInputRef\.current\)\?\.focus\(\)/);
+});

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Validate names in administrator account creation
+
+- **Reviewed:** The manual account form, shared account-name rules, account-creation request payload, and the API's existing `invalid_name` error contract.
+- **Improvement:** Catch whitespace-only and other invalid first or last names before submission, normalize valid spacing, focus and mark the field needing correction, and associate its message with an alert. Handle authoritative server name errors the same way.
+- **Why it helps:** HTML `required` treats a string of spaces as a value. Administrators now get a specific, accessible correction before account creation instead of a generic form error after a rejected request.
+- **Backend:** Reuses existing server validation; no route or response contract changed.
+- **Checked:** Focused account-name and account-creation client/server tests, including a route regression proving a whitespace-only name creates no account; full `npm test -- --test-reporter=dot`, `npm run build`, and `git diff --check` passed. The connected browser is signed out, so the authenticated form could not be replayed there.
+
 ## 2026-10-12 — Validate certificate names in account management
 
 - **Reviewed:** The administrator certificate-name form, shared server-compatible account-name validation, saved-name normalization, and the account PATCH route's `invalid_name` response.
