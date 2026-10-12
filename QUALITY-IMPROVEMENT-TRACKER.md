@@ -8,6 +8,14 @@
 - **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js tests/client/app-select-activation.test.js tests/client/app-select-position.test.js tests/client/app-select-layout.test.js` passed (25/25). The local Vite server serves the current component and CSS. The available browser session redirects the protected admin page to `/login`, so signed-in interaction could not be replayed.
 - **Needed to revisit:** The same click still opens the menu on a refreshed, signed-in account page using the current markup.
 
+## 2026-10-12 — Recheck backend log query and retention behavior
+
+- **Reviewed:** Audit-action and system-severity page queries, their SQLite indexes, bounded log retention cleanup, transaction rollback handling, and prepared insert reuse.
+- **Result:** No runtime change. Both filtered newest-first queries use their composite indexes without a temporary sort; retention removes old rows with one indexed range delete and recounts correctly after rollback.
+- **Why no change:** The current route, index, and write paths already bound the reviewed work and preserve stable paging and retention behavior.
+- **Checked:** `node --test tests/server/admin-logs.test.js tests/server/log-store.test.js` passed (7/7), including query-plan and retention-backlog cases. `git diff --check` passed.
+- **Needed to revisit:** A new filter without a supporting plan, retention exceeding its configured cap, or a measured increase in log-page latency as history grows.
+
 ## 2026-10-12 — Recheck form-control accessible names
 
 - **Reviewed:** Native inputs, textareas, selects, shared password fields, dynamically identified quiz prompts, and the registration form/editor control semantics.
