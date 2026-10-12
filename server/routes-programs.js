@@ -136,7 +136,7 @@ export function syncUnlockedPathStates(pathIds, userId, pathRowsById = new Map()
       }
       allEarlierCoursesCompleted = allEarlierCoursesCompleted && summary.completed;
     }
-    // Reuse the state rows already loaded with progress and prepare one insert for all newly unlocked courses.
+    // Insert newly unlocked states in bounded multi-row batches after evaluating this path's progress.
     insertCourseLearningStates(userId, pendingStateInsertions);
   }
 }
