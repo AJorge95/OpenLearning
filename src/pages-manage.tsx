@@ -39,7 +39,7 @@ import { buildAuditActionOptions } from './audit-log-filter';
 import { readResetStatusAfterConflict, shouldClearResetConfirmationAfterFailure } from './platform-reset-status';
 import type { PlatformResetStatus } from './platform-reset-status';
 import type { UserApprovalFilter, UserRoleFilter } from './user-list-empty-state';
-import type { Competency, Course, CourseAccessUser, CourseAnalytics, CourseAnalyticsLearnerPage, CourseModule, CourseVersion, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
+import type { Competency, Course, CourseAccessUser, CourseAnalytics, CourseAnalyticsLearner, CourseAnalyticsLearnerDetails, CourseAnalyticsLearnerPage, CourseModule, CourseVersion, Lesson, LessonCaption, LessonResource, QuizQuestion, RegistrationField, RegistrationFieldType, Role, SavedRegistrationFieldValue, User } from './types';
 
 type CourseListResponse = { courses: Course[]; total: number; page: number; pageSize: number };
 type FailedCourseListRequest = { page: number; query: string; status: string };
@@ -387,6 +387,55 @@ function Percentage({ value }: { value: number }) {
   return <span className="analytics-percentage">{value}%</span>;
 }
 
+function CourseAnalyticsLearnerActivity({ courseId, learner }: { courseId: string; learner: CourseAnalyticsLearner }) {
+  const [open, setOpen] = useState(false);
+  const [details, setDetails] = useState<CourseAnalyticsLearnerDetails | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [retryVersion, setRetryVersion] = useState(0);
+
+  useEffect(() => {
+    if (!open || details) return;
+    const controller = new AbortController();
+    let active = true;
+    setLoading(true);
+    setError('');
+    api.get<CourseAnalyticsLearnerDetails>(`/api/manage/courses/${courseId}/analytics/learners/${encodeURIComponent(learner.id)}`, { signal: controller.signal })
+      .then((result) => { if (active) setDetails(result); })
+      .catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.message : 'Learner activity could not be loaded.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [courseId, learner.id, open, details, retryVersion]);
+
+  return <details className="analytics-learner-details" aria-busy={loading} onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <summary aria-label={`View activity details for ${learner.username}`}>View activity details</summary>
+    {loading ? <p className="page-loading" role="status" aria-live="polite">Loading activity details…</p>
+      : error ? <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" onClick={() => setRetryVersion((version) => version + 1)}>Retry activity details</Button></div>
+        : details && <div className="analytics-detail-grid">
+          <section>
+            <h3 id={`learner-${learner.id}-lesson-progress`}>Lesson progress</h3>
+            <ul tabIndex={0} aria-labelledby={`learner-${learner.id}-lesson-progress`}>
+              {details.lessonProgress.map((lesson) => <li key={lesson.id}>
+                <span className={lesson.completed ? 'analytics-item-complete' : ''}>{lesson.completed ? 'Complete' : 'Not complete'}</span>
+                <strong>{lesson.moduleTitle}: {lesson.title}</strong>
+                {lesson.completedAt && <small><DateText value={lesson.completedAt} /></small>}
+              </li>)}
+            </ul>
+          </section>
+          <section>
+            <h3 id={`learner-${learner.id}-quiz-attempts`}>Quiz attempts</h3>
+            {details.quizProgress.length ? <ul tabIndex={0} aria-labelledby={`learner-${learner.id}-quiz-attempts`}>
+              {details.quizProgress.map((quiz) => <li key={quiz.id}>
+                <span className={quiz.passed ? 'analytics-item-complete' : ''}>{quiz.attempts ? `${quiz.attempts} attempt${quiz.attempts === 1 ? '' : 's'}` : 'Not attempted'}</span>
+                <strong>{quiz.moduleTitle}: {quiz.title}</strong>
+                <small>{quiz.attempts ? `Latest ${quiz.latestScore}% · Best ${quiz.highestScore}% · Pass mark ${quiz.passMark}%` : `Pass mark ${quiz.passMark}%`}</small>
+              </li>)}
+            </ul> : <p>This course has no quizzes.</p>}
+          </section>
+        </div>}
+  </details>;
+}
+
 export function CourseAnalyticsPage() {
   const { courseId = '' } = useParams();
   const [data, setData] = useState<CourseAnalytics | null>(null);
@@ -464,31 +513,7 @@ export function CourseAnalyticsPage() {
           <th scope="row">
             <strong>{learner.username}</strong>
             {learner.disabled && <small className="analytics-disabled-label">Disabled account</small>}
-            <details className="analytics-learner-details">
-              <summary aria-label={`View activity details for ${learner.username}`}>View activity details</summary>
-              <div className="analytics-detail-grid">
-                <section>
-                  <h3 id={`learner-${learner.id}-lesson-progress`}>Lesson progress</h3>
-                  <ul tabIndex={0} aria-labelledby={`learner-${learner.id}-lesson-progress`}>
-                    {learner.lessonProgress.map((lesson) => <li key={lesson.id}>
-                      <span className={lesson.completed ? 'analytics-item-complete' : ''}>{lesson.completed ? 'Complete' : 'Not complete'}</span>
-                      <strong>{lesson.moduleTitle}: {lesson.title}</strong>
-                      {lesson.completedAt && <small><DateText value={lesson.completedAt} /></small>}
-                    </li>)}
-                  </ul>
-                </section>
-                <section>
-                  <h3 id={`learner-${learner.id}-quiz-attempts`}>Quiz attempts</h3>
-                  {learner.quizProgress.length ? <ul tabIndex={0} aria-labelledby={`learner-${learner.id}-quiz-attempts`}>
-                    {learner.quizProgress.map((quiz) => <li key={quiz.id}>
-                      <span className={quiz.passed ? 'analytics-item-complete' : ''}>{quiz.attempts ? `${quiz.attempts} attempt${quiz.attempts === 1 ? '' : 's'}` : 'Not attempted'}</span>
-                      <strong>{quiz.moduleTitle}: {quiz.title}</strong>
-                      <small>{quiz.attempts ? `Latest ${quiz.latestScore}% · Best ${quiz.highestScore}% · Pass mark ${quiz.passMark}%` : `Pass mark ${quiz.passMark}%`}</small>
-                    </li>)}
-                  </ul> : <p>This course has no quizzes.</p>}
-                </section>
-              </div>
-            </details>
+            <CourseAnalyticsLearnerActivity courseId={courseId} learner={learner} />
           </th>
           <td><div className="analytics-rate-cell"><ProgressBar value={learner.progress} label={`Course progress for ${learner.username}`} /><Percentage value={learner.progress} /></div></td>
           <td>{learner.completedLessonCount} / {learner.lessonCount}</td>

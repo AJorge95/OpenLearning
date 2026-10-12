@@ -530,19 +530,37 @@ test('analytics count each eligible learner once and report course-wide completi
   const active = result.learners.find((learner) => learner.id === 'learner-active');
   assert.equal(active.progress, 100);
   assert.equal(active.completed, true);
-  assert.equal(active.lessonProgress[0].completedAt, '2026-10-01 10:00:00');
-  assert.equal(active.quizProgress[0].attempts, 2);
-  assert.equal(active.quizProgress[0].highestScore, 100);
-  assert.equal(active.quizProgress[0].latestScore, 100);
+  assert.equal('lessonProgress' in active, false, 'summary pages omit collapsed lesson details');
+  assert.equal('quizProgress' in active, false, 'summary pages omit collapsed quiz details');
   assert.equal(active.lastActivityAt, '2026-10-02 12:00:00');
+
+  const activeDetailsResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics/learners/learner-active'), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(activeDetailsResponse.status, 200);
+  const activeDetails = await activeDetailsResponse.json();
+  assert.equal(activeDetails.lessonProgress[0].completedAt, '2026-10-01 10:00:00');
+  assert.equal(activeDetails.quizProgress[0].attempts, 2);
+  assert.equal(activeDetails.quizProgress[0].highestScore, 100);
+  assert.equal(activeDetails.quizProgress[0].latestScore, 100);
 
   const disabled = result.learners.find((learner) => learner.id === 'learner-disabled');
   assert.equal(disabled.disabled, true);
   assert.equal(disabled.progress, 0);
   assert.equal(disabled.started, true);
-  assert.equal(disabled.quizProgress[0].passed, false);
   assert.equal(disabled.lastActivityAt, '2026-10-03 12:00:00');
   assert.equal(result.learners.some((learner) => learner.id === 'learner-unassigned'), false);
+
+  const disabledDetailsResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics/learners/learner-disabled'), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(disabledDetailsResponse.status, 200, 'staff can inspect an assigned disabled learner');
+  assert.equal((await disabledDetailsResponse.json()).quizProgress[0].passed, false);
+
+  const unassignedDetailsResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics/learners/learner-unassigned'), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(unassignedDetailsResponse.status, 404, 'details are limited to course members');
 });
 
 test('learner-only analytics pages skip course-wide aggregate queries', async () => {
@@ -746,6 +764,8 @@ test('course analytics use published version content without creating an edit re
       VALUES ('lesson-analytics-current-version', 'module-analytics-current-version', 'Published lesson', 0)`).run();
     database.prepare(`INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
       VALUES ('version-analytics-current-version', ?, ?, 1, 'admin-1')`).run(courseId, storageCourseId);
+    database.prepare(`INSERT INTO enrollments (id, course_id, user_id, enrolled_at)
+      VALUES ('enrollment-analytics-current-version', ?, 'learner-active', '2026-10-01 09:00:00')`).run(courseId);
 
     const response = await fetch(apiUrl(`/manage/courses/${courseId}/analytics`), { headers: userHeaders('admin-1') });
     assert.equal(response.status, 200);
@@ -754,6 +774,12 @@ test('course analytics use published version content without creating an edit re
     assert.equal(result.course.title, 'Versioned analytics course');
     assert.deepEqual(result.lessonMetrics.map((lesson) => lesson.id), ['lesson-analytics-current-version']);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_revisions WHERE course_id = ?').get(courseId).count, 0);
+
+    const detailsResponse = await fetch(apiUrl(`/manage/courses/${courseId}/analytics/learners/learner-active`), {
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(detailsResponse.status, 200);
+    assert.deepEqual((await detailsResponse.json()).lessonProgress.map((lesson) => lesson.id), ['lesson-analytics-current-version']);
   } finally {
     database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
   }
@@ -1033,6 +1059,11 @@ test('course analytics remain restricted to staff', async () => {
     headers: userHeaders('learner-active'),
   });
   assert.equal(response.status, 403);
+
+  const detailsResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics/learners/learner-active'), {
+    headers: userHeaders('learner-active'),
+  });
+  assert.equal(detailsResponse.status, 403);
 });
 
 test('course details resolve learner progress before version history exists', async () => {
