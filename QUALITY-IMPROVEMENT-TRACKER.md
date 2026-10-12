@@ -9913,3 +9913,10 @@
 - **Result:** No code change. The active learner and staff links are brought into view when navigation overflows; filters remain native, keyboard-reachable pressed-state buttons. The pending-count route is protected by the admin router and returns a database count without exposing account details.
 - **Why no change:** The reviewed controls already expose and reveal the active navigation item, and the badge only contains a count. No reproducible clipped-control or backend consistency issue surfaced.
 - **Checked:** `node --test tests/client/navigation-scroll.test.js tests/client/responsive-viewport.test.js` passed (8/8), and `git diff --check` passed. A signed-in responsive browser check remains unavailable in the current browser session.
+
+## 2026-10-12 — Recheck administrator password reset behavior
+
+- **Reviewed:** Password-reset dialog naming, focus trapping and restoration, password-length guidance, API-side validation and rate limiting, session invalidation, and transactional audit failure handling.
+- **Result:** No code change. The form explains the 12-character minimum and signs the target out of active sessions; the admin-only endpoint independently validates the matching password, applies per-admin throttling, revokes sessions, and rolls back if the audit write fails.
+- **Why no change:** UI and backend behavior agree, and the important failure paths already have regression coverage.
+- **Checked:** Focused password-reset UI and server tests passed (8/8), including rate limiting and rollback on audit persistence failure. `git diff --check` passed.
