@@ -1008,11 +1008,12 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .log-table { width: 100%; min-width: 850px; border-collapse: collapse; text-align: left; }
 .log-table th { height: 48px; padding: 0 15px; border-bottom: 1px solid var(--line); color: #5d6372; background: #f9f9fc; font-size: 12px; font-weight: 650; white-space: nowrap; }
 .log-table td { padding: 15px; border-bottom: 1px solid var(--line); color: #414657; font-size: 12px; vertical-align: top; }
-.log-table tbody tr:last-child td { border-bottom: 0; }
+.log-table tbody th { height: auto; padding: 15px; border-bottom: 1px solid var(--line); color: #414657; background: transparent; font-size: 12px; font-weight: 400; text-align: left; vertical-align: top; white-space: normal; }
+.log-table tbody tr:last-child td, .log-table tbody tr:last-child th { border-bottom: 0; }
 .log-table td:first-child { min-width: 170px; color: #687080; white-space: nowrap; }
 .log-table td:nth-child(2) { min-width: 130px; }
-.log-table td strong { display: block; max-width: 470px; color: var(--ink); font-size: 13px; font-weight: 650; white-space: normal; }
-.log-table td small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.log-table td strong, .log-table tbody th strong { display: block; max-width: 470px; color: var(--ink); font-size: 13px; font-weight: 650; white-space: normal; }
+.log-table td small, .log-table tbody th small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .log-action { display: inline-flex; padding: 5px 8px; border-radius: 3px; color: var(--purple); background: var(--purple-soft); font-size: 11px; font-weight: 650; text-transform: capitalize; white-space: nowrap; }
 .log-level { display: inline-flex; padding: 5px 8px; border-radius: 3px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
 .log-level-info { color: #3e587b; background: #edf3fc; }
