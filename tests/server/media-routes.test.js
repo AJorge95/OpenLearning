@@ -262,6 +262,33 @@ test('rejects a truncated PNG cover and removes the temporary upload', async () 
   assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
 });
 
+test('reports a signature-read failure as retryable and removes the temporary upload', async () => {
+  const courseMediaDirectory = path.dirname(captionPath);
+  const originalFiles = (await fs.readdir(courseMediaDirectory)).sort();
+  const originalMediaCount = database.prepare('SELECT COUNT(*) AS count FROM media_files').get().count;
+  const originalOpen = fsSync.promises.open;
+  fsSync.promises.open = async () => {
+    throw Object.assign(new Error('Injected upload read failure.'), { code: 'EIO' });
+  };
+
+  try {
+    const response = await uploadCourseCover('valid-cover.png', pngCoverHeader(1, 1), 'image/png');
+    const payload = await response.json();
+    assert.equal(response.status, 500);
+    assert.equal(payload.code, 'media_validation_unavailable');
+    assert.equal(payload.error, 'The uploaded file could not be checked. Please try again.');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM media_files').get().count, originalMediaCount);
+    assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
+
+    const log = database.prepare(`SELECT level, details_json FROM system_logs
+      WHERE source = 'media' AND message = 'Upload signature validation failed' ORDER BY id DESC LIMIT 1`).get();
+    assert.equal(log?.level, 'error');
+    assert.deepEqual(JSON.parse(log.details_json), { kind: 'cover', errorName: 'Error', errorCode: 'EIO' });
+  } finally {
+    fsSync.promises.open = originalOpen;
+  }
+});
+
 test('streams protected video byte ranges and rejects unsatisfiable ranges', async () => {
   const response = await fetch(mediaUrl('/media-range-tests'), {
     headers: { 'x-test-user': 'admin-media', range: 'bytes=2-5', connection: 'close' },

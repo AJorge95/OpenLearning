@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Report media signature read failures as server errors
+
+- **Reviewed:** The media upload signature validator, its course-cover and lesson-document callers, temporary-upload cleanup, and existing system-log handling.
+- **Improvement:** Distinguish file-open/read errors from ordinary signature mismatches. Log the error name and code, clean up the temporary upload, and return a retryable `media_validation_unavailable` server response for operational failures; keep unsupported or malformed signatures on the existing client-error path.
+- **Why it helps:** A transient storage problem no longer tells staff that a valid file has the wrong format, and the server retains useful diagnostic context without leaving the temporary upload behind.
+- **Checked:** Added a media-route regression under `tests/server/` that injects an `EIO` read failure and verifies the response, system log, unchanged media records, and temporary-file cleanup. The focused `node --test tests/server/media-routes.test.js` suite passed (21/21), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed.
+
 ## 2026-10-12 — Validate quiz titles before saving
 
 - **Reviewed:** The quiz editor's title field and save flow, the course API's required, trimmed 160-character rule, and the existing focus callback used when adding a quiz.

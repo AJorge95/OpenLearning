@@ -198,6 +198,7 @@ async function fileSignatureMatchesKind(file, kind) {
     && !compoundOfficeExtensions.has(ext) && !zipOfficeExtensions.has(ext)) return true;
   if (kind !== 'cover' && kind !== 'video' && kind !== 'document') return true;
   let fileHandle;
+  let validationError;
   try {
     fileHandle = await fs.promises.open(file.path, 'r');
     const size = (await fileHandle.stat()).size;
@@ -277,14 +278,25 @@ async function fileSignatureMatchesKind(file, kind) {
       return Boolean(dimensions);
     }
     return false;
-  } catch {
-    return false;
+  } catch (error) {
+    validationError = error;
   } finally {
     if (fileHandle) {
       // Preserve the signature decision if best-effort handle cleanup fails.
       try { await fileHandle.close(); } catch {}
     }
   }
+  if (validationError) {
+    // A read failure is operational, not evidence that the uploaded format is invalid.
+    writeSystemLog('error', 'media', 'Upload signature validation failed', {
+      kind,
+      errorName: String(validationError?.name || 'Error').slice(0, 100),
+      errorCode: typeof validationError?.code === 'string' ? validationError.code.slice(0, 100) : undefined,
+    });
+    await cleanupTemporaryUpload(file, 'Temporary upload cleanup failed after signature validation error', { kind });
+    throw new ApiError(500, 'The uploaded file could not be checked. Please try again.', 'media_validation_unavailable');
+  }
+  return false;
 }
 
 function uploadTypeMessage(kind) {
