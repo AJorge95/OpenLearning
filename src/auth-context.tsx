@@ -56,8 +56,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     const requestId = ++refreshRequestId.current;
     const stateRevision = authStateRevision.current;
-    const [setup, me] = await Promise.all([getSetupStatus(), getMe()]);
-    await api.refreshCsrf();
+    // Startup reads are independent, so load them together instead of adding a network round trip.
+    const [setup, me] = await Promise.all([
+      getSetupStatus(),
+      getMe(),
+      api.refreshCsrf(),
+    ]);
     if (requestId !== refreshRequestId.current || stateRevision !== authStateRevision.current) return;
     authStateRevision.current += 1;
     setConfigured(setup.configured);
