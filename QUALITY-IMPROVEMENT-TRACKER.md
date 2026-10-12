@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Batch learner progress reads during path edits
+
+- **Reviewed:** Path-edit synchronization, learner-specific state and completion histories, and the staff assignment panel's accessible search/status/pagination plus narrow-screen controls.
+- **Improvement:** Preload course states, lesson completions, and passed quiz histories for enrolled learners in groups of ten, then evaluate each learner against their own grouped history maps. The maximum path size keeps each query below 999 bind variables; the assignment interface already has clear loading, retry, empty, and mobile states, so no UI change was needed.
+- **Why it helps:** A path edit with 12 learners now uses two reads per learner-progress query type instead of repeating each query for all 12 learners, while bounding the progress rows held for processing.
+- **Checked:** The route regression verified two reads per query type across two batches, preserved different learner outcomes using lesson and quiz completion, and confirmed only the completed learner unlocked the next course. Focused path-sync tests passed (4/4); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript and Vite; `git diff --check` passed. The test remains in `tests/server/`.
+
 ## 2026-10-12 — Batch learning-path state writes
 
 - **Reviewed:** The path-assignment panel's search, learner selector, loading and retry feedback, pagination labels, and narrow-screen layout; the learner-state write path and its 200-course limit.

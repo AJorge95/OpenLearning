@@ -1184,10 +1184,19 @@ test('course and learning-path detail GETs are read-only while protected actions
   }
 });
 
-test('path edits prepare shared course summary reads once for all enrolled learners', async () => {
+test('path edits batch shared course metadata and learner progress for enrolled learners', async () => {
   const pathId = 'path-summary-preload';
   const addedCourseId = 'course-path-summary-preload';
-  const learners = ['learner-path-preload-a', 'learner-path-preload-b', 'learner-path-preload-c'];
+  const firstCourseId = 'course-path-summary-preload-first';
+  const moduleId = 'module-path-summary-preload-first';
+  const lessonId = 'lesson-path-summary-preload-first';
+  const quizId = 'quiz-path-summary-preload-first';
+  const attemptId = 'attempt-path-summary-preload-first';
+  const learners = Array.from({ length: 12 }, (_, index) => `learner-path-preload-${index + 1}`);
+  const learnerRows = learners.map((learner, index) =>
+    `('${learner}', 'path_preload_${index + 1}', 'path.preload.${index + 1}@example.invalid', 'not-used', 'learner', 0)`).join(',\n');
+  const enrollmentRows = learners.map((learner, index) =>
+    `('path-summary-preload-enrollment-${index + 1}', '${pathId}', '${learner}', 'assigned')`).join(',\n');
   const originalPrepare = database.prepare;
   const sharedReadCounts = new Map([
     ['versions', 'SELECT v.course_id, v.id'],
@@ -1195,25 +1204,39 @@ test('path edits prepare shared course summary reads once for all enrolled learn
     ['lessons', 'SELECT m.course_id, l.id'],
     ['quizzes', 'SELECT m.course_id, q.id'],
   ].map(([name, fragment]) => [name, { fragment, count: 0 }]));
+  const learnerProgressReadCounts = new Map([
+    ['states', 'FROM course_learning_state\n    WHERE user_id IN'],
+    ['lessons', 'FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id'],
+    ['quizzes', 'FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id'],
+  ].map(([name, fragment]) => [name, { fragment, count: 0 }]));
   database.exec(`
-    INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES
-      ('learner-path-preload-a', 'path_preload_a', 'path.preload.a@example.invalid', 'not-used', 'learner', 0),
-      ('learner-path-preload-b', 'path_preload_b', 'path.preload.b@example.invalid', 'not-used', 'learner', 0),
-      ('learner-path-preload-c', 'path_preload_c', 'path.preload.c@example.invalid', 'not-used', 'learner', 0);
-    INSERT INTO courses (id, title, status, created_by, updated_by)
-      VALUES ('${addedCourseId}', 'Path summary preload', 'published', 'admin-1', 'admin-1');
+    INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES ${learnerRows};
+    INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
+      ('${firstCourseId}', 'First path course', 'published', 'admin-1', 'admin-1'),
+      ('${addedCourseId}', 'Path summary preload', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('${moduleId}', '${firstCourseId}', 'First module', 0);
+    INSERT INTO lessons (id, module_id, title, position)
+      VALUES ('${lessonId}', '${moduleId}', 'First lesson', 0);
+    INSERT INTO quizzes (id, module_id, title, pass_mark)
+      VALUES ('${quizId}', '${moduleId}', 'First quiz', 70);
+    INSERT INTO lesson_progress (user_id, lesson_id, completed_at)
+      VALUES ('${learners[0]}', '${lessonId}', '2026-10-01 10:00:00');
+    INSERT INTO quiz_attempts
+      (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json, submitted_at)
+      VALUES ('${attemptId}', '${quizId}', '${learners[0]}', 100, 1, '{}', '[]', '2026-10-01 11:00:00');
     INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
       VALUES ('${pathId}', 'Path summary preload', 'published', 0, 'admin-1', 'admin-1');
     INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
-      VALUES ('path-summary-preload-step', '${pathId}', 'course-empty', 0, 0);
-    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source) VALUES
-      ('path-summary-preload-enrollment-a', '${pathId}', 'learner-path-preload-a', 'assigned'),
-      ('path-summary-preload-enrollment-b', '${pathId}', 'learner-path-preload-b', 'assigned'),
-      ('path-summary-preload-enrollment-c', '${pathId}', 'learner-path-preload-c', 'assigned');
+      VALUES ('path-summary-preload-step', '${pathId}', '${firstCourseId}', 0, 0);
+    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source) VALUES ${enrollmentRows};
   `);
   database.prepare = function countSharedSummaryReads(sql, ...parameters) {
     if (typeof sql === 'string') {
       for (const query of sharedReadCounts.values()) {
+        if (sql.includes(query.fragment)) query.count += 1;
+      }
+      for (const query of learnerProgressReadCounts.values()) {
         if (sql.includes(query.fragment)) query.count += 1;
       }
     }
@@ -1225,23 +1248,28 @@ test('path edits prepare shared course summary reads once for all enrolled learn
       method: 'PATCH',
       headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
       body: JSON.stringify({ courses: [
-        { courseId: 'course-empty', requiresPrevious: false },
+        { courseId: firstCourseId, requiresPrevious: false },
         { courseId: addedCourseId, requiresPrevious: true },
       ] }),
     });
 
     assert.equal(response.status, 200);
     assert.deepEqual([...sharedReadCounts.values()].map(({ count }) => count), [2, 2, 2, 2]);
+    assert.deepEqual([...learnerProgressReadCounts.values()].map(({ count }) => count), [2, 2, 2]);
     for (const learner of learners) {
       assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE user_id = ? AND course_id = ?')
-        .get(learner, 'course-empty').count, 1);
+        .get(learner, firstCourseId).count, 1);
       assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE user_id = ? AND course_id = ?')
-        .get(learner, addedCourseId).count, 0);
+        .get(learner, addedCourseId).count, learner === learners[0] ? 1 : 0);
     }
   } finally {
     database.prepare = originalPrepare;
     database.prepare('DELETE FROM learning_paths WHERE id = ?').run(pathId);
-    database.prepare('DELETE FROM courses WHERE id = ?').run(addedCourseId);
+    database.prepare('DELETE FROM lesson_progress WHERE lesson_id = ?').run(lessonId);
+    database.prepare('DELETE FROM quiz_attempts WHERE id = ?').run(attemptId);
+    database.prepare('DELETE FROM quizzes WHERE id = ?').run(quizId);
+    database.prepare('DELETE FROM course_modules WHERE id = ?').run(moduleId);
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(firstCourseId, addedCourseId);
     for (const learner of learners) database.prepare('DELETE FROM users WHERE id = ?').run(learner);
   }
 });

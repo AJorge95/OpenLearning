@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireObjectBody, requireStaff } from './http.js';
-import { courseLearningDeadlineAt, courseSummaries, courseSummariesWithState, insertCourseLearningStates, prepareCourseSummaryData } from './course-service.js';
+import { courseLearningDeadlineAt, courseSummaries, courseSummariesWithState, insertCourseLearningStates, prepareCourseLearnerSummaryData, prepareCourseSummaryData } from './course-service.js';
 import { courseVersionHistoryPage, logicalCourseId, logicalCourseIds, publishRevision, restoreCourseVersion } from './course-versioning.js';
 import { writeAuditLog } from './log-store.js';
 import { textSearchPredicate } from './sql.js';
@@ -12,6 +12,7 @@ import { COMPETENCY_ACHIEVEMENT_BATCH_SIZE, COMPETENCY_PROGRESS_PAGE_SIZE } from
 export const programsRouter = Router();
 programsRouter.use(requireAuth);
 const LEARNING_PATH_PAGE_SIZE = 20;
+const LEARNING_PATH_LEARNER_PROGRESS_BATCH_SIZE = 10;
 const COURSE_VERSION_PAGE_SIZE = 20;
 const COMPETENCY_ADMIN_PAGE_SIZE = 25;
 const COURSE_COMPETENCY_SELECTION_LIMIT = 200;
@@ -91,12 +92,18 @@ function splitIntoBatches(values, size) {
   return batches;
 }
 
-export function syncUnlockedPathStates(pathIds, userId, pathRowsById = new Map(), summaryDataByPathId = new Map()) {
+export function syncUnlockedPathStates(
+  pathIds,
+  userId,
+  pathRowsById = new Map(),
+  summaryDataByPathId = new Map(),
+  learnerSummaryDataByPathId = new Map(),
+) {
   const user = { id: userId, role: 'learner', disabled: false };
   const statesByCourse = new Map();
   for (const pathId of pathIds) {
     const rows = pathRowsById.get(pathId) ?? pathCourseRows(pathId);
-    const summaries = courseSummariesWithState(rows, user, summaryDataByPathId.get(pathId));
+    const summaries = courseSummariesWithState(rows, user, summaryDataByPathId.get(pathId), learnerSummaryDataByPathId.get(pathId));
     const pendingStateInsertions = [];
     const startedAtDate = new Date();
     const startedAt = startedAtDate.toISOString();
@@ -147,8 +154,13 @@ function syncUnlockedPathStatesForEnrollments(pathId, enrollments) {
   const rows = pathCourseRows(pathId);
   const pathRowsById = new Map([[pathId, rows]]);
   const summaryDataByPathId = new Map([[pathId, prepareCourseSummaryData(rows)]]);
-  for (const enrollment of enrollments) {
-    syncUnlockedPathStates([pathId], enrollment.user_id, pathRowsById, summaryDataByPathId);
+  // Ten learners plus two 200-course ID lists use at most 410 bind variables; batching also bounds history memory.
+  for (const enrollmentBatch of splitIntoBatches(enrollments, LEARNING_PATH_LEARNER_PROGRESS_BATCH_SIZE)) {
+    const progressByUser = prepareCourseLearnerSummaryData(rows, enrollmentBatch.map((enrollment) => enrollment.user_id));
+    for (const enrollment of enrollmentBatch) {
+      const learnerSummaryDataByPathId = new Map([[pathId, progressByUser.get(enrollment.user_id)]]);
+      syncUnlockedPathStates([pathId], enrollment.user_id, pathRowsById, summaryDataByPathId, learnerSummaryDataByPathId);
+    }
   }
 }
 
