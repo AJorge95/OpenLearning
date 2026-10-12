@@ -469,7 +469,7 @@ export function CourseOverviewPage() {
     courseRequestControllerRef.current?.abort();
     courseRequestControllerRef.current = requestController;
     setCourse(null); setError(''); setLoading(true); setStarting(false);
-    fetchCourse(courseId, false, { signal: requestController.signal, includeQuizQuestions: false }).then((result) => {
+    fetchCourse(courseId, false, { signal: requestController.signal, includeQuizQuestions: false, includeLatestAttempts: false }).then((result) => {
       if (requestSequence === loadSequenceRef.current && routeCourseIdRef.current === courseId) setCourse(result.course);
     }).catch((cause) => {
       if (requestSequence === loadSequenceRef.current && routeCourseIdRef.current === courseId) setError(cause instanceof ApiError ? cause.message : 'This course could not be loaded.');
@@ -731,7 +731,7 @@ export function CoursePlayerPage() {
     if (showLoading) setLoading(true);
     setError('');
     try {
-      const response = await fetchCourse(requestedCourseId, false, { signal: requestController.signal, includeQuizQuestions: false });
+      const response = await fetchCourse(requestedCourseId, false, { signal: requestController.signal, includeQuizQuestions: false, includeLatestAttempts: false });
       if (isCurrentRequest()) setCourse(response.course);
     } catch (cause) {
       if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'This course could not be loaded.');

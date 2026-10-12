@@ -7,6 +7,13 @@
 - **Why it helps:** Starting a quiz no longer fetches and serializes every other quiz's prompts and answer choices, or repeats a passed-attempt check whose result is already available from the progress summary.
 - **Checked:** Added route coverage with two quizzes, verifying only the selected quiz's questions and attempt details load while course progress and pass states remain unchanged; unknown and empty quiz IDs return errors. Focused route/client tests passed (5/5), the full test suite passed, `npm run build` passed TypeScript and Vite, both server syntax checks passed, and `git diff --check` passed.
 
+## 2026-10-12 — Skip unused quiz-attempt details on course screens
+
+- **Reviewed:** Client reads of `latestAttempt`, course and lesson payload consumers, the separate quiz pass-state summary, and the latest-attempt query.
+- **Improvement:** Let overview and lesson screens omit latest-attempt metadata, skip the query when disabled, and retain quiz pass states from the shared progress summary. The default remains enabled for quiz pages and other API callers.
+- **Why it helps:** Course and lesson screens avoid a correlated latest-attempt lookup for every quiz when they only render whether each quiz is passed.
+- **Checked:** Added a route regression proving the query is not prepared when omitted, latest-attempt metadata is null, and pass state is retained; invalid option values are rejected. Focused route/client tests passed (6/6), the full test suite passed, `npm run build` passed TypeScript and Vite, both server syntax checks passed, and `git diff --check` passed.
+
 ## 2026-10-12 — Explain startup cleanup diagnostics in the admin guide
 
 - **Reviewed:** The system-log writer's cleanup completion and failure details against the administrator-facing log documentation.
