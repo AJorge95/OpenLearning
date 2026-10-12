@@ -8,6 +8,14 @@
 - **Backend review:** The route validates note length and completion policy within its transaction; no API or persistence change was needed.
 - **Checked:** Course-editor route-state tests passed (13/13); the server publication/review note-boundary test passed (1/1); `npm run build` passed TypeScript and Vite; `git diff --check` passed. The signed-in review page was not rendered because the available local browser session is signed out.
 
+## 2026-10-12 — Reconcile the supplied role-selector screenshot with current code
+
+- **Reviewed:** The screenshot's selected DOM path, current account-detail markup and CSS hit bounds, shared `AppSelect` pointer-coordinate guard, and existing selector regressions.
+- **Result:** No additional runtime change. Current markup uses a separate `<span>` label and `<div>` control, constrains the interactive container to 8.5rem, ignores pointer events on the surrounding role-label area, and matches the menu to the trigger width. The screenshot's path still identifies a wrapping `<label>`, which is absent from the current source.
+- **Why no change:** The bounded hit target and outside-trigger activation rejection are already implemented and covered; repeating the code change would duplicate the existing fix.
+- **Checked:** Account role hit-area, activation-coordinate, and shared-select label tests passed (15/15); `git diff --check` passed. A fresh signed-in render could not be performed because the available browser session is signed out.
+- **Needed to revisit:** A fresh signed-in render of the current build that still opens when clicking outside the visible trigger.
+
 ## 2026-10-12 — Recheck account approval and role-management states
 
 - **Reviewed:** Pending-registration approval, role and status updates, account-list filters and retry, pending-count refresh, last-active-admin protection, and the approval transaction's session and audit behavior.
