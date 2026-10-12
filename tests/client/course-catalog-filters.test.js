@@ -46,3 +46,14 @@ test('catalog category and sort changes apply the visible search draft', () => {
   assert.match(source, /ariaLabel="Course category"[^\n]*onChange=\{\(nextCategory\) => applyCatalogControlChange\(nextCategory, sort\)\}/);
   assert.match(source, /ariaLabel="Sort by"[^\n]*onChange=\{\(nextSort\) => applyCatalogControlChange\(category, nextSort\)\}/);
 });
+
+test('catalog select option references stay stable while the search draft changes', () => {
+  const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
+  const componentSource = fs.readFileSync(new URL('../../src/components.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /const COURSE_CATALOG_SORT_OPTIONS: AppSelectOption<string>\[\] = \[/);
+  assert.match(source, /const categoryOptions = useMemo\(\(\) => courseCatalogCategoryOptions\(categories\), \[categories\]\)/);
+  assert.match(source, /options=\{categoryOptions\}/);
+  assert.match(source, /options=\{COURSE_CATALOG_SORT_OPTIONS\}/);
+  assert.match(componentSource, /\}, \[activeOptionIndex, activeValue, options, unavailable\]\);/);
+});

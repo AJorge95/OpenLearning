@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse learner catalog filter options between searches
+
+- **Reviewed:** The course catalog's search draft, submitted filters, category and sort selectors, `AppSelect` option-validation effect, and the server's access-aware filtering and paging.
+- **Improvement:** Hoist sort choices to a shared constant and memoize category choices until the category list changes.
+- **Why it helps:** Search typing no longer rebuilds both option arrays or reruns the selectors' active-option validation for choices that did not change.
+- **Backend review:** The route continues validating filters, applying visibility before paging, and skipping repeated category metadata on later pages; no separate backend change was indicated.
+- **Checked:** Added a stability regression; focused catalog tests passed (6/6). The full test suite, `npm run build` (TypeScript and Vite), and `git diff --check` passed. Rendered content and layout are unchanged.
+
 ## 2026-10-12 — Keep account role menu activation and width inside its visible control
 
 - **Reviewed:** The administrator account detail role field, its wider clickable label behavior, shared `AppSelect` pointer-boundary guard, and menu positioning.
