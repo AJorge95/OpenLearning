@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck account creation and shared text search
+
+- **Reviewed:** Manual account form labels, autocomplete and name/password guidance; server-side credential, email, name, role, duplicate, and audit checks; shared ASCII wildcard escaping and Unicode-normalized search.
+- **Result:** No runtime change. The form exposes field-level name errors and password confirmation, while the server validates the payload, checks duplicate accounts before and inside the write transaction, and rolls account writes back if auditing fails. Search treats `%` and `_` literally and supports canonical Unicode matches.
+- **Why no change:** Existing UI and route behavior matches the current account-creation flow, and the search helper already handles the reviewed edge cases. No validation mismatch or failing interaction surfaced.
+- **Checked:** Account-name, form-choice, and SQL search tests passed (12/12); administrator account-creation route regressions passed (3/3). The signed-in form could not be rendered in the current browser session.
+- **Needed to revisit:** A reproducible client/server validation mismatch, duplicate account under concurrent creation, audit rollback failure, or search mismatch for literal wildcard and Unicode input.
+
 ## 2026-10-12 — Recheck admin user-list filtering and pagination
 
 - **Reviewed:** Search draft/application state, role and approval filters, clear and retry actions, table semantics, mobile filter stacking, bounded backend search input, validated filter values, stable ordering, and page clamping.
