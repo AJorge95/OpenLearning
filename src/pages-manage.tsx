@@ -2206,6 +2206,7 @@ export function AdminUsersPage() {
   const resetUserRef = useRef<User | null>(null);
   const resetDialogRef = useRef<HTMLElement | null>(null);
   const resetTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [success, setSuccess] = useState('');
@@ -2382,7 +2383,7 @@ export function AdminUsersPage() {
     const user = resetUser;
     if (!user || savingIdsRef.current.has(user.id)) return;
     const confirmationError = getPasswordConfirmationError(newPassword, confirmPassword);
-    if (confirmationError) { setError(confirmationError); return; }
+    if (confirmationError) { setError(confirmationError); confirmPasswordInputRef.current?.focus(); return; }
     markSaving(user.id, true); setError(''); setSuccess('');
     try {
       await api.put(`/api/admin/users/${user.id}/password`, { password: newPassword, confirmPassword });
@@ -2456,7 +2457,7 @@ export function AdminUsersPage() {
     })}</tbody></table>{!users.length && <div className="access-empty user-list-empty"><p>{userListEmptyMessage(appliedQuery, roleFilter, approvalFilter)}</p></div>}</div>}
     {!loading && !failedRequest && total > 0 && <LogPagination ariaLabel="User accounts pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
     {pendingDisableUser && <ConfirmationDialog {...accountDisableConfirmation(pendingDisableUser.username)} confirmLabel="Disable account" onCancel={() => setPendingDisableUser(null)} onConfirm={() => { const user = pendingDisableUser; setPendingDisableUser(null); if (user) void updateUser(user, { disabled: true }, true); }} />}
-    {resetUser && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePasswordReset(); }}><section ref={resetDialogRef} className="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title" aria-describedby="reset-description" tabIndex={-1}><button className="modal-close" type="button" onClick={() => closePasswordReset()} aria-label="Close" disabled={savingIds.has(resetUser.id)}>×</button><h2 id="reset-title">Reset password</h2><p id="reset-description">Set a temporary password for <strong>{resetUser.username}</strong>. Their active sessions will be signed out.</p><form className="form-stack" onSubmit={resetPassword} aria-busy={savingIds.has(resetUser.id)}><PasswordField label="New password" autoFocus required minLength={12} maxLength={256} autoComplete="new-password" value={newPassword} hint="Use at least 12 characters." hintId={resetPasswordHintId} onChange={(event) => { setNewPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={savingIds.has(resetUser.id)} /><PasswordField label="Confirm password" {...passwordConfirmationFieldProps(error, resetPasswordErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={savingIds.has(resetUser.id)} />{error && <Notice id={resetPasswordErrorId}>{error}</Notice>}<Button type="submit" disabled={savingIds.has(resetUser.id)}>{savingIds.has(resetUser.id) ? 'Saving…' : 'Reset password'}</Button></form></section></div>}
+    {resetUser && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePasswordReset(); }}><section ref={resetDialogRef} className="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title" aria-describedby="reset-description" tabIndex={-1}><button className="modal-close" type="button" onClick={() => closePasswordReset()} aria-label="Close" disabled={savingIds.has(resetUser.id)}>×</button><h2 id="reset-title">Reset password</h2><p id="reset-description">Set a temporary password for <strong>{resetUser.username}</strong>. Their active sessions will be signed out.</p><form className="form-stack" onSubmit={resetPassword} aria-busy={savingIds.has(resetUser.id)}><PasswordField label="New password" autoFocus required minLength={12} maxLength={256} autoComplete="new-password" value={newPassword} hint="Use at least 12 characters." hintId={resetPasswordHintId} onChange={(event) => { setNewPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={savingIds.has(resetUser.id)} /><PasswordField label="Confirm password" inputRef={confirmPasswordInputRef} {...passwordConfirmationFieldProps(error, resetPasswordErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={savingIds.has(resetUser.id)} />{error && <Notice id={resetPasswordErrorId}>{error}</Notice>}<Button type="submit" disabled={savingIds.has(resetUser.id)}>{savingIds.has(resetUser.id) ? 'Saving…' : 'Reset password'}</Button></form></section></div>}
   </div>;
 }
 
@@ -2472,6 +2473,7 @@ export function AdminUserCreatePage() {
   const [invalidNameField, setInvalidNameField] = useState<'firstName' | 'lastName' | null>(null);
   const firstNameInputRef = useRef<HTMLInputElement>(null);
   const lastNameInputRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
   const [username, setUsername] = useState('');
   const [role, setRole] = useState<Role>('learner');
   const [password, setPassword] = useState('');
@@ -2498,7 +2500,7 @@ export function AdminUserCreatePage() {
       return;
     }
     const confirmationError = getPasswordConfirmationError(password, confirmPassword);
-    if (confirmationError) { setError(confirmationError); return; }
+    if (confirmationError) { setError(confirmationError); confirmPasswordInputRef.current?.focus(); return; }
     setSaving(true);
     try {
       const response = await api.post<{ user: User }>('/api/admin/users', {
@@ -2535,7 +2537,7 @@ export function AdminUserCreatePage() {
       <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>3–32 letters, numbers, dots, underscores, or hyphens.</small></label>
       <div className="account-form-role-field"><span>Platform role</span><AppSelect<Role> ariaLabel="Platform role" describedBy={roleHelpId} value={role} onChange={setRole} disabled={saving} options={ACCOUNT_ROLE_OPTIONS} /><small id={roleHelpId}>Choose administrator or moderator only when the person needs management access.</small></div>
       <PasswordField label="Password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} hint="Use at least 12 characters. You can reset it later from account details." />
-      <PasswordField label="Confirm password" {...passwordConfirmationFieldProps(error, passwordConfirmationErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />
+      <PasswordField label="Confirm password" inputRef={confirmPasswordInputRef} {...passwordConfirmationFieldProps(error, passwordConfirmationErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />
       {error && <Notice id={passwordConfirmationErrorId}>{error}</Notice>}
       <div className="account-form-actions"><Button type="submit" disabled={saving}>{saving ? 'Creating account…' : 'Create account'}</Button><span>Manual accounts can be created while public registration is closed. The account limit still applies; no email invitation is sent.</span></div>
     </form></section>
@@ -2588,6 +2590,7 @@ export function AdminUserDetailsPage() {
   const [invalidCertificateNameField, setInvalidCertificateNameField] = useState<'firstName' | 'lastName' | null>(null);
   const profileFirstNameInputRef = useRef<HTMLInputElement>(null);
   const profileLastNameInputRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
   const [profileNamesUserId, setProfileNamesUserId] = useState('');
   const [pendingDisableAccountId, setPendingDisableAccountId] = useState<string | null>(null);
 
@@ -2724,7 +2727,7 @@ export function AdminUserDetailsPage() {
     event.preventDefault();
     if (!account || saving) return;
     const confirmationError = getPasswordConfirmationError(password, confirmPassword);
-    if (confirmationError) { setError(confirmationError); setSuccess(''); return; }
+    if (confirmationError) { setError(confirmationError); setSuccess(''); confirmPasswordInputRef.current?.focus(); return; }
     const requestedUserId = account.user.id;
     const requestedUsername = account.user.username;
     const actionSequence = ++actionSequenceRef.current;
@@ -2775,7 +2778,7 @@ export function AdminUserDetailsPage() {
         </div>
         {user.isLastActiveAdmin && <p className="account-admin-protection" id={lastAdminHelpId}>This is the only active administrator. Add another administrator before changing this account’s role or status.</p>}
       </article>
-      <article className="account-detail-card"><div className="account-detail-card-heading"><div><h2>Reset password</h2><p>Set a new password and sign out existing sessions.</p></div></div><form className="form-stack account-password-form" onSubmit={resetPassword} aria-busy={savingAction === 'password'}><PasswordField label="New password" id={passwordInputId} required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} hint="Use at least 12 characters." hintId={passwordHintId} /><PasswordField label="Confirm password" {...passwordConfirmationFieldProps(error, passwordConfirmationErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} /><Button type="submit" disabled={saving} aria-busy={savingAction === 'password'}>{savingAction === 'password' ? 'Saving…' : 'Reset password'}</Button></form></article>
+      <article className="account-detail-card"><div className="account-detail-card-heading"><div><h2>Reset password</h2><p>Set a new password and sign out existing sessions.</p></div></div><form className="form-stack account-password-form" onSubmit={resetPassword} aria-busy={savingAction === 'password'}><PasswordField label="New password" id={passwordInputId} required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} hint="Use at least 12 characters." hintId={passwordHintId} /><PasswordField label="Confirm password" inputRef={confirmPasswordInputRef} {...passwordConfirmationFieldProps(error, passwordConfirmationErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} /><Button type="submit" disabled={saving} aria-busy={savingAction === 'password'}>{savingAction === 'password' ? 'Saving…' : 'Reset password'}</Button></form></article>
     </section>
     <section className="analytics-section account-courses-section"><div className="analytics-section-heading"><div><h2>Course activity</h2><p>Courses this account has enrolled in or been assigned.</p></div><span>{formatCountLabel(account.total, 'course', 'courses')}</span></div>
       {courses.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable course activity" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Account course activity</caption><thead><tr><th scope="col">Course</th><th scope="col">Assignment</th><th scope="col">Progress</th><th scope="col">Lessons</th><th scope="col">Quizzes</th><th scope="col">Completion</th><th scope="col">Dashboard</th></tr></thead><tbody>{courses.map((course) => <tr key={course.id}><th scope="row"><strong>{course.title}</strong><small><CourseStatus status={course.status} /></small></th><td>{accountCourseAssignmentLabel(course)}</td><td>{course.progress}%</td><td>{course.completedLessons} / {course.lessonCount}</td><td>{course.quizCount}</td><td>{course.completed ? 'Completed' : course.progress ? 'In progress' : 'Not started'}</td><td><Link className="text-action" to={`/manage/courses/${course.id}/analytics`} aria-label={`Open dashboard for ${course.title}`}>Open dashboard</Link></td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No course activity" detail="This account has not enrolled in or been assigned a course." />}

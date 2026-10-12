@@ -107,6 +107,7 @@ export function SetupPage() {
   const setupEmailInputRef = useRef<HTMLInputElement>(null);
   const setupFirstNameInputRef = useRef<HTMLInputElement>(null);
   const setupLastNameInputRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<1 | 2>(1);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousStepRef = useRef(step);
@@ -184,6 +185,7 @@ export function SetupPage() {
     const confirmationError = getPasswordConfirmationError(password, confirmPassword);
     if (confirmationError) {
       setError(confirmationError);
+      confirmPasswordInputRef.current?.focus();
       return;
     }
     setPlatformName(normalizedPlatformName);
@@ -247,7 +249,7 @@ export function SetupPage() {
             <div className="account-name-fields"><label>First name<input ref={setupFirstNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="given-name" aria-invalid={invalidNameField === 'firstName' || undefined} aria-describedby={invalidNameField === 'firstName' ? setupErrorId : undefined} value={firstName} onChange={(event) => { setFirstName(event.target.value); if (invalidNameField === 'firstName') { setInvalidNameField(null); setError(''); } }} /></label><label>Last name<input ref={setupLastNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="family-name" aria-invalid={invalidNameField === 'lastName' || undefined} aria-describedby={invalidNameField === 'lastName' ? setupErrorId : undefined} value={lastName} onChange={(event) => { setLastName(event.target.value); if (invalidNameField === 'lastName') { setInvalidNameField(null); setError(''); } }} /></label></div>
             <label>Admin username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} /></label>
             <PasswordField label="Password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} hint="Use at least 12 characters." />
-            <PasswordField label="Confirm password" {...passwordConfirmationFieldProps(error, setupErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} />
+            <PasswordField label="Confirm password" inputRef={confirmPasswordInputRef} {...passwordConfirmationFieldProps(error, setupErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} />
             <label>One-time setup token<input required minLength={32} maxLength={256} type="password" autoComplete="off" value={setupToken} onChange={(event) => setSetupToken(event.target.value)} /><small>Enter the private bootstrap credential configured by the server operator.</small></label>
             {error && <p id={setupErrorId} className="form-error" role="alert">{error}</p>}
             <Button type="submit">Continue to access settings</Button>
@@ -318,6 +320,7 @@ export function RegisterPage() {
   const emailInputRef = useRef<HTMLInputElement>(null);
   const firstNameInputRef = useRef<HTMLInputElement>(null);
   const lastNameInputRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [invalidNameField, setInvalidNameField] = useState<'firstName' | 'lastName' | null>(null);
@@ -407,6 +410,7 @@ export function RegisterPage() {
     const confirmationError = getPasswordConfirmationError(password, confirmPassword);
     if (confirmationError) {
       setError(confirmationError);
+      confirmPasswordInputRef.current?.focus();
       return;
     }
     if (!acquireSubmissionLock(submissionInFlightRef)) return;
@@ -446,7 +450,7 @@ export function RegisterPage() {
         : <RegistrationFieldsForm fields={registrationFields} values={registrationFieldValues} disabled={saving} invalidFieldId={invalidRegistrationFieldId} onChange={(id, value) => { setRegistrationFieldValues((current) => ({ ...current, [id]: value })); setRegistrationFieldsChanged(false); if (id === invalidRegistrationFieldId) { setInvalidRegistrationFieldId(''); setError(''); } }} />}
       {registrationFieldsChanged && <p className="registration-fields-changed" role="status" aria-live="polite">{registrationFieldsLoading ? 'Registration details changed. Refreshing the latest fields…' : registrationFieldsError ? 'Registration details changed. Retry loading the latest fields before continuing.' : 'Registration details changed. Answers that still match were kept; review the updated fields and submit again.'}</p>}
       <PasswordField label="Password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} hint="Use at least 12 characters." />
-      <PasswordField label="Confirm password" {...passwordConfirmationFieldProps(error, 'registration-form-error')} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />
+      <PasswordField label="Confirm password" inputRef={confirmPasswordInputRef} {...passwordConfirmationFieldProps(error, 'registration-form-error')} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />
       {error && <p id="registration-form-error" className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving || registrationFieldsLoading || Boolean(registrationFieldsError)}>{saving ? 'Creating account…' : 'Create account'}</Button>
     </form>
@@ -467,6 +471,7 @@ export function AccountSecurityPage() {
   const profileSubmissionInFlightRef = useRef(false);
   const firstNameInputRef = useRef<HTMLInputElement>(null);
   const lastNameInputRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -532,6 +537,7 @@ export function AccountSecurityPage() {
       setError(confirmationError);
       setInvalidPasswordField('confirmation');
       setMessage('');
+      confirmPasswordInputRef.current?.focus();
       return;
     }
     if (!acquireSubmissionLock(passwordSubmissionInFlightRef)) return;
@@ -572,7 +578,7 @@ export function AccountSecurityPage() {
     <form className="surface-form form-stack" onSubmit={submit} aria-busy={saving}>
       <PasswordField label="Current password" required maxLength={256} autoComplete="current-password" aria-invalid={invalidPasswordField === 'current' || undefined} aria-describedby={invalidPasswordField === 'current' ? passwordErrorId : undefined} value={currentPassword} onChange={(event) => { setCurrentPassword(event.target.value); clearPasswordFieldFeedback('current'); }} disabled={saving} />
       <PasswordField label="New password" required minLength={12} maxLength={256} autoComplete="new-password" aria-invalid={invalidPasswordField === 'new' || undefined} aria-describedby={invalidPasswordField === 'new' ? passwordErrorId : undefined} value={password} onChange={(event) => { setPassword(event.target.value); clearPasswordFieldFeedback('new'); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} hint="Use at least 12 characters." />
-      <PasswordField label="Confirm new password" {...passwordConfirmationFieldProps(error, passwordErrorId, invalidPasswordField === 'confirmation')} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); clearPasswordFieldFeedback('confirmation'); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />
+      <PasswordField label="Confirm new password" inputRef={confirmPasswordInputRef} {...passwordConfirmationFieldProps(error, passwordErrorId, invalidPasswordField === 'confirmation')} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); clearPasswordFieldFeedback('confirmation'); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />
       {message && <p className="form-success" role="status">{message}</p>}{error && <p id={passwordErrorId} className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Update password'}</Button>
     </form>
