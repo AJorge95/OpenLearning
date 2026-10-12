@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse calendar date formatters across renders
+
+- **Reviewed:** The calendar's month label and date-cell accessible names, their formatting options, the existing module-scoped deadline formatters, and the calendar's month and data update render paths.
+- **Improvement:** Hoist the month-name and full-date `Intl.DateTimeFormat` instances to module scope and reuse them for the heading, table label, and date cells.
+- **Why it helps:** Calendar re-renders no longer construct two locale-aware formatter objects each time a month or deadline state updates, while preserving the existing localized output.
+- **Backend review:** The calendar API already returns a bounded date range for the selected month; request and response behavior are unchanged.
+- **Checked:** Added a regression ensuring the two formatters remain outside `CalendarPage` and are used by its output. The focused calendar tests passed (7/7), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. Rendered calendar performance remains unmeasured because the local browser is at `/login`.
+
 ## 2026-10-12 — Preserve deadlines when returning to the current calendar month
 
 - **Reviewed:** The learner calendar's month controls, the fetch effect's date-range dependencies, the selected-month deadline state, and the existing date grouping and loading states.
