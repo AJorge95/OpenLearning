@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck course-list actions and reload recovery
+
+- **Reviewed:** Course search and status filters, paged list loading, per-row action status, status-change and deletion handlers, failed-read retry state, and the publication transaction's response-read rollback.
+- **Result:** No runtime change. The list applies its visible search with status changes, retries the failed request using its saved page and filters, and hides stale rows while results are unavailable. A failed follow-up list read remains distinguishable from the completed status mutation.
+- **Why no change:** Existing client and route behavior covers the reviewed states; no reproduced stale row or misleading mutation outcome justified another UI or API change.
+- **Checked:** Course-list and row-action client tests passed (5/5); the targeted course-publication rollback route test passed (1/1); `git diff --check` passed.
+- **Needed to revisit:** A reproduced stale row after retry or a status/delete request whose unknown commit result leaves staff unable to confirm the current course state.
+
 ## 2026-10-12 — Update calendar deadline status while the page stays open
 
 - **Reviewed:** Calendar deadline status from the API, local-month grouping, the My Learning due-boundary timer, completed-course state, and the calendar's month-load lifecycle.
