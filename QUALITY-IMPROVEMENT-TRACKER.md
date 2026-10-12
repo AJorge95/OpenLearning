@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Avoid retries for permanently damaged quiz breakdowns
+
+- **Reviewed:** The learner's saved-score fallback, the structured `quiz_attempt_details_unavailable` API response, and the shared error notice's optional retry action.
+- **Improvement:** Keep retry available for transient attempt-detail failures, but show a non-retry error with administrator guidance when the API identifies a malformed saved snapshot.
+- **Why it helps:** Learners no longer repeat a request that cannot succeed until the saved data is repaired; their score remains visible, and the message explains who can help.
+- **Checked:** The focused quiz-result accessibility tests passed (5/5), the full `npm test` suite passed (781/781), `npm run build` passed TypeScript and Vite, and `git diff --check` passed.
+
 ## 2026-10-12 — Report malformed saved quiz breakdowns clearly
 
 - **Reviewed:** Learner-scoped quiz attempt detail loading, persisted question snapshots, the shared HTTP error handler, and the learner result fallback that preserves the saved score.
