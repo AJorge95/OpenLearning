@@ -44,6 +44,17 @@ test('ImageWithFallback requires an explicit alt decision', () => {
   assert.ok(altIsRequired, 'ImageWithFallbackProps should require alt');
 });
 
+test('ImageWithFallback resets failed state when the image source changes', () => {
+  const source = fs.readFileSync(path.join(sourceDirectory, 'components.tsx'), 'utf8');
+  const wrapperStart = source.indexOf('export function ImageWithFallback');
+  const wrapperEnd = source.indexOf('\nfunction ImageWithFallbackImage', wrapperStart);
+  const wrapper = source.slice(wrapperStart, wrapperEnd);
+
+  assert.match(wrapper, /<ImageWithFallbackImage key=\{props\.src\}/);
+  assert.match(source, /const \[failed, setFailed\] = useState\(false\);[\s\S]*?if \(failed\) return <>\{fallback\}<\/>;/);
+  assert.match(source, /onError=\{\(\) => \{ setFailed\(true\); onError\?\.\(\); \}\}/);
+});
+
 test('all ImageWithFallback JSX call sites state their alt intent', () => {
   const missingAlt = [];
 

@@ -42,6 +42,7 @@ type ImageWithFallbackProps = {
 
 export function ImageWithFallback(props: ImageWithFallbackProps) {
   if (!props.src) return <>{props.fallback}</>;
+  // A source change remounts the image so a previous failure cannot hide the new asset.
   return <ImageWithFallbackImage key={props.src} {...props} src={props.src} />;
 }
 
