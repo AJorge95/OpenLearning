@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Back up the configured database and media paths
+
+- **Reviewed:** The backup example, SQLite WAL mode, `DATA_DIR`/`DB_PATH`/`MEDIA_ROOT` resolution, the running reset-backup implementation, and existing test organization.
+- **Improvement:** Derive backup command defaults from `DATA_DIR`, honor explicit `DB_PATH` and `MEDIA_ROOT` shell values, and explain that `.env` is not loaded automatically by the shell. Add a documentation regression under `tests/server` so future edits keep using the configured storage paths.
+- **Why it helps:** Installations using custom database or media locations no longer risk copying the default files while leaving their actual course data unprotected. The SQLite online-backup operation remains WAL-safe, and the media copy still requires pausing edits/uploads for a consistent pair.
+- **Checked:** `node --test tests/server/backup-documentation.test.js` passed (1/1); the README shell example passed `bash -n` using Git Bash; a shell-stub run confirmed an overridden `DATA_DIR` and `BACKUP_DIR` expand to the same database and media paths used by the commands; `git diff --check` passed. The SQLite CLI is not installed here, so the online backup command itself was not executed.
+- **Needed to continue:** A real backup/restore check against an installation configured with non-default paths; the source-level example now follows the documented configuration rules.
+
 ## 2026-10-12 — Compare the reported role-selector hit area with the current build
 
 - **Reviewed:** The browser comment's selected `label` target, the current account-detail markup, the desktop/mobile selector widths, click activation guards, and the live Vite module served at `http://127.0.0.1:5173`.

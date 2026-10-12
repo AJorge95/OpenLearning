@@ -118,12 +118,19 @@ Back up both the SQLite database and the complete media root. Platform identity,
 Example online backup while the app is running:
 
 ```sh
-mkdir -p ./backup
-sqlite3 ./data/openlearning.sqlite ".backup './backup/openlearning.sqlite'"
-cp -a ./data/course-media ./backup/course-media
+# These defaults mirror config.js when no storage-path overrides are set.
+# Export values from .env or edit them here when the running service uses overrides.
+DATA_DIR=${DATA_DIR:-./data}
+DB_PATH=${DB_PATH:-"$DATA_DIR/openlearning.sqlite"}
+MEDIA_ROOT=${MEDIA_ROOT:-"$DATA_DIR/course-media"}
+BACKUP_DIR=${BACKUP_DIR:-./backup}
+
+mkdir -p "$BACKUP_DIR"
+sqlite3 "$DB_PATH" ".backup '$BACKUP_DIR/openlearning.sqlite'"
+cp -a "$MEDIA_ROOT" "$BACKUP_DIR/course-media"
 ```
 
-Pause course edits and uploads while copying the media tree so the database backup and media files describe the same point in time. The `sqlite3` command is the SQLite CLI; the app itself uses its bundled Node SQLite driver.
+The shell does not load `.env` automatically. If `DB_PATH` or `MEDIA_ROOT` is set there, export those values before running the example; when only `DATA_DIR` is overridden, export it and the example derives both default paths from it. Run the commands from the same working directory used by OpenLearning, since relative storage paths are resolved from that directory, or replace them with their absolute paths. Pause course edits and uploads while copying the media tree so the database backup and media files describe the same point in time. The `sqlite3` command is the SQLite CLI; the app itself uses its bundled Node SQLite driver.
 
 To restore, stop OpenLearning, restore the database to `DB_PATH` and the media tree to `MEDIA_ROOT`, then start the app again. Keep the directory layout and course folders intact. Restoring only one of the database or media tree can leave course records without their uploaded files, or files without their course records.
 
