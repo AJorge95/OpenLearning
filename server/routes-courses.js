@@ -312,22 +312,44 @@ courseRouter.get('/courses/:courseId', (req, res) => {
   res.json({ course: getCoursePayload(course, req.currentUser) });
 });
 
+function requireCertificateIssuanceEligibility(courseRef, user) {
+  if (user.role !== 'learner') fail(403, 'Only learners can earn course certificates.', 'forbidden');
+  const course = requireCourseViewer(courseRef, user);
+  if (course.status !== 'published') fail(404, 'Course not found.', 'not_found');
+  if (!courseSummary(course, user).completed) {
+    fail(409, 'Complete all lessons and pass the required quizzes to earn this certificate.', 'course_incomplete');
+  }
+  const account = db.prepare('SELECT first_name, last_name FROM users WHERE id = ?').get(user.id);
+  if (!account?.first_name?.trim() || !account.last_name?.trim()) {
+    fail(409, 'Add your first and last name in Account settings to receive your certificate.', 'certificate_name_required');
+  }
+  return course;
+}
+
 courseRouter.get('/certificates/:certificateRef', (req, res) => {
   const saved = db.prepare('SELECT * FROM course_certificates WHERE id = ? AND user_id = ?')
     .get(req.params.certificateRef, req.currentUser.id);
   if (saved) return res.json({ certificate: certificatePayload(saved) });
   const existing = findCourseCertificate(req.params.certificateRef, req.currentUser.id);
   if (existing) return res.json({ certificate: certificatePayload(existing) });
-  if (req.currentUser.role !== 'learner') fail(403, 'Only learners can earn course certificates.', 'forbidden');
-  const course = requireCourseViewer(req.params.certificateRef, req.currentUser);
-  if (course.status !== 'published') fail(404, 'Course not found.', 'not_found');
-  const certificate = issueCertificateIfComplete(course.id, req.currentUser);
-  if (!certificate && courseSummary(course, req.currentUser).completed
-      && (!req.currentUser.first_name?.trim() || !req.currentUser.last_name?.trim())) {
-    fail(409, 'Add your first and last name in Account settings to receive your certificate.', 'certificate_name_required');
-  }
-  if (!certificate) fail(409, 'Complete all lessons and pass the required quizzes to earn this certificate.', 'course_incomplete');
-  res.json({ certificate });
+  requireCertificateIssuanceEligibility(req.params.certificateRef, req.currentUser);
+  fail(409, 'Your certificate is ready to be issued.', 'certificate_not_issued');
+});
+
+courseRouter.post('/certificates/:certificateRef/issue', (req, res) => {
+  const issueCertificate = db.transaction(() => {
+    const saved = db.prepare('SELECT * FROM course_certificates WHERE id = ? AND user_id = ?')
+      .get(req.params.certificateRef, req.currentUser.id);
+    if (saved) return { certificate: certificatePayload(saved), created: false };
+    const existing = findCourseCertificate(req.params.certificateRef, req.currentUser.id);
+    if (existing) return { certificate: certificatePayload(existing), created: false };
+    const course = requireCertificateIssuanceEligibility(req.params.certificateRef, req.currentUser);
+    const certificate = issueCertificateIfComplete(course.id, req.currentUser);
+    if (!certificate) fail(409, 'Complete all lessons and pass the required quizzes to earn this certificate.', 'course_incomplete');
+    return { certificate, created: true };
+  });
+  const result = issueCertificate.immediate();
+  res.status(result.created ? 201 : 200).json({ certificate: result.certificate });
 });
 
 courseRouter.get('/lessons/:lessonId/watch-progress', async (req, res) => {
