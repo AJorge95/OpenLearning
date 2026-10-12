@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reconfirm public registration cues and validation
+
+- **Reviewed:** The rendered signup form, its visual required indicators and accessible field names, the native required constraints, and the server registration checks for email, names, credentials, and configured fields.
+- **Result:** No code change was needed. The browser’s accessibility tree omits the intentionally `aria-hidden` visual “Required” cues, while the rendered page shows them beside email, username, password, and confirmation. First and last name each show “Required · used on certificates.” Native controls retain their required state.
+- **Why no change:** The visual guidance, accessible names, browser constraints, and server-side validation agree; the DOM snapshot alone was not evidence that the visual cues were missing.
+- **Checked:** The rendered page was reviewed at 1999×1244, and focused registration, registration-field, and registration-limit tests passed (20/20). Mobile rendered behavior was not checked because the connected browser does not expose viewport resizing.
+- **Needed to revisit:** A reproduced missing or misleading required cue, a mismatch between client and server validation, or mobile viewport evidence showing clipping or overflow.
+
 ## 2026-10-12 — Cover fresh-install and downgrade-protection migrations
 
 - **Reviewed:** Startup’s automatic SQLite migrations through version 35, migration transaction boundaries, the existing upgrades from version 15 and version 30, and the future-schema guard.
