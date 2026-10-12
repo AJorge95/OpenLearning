@@ -574,8 +574,13 @@ export function LearningPathsPage() {
     }
   }
 
-  const assignableLearners = learners.filter((learner) => !learner.enrolled);
-  const enrolledLearners = learners.filter((learner) => learner.enrolled);
+  const assignableLearners = useMemo(() => learners.filter((learner) => !learner.enrolled), [learners]);
+  const enrolledLearners = useMemo(() => learners.filter((learner) => learner.enrolled), [learners]);
+  // Keep the potentially 50-row selector stable during unrelated path and assignment state updates.
+  const assignmentOptions = useMemo(() => [
+    { value: '', label: assignmentTotal === 0 ? 'No learners found' : assignableLearners.length ? 'Choose a learner' : 'No unassigned learners on this page', disabled: true },
+    ...assignableLearners.map((learner) => ({ value: learner.id, label: learner.email ? `${learner.username} · ${learner.email}` : learner.username })),
+  ], [assignableLearners, assignmentTotal]);
   const emptyPathState = appliedPathSearch
     ? { title: 'No matching learning paths', detail: 'Try another name or description, or clear the search.' }
     : staff
@@ -621,7 +626,7 @@ export function LearningPathsPage() {
         </div>
         {staff && canAssignLearningPathLearners(path.status) && assignmentPath === path.id && <div id={`path-assignments-${path.id}`} className="path-assignment-panel" aria-busy={assignmentLoading || assignmentBusy}><h3>Assign a learner</h3>
           <form role="search" aria-label="Search learners" className="management-search path-assignment-search" onSubmit={(event) => searchPathLearners(event, path.id)}><Search size={16} aria-hidden="true" /><input ref={assignmentSearchInputRef} type="search" aria-label="Search learners by name or email" maxLength={100} placeholder="Search learners by name or email" value={assignmentSearch} disabled={assignmentBusy} onChange={(event) => setAssignmentSearch(event.target.value)} /><Button type="submit" variant="quiet" disabled={assignmentBusy}>Search</Button></form>
-          <div className="path-assignment-controls"><AppSelect ariaLabel="Select a learner" value={selectedLearner} disabled={assignmentLoading || assignmentBusy || assignmentLoadError || assignableLearners.length === 0} onChange={setSelectedLearner} options={[{ value: '', label: assignmentTotal === 0 ? 'No learners found' : assignableLearners.length ? 'Choose a learner' : 'No unassigned learners on this page', disabled: true }, ...assignableLearners.map((learner) => ({ value: learner.id, label: learner.email ? `${learner.username} · ${learner.email}` : learner.username }))]} /><Button disabled={!selectedLearner || assignmentLoading || assignmentBusy || assignmentLoadError} onClick={() => void assignLearner(path.id)}>{assignmentAction === 'assign' ? 'Assigning…' : 'Assign'}</Button></div>
+          <div className="path-assignment-controls"><AppSelect ariaLabel="Select a learner" value={selectedLearner} disabled={assignmentLoading || assignmentBusy || assignmentLoadError || assignableLearners.length === 0} onChange={setSelectedLearner} options={assignmentOptions} /><Button disabled={!selectedLearner || assignmentLoading || assignmentBusy || assignmentLoadError} onClick={() => void assignLearner(path.id)}>{assignmentAction === 'assign' ? 'Assigning…' : 'Assign'}</Button></div>
           {assignmentLoading && <p className="path-assignment-status" role="status">Loading learners…</p>}
           {assignmentLoadError && <Button type="button" variant="secondary" onClick={() => void loadPathLearners(path.id, assignmentAppliedSearch, assignmentPage)}>Try loading learners again</Button>}
           {!assignmentLoading && !assignmentLoadError && assignmentTotal === 0 && (assignmentAppliedSearch
