@@ -736,6 +736,7 @@ export function CalendarPage() {
     {error && <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => setReloadSequence((current) => current + 1)}>Try again</Button></div>}
     {hasInvalidDeadlines && <div className="inline-notice" role="status">Some course deadlines could not be displayed. An administrator can check the system log.</div>}
     <section className="calendar-panel" aria-label={`Deadlines for ${calendarMonthFormatter.format(month)}`} aria-busy={loading} tabIndex={0}>
+      <p className="table-scroll-hint">Scroll horizontally to see the full month.</p>
       <table className="calendar-grid"><caption className="sr-only">Calendar days and course deadlines for {calendarMonthFormatter.format(month)}</caption>
         <thead><tr>{weekdays.map((day) => <th scope="col" key={day}><span aria-hidden="true">{day.slice(0, 3)}</span><span className="sr-only">{day}</span></th>)}</tr></thead>
         <tbody>{Array.from({ length: cells.length / 7 }, (_, weekIndex) => <tr key={`week-${weekIndex}`}>
