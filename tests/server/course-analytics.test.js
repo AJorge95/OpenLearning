@@ -36,8 +36,8 @@ let readCourseById;
 let requireCourseManagerForTests;
 let logicalCourseId;
 let publishedVersionForLogicalCourse;
-let trackQuizChoiceReads = false;
-let quizChoiceReadExecutions = 0;
+let trackCloneContentReads = false;
+let cloneContentReadExecutions = new Map();
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -299,44 +299,72 @@ test('editing a versioned course clones caption references to shared media files
   }
 });
 
-test('editing a versioned course loads quiz choices once per quiz', async () => {
-  const courseId = 'course-choice-clone-batch';
-  const moduleId = 'module-choice-clone-batch';
-  const quizId = 'quiz-choice-clone-batch';
+test('editing a versioned course batches nested content reads and preserves the copied order', () => {
+  const courseId = 'course-content-clone-batch';
   database.exec(`
     INSERT INTO courses (id, title, status, created_by, updated_by)
-      VALUES ('${courseId}', 'Quiz choice clone fixture', 'published', 'admin-1', 'admin-1');
-    INSERT INTO course_modules (id, course_id, title, position)
-      VALUES ('${moduleId}', '${courseId}', 'Question module', 0);
-    INSERT INTO quizzes (id, module_id, title, pass_mark)
-      VALUES ('${quizId}', '${moduleId}', 'Knowledge check', 70);
+      VALUES ('${courseId}', 'Nested content clone fixture', 'published', 'admin-1', 'admin-1');
     INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
-      VALUES ('version-choice-clone-batch', '${courseId}', '${courseId}', 1, 'admin-1');
+      VALUES ('version-content-clone-batch', '${courseId}', '${courseId}', 1, 'admin-1');
   `);
+  const insertModule = database.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, ?)');
+  const insertLesson = database.prepare('INSERT INTO lessons (id, module_id, title, position) VALUES (?, ?, ?, ?)');
+  const insertResource = database.prepare(`INSERT INTO lesson_resources (id, lesson_id, resource_type, title, href, position)
+    VALUES (?, ?, 'link', ?, ?, ?)`);
+  const insertCaption = database.prepare(`INSERT INTO lesson_captions (id, lesson_id, language, label, file_name, original_name, byte_size)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  const insertQuiz = database.prepare('INSERT INTO quizzes (id, module_id, title, pass_mark) VALUES (?, ?, ?, ?)');
   const insertQuestion = database.prepare(`INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position)
     VALUES (?, ?, ?, ?, ?)`);
   const insertChoice = database.prepare(`INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position)
     VALUES (?, ?, ?, ?, ?)`);
-  for (let questionIndex = 0; questionIndex < 4; questionIndex += 1) {
-    const questionId = `question-choice-clone-${questionIndex + 1}`;
-    insertQuestion.run(questionId, quizId, `Question ${questionIndex + 1}?`, '', questionIndex);
-    for (let choiceIndex = 0; choiceIndex < 3; choiceIndex += 1) {
-      insertChoice.run(`choice-clone-${questionIndex + 1}-${choiceIndex + 1}`, questionId,
-        `Answer ${choiceIndex + 1}`, choiceIndex === 1 ? 1 : 0, choiceIndex);
+  for (let moduleIndex = 0; moduleIndex < 3; moduleIndex += 1) {
+    const moduleId = `module-content-clone-${moduleIndex + 1}`;
+    const quizId = `quiz-content-clone-${moduleIndex + 1}`;
+    insertModule.run(moduleId, courseId, `Module ${moduleIndex + 1}`, moduleIndex);
+    for (let lessonIndex = 0; lessonIndex < 2; lessonIndex += 1) {
+      const lessonId = `lesson-content-clone-${moduleIndex + 1}-${lessonIndex + 1}`;
+      insertLesson.run(lessonId, moduleId, `Lesson ${moduleIndex + 1}.${lessonIndex + 1}`, lessonIndex);
+      for (let resourceIndex = 0; resourceIndex < 2; resourceIndex += 1) {
+        insertResource.run(`resource-content-clone-${moduleIndex + 1}-${lessonIndex + 1}-${resourceIndex + 1}`, lessonId,
+          `Resource ${moduleIndex + 1}.${lessonIndex + 1}.${resourceIndex + 1}`,
+          `https://example.test/resource-${moduleIndex + 1}-${lessonIndex + 1}-${resourceIndex + 1}`, resourceIndex);
+      }
+      for (let captionIndex = 0; captionIndex < 2; captionIndex += 1) {
+        insertCaption.run(`caption-content-clone-${moduleIndex + 1}-${lessonIndex + 1}-${captionIndex + 1}`, lessonId,
+          `en-${moduleIndex + 1}-${lessonIndex + 1}-${captionIndex + 1}`, `English ${captionIndex + 1}`,
+          `caption-${moduleIndex + 1}-${lessonIndex + 1}-${captionIndex + 1}.vtt`,
+          `caption-${moduleIndex + 1}-${lessonIndex + 1}-${captionIndex + 1}.vtt`, 20);
+      }
+    }
+    insertQuiz.run(quizId, moduleId, `Quiz ${moduleIndex + 1}`, 70);
+    for (let questionIndex = 0; questionIndex < 3; questionIndex += 1) {
+      const questionId = `question-content-clone-${moduleIndex + 1}-${questionIndex + 1}`;
+      insertQuestion.run(questionId, quizId, `Question ${moduleIndex + 1}.${questionIndex + 1}?`, '', questionIndex);
+      for (let choiceIndex = 0; choiceIndex < 3; choiceIndex += 1) {
+        insertChoice.run(`choice-content-clone-${moduleIndex + 1}-${questionIndex + 1}-${choiceIndex + 1}`, questionId,
+          `Answer ${choiceIndex + 1}`, choiceIndex === 1 ? 1 : 0, choiceIndex);
+      }
     }
   }
 
+  const trackedTables = ['lessons', 'lesson_resources', 'lesson_captions', 'quizzes', 'quiz_questions', 'quiz_choices'];
+  const readAliases = { lessons: 'l', lesson_resources: 'lr', lesson_captions: 'lc', quizzes: 'q', quiz_questions: 'qq', quiz_choices: 'qc' };
   const originalPrepare = database.prepare;
   try {
     database.prepare = (sql) => {
       const statement = originalPrepare.call(database, sql);
-      if (!/^\s*SELECT\b[\s\S]*\bFROM\s+quiz_choices\b/i.test(sql)) return statement;
+      if (!/^\s*SELECT\b/i.test(sql)) return statement;
+      const table = trackedTables.find((name) => new RegExp(
+        `^\\s*SELECT\\s+(?:${readAliases[name]}\\.\\*|\\*)\\s+FROM\\s+${name}(?:\\s+${readAliases[name]})?\\b`, 'i',
+      ).test(sql));
+      if (!table) return statement;
       return new Proxy(statement, {
         get(target, property) {
           const value = Reflect.get(target, property, target);
-          if (property === 'all') {
+          if (property === 'all' || property === 'get') {
             return (...parameters) => {
-              if (trackQuizChoiceReads) quizChoiceReadExecutions += 1;
+              if (trackCloneContentReads) cloneContentReadExecutions.set(table, (cloneContentReadExecutions.get(table) ?? 0) + 1);
               return value.apply(target, parameters);
             };
           }
@@ -345,23 +373,46 @@ test('editing a versioned course loads quiz choices once per quiz', async () => 
       });
     };
 
-    quizChoiceReadExecutions = 0;
-    trackQuizChoiceReads = true;
+    cloneContentReadExecutions = new Map();
+    trackCloneContentReads = true;
     const revision = editableCourse(courseId, { id: 'admin-1' });
-    trackQuizChoiceReads = false;
+    trackCloneContentReads = false;
 
     assert.ok(revision?.id);
-    assert.equal(quizChoiceReadExecutions, 1);
+    assert.deepEqual(Object.fromEntries(cloneContentReadExecutions), Object.fromEntries(trackedTables.map((table) => [table, 1])));
+    const clonedLessons = database.prepare(`SELECT m.position AS module_position, l.position AS lesson_position, l.title
+      FROM course_modules m JOIN lessons l ON l.module_id = m.id
+      WHERE m.course_id = ? ORDER BY m.position, l.position`).all(revision.id);
+    assert.deepEqual(clonedLessons.map((row) => [row.module_position, row.lesson_position, row.title]),
+      Array.from({ length: 3 }, (_, moduleIndex) => Array.from({ length: 2 }, (_, lessonIndex) => [
+        moduleIndex, lessonIndex, `Lesson ${moduleIndex + 1}.${lessonIndex + 1}`,
+      ])).flat());
+    const clonedResources = database.prepare(`SELECT m.position AS module_position, l.position AS lesson_position,
+        lr.position AS resource_position, lr.title
+      FROM course_modules m JOIN lessons l ON l.module_id = m.id JOIN lesson_resources lr ON lr.lesson_id = l.id
+      WHERE m.course_id = ? ORDER BY m.position, l.position, lr.position`).all(revision.id);
+    assert.deepEqual(clonedResources.map((row) => [row.module_position, row.lesson_position, row.resource_position, row.title]),
+      Array.from({ length: 3 }, (_, moduleIndex) => Array.from({ length: 2 }, (_, lessonIndex) =>
+        Array.from({ length: 2 }, (_, resourceIndex) => [moduleIndex, lessonIndex, resourceIndex,
+          `Resource ${moduleIndex + 1}.${lessonIndex + 1}.${resourceIndex + 1}`])).flat()).flat());
+    const clonedCaptions = database.prepare(`SELECT m.position AS module_position, l.position AS lesson_position, lc.language
+      FROM course_modules m JOIN lessons l ON l.module_id = m.id JOIN lesson_captions lc ON lc.lesson_id = l.id
+      WHERE m.course_id = ? ORDER BY m.position, l.position, lc.rowid`).all(revision.id);
+    assert.deepEqual(clonedCaptions.map((row) => [row.module_position, row.lesson_position, row.language]),
+      Array.from({ length: 3 }, (_, moduleIndex) => Array.from({ length: 2 }, (_, lessonIndex) =>
+        Array.from({ length: 2 }, (_, captionIndex) => [moduleIndex, lessonIndex,
+          `en-${moduleIndex + 1}-${lessonIndex + 1}-${captionIndex + 1}`])).flat()).flat());
     const clonedQuestions = database.prepare(`SELECT qq.prompt, qc.choice_text, qc.is_correct, qc.position
       FROM quiz_questions qq JOIN quiz_choices qc ON qc.question_id = qq.id
       JOIN quizzes q ON q.id = qq.quiz_id JOIN course_modules m ON m.id = q.module_id
-      WHERE m.course_id = ? ORDER BY qq.position, qc.position`).all(revision.id);
+      WHERE m.course_id = ? ORDER BY m.position, qq.position, qc.position`).all(revision.id);
     assert.deepEqual(clonedQuestions.map((row) => [row.prompt, row.choice_text, row.is_correct, row.position]),
-      Array.from({ length: 4 }, (_, questionIndex) => Array.from({ length: 3 }, (_, choiceIndex) => [
-        `Question ${questionIndex + 1}?`, `Answer ${choiceIndex + 1}`, choiceIndex === 1 ? 1 : 0, choiceIndex,
-      ])).flat());
+      Array.from({ length: 3 }, (_, moduleIndex) => Array.from({ length: 3 }, (_, questionIndex) =>
+        Array.from({ length: 3 }, (_, choiceIndex) => [
+          `Question ${moduleIndex + 1}.${questionIndex + 1}?`, `Answer ${choiceIndex + 1}`, choiceIndex === 1 ? 1 : 0, choiceIndex,
+        ])).flat()).flat());
   } finally {
-    trackQuizChoiceReads = false;
+    trackCloneContentReads = false;
     database.prepare = originalPrepare;
     database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
   }
