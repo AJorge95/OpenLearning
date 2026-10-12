@@ -14,6 +14,8 @@ test('backup instructions follow configured database and media paths', () => {
   assert.match(backupSection, /BACKUP_DIR/);
   assert.match(backupSection, /same working directory used by OpenLearning/i);
   assert.match(backupSection, /pause course edits and uploads during the media copy/i);
+  assert.match(backupSection, /Before copying media or reporting success, it verifies the SQLite snapshot with `quick_check`/i);
+  assert.match(backupSection, /if the check fails, incomplete output is removed/i);
   assert.match(backupSection, /rejects backup destinations inside the media root/i);
   assert.match(backupSection, /removes incomplete output when a backup fails/i);
 });

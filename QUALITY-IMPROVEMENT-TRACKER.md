@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Verify the standalone SQLite backup before copying media
+
+- **Reviewed:** The portable backup command’s SQLite snapshot and media-copy sequence, its failure cleanup, the platform-reset backup verification path, and the existing backup and restore tests.
+- **Improvement:** Open the generated database snapshot read-only and require every SQLite `quick_check` result to be `ok` before copying media or reporting success. Verification failures follow the existing cleanup path, which removes the incomplete backup directory; the verification connection is closed in all cases.
+- **Why it helps:** A damaged or unreadable database snapshot cannot be reported as a successful backup alongside a complete media copy. Administrators get a failure and can retry instead of relying on an unusable restore point.
+- **Interface review:** The reported role-selector boundary was rechecked separately; the current rendered control already matches its menu width and ignores adjacent clicks.
+- **Checked:** Added an isolated malformed-snapshot regression that verifies cleanup, connection closure, and that media copying is skipped. Focused backup and reset tests passed (17/17), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed.
+
 ## 2026-10-12 — Recheck the role selector’s right-side click boundary
 
 - **Reviewed:** The reported screenshot’s label-wrapped DOM path, the current account-details markup and CSS, and the role selector in the authenticated local build.

@@ -31,6 +31,19 @@ function timestampedDirectoryName(date) {
   return `${date.toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`;
 }
 
+function verifyDatabaseBackup(databasePath, DatabaseClass) {
+  const backupDatabase = new DatabaseClass(databasePath, { readonly: true, fileMustExist: true });
+  try {
+    // Match the reset workflow: do not call a snapshot verified unless SQLite confirms its structure.
+    const checkResults = backupDatabase.pragma('quick_check');
+    if (checkResults.length === 0 || checkResults.some((row) => row.quick_check !== 'ok')) {
+      throw new Error('SQLite backup verification failed.');
+    }
+  } finally {
+    if (backupDatabase.open) backupDatabase.close();
+  }
+}
+
 export async function createBackup({
   appConfig = config,
   destinationRoot = path.resolve(process.cwd(), process.env.BACKUP_DIR?.trim() || './backup'),
@@ -74,6 +87,7 @@ export async function createBackup({
     await sourceDatabase.backup(databaseBackupPath);
     sourceDatabase.close();
     sourceDatabase = null;
+    verifyDatabaseBackup(databaseBackupPath, DatabaseClass);
     await copyMedia(mediaRoot, mediaBackupPath, { recursive: true, errorOnExist: true, force: false });
     return backupDirectory;
   } catch (cause) {
