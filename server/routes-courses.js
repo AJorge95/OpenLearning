@@ -643,6 +643,8 @@ courseRouter.post('/courses/:courseId/enroll', (req, res) => {
   // Keep eligibility, enrollment, and initial learning state in one transaction.
   const enroll = db.transaction(() => {
     const course = requireCourseViewer(req.params.courseId, req.currentUser);
+    // Staff can preview course content, but enrollment represents learner activity.
+    if (req.currentUser.role !== 'learner') fail(403, 'Only learners can enroll in courses.', 'forbidden');
     if (!canLearnerAccess(course, req.currentUser) || course.status !== 'published') fail(403, 'You do not have access to this course.', 'course_access_denied');
     return enrollLearner(course.id, req.currentUser.id);
   });

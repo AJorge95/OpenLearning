@@ -950,6 +950,41 @@ test('course and learning-path detail GETs are read-only while protected actions
   }
 });
 
+test('course enrollment rejects staff roles without creating learner activity', async () => {
+  const courseId = 'course-enrollment-staff-boundary';
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('${courseId}', 'Staff enrollment boundary', 'published', 'admin-1', 'admin-1');
+    INSERT INTO users (id, username, email, password_hash, role, disabled)
+      VALUES ('moderator-enrollment-boundary', 'moderator_enrollment_boundary', 'moderator-enrollment@example.invalid', 'not-used', 'moderator', 0);
+  `);
+
+  const countEnrollment = (userId) => database.prepare('SELECT COUNT(*) AS count FROM enrollments WHERE course_id = ? AND user_id = ?')
+    .get(courseId, userId).count;
+  const countLearningState = (userId) => database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE course_id = ? AND user_id = ?')
+    .get(courseId, userId).count;
+
+  try {
+    for (const staffId of ['admin-1', 'moderator-enrollment-boundary']) {
+      const response = await fetch(apiUrl(`/courses/${courseId}/enroll`), {
+        method: 'POST',
+        headers: userHeaders(staffId),
+      });
+
+      assert.equal(response.status, 403, staffId);
+      assert.deepEqual(await response.json(), {
+        error: 'Only learners can enroll in courses.',
+        code: 'forbidden',
+      });
+      assert.equal(countEnrollment(staffId), 0);
+      assert.equal(countLearningState(staffId), 0);
+    }
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+    database.prepare('DELETE FROM users WHERE id = ?').run('moderator-enrollment-boundary');
+  }
+});
+
 test('course enrollment rolls back when its learning state cannot be created', async () => {
   const courseId = 'course-enrollment-atomic';
   const originalPrepare = database.prepare;
