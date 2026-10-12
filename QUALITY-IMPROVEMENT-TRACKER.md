@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse account select options across list updates
+
+- **Reviewed:** The 50-row admin account table, its three shared selects, and the option-validation effect in `AppSelect`.
+- **Improvement:** Hoist role, registration, and filter option arrays outside `AdminUsersPage` so account updates reuse the same references.
+- **Why it helps:** The table no longer creates 50 equivalent role-option arrays or triggers option validation in every row after a save; each select validates when its options or selected value actually changes.
+- **Checked:** The focused account-select and filter tests passed (4/4), the full test suite passed, `npm run build` passed TypeScript and Vite, and `git diff --check` passed. The protected admin page is not available in the signed-out browser session; the change does not alter rendered content.
+
 ## 2026-10-12 — Recheck reported account-role picker hit area
 
 - **Reviewed:** The supplied account-role screenshot and target path, current account-details markup and CSS, and the existing adjacent-click regression coverage.
