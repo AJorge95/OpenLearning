@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck empty competency progress after paging changes
+
+- **Reviewed:** Competency progress totals and percentage calculation, successful empty-state announcements, load-more reconciliation, and the API's overall achieved count after bounded catalog paging.
+- **Result:** No runtime change. The summary and progress bar render only when the total is nonzero; a successful empty catalog shows an announced empty state, and the first-page API response carries the overall achieved count separately from its bounded page.
+- **Why no change:** Existing UI and route behavior already handles both zero competencies and paged totals; no `0/0`, misleading empty state, or lost summary count surfaced.
+- **Checked:** Competency progress/admin UI checks passed (10/10); `node --test tests/server/course-analytics.test.js` passed (124/124).
+- **Needed to revisit:** A reproduced zero-denominator summary, incorrect achieved total after paging, or empty state shown during a load failure.
+
 ## 2026-10-12 — Explain empty learning paths in staff cards
 
 - **Reviewed:** Learning-path card rendering for draft, published, and archived paths; zero-course progress handling; and server validation when creating or publishing a path.
