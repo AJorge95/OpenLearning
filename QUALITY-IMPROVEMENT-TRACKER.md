@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck lesson feedback page races
+
+- **Reviewed:** Comment paging alongside new posts and moderation, stale-page detection after concurrent feed changes, out-of-range page recovery, lesson access checks, comment validation, and audit-backed removal.
+- **Result:** No runtime change. Posting and removal invalidate in-flight paging requests; overlapping or shifted pages trigger a refresh; the API clamps a deleted last page and keeps comment removal with its audit record in one transaction.
+- **Why no change:** Existing client and route behavior already handles these transitions, and focused tests did not expose a stale, duplicated, or unauthorized comment state.
+- **Checked:** `node --test tests/client/lesson-comments.test.js tests/client/lesson-comment-removal-confirmation.test.js tests/server/lesson-comment-moderation.test.js` passed (25/25).
+- **Needed to revisit:** A reproduced stale page after posting/removal, duplicate or missing comments during paging, or an authorization/audit failure.
+
 ## 2026-10-12 — Recheck lesson video controls and completion gating
 
 - **Reviewed:** Video control names and pressed states, captions, playback clock and verified-progress announcements, fullscreen behavior, retry/resume handling, completion controls, and the lesson-watch API.
