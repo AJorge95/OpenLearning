@@ -8,6 +8,7 @@ import { findMissingRequiredRegistrationField, refreshRegistrationFieldValues } 
 import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordConfirmationFieldProps } from './password-confirmation';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
 import { validateEmail } from './email-validation';
+import { accountNameError, MAX_ACCOUNT_NAME_LENGTH, normalizeAccountName } from './account-name-validation';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import type { RegistrationField, RegistrationFieldValues } from './types';
 
@@ -94,6 +95,8 @@ export function SetupPage() {
   const setupErrorId = useId();
   const setupEmailErrorId = useId();
   const setupEmailInputRef = useRef<HTMLInputElement>(null);
+  const setupFirstNameInputRef = useRef<HTMLInputElement>(null);
+  const setupLastNameInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<1 | 2>(1);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousStepRef = useRef(step);
@@ -112,6 +115,7 @@ export function SetupPage() {
   const [userLimit, setUserLimit] = useState(String(initialUserLimit));
   const [error, setError] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [invalidNameField, setInvalidNameField] = useState<'firstName' | 'lastName' | null>(null);
   const [saving, setSaving] = useState(false);
   const setupSubmissionInFlightRef = useRef(false);
 
@@ -133,6 +137,7 @@ export function SetupPage() {
   function continueToAccessSettings(event: React.FormEvent) {
     event.preventDefault();
     setError('');
+    setInvalidNameField(null);
     const normalizedPlatformName = platformName.trim();
     if (normalizedPlatformName.length < 2 || normalizedPlatformName.length > 80) {
       setError('Platform name must be between 2 and 80 characters.');
@@ -145,6 +150,23 @@ export function SetupPage() {
       return;
     }
     setEmailError('');
+    const firstNameError = accountNameError(firstName, 'First name');
+    if (firstNameError) {
+      setInvalidNameField('firstName');
+      setError(firstNameError);
+      window.requestAnimationFrame(() => setupFirstNameInputRef.current?.focus());
+      return;
+    }
+    const lastNameError = accountNameError(lastName, 'Last name');
+    if (lastNameError) {
+      setInvalidNameField('lastName');
+      setError(lastNameError);
+      window.requestAnimationFrame(() => setupLastNameInputRef.current?.focus());
+      return;
+    }
+    setInvalidNameField(null);
+    setFirstName(normalizeAccountName(firstName));
+    setLastName(normalizeAccountName(lastName));
     const confirmationError = getPasswordConfirmationError(password, confirmPassword);
     if (confirmationError) {
       setError(confirmationError);
@@ -171,6 +193,12 @@ export function SetupPage() {
         setEmailError(cause.message);
         setStep(1);
         window.requestAnimationFrame(() => setupEmailInputRef.current?.focus());
+      } else if (cause instanceof ApiError && cause.code === 'invalid_name') {
+        const invalidField = cause.message.startsWith('Last name') ? 'lastName' : 'firstName';
+        setInvalidNameField(invalidField);
+        setError(cause.message);
+        setStep(1);
+        window.requestAnimationFrame(() => (invalidField === 'lastName' ? setupLastNameInputRef.current : setupFirstNameInputRef.current)?.focus());
       } else setError(cause instanceof ApiError ? cause.message : 'Setup could not be completed. Try again.');
     } finally {
       releaseSubmissionLock(setupSubmissionInFlightRef);
@@ -197,7 +225,7 @@ export function SetupPage() {
             <div className="branding-choice-field"><span className="branding-choice-label">Color palette</span><small>Choose the accent colors used across the platform.</small><PalettePicker value={themePalette} onChange={choosePalette} /></div>
             <label>Admin email<input ref={setupEmailInputRef} required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? setupEmailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} /></label>
             {emailError && <p id={setupEmailErrorId} className="form-error" role="alert">{emailError}</p>}
-            <div className="account-name-fields"><label>First name<input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} /></label><label>Last name<input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} /></label></div>
+            <div className="account-name-fields"><label>First name<input ref={setupFirstNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="given-name" aria-invalid={invalidNameField === 'firstName' || undefined} aria-describedby={invalidNameField === 'firstName' ? setupErrorId : undefined} value={firstName} onChange={(event) => { setFirstName(event.target.value); if (invalidNameField === 'firstName') { setInvalidNameField(null); setError(''); } }} /></label><label>Last name<input ref={setupLastNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="family-name" aria-invalid={invalidNameField === 'lastName' || undefined} aria-describedby={invalidNameField === 'lastName' ? setupErrorId : undefined} value={lastName} onChange={(event) => { setLastName(event.target.value); if (invalidNameField === 'lastName') { setInvalidNameField(null); setError(''); } }} /></label></div>
             <label>Admin username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} /></label>
             <PasswordField label="Password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} hint="Use at least 12 characters." />
             <PasswordField label="Confirm password" {...passwordConfirmationFieldProps(error, setupErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} />
@@ -269,8 +297,11 @@ export function RegisterPage() {
   const postLoginPath = getPostLoginPath(location.state?.from);
   const emailErrorId = useId();
   const emailInputRef = useRef<HTMLInputElement>(null);
+  const firstNameInputRef = useRef<HTMLInputElement>(null);
+  const lastNameInputRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [invalidNameField, setInvalidNameField] = useState<'firstName' | 'lastName' | null>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
@@ -319,6 +350,7 @@ export function RegisterPage() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(''); setInvalidRegistrationFieldId('');
+    setInvalidNameField(null);
     setRegistrationFieldsChanged(false);
     const currentEmailError = validateEmail(email);
     if (currentEmailError) {
@@ -327,6 +359,25 @@ export function RegisterPage() {
       return;
     }
     setEmailError('');
+    const firstNameError = accountNameError(firstName, 'First name');
+    if (firstNameError) {
+      setInvalidNameField('firstName');
+      setError(firstNameError);
+      window.requestAnimationFrame(() => firstNameInputRef.current?.focus());
+      return;
+    }
+    const lastNameError = accountNameError(lastName, 'Last name');
+    if (lastNameError) {
+      setInvalidNameField('lastName');
+      setError(lastNameError);
+      window.requestAnimationFrame(() => lastNameInputRef.current?.focus());
+      return;
+    }
+    setInvalidNameField(null);
+    const normalizedFirstName = normalizeAccountName(firstName);
+    const normalizedLastName = normalizeAccountName(lastName);
+    setFirstName(normalizedFirstName);
+    setLastName(normalizedLastName);
     const missingField = findMissingRequiredRegistrationField(registrationFields, registrationFieldValues);
     if (missingField) {
       setError(`${missingField.label} is required.`);
@@ -342,7 +393,7 @@ export function RegisterPage() {
     if (!acquireSubmissionLock(submissionInFlightRef)) return;
     setSaving(true);
     try {
-      const result = await signUp(email, firstName, lastName, username, password, confirmPassword, registrationFieldValues);
+      const result = await signUp(email, normalizedFirstName, normalizedLastName, username, password, confirmPassword, registrationFieldValues);
       if (result.approvalRequired) { setApprovalSubmitted(true); return; }
       navigate(postLoginPath, { replace: true });
     }
@@ -354,6 +405,11 @@ export function RegisterPage() {
       } else if (cause instanceof ApiError && cause.code === 'invalid_email') {
         setEmailError(cause.message);
         window.requestAnimationFrame(() => emailInputRef.current?.focus());
+      } else if (cause instanceof ApiError && cause.code === 'invalid_name') {
+        const invalidField = cause.message.startsWith('Last name') ? 'lastName' : 'firstName';
+        setInvalidNameField(invalidField);
+        setError(cause.message);
+        window.requestAnimationFrame(() => (invalidField === 'lastName' ? lastNameInputRef.current : firstNameInputRef.current)?.focus());
       } else setError(cause instanceof ApiError ? cause.message : 'Registration failed. Try again.');
     }
     finally { releaseSubmissionLock(submissionInFlightRef); setSaving(false); }
@@ -364,7 +420,7 @@ export function RegisterPage() {
     <form onSubmit={submit} className="form-stack" aria-busy={saving}>
       <label>Email<input ref={emailInputRef} required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? emailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} disabled={saving} /></label>
       {emailError && <p id={emailErrorId} className="form-error" role="alert">{emailError}</p>}
-      <div className="account-name-fields"><label>First name <small>Required · used on certificates</small><input required maxLength={80} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} disabled={saving} /></label><label>Last name <small>Required · used on certificates</small><input required maxLength={80} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} disabled={saving} /></label></div>
+      <div className="account-name-fields"><label>First name <small>Required · used on certificates</small><input ref={firstNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="given-name" aria-invalid={invalidNameField === 'firstName' || undefined} aria-describedby={invalidNameField === 'firstName' ? 'registration-form-error' : undefined} value={firstName} onChange={(event) => { setFirstName(event.target.value); if (invalidNameField === 'firstName') { setInvalidNameField(null); setError(''); } }} disabled={saving} /></label><label>Last name <small>Required · used on certificates</small><input ref={lastNameInputRef} required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="family-name" aria-invalid={invalidNameField === 'lastName' || undefined} aria-describedby={invalidNameField === 'lastName' ? 'registration-form-error' : undefined} value={lastName} onChange={(event) => { setLastName(event.target.value); if (invalidNameField === 'lastName') { setInvalidNameField(null); setError(''); } }} disabled={saving} /></label></div>
       <label>Username<input required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>Letters, numbers, dots, underscores, and hyphens.</small></label>
       {registrationFieldsLoading ? <p className="registration-fields-loading" role="status">Loading registration details…</p> : registrationFieldsError
         ? <div className="registration-fields-load-error"><p className="form-error" role="alert">{registrationFieldsError}</p><Button type="button" variant="secondary" onClick={() => setRegistrationFieldsRetryVersion((version) => version + 1)}>Retry</Button></div>

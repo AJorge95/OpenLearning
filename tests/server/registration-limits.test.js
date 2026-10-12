@@ -54,15 +54,15 @@ function apiUrl(pathname) {
   return `http://127.0.0.1:${address.port}/api${pathname}`;
 }
 
-function registrationRequest(username, email = `${username}@example.invalid`) {
+function registrationRequest(username, email = `${username}@example.invalid`, firstName = 'Limit', lastName = 'Check') {
   return fetch(apiUrl('/auth/register'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify({
       username,
       email,
-      firstName: 'Limit',
-      lastName: 'Check',
+      firstName,
+      lastName,
       password: 'RegistrationLimitPassphrase-2026',
       confirmPassword: 'RegistrationLimitPassphrase-2026',
     }),
@@ -111,6 +111,16 @@ test('registration rejects a host-only email domain before creating an account',
     code: 'invalid_email',
   });
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get('registration_local_email').count, 0);
+});
+
+test('registration rejects a whitespace-only account name before creating an account', async () => {
+  const response = await registrationRequest('registration_empty_name', 'empty.name@example.invalid', '   ');
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: 'First name must be between 1 and 80 characters.',
+    code: 'invalid_name',
+  });
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get('registration_empty_name').count, 0);
 });
 
 after(async () => {
