@@ -2675,6 +2675,8 @@ export function AdminSettingsPage() {
       setResetError(cause instanceof ApiError ? cause.message : 'The platform could not be reset. Your backup remains available.'); setResetBusy(false);
     }
   }
+  // The server pauses settings writes during a reset, so keep these controls read-only until it clears.
+  const platformSettingsDisabled = saving || resetBusy || resetState.pending;
   const parsedAccountLimit = Number(userLimitValue);
   const accountLimit = Number.isFinite(parsedAccountLimit) && parsedAccountLimit > 0 ? Math.floor(parsedAccountLimit) : 0;
   // The server blocks every new account at or above the configured cap.
@@ -2684,7 +2686,7 @@ export function AdminSettingsPage() {
     : 0;
   return <div className="management-page settings-page"><PageHeading title="Settings" subtitle="Customize platform branding, connection security, and learner registration." /><AdminSettingsTabs />{error && <Notice>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
     <form className="settings-card form-stack" onSubmit={submit} aria-busy={saving}>
-      <fieldset className="settings-fields" aria-label="Platform settings" disabled={saving}>
+      <fieldset className="settings-fields" aria-label="Platform settings" disabled={platformSettingsDisabled}>
       <div className="settings-card-heading"><span className="settings-icon"><Settings2 size={19} /></span><div><h2>Platform identity</h2><p>Choose the brand learners see throughout the platform.</p></div></div>
       <label>Platform name<input required minLength={2} maxLength={80} value={name} onChange={(event) => setName(event.target.value)} /></label>
       <PlatformIconPicker value={icon} onChange={(nextIcon) => { setIcon(nextIcon); setIconEdited(true); }} />

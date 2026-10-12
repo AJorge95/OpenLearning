@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Disable settings while a reset pauses API requests
+
+- **Reviewed:** The platform-reset request gate, settings form fieldset and save action, reset preparation/cancel/confirm state, live status polling, and existing reset client/route coverage.
+- **Improvement:** Disable the platform-settings fieldset while settings are saving, reset actions are busy, or a reset is pending. Keep the reset status explanation visible below the form.
+- **Why it helps:** Administrators can’t edit or submit settings that the server is deliberately rejecting during backup preparation or a pending reset.
+- **Backend review:** The API gate continues to reject non-reset requests during a reset, covering races between status polls and writes; no server contract changed.
+- **Checked:** Focused platform-reset UI and server-gate tests passed (16/16); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. The connected browser is signed out, so authenticated settings interaction was not replayed.
+
 ## 2026-10-12 — Make lesson comment authors navigable headings
 
 - **Reviewed:** The learner feedback section heading, individual comment article structure, existing comment pagination/moderation behavior, and responsive comment layout.

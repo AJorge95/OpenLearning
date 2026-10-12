@@ -38,6 +38,19 @@ test('settings explain when live reset status could not be refreshed', () => {
   assert.match(settingsPage.getText(sourceFile), /resetStatusError && <Notice>\{resetStatusError\} The displayed reset status may be out of date\.<\/Notice>/);
 });
 
+test('platform settings become read-only while a reset pauses API requests', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const settingsPage = sourceFile.statements.find((statement) => ts.isFunctionDeclaration(statement)
+    && statement.name?.text === 'AdminSettingsPage');
+  assert.ok(settingsPage, 'expected to find the admin settings page');
+
+  const pageSource = settingsPage.getText(sourceFile);
+  assert.match(pageSource, /const platformSettingsDisabled = saving \|\| resetBusy \|\| resetState\.pending/);
+  assert.match(pageSource, /<fieldset className="settings-fields" aria-label="Platform settings" disabled=\{platformSettingsDisabled\}>/);
+  assert.match(pageSource, /Platform requests are paused until the administrator confirms or preparation ends\./);
+});
+
 test('failed reset attempts clear confirmations that the server invalidated', () => {
   assert.equal(shouldClearResetConfirmationAfterFailure({ code: 'platform_reset_confirmation_invalid' }), true);
   assert.equal(shouldClearResetConfirmationAfterFailure({ status: 500, code: 'audit_unavailable' }), true);
