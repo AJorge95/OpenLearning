@@ -42,6 +42,16 @@ test('loading another comment page announces progress to assistive technology', 
   assert.match(source, /<p className="sr-only" role="status" aria-live="polite" aria-atomic="true">\{commentsLoading \? 'Loading more comments\.' : ''\}<\/p>/);
 });
 
+test('lesson comment composer keeps a visible label and associated audience guidance', () => {
+  const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
+  const composer = source.match(/<form className="lesson-comment-form"[\s\S]*?<\/form>/)?.[0];
+
+  assert.ok(composer, 'Expected the lesson comment composer form.');
+  assert.match(composer, /<label htmlFor="lesson-comment">Add a comment<\/label>/);
+  assert.match(composer, /<textarea id="lesson-comment" aria-describedby="lesson-comment-hint"/);
+  assert.match(composer, /id="lesson-comment-hint">\{commentDraft\.length\}\/2,000 characters · visible to learners with course access<\/small>/);
+});
+
 test('lesson comment authors are headings within the feedback section', () => {
   const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
   const styles = fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');

@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Protect the lesson comment field label
+
+- **Reviewed:** The learner comment textarea, its visible label, character/audience hint, associated description, and the existing comment client and moderation regressions.
+- **Improvement:** Add a client regression that requires the visible “Add a comment” label to target the textarea and keeps the character/audience hint linked through `aria-describedby`.
+- **Why it helps:** Future edits to the composer cannot silently remove the field's accessible name or its guidance for screen-reader users.
+- **Backend review:** Comment length and access validation, paginated reads, and audit-backed moderation remain unchanged.
+- **Checked:** Comment client tests passed (14/14); `tests/server/lesson-comment-moderation.test.js` passed (12/12); `git diff --check` passed.
+
 ## 2026-10-12 — Refresh registration choices after a stale-answer rejection
 
 - **Reviewed:** Public registration's dynamic custom fields, server-side answer validation, and the existing refresh flow that preserves answers still compatible with an updated schema.
