@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck the right-side role-selector hit area
+
+- **Reviewed:** The reported account route, current role-selector markup and width rules, an enabled learner account, and the account-role update route's last-active-administrator safeguard.
+- **Result:** No runtime change. The reported account is the only active administrator, so its selector is disabled. On an enabled learner account, the rendered 8.5rem trigger opened normally; clicking 6px beyond its right edge or in the far-right blank area while closed left the menu closed. The current markup has a separate text label and bounded trigger; the supplied screenshot's wider wrapping-label target is absent.
+- **Why no code change:** The current build did not reproduce a click outside the visible trigger opening the menu, and the existing width and pointer-event rules already confine activation to that trigger.
+- **Backend review:** Role values remain validated, and the API prevents disabling or demoting the last active administrator.
+- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js` passed (10/10); the focused last-active-administrator route test passed (1/1); `git diff --check` passed. In the local browser at 1265 × 714, the enabled selector opened from its trigger, Escape closed it, and clicks 6px to the right and farther across the row did not reopen it. No account data changed.
+- **Needed to continue:** A current-build reproduction where clicking outside the visible trigger opens it, since the supplied screenshot shows a different selector structure and an enabled state not present on the reported account.
+
 ## 2026-10-12 — Review ARIA naming targets and comment moderation
 
 - **Reviewed:** JSX elements using `aria-label` without an explicit role, lesson comment removal confirmation and status feedback, and the comment moderation API.
