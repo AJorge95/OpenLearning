@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reject pointer clicks that land beside the platform-role selector
+
+- **Reviewed:** The reported account-role click area, its 8.5rem field and matching popup width, and the shared `AppSelect` label-forwarding guard.
+- **Improvement:** Preserve the real pointer-down target through the browser's forwarded click and only open a custom select when the pointer started inside its visible trigger. The shared tracker uses one document listener for mounted selects; keyboard and assistive-technology activation remain available.
+- **Why it helps:** Clicking blank space to the right of a label can no longer open the platform-role menu even when the browser retargets the forwarded click coordinates into the trigger.
+- **Checked:** Account-role hit-area and custom-select activation, sizing, accessibility, navigation, and layout tests passed (36/36); `npm run build` passed TypeScript and Vite; `git diff --check` passed. Browser-plugin validation was unavailable and Playwright is not installed; the protected account route could not be exercised in the signed-out local browser.
+
 ## 2026-10-12 — Recheck request parsing and media-stream failure handling
 
 - **Reviewed:** JSON and multipart parser error mapping, media upload validation and temporary-file cleanup, protected byte-range responses, and file-stream cancellation when a client closes early.
