@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Ignore select clicks outside the visible trigger
+
+- **Reviewed:** The reported account-role hit area, the shared `AppSelect` click handler, current account-detail markup and sizing, and the existing label/hit-area regressions.
+- **Improvement:** Check pointer click coordinates against the trigger's rendered bounds before toggling its menu. Clicks without pointer coordinates, including keyboard activation, continue to work.
+- **Why it helps:** A wide native label can forward a click from its blank right-side area to a nested button; the select now ignores that forwarded activation when it started outside the visible trigger.
+- **Backend review:** Role-update validation and the last-active-administrator safeguard are unchanged.
+- **Checked:** Added unit coverage for inside/outside pointer coordinates and keyboard activation, plus a regression that verifies the guard is wired to `AppSelect`. Focused selector tests passed (19/19), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. The protected account route settled at `/login`, so the reported account interaction could not be rendered.
+
 ## 2026-10-12 — Recheck administrative log bounds and error handling
 
 - **Reviewed:** Admin and system log pagination, filter parsing and binding, search limits, retention, credential redaction, and rollback behavior for log writes.

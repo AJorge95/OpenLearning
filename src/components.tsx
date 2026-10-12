@@ -7,6 +7,7 @@ import { useAuth } from './auth-context';
 import { pendingRegistrationCountRefreshRequestedEvent, requestPendingRegistrationCountRefresh } from './admin-navigation-events';
 import { BRAND_PALETTES, isBrandIconDimensionAllowed, MAX_BRAND_ICON_BYTES, MAX_BRAND_ICON_DIMENSION } from './branding';
 import type { BrandingPalette } from './branding';
+import { isAppSelectActivationWithinTrigger } from './app-select-activation';
 import { shouldCloseAppSelectForLayoutChange } from './app-select-layout';
 import { findAppSelectTypeaheadIndex, findEnabledAppSelectIndex, getAppSelectDisplayLabel, isAppSelectUnavailable, resolveAppSelectActiveIndex } from './app-select-navigation';
 import { getAppSelectHorizontalPosition, getAppSelectVerticalPosition } from './app-select-position';
@@ -530,7 +531,11 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
   const menuPortalContainer = portalContainer ?? document.body;
 
   return <div ref={rootRef} className={`app-select ${className}`.trim()}>
-    <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-labelledby={ariaLabelledBy} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-required={required || undefined} aria-haspopup="listbox" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined} aria-activedescendant={menuOpen ? `${menuId}-option-${activeOptionIndex}` : undefined} disabled={unavailable} onClick={() => menuOpen ? setOpen(false) : openMenu()} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
+    <button id={controlId} ref={triggerRef} type="button" className="app-select-trigger" role="combobox" aria-label={ariaLabel} aria-labelledby={ariaLabelledBy} aria-describedby={describedBy} aria-invalid={invalid || undefined} aria-required={required || undefined} aria-haspopup="listbox" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined} aria-activedescendant={menuOpen ? `${menuId}-option-${activeOptionIndex}` : undefined} disabled={unavailable} onClick={(event) => {
+      // A wrapping label can forward clicks from its blank area to this button.
+      if (!isAppSelectActivationWithinTrigger(event.nativeEvent, event.currentTarget.getBoundingClientRect())) return;
+      menuOpen ? setOpen(false) : openMenu();
+    }} onKeyDown={handleKeyDown} onBlur={() => setOpen(false)}>
       {leadingIcon && <span className="app-select-leading" aria-hidden="true">{leadingIcon}</span>}<span className="app-select-value">{getAppSelectDisplayLabel(options, value)}</span><ChevronDown className="app-select-chevron" size={16} aria-hidden="true" />
     </button>
     {menuOpen && createPortal(<div ref={menuRef} id={menuId} className={`app-select-menu${matchTriggerWidth ? ' app-select-menu--match-trigger' : ''}`} role="listbox" aria-label={`${ariaLabel} options`} style={position}>

@@ -182,6 +182,12 @@ test('AppSelect controls are not nested inside native labels', () => {
   assert.deepEqual(violations, [], `AppSelect must use a separate field container instead of a wrapping label:\n${violations.join('\n')}`);
 });
 
+test('AppSelect ignores pointer clicks forwarded from outside its trigger', () => {
+  const componentSource = fs.readFileSync(path.join(sourceDirectory, 'components.tsx'), 'utf8');
+
+  assert.match(componentSource, /if \(!isAppSelectActivationWithinTrigger\(event\.nativeEvent, event\.currentTarget\.getBoundingClientRect\(\)\)\) return;/);
+});
+
 test('the administrator role selector keeps clicks inside its visible trigger', () => {
   const pageSource = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
   const sourceFile = ts.createSourceFile('pages-manage.tsx', pageSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
