@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Load authentication startup data concurrently
+
+- **Reviewed:** The authentication provider’s setup-status, current-user, and CSRF startup requests and their dependencies.
+- **Improvement:** Start all three independent requests together when the provider refreshes startup state.
+- **Why it helps:** The sign-in and registration screens no longer wait for setup and user requests to finish before beginning the CSRF request, removing a sequential network round trip on startup.
+- **Checked:** Added a client regression requiring all three startup reads to share one `Promise.all`. The focused test, full `npm test -- --test-reporter=dot`, `npm run build`, and `git diff --check` passed. A fresh local sign-in page rendered with the startup API endpoints returning 200.
+
 ## 2026-10-12 — Associate review-note validation with its field
 
 - **Reviewed:** The course-review note field, its whitespace validation, the page-level error announcement, and the field's accessible name and help text.
