@@ -33,6 +33,29 @@ function contrastRatio(first, second) {
   return (Math.max(firstLuminance, secondLuminance) + 0.05) / (Math.min(firstLuminance, secondLuminance) + 0.05);
 }
 
+test('palette text colors keep 4.5:1 contrast on their tinted surfaces', () => {
+  // These colors appear in small labels and links, so each foreground/background pair needs text contrast.
+  const textPairs = [
+    ['--purple', '--purple-soft'],
+    ['--purple', '--purple-hover-bg'],
+    ['--purple-dark', '--purple-soft'],
+    ['--purple-dark', '--purple-hover-bg'],
+    ['--purple-dark', '--purple-selected'],
+    ['--purple-contrast', '--purple-selection'],
+    ['--purple-contrast', '--purple-hover-bg'],
+    ['--purple-contrast', '--purple-selected'],
+    ['--muted', '--surface'],
+    ['--muted', '--subtle'],
+  ];
+
+  for (const { palette, tokens } of palettes) {
+    for (const [foreground, background] of textPairs) {
+      const ratio = contrastRatio(resolveColor(tokens, foreground), resolveColor(tokens, background));
+      assert.ok(ratio >= 4.5, `${palette} ${foreground} has only ${ratio.toFixed(2)}:1 contrast on ${background}`);
+    }
+  }
+});
+
 test('shared control borders keep 3:1 contrast on primary and subtle surfaces in every palette', () => {
   for (const { palette, tokens } of palettes) {
     const border = resolveColor(tokens, '--line-strong');

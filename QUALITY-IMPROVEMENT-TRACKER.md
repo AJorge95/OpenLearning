@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Cover text contrast in every color palette
+
+- **Reviewed:** Palette foreground and background tokens used for links, selected course and quiz states, dropdown options, and muted copy.
+- **Improvement:** Add a dedicated regression requiring at least 4.5:1 contrast for text token pairs across all five palettes and their tinted surfaces.
+- **Why it helps:** Future palette adjustments cannot quietly make small labels and links harder to read while the existing border checks still pass.
+- **Checked:** Measured the current text pairs at 4.82:1 or higher; the expanded contrast suite passed (5/5), and `git diff --check` passed. All test files remain under `tests/client` or `tests/server`.
+
 ## 2026-10-12 — Document the accessible state-border token
 
 - **Reviewed:** The strong palette border token and its selected, hover, and expanded-state uses across shared controls, quizzes, and the calendar.
