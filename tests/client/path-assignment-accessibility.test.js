@@ -45,6 +45,10 @@ test('staff learning-path cards identify personal progress and omit zero-course 
   assert.match(pageSource, /label=\{`\$\{staff \? 'Your progress in' : 'Progress in'\} \$\{path\.title\}`\}/);
 });
 
+test('learning-path cards explain when no courses are currently included', () => {
+  assert.match(pageSource, /path\.courses\.length > 0 \? <ol className="path-course-list">[\s\S]*?<\/ol> : <p className="path-course-list-empty muted">No courses are currently included in this path\.<\/p>/);
+});
+
 test('changing an assigned published path back to draft closes its assignment panel after saving', () => {
   assert.match(pageSource, /if \(editing && !canAssignLearningPathLearners\(value\.status\) && assignmentPathRef\.current === editing\.id\) clearAssignmentPanel\(\);/);
 });

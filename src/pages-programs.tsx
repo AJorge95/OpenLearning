@@ -618,11 +618,11 @@ export function LearningPathsPage() {
           <div className="program-progress-line"><span>{staff ? 'Your progress: ' : ''}{path.completedCourses} of {path.courseCount} courses complete</span><strong>{Math.round(path.completedCourses / path.courseCount * 100)}%</strong></div>
           <ProgressBar value={Math.round(path.completedCourses / path.courseCount * 100)} label={`${staff ? 'Your progress in' : 'Progress in'} ${path.title}`} />
         </>}
-        <ol className="path-course-list">{path.courses.map((course) => <li key={course.id} className={!course.unlocked && !staff ? 'locked' : ''}>
+        {path.courses.length > 0 ? <ol className="path-course-list">{path.courses.map((course) => <li key={course.id} className={!course.unlocked && !staff ? 'locked' : ''}>
           <span className="path-course-number">{course.completed ? <Check size={14} /> : course.position + 1}</span>
           <div><strong>{course.title}</strong><small>{course.category}{course.deadlineAt ? ` · Due ${pathCourseDeadlineFormatter.format(new Date(course.deadlineAt))}` : ''}</small></div>
           {!staff && course.unlocked ? <Link className="text-action" to={`/courses/${course.id}`} aria-label={`${course.completed ? 'Review course' : 'Start course'}: ${course.title}`}>{course.completed ? 'Review course' : 'Start course'}</Link> : !staff ? <span className="muted">Complete earlier courses to unlock</span> : <Link className="text-action" to={`/manage/courses/${course.id}/edit`} aria-label={`Edit course: ${course.title}`}>Edit course</Link>}
-        </li>)}</ol>
+        </li>)}</ol> : <p className="path-course-list-empty muted">No courses are currently included in this path.</p>}
         <div className="program-card-footer">
           {staff ? path.status === 'archived' ? <Button variant="secondary" aria-label={`Restore ${path.title} as draft`} disabled={saving || assignmentBusy} aria-busy={changingPathStatusId === path.id} onClick={() => void restorePath(path)}><RotateCcw size={15} />{changingPathStatusId === path.id ? 'Restoring…' : 'Restore as draft'}</Button> : <><Button variant="secondary" aria-label={`Edit path: ${path.title}`} onClick={(event) => requestPathEdit(path, event.currentTarget)} disabled={saving || assignmentBusy}>Edit path</Button>
             {canAssignLearningPathLearners(path.status)
