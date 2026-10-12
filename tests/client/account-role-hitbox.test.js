@@ -17,6 +17,6 @@ test('account role hit area stays bounded by its visible trigger', () => {
 
   assert.ok(roleControlRules.some((rule) => /pointer-events:\s*none/.test(rule)));
   assert.ok(triggerRules.some((rule) => /pointer-events:\s*auto/.test(rule)));
-  assert.ok(desktopSelectRules.some((rule) => /width:\s*9rem/.test(rule) && /max-width:\s*9rem/.test(rule)));
+  assert.ok(desktopSelectRules.some((rule) => /width:\s*8\.5rem/.test(rule) && /max-width:\s*8\.5rem/.test(rule)));
   assert.match(styles, /@media \(max-width: 460px\) \{[\s\S]*?\.account-control-row \.account-role-control > \.account-role-select,\s*\.account-control-row \.account-role-control > \.account-role-select \.app-select-trigger \{ width: 100%; max-width: none; \}/);
 });

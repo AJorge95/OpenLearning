@@ -273,12 +273,12 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .account-meta-list dt { margin-bottom: 4px; color: var(--muted); font-size: 10px; font-weight: 650; text-transform: uppercase; }
 .account-meta-list dd { margin: 0; color: #3d4250; font-size: 12px; overflow-wrap: anywhere; }
 .account-control-row { display: flex; align-items: flex-end; gap: 13px; padding-top: 15px; border-top: 1px solid var(--line); }
-/* Keep blank field space outside the selector's pointer hit area. */
-.account-role-control { display: flex; flex-direction: column; align-items: flex-start; flex: 0 0 9rem; width: 9rem; gap: 6px; min-width: 0; max-width: min(240px, 100%); pointer-events: none; color: #303443; font-size: 11px; font-weight: 650; }
+/* Keep the selector narrower than the gap to adjacent actions so blank space cannot activate it. */
+.account-role-control { display: flex; flex-direction: column; align-items: flex-start; flex: 0 0 8.5rem; width: 8.5rem; gap: 6px; min-width: 0; max-width: min(240px, 100%); pointer-events: none; color: #303443; font-size: 11px; font-weight: 650; }
 .account-control-row .app-select { width: 100%; max-width: 240px; }
 .account-role-control > .app-select { width: 100%; max-width: 100%; }
 .account-role-control .app-select-trigger { pointer-events: auto; }
-.account-control-row .account-role-control > .account-role-select { width: 9rem; max-width: 9rem; }
+.account-control-row .account-role-control > .account-role-select { width: 8.5rem; max-width: 8.5rem; }
 .account-control-row .account-role-control > .account-role-select .app-select-trigger { width: 100%; }
 .account-admin-protection { margin: 9px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .account-password-form { gap: 12px; }

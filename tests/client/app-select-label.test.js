@@ -200,11 +200,11 @@ test('the administrator role selector keeps clicks inside its visible trigger', 
   assert.match(pageSource, /ariaLabel="Platform role"[^>]*matchTriggerWidth/);
   assert.match(componentSource, /app-select-menu--match-trigger/);
   assert.match(componentSource, /aria-labelledby=\{ariaLabelledBy\}/);
-  assert.match(styles, /\.account-role-control\s*\{[^}]*flex:\s*0\s+0\s+9rem;[^}]*width:\s*9rem;/);
+  assert.match(styles, /\.account-role-control\s*\{[^}]*flex:\s*0\s+0\s+8\.5rem;[^}]*width:\s*8\.5rem;/);
   assert.match(styles, /\.account-role-control\s*\{[^}]*pointer-events:\s*none;/);
   assert.doesNotMatch(styles, /\.account-role-control\s*>\s*label\s*\{[^}]*pointer-events:\s*auto;/);
   assert.match(styles, /\.account-role-control\s+\.app-select-trigger\s*\{\s*pointer-events:\s*auto;\s*\}/);
-  assert.match(styles, /\.account-control-row \.account-role-control\s*>\s*\.account-role-select\s*\{\s*width:\s*9rem;\s*max-width:\s*9rem;\s*\}/);
+  assert.match(styles, /\.account-control-row \.account-role-control\s*>\s*\.account-role-select\s*\{\s*width:\s*8\.5rem;\s*max-width:\s*8\.5rem;\s*\}/);
   assert.match(styles, /\.account-control-row \.account-role-control\s*>\s*\.account-role-select \.app-select-trigger\s*\{\s*width:\s*100%;\s*\}/);
   assert.match(styles, /\.account-control-row \.account-role-control\s*>\s*\.account-role-select,\s*\.account-control-row \.account-role-control\s*>\s*\.account-role-select \.app-select-trigger\s*\{\s*width:\s*100%;\s*max-width:\s*none;\s*\}/);
   assert.match(styles, /\.account-role-control\s*>\s*\.app-select\s*\{\s*width:\s*100%;\s*max-width:\s*100%;\s*\}/);

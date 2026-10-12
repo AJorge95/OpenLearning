@@ -91,11 +91,11 @@
 
 ## 2026-10-12 — Recheck the reported account-role selector width
 
-- **Reviewed:** The supplied account screenshot and target path against the current role-control markup, desktop sizing, popup width, and pointer hit area.
-- **Result:** No additional selector change was needed. The exact account is the only active administrator, so its role control is disabled. On an enabled account, the visible trigger opened the menu; clicking just outside its right edge and in the blank area to the right left the menu closed. The screenshot's wide wrapping-label target is absent from the current markup.
-- **Why no change:** The current build already bounds the control to its visible trigger and matches the popup to that width. Another CSS change would duplicate the existing behavior without a current-build reproduction.
-- **Checked:** Account-role hit-area and AppSelect-label tests passed (10/10). A temporary local browser tab verified the exact account's disabled state and the enabled account's trigger/outside-click behavior; no role or account data was changed.
-- **Needed to revisit:** A current-build enabled account where a click outside the visible trigger opens the menu, with the click location and viewport.
+- **Reviewed:** The supplied account screenshot, current role-control markup and CSS, the enabled learner control in the local admin UI, and the account-update route's role validation and last-administrator safeguard.
+- **Improvement:** Narrow the desktop role-control wrapper and trigger together from 9rem to 8.5rem while keeping the menu matched to the trigger and retaining the full-width mobile rule.
+- **Why it helps:** The previous trigger still opened when clicked in the narrow blank area to its right. The tighter width gives the adjacent action a clear click boundary without clipping any role option.
+- **Backend review:** No endpoint change was needed. Role values are validated before the transaction, and the last active administrator remains protected.
+- **Checked:** The focused account-role and AppSelect-label tests passed (10/10); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed. In a 1265 × 714 local browser view, the selector opened from its trigger, a click in the blank area to its right left it collapsed, and Escape closed the menu without changing the role. The popup remained aligned with the narrower trigger, and no account data changed.
 
 ## 2026-10-12 — Protect unsaved course details during navigation
 
