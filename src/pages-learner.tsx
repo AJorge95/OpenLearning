@@ -588,7 +588,8 @@ export function CourseOverviewPage() {
       <div className="course-hero-copy">
         <span className="category-label">{course.category}</span>
         <h1>{course.title}</h1>
-        {course.description ? <p className="course-hero-description" aria-hidden="true">{course.description}</p> : null}
+        {/* Keep the description available to screen readers alongside its visible text. */}
+        {course.description ? <p className="course-hero-description">{course.description}</p> : null}
         <div className="course-hero-meta"><span><BookOpen size={17} />{formatCountLabel(course.moduleCount, 'module', 'modules')}</span><span><Play size={15} />{formatCountLabel(course.lessonCount, 'lesson', 'lessons')}</span></div>
         <div className="course-hero-actions">
           <Button onClick={startLearning} disabled={!nextActivity || starting}>{startButtonLabel}<ArrowRight size={17} /></Button>
