@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Revalidate the account-role click boundary report
+
+- **Reviewed:** The supplied screenshot target, current account-detail markup and width rules, the Vite-served modules, the shared AppSelect activation guard, and the account-update route.
+- **Result:** No runtime change was needed. The existing fix keeps the visible label outside the combobox, limits pointer input to the 8.5rem trigger, matches the popup width to that trigger, and rejects forwarded pointer activations outside its bounds. The server validates role values and protects the last active administrator.
+- **Why no change:** The screenshot identifies the former wrapping-label structure, which is absent from both current source and the served module. A further width reduction would duplicate the existing boundary and could make the selected role harder to read. The connected browser is signed out, so an authenticated click could not be replayed in this cycle.
+- **Checked:** The Vite server returned the current account-detail markup and 8.5rem selector rule. `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js tests/client/app-select-activation.test.js` passed (14/14), `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed.
+- **Needed to revisit:** A reproduction after reloading the current build on an enabled account, with the viewport and click coordinates, or markup showing the older wrapping-label structure.
+
 ## 2026-10-12 — Recheck public registration labels and validation
 
 - **Reviewed:** The rendered public registration form, its email/name/username/password labels and descriptions, configurable-field client refresh behavior, and the server's field definition and answer validation.
