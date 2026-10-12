@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Bound certificate backfill candidate loading
+
+- **Reviewed:** Profile-triggered and administrator-triggered certificate backfill, the existing 200-course summary batches, and the query that selected courses with learner activity.
+- **Improvement:** Fetch eligible courses with stable ID keyset pages of at most 200 rows, preparing the next-page query only when another page is needed.
+- **Why it helps:** Backfill no longer materializes a learner's entire active-course history before processing it; large histories stay within the same memory bound as the summary and certificate queries.
+- **Checked:** Added a regression with 201 active but incomplete courses and observed candidate batches of 200, 1, and 0 rows. The focused certificate-service tests passed (8/8), the full test suite passed, `npm run build` (including TypeScript), and `git diff --check` passed.
+
 ## 2026-10-12 — Restore certificate metadata readability in the current styles
 
 - **Reviewed:** The certificate's earlier readability rules, the later design-system overrides, responsive layout, and print stylesheet cascade.
