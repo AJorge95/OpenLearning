@@ -8,6 +8,14 @@
 - **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js` passed (11/11), and `git diff --check` passed. The available in-app browser is at sign-in and Chrome is at registration, so the protected account route could not be rechecked in this session.
 - **Needed to revisit:** A fresh authenticated current-build reproduction showing the menu open from outside the visible trigger, with the viewport and click position.
 
+## 2026-10-12 — Recheck API response and request-failure handling
+
+- **Reviewed:** Client response parsing, network and abort errors, concurrent CSRF refresh and one-time write retry, multipart cancellation, and server request-body parser errors.
+- **Result:** No runtime change. The client preserves aborts, normalizes transport and malformed-response failures, coalesces CSRF refreshes, and retries a rejected write once. The server maps malformed or oversized request bodies to structured client errors.
+- **Why no change:** Existing behavior and focused tests cover the reviewed failure boundaries; no reproducible response mismatch or backend failure appeared.
+- **Checked:** `node --test tests/client/api.test.js tests/server/last-login.test.js` passed (32/32).
+- **Needed to revisit:** A concrete API response mismatch, duplicated write after a CSRF retry, cancellation edge case, or request-body parser failure outside these cases.
+
 ## 2026-10-12 — Omit unused quiz questions from course overview and lesson payloads
 
 - **Reviewed:** The shared course payload, quiz question/choice queries, and data used by the course overview, lesson player, quiz page, and course editor.
