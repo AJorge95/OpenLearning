@@ -28,6 +28,7 @@ import { uploadSizeError } from './upload-size-validation';
 import { accountNameError, MAX_ACCOUNT_NAME_LENGTH, normalizeAccountName } from './account-name-validation';
 import { MAX_PLATFORM_NAME_LENGTH, MIN_PLATFORM_NAME_LENGTH, normalizePlatformName, platformNameValidationError } from './platform-name-validation';
 import { courseEditingNote } from './course-editing-note';
+import { coursePublishedNotice } from './course-published-notice';
 import { COMPLETION_WINDOW_ERROR, COURSE_CATEGORY_REQUIRED_ERROR, COURSE_CATEGORY_TOO_LONG_ERROR, COURSE_TITLE_REQUIRED_ERROR, COURSE_TITLE_TOO_LONG_ERROR, MAX_COURSE_CATEGORY_LENGTH, MAX_COURSE_TITLE_LENGTH, validateCompletionWindowDays, validateCourseCategory, validateCourseTitle } from './course-editor-validation';
 import { isCourseCoverDimensionAllowed, MAX_COURSE_COVER_DIMENSION } from './course-cover-validation';
 import { readImageDimensions } from './image-dimensions';
@@ -1374,7 +1375,7 @@ export function CourseEditorPage() {
       if (routeCourseIdRef.current !== requestedCourseId || requestSequence !== courseLoadSequenceRef.current) return;
       courseSaved = true;
       syncCourseDetailsAfterSave(response.course, submittedDetails);
-      setNotice(status === 'published' ? 'Course published for learners.' : status === 'draft' ? 'Draft saved.' : 'Course details saved.');
+      setNotice(status === 'published' ? coursePublishedNotice(response.course.visibility) : status === 'draft' ? 'Draft saved.' : 'Course details saved.');
       if (status === 'published') { setRequiresRecompletion(false); setChangeNote(''); await loadGovernance(requestedCourseId); }
     } catch (cause) {
       showCourseTitleApiError(cause);

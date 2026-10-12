@@ -10042,3 +10042,11 @@
 - **Backend review:** The last-active-administrator safeguard explains why the reported account cannot be used to test an enabled control; no role-permission or account API change was indicated.
 - **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-activation.test.js tests/client/app-select-label.test.js` passed (19/19). The local signed-in browser check used a separate enabled learner account and did not change account data. `git diff --check` passed.
 - **Needed to continue:** If the current source still shows an oversized selector after a fresh load, capture a new screenshot of the enabled control and the click location so the mismatch can be reproduced.
+
+## 2026-10-12 — Clarify private-course publication feedback
+
+- **Reviewed:** Course visibility controls, the editor's publication handler and existing status guidance, and the shared server access rule for published private courses.
+- **Improvement:** Use the server-returned course visibility to show a private-specific success message that tells staff learners need an active course assignment or access through an unlocked learning path. Public-course publication keeps its existing confirmation.
+- **Why it helps:** Publishing a private course no longer sounds like it became available to every learner; the notice states the access conditions at the moment of publication.
+- **Backend review:** `canViewCourse` already grants private-course access only to admins/moderators, learners with a course grant, or learners with access through an enrolled unlocked path. The API contract already returns the saved visibility; no backend change was needed.
+- **Checked:** Added `tests/client/course-published-notice.test.js` under the dedicated client-test folder. Focused publication/editor tests passed (20/20), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed TypeScript and Vite, and `git diff --check` passed. The live publish action was not submitted to avoid changing an existing development course.
