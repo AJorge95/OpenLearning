@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Cache verified video durations in bounded memory
+
+- **Reviewed:** The MP4 reader's in-flight request coalescing, unavailable-result TTL, database-backed duration cache, and the fallback for cache-write failures.
+- **Improvement:** Retain successful duration reads in a bounded 256-entry least-recently-used cache keyed by media ID.
+- **Why it helps:** When a verified duration cannot be persisted to SQLite, subsequent watch-progress requests reuse the already-verified value instead of rescanning the same MP4. The memory cache stays bounded.
+- **Checked:** Added a regression for cache hits, LRU refresh, and eviction. The focused MP4 parser and duration-reader suites passed (15/15); the full `npm test -- --test-reporter=dot` suite, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-12 — Keep video playback available when duration caching fails
 
 - **Reviewed:** MP4 duration verification, the `media_files.duration_seconds` cache write, GET watch-progress reads, and explicit POST watch-start behavior.
