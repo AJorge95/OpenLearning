@@ -8,6 +8,14 @@
 - **Backend review:** Public registration still validates submitted custom-field types, required values, choices, and current field versions on the server. No API change was needed.
 - **Checked:** `node --test tests/client/form-control-accessible-name.test.js` passed (4/4); `node --test tests/server/registration-fields.test.js` passed (31/31); `git diff --check` passed. The test fixture confirms that placeholder text alone is not counted as an accessible name.
 
+## 2026-10-12 — Guard accessible names on buttons
+
+- **Reviewed:** Native buttons and the shared `Button` component across all TSX pages, including icon-only actions, dynamic labels, and decorative icon markup.
+- **Improvement:** Extend the JSX accessibility inventory to require each button to expose visible text or an explicit `aria-label`/`aria-labelledby`. Ignore `aria-hidden` icon content and test buttons whose conditional text can disappear in one state.
+- **Why it helps:** New actions cannot silently ship as unnamed controls, including shared buttons and native buttons that only contain decorative icons.
+- **Backend review:** The current backup path guard resolves storage paths through symlinks and rechecks its created output before writing; existing backup tests cover those boundaries. No backend change was indicated by this review.
+- **Checked:** `node --test tests/client/form-control-accessible-name.test.js` passed (6/6), including fixtures for icon-only, visible-text, conditional, and ARIA-named buttons. The full `npm test -- --test-reporter=dot` suite, `node --check tests/client/form-control-accessible-name.test.js`, and `git diff --check` passed.
+
 ## 2026-10-12 — Guard accessible names on textareas
 
 - **Reviewed:** Textarea markup across learner, course, lesson, quiz, path, and registration-field forms, including visible labels, visually hidden labels, matching `htmlFor`/`id`, and ARIA naming alternatives.
