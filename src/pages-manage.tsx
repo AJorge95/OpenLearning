@@ -28,7 +28,7 @@ import { courseEditingNote } from './course-editing-note';
 import { COMPLETION_WINDOW_ERROR, COURSE_CATEGORY_REQUIRED_ERROR, COURSE_CATEGORY_TOO_LONG_ERROR, COURSE_TITLE_REQUIRED_ERROR, COURSE_TITLE_TOO_LONG_ERROR, MAX_COURSE_CATEGORY_LENGTH, MAX_COURSE_TITLE_LENGTH, validateCompletionWindowDays, validateCourseCategory, validateCourseTitle } from './course-editor-validation';
 import { isCourseCoverDimensionAllowed, MAX_COURSE_COVER_DIMENSION } from './course-cover-validation';
 import { readImageDimensions } from './image-dimensions';
-import { firstQuizTextIssue } from './quiz-validation';
+import { firstQuizTextIssue, MAX_QUIZ_TITLE_LENGTH, QUIZ_TITLE_REQUIRED_ERROR, QUIZ_TITLE_TOO_LONG_ERROR, validateQuizTitle } from './quiz-validation';
 import { lessonResourceUrlError } from './resource-validation';
 import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordConfirmationFieldProps } from './password-confirmation';
 import { userListEmptyMessage } from './user-list-empty-state';
@@ -44,7 +44,7 @@ type CourseVersionHistoryPage = { currentVersion: CourseVersion | null; versions
 
 const courseDateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 const logTimestampFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-const quizTitleLimit = 160;
+const quizTitleLimit = MAX_QUIZ_TITLE_LENGTH;
 const defaultQuizTitleSuffix = ' quiz';
 
 function CourseVersionPagination({ page, pageSize, total, versions, loading, onChange }: {
@@ -471,6 +471,7 @@ export function CourseAnalyticsPage() {
 function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: CourseModule; onSaved: (action: 'saved' | 'removed') => void | Promise<void>; onError: (message: string) => void; titleInputRef?: (node: HTMLInputElement | null) => void }) {
   const existing = module.quiz;
   const [title, setTitle] = useState(existing?.title || `${module.title} quiz`);
+  const [titleError, setTitleError] = useState('');
   const [passMark, setPassMark] = useState(existing?.passMark ?? 70);
   const [questions, setQuestions] = useState<EditableQuizQuestion[]>(existing?.questions || []);
   const [busyAction, setBusyAction] = useState<'save' | 'remove' | null>(null);
@@ -478,9 +479,14 @@ function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: Cours
   const [focusTarget, setFocusTarget] = useState<{ questionIndex: number; choiceIndex?: number } | null>(null);
   const [showTextValidation, setShowTextValidation] = useState(false);
   const editorKeySequenceRef = useRef(0);
+  const quizTitleInputRef = useRef<HTMLInputElement>(null);
   const questionInputRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
   const choiceInputRefs = useRef<Array<Array<HTMLInputElement | null>>>([]);
   const addQuestionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const setQuizTitleInputRef = useCallback((node: HTMLInputElement | null) => {
+    quizTitleInputRef.current = node;
+    titleInputRef?.(node);
+  }, [titleInputRef]);
   const quizContext = `${module.title} quiz (module ${module.position + 1})`;
 
   function nextEditorKey(kind: 'question' | 'choice') {
@@ -490,6 +496,7 @@ function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: Cours
 
   useEffect(() => {
     setTitle(existing?.title || `${module.title} quiz`);
+    setTitleError('');
     setPassMark(existing?.passMark ?? 70);
     setQuestions(existing?.questions || []);
     setConfirmingRemoval(false);
@@ -562,6 +569,14 @@ function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: Cours
   }
   async function save() {
     if (busyAction || !hasChanges) return;
+    const titleValidation = validateQuizTitle(title);
+    const normalizedTitle = titleValidation.value;
+    if (normalizedTitle === null) {
+      setTitleError(titleValidation.error ?? QUIZ_TITLE_REQUIRED_ERROR);
+      window.requestAnimationFrame(() => quizTitleInputRef.current?.focus());
+      return;
+    }
+    setTitleError('');
     const missingText = firstQuizTextIssue(questions);
     if (missingText) {
       setShowTextValidation(true);
@@ -575,9 +590,16 @@ function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: Cours
         explanation,
         choices: choices.map(({ text, isCorrect }) => ({ text, isCorrect })),
       }));
-      await api.put(`/api/manage/modules/${module.id}/quiz`, { title, passMark: Number(passMark), questions: savedQuestions });
+      await api.put(`/api/manage/modules/${module.id}/quiz`, { title: normalizedTitle, passMark: Number(passMark), questions: savedQuestions });
+      setTitle(normalizedTitle);
       await onSaved('saved');
-    } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Quiz could not be saved.'); }
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'validation_error'
+        && [QUIZ_TITLE_REQUIRED_ERROR, QUIZ_TITLE_TOO_LONG_ERROR].includes(cause.message)) {
+        setTitleError(cause.message);
+        window.requestAnimationFrame(() => quizTitleInputRef.current?.focus());
+      } else onError(cause instanceof ApiError ? cause.message : 'Quiz could not be saved.');
+    }
     finally { setBusyAction(null); }
   }
   async function remove(confirmed = false) {
@@ -593,7 +615,7 @@ function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: Cours
     <div className="quiz-editor-head"><div><span className="editor-type"><CircleHelp size={15} />Module quiz</span><h4>{existing ? 'Edit quiz' : 'Add a quiz'}</h4></div>{existing && <button type="button" className="icon-button danger-icon" aria-label={busyAction === 'remove' ? `Removing ${quizContext}` : `Remove ${quizContext}`} disabled={busyAction !== null} onClick={() => void remove()}><Trash2 size={16} /></button>}</div>
     {textValidationIssue && <Notice>Enter text for every quiz question and answer choice before saving.</Notice>}
     <fieldset className="quiz-editor-fields" aria-label={`Fields for ${quizContext}`} disabled={busyAction !== null}>
-    <div className="quiz-settings-row"><label>Quiz title<input ref={titleInputRef} aria-label={`Quiz title for ${quizContext}`} value={title} maxLength={quizTitleLimit} onChange={(event) => setTitle(event.target.value)} /></label><div className="app-select-field"><span>Pass mark</span><AppSelect<number> ariaLabel={`Pass mark for ${quizContext}`} value={passMark} onChange={setPassMark} options={[50, 60, 70, 80, 90, 100].map((value) => ({ value, label: `${value}%` }))} /></div></div>
+    <div className="quiz-settings-row"><label>Quiz title<input ref={setQuizTitleInputRef} required aria-label={`Quiz title for ${quizContext}`} value={title} maxLength={quizTitleLimit} aria-invalid={titleError ? true : undefined} aria-describedby={titleError ? `quiz-title-error-${module.id}` : undefined} onChange={(event) => { setTitle(event.target.value); setTitleError(''); }} />{titleError && <small id={`quiz-title-error-${module.id}`} className="quiz-title-error" role="alert">{titleError}</small>}</label><div className="app-select-field"><span>Pass mark</span><AppSelect<number> ariaLabel={`Pass mark for ${quizContext}`} value={passMark} onChange={setPassMark} options={[50, 60, 70, 80, 90, 100].map((value) => ({ value, label: `${value}%` }))} /></div></div>
     {questions.map((question, questionIndex) => <div className="question-editor" key={question.id || question.editorKey || questionIndex}>
       <div className="question-editor-head"><span>Question {questionIndex + 1}</span><button type="button" className="text-action danger-text" aria-label={`Remove question ${questionIndex + 1} from ${quizContext}`} onClick={() => removeQuestion(questionIndex)}>Remove</button></div>
       <label className="sr-only" htmlFor={`question-${module.id}-${questionIndex}`}>Question {questionIndex + 1} text for {quizContext}</label><textarea ref={(node) => { questionInputRefs.current[questionIndex] = node; }} id={`question-${module.id}-${questionIndex}`} rows={2} maxLength={1000} placeholder="Write a question" value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} aria-invalid={textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === undefined || undefined} aria-describedby={textValidationIssue?.questionIndex === questionIndex && textValidationIssue.choiceIndex === undefined ? `quiz-question-error-${module.id}-${questionIndex}` : undefined} />
