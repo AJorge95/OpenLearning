@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Associate review-note validation with its field
+
+- **Reviewed:** The course-review note field, its whitespace validation, the page-level error announcement, and the field's accessible name and help text.
+- **Improvement:** Keep blank-note feedback beside the textarea, mark the field invalid, connect the alert through `aria-describedby`, and return focus to the field. Clear the error as soon as a nonblank note is entered.
+- **Why it helps:** Reviewers get the correction where they can act on it, and assistive technology receives the error as part of the field's description instead of only as a page-level message.
+- **Checked:** `node --test tests/client/course-editor-route-state.test.js` passed (12/12); the full `npm test -- --test-reporter=dot` suite and `npm run build` (TypeScript and Vite) passed. Rendered QA was unavailable: the browser was signed out and Playwright is not installed in the workspace.
+
 ## 2026-10-12 — Require useful feedback for course change requests
 
 - **Reviewed:** The review-decision form's required, trimmed note; the server's shared text validator; and the revision transaction and audit event.
