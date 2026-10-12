@@ -16,6 +16,14 @@
 - **Checked:** Account list, filter, select, pending-approval, and registration client tests passed (12/12); the full `tests/server/last-login.test.js` passed (17/17); `git diff --check` passed. Signed-in account management was not rendered because the available browser session is signed out.
 - **Needed to revisit:** A reproduced approval/list mismatch, a lost pending-count retry, or an incorrect role/status transition in a signed-in admin flow.
 
+## 2026-10-12 — Recheck audit-log filters and paging
+
+- **Reviewed:** Audit search and action filters, empty and failed states, retention-aware action choices, request cancellation, server-side filter bounds, authorization, and paged ordering.
+- **Result:** No runtime change. The page applies the visible search when its action filter changes, preserves a pruned action as an explicit selected option, and keeps failed requests retryable. The API enforces admin access and fixed 50-entry pages with stable newest-first ordering.
+- **Why no change:** Existing client and route behavior covers the reviewed filtering, retention, and paging cases; no reproduced missing entry or ambiguous filter state justified another change.
+- **Checked:** Audit filter and empty-state client tests passed (10/10); audit and system log route tests passed (2/2); `git diff --check` passed. The signed-in audit page was not rendered because the available browser session is signed out.
+- **Needed to revisit:** A reproduced entry omitted from a search, a stale filter after a retention change, or a measurable delay as the log history grows.
+
 ## 2026-10-12 — Let staff revoke course access from disabled learners
 
 - **Reviewed:** Disabled learner rows in course access management, the UI's grant/revoke actions, and the existing course-grant API and audit transaction.
