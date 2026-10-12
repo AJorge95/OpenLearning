@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Review remaining checkbox and selection flows
+
+- **Reviewed:** Learner registration checkboxes, learning-path enrollment and prerequisite choices, course competency selection cards, their keyboard focus states, and the matching server-side field and selection validation.
+- **Result:** No runtime change. Registration and competency checkboxes sit inside full clickable cards or labels with visible focus; the server validates checkbox answers and requiredness, while competency mappings enforce the configured selection cap and allow legacy selections to be removed.
+- **Why no change:** The source and current tests show the expected pointer, keyboard, and validation behavior. A smaller native checkbox inside a sufficiently large associated card is not itself a usability defect, so increasing it would be speculative.
+- **Checked:** The related course-competency, learning-path selection, registration client, and registration server suites passed (51/51). Failure-path tests emitted their expected simulated persistence/count errors while passing. No runtime files changed, so no build was needed.
+- **Needed to continue:** A concrete control that is hard to reach by keyboard or pointer, a mismatched registration answer, or a reproduced backend validation failure.
+
 ## 2026-10-12 — Keep compact editor radios native and correctly sized
 
 - **Reviewed:** Course visibility and quiz correct-answer radio markup, the shared text-field selectors that cascade into those controls, keyboard and forced-colors behavior, and the reported administrator role-selector hit area.
