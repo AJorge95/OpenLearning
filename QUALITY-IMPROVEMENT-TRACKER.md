@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck deliberate error fallbacks
+
+- **Reviewed:** Empty and fallback catches in authentication, readiness, log serialization, registration configuration, session parsing, browser capability handling, and media upload validation; compared them with their existing cleanup and diagnostic paths.
+- **Result:** No runtime change. Malformed or unsupported inputs return defined fallbacks, operational upload reads remain logged and retryable, and file-handle close remains best-effort without overriding the signature result.
+- **Why no change:** The reviewed catches have explicit caller-facing or recovery behavior, and the sole empty cleanup catch is already documented and covered by the media validation lifecycle.
+- **Checked:** `node --test tests/server/media-routes.test.js tests/server/admin-logs.test.js tests/server/registration-fields.test.js tests/server/session-data.test.js tests/server/readiness.test.js` passed (60/60).
+- **Needed to revisit:** A reproduced fallback that hides a failed state change, an unlogged operational error, or cleanup that leaves persistent resources behind.
+
 ## 2026-10-12 — Recheck progress values at shared bar call sites
 
 - **Reviewed:** The shared progress bar's range clamp and ARIA value, each course/path/competency/analytics caller, and the backend's zero-activity and zero-learner percentage calculations.
