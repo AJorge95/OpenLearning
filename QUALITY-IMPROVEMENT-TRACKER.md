@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck account-menu navigation dismissal
+
+- **Reviewed:** Shared account-menu dismissal on route changes, outside pointer/focus and Escape, plus active-link reveal at both ends of the horizontally scrollable mobile navigation.
+- **Result:** No runtime change. The menu closes when the pathname changes, closes on outside interaction or Escape, and returns focus to its summary on Escape; navigation scrolling only moves enough to reveal the active link.
+- **Why no change:** The existing source covers the route transition and keeps the menu interactions bounded; no stale-open menu or overscrolled active link surfaced.
+- **Checked:** `node --test tests/client/account-menu-dismissal.test.js tests/client/navigation-scroll.test.js` passed (5/5). The route-change close was confirmed in source; these focused tests cover outside dismissal, Escape, and scroll bounds.
+- **Needed to revisit:** A reproduced open menu after navigating to another route, lost focus after Escape, or an active navigation link that remains clipped at a supported viewport.
+
 ## 2026-10-12 — Recheck database reads inside server loops
 
 - **Reviewed:** Course and path summary construction, learner-state and deadline lookups, certificate backfill, analytics summaries, and loop-local prepared statements.
