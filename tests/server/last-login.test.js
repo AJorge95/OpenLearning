@@ -637,6 +637,67 @@ test('initial setup rolls back when its success payload cannot be read', async (
   }
 });
 
+test('initial setup reports duplicate usernames and emails without opening a transaction', async () => {
+  const { hashPassword } = await import('../../server/auth.js');
+  const existingLearnerId = 'setup-identifier-conflict-learner';
+  const existingLearnerHash = await hashPassword('ExistingLearnerPassphrase-2026');
+  database.prepare(`INSERT INTO users (id, username, email, first_name, last_name, password_hash, role)
+    VALUES (?, ?, ?, ?, ?, ?, 'learner')`).run(
+    existingLearnerId,
+    'setup_existing_learner',
+    'setup.existing@example.invalid',
+    'Existing',
+    'Learner',
+    existingLearnerHash,
+  );
+
+  const originalTransaction = database.transaction;
+  let transactionsStarted = 0;
+  database.transaction = function countSetupTransactions(...args) {
+    transactionsStarted += 1;
+    return originalTransaction.apply(this, args);
+  };
+
+  const requestSetup = (username, email) => fetch(apiUrl('/setup'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({
+      setupToken: isolatedConfig.SETUP_TOKEN,
+      platformName: 'Identifier Conflict Test',
+      username,
+      email,
+      firstName: 'Setup',
+      lastName: 'Admin',
+      password: 'SetupConflictPassphrase-2026',
+      confirmPassword: 'SetupConflictPassphrase-2026',
+    }),
+  });
+
+  try {
+    const duplicateUsernameResponse = await requestSetup('SETUP_EXISTING_LEARNER', 'new.setup@example.invalid');
+    assert.equal(duplicateUsernameResponse.status, 409);
+    assert.deepEqual(await duplicateUsernameResponse.json(), {
+      error: 'That username is already in use.',
+      code: 'username_taken',
+    });
+
+    const duplicateEmailResponse = await requestSetup('new_setup_admin', 'SETUP.EXISTING@EXAMPLE.INVALID');
+    assert.equal(duplicateEmailResponse.status, 409);
+    assert.deepEqual(await duplicateEmailResponse.json(), {
+      error: 'That email address is already in use.',
+      code: 'email_taken',
+    });
+
+    assert.equal(transactionsStarted, 0, 'known duplicate identifiers should be rejected before the write transaction');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, 1);
+    assert.notEqual(database.prepare("SELECT value FROM app_settings WHERE key = 'setup_complete'").get()?.value, '1');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'platform.setup'").get().count, 0);
+  } finally {
+    database.transaction = originalTransaction;
+    database.prepare('DELETE FROM users WHERE id = ?').run(existingLearnerId);
+  }
+});
+
 test('setup, registration, and successful sign-in record last login for admin details', async () => {
   const originalPrepareForSetup = database.prepare;
   let setupRegisteredUserCountReads = 0;

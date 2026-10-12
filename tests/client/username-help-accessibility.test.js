@@ -56,7 +56,12 @@ test('setup and registration username fields keep their help text out of the nam
     const helpId = attributeExpression(help, 'id');
 
     assert.equal(attributeExpression(label, 'htmlFor'), inputId);
-    assert.equal(attributeExpression(input, 'aria-describedby'), helpId);
+    const describedBy = attributeExpression(input, 'aria-describedby');
+    if (componentName === 'SetupPage') {
+      assert.match(describedBy, /setupUsernameError \? `\$\{setupUsernameHelpId\} \$\{setupUsernameErrorId\}` : setupUsernameHelpId/);
+    } else {
+      assert.equal(describedBy, helpId);
+    }
     assert.equal(attributeExpression(input, 'pattern'), '"[A-Za-z0-9_.-]+"');
     assert.match(help.getText(sourceFile), /Letters, numbers, dots, underscores, and hyphens\./);
     assert.doesNotMatch(label.getText(sourceFile), /Letters, numbers, dots, underscores, and hyphens/);

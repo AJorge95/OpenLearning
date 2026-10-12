@@ -513,6 +513,16 @@ function isUserIdentifierUniqueConstraint(error) {
     && /users\.(?:username|email)/i.test(String(error.message || ''));
 }
 
+function assertSetupIdentifiersAvailable(username, email) {
+  // Keep duplicate errors field-specific so the setup form can focus the value that needs changing.
+  if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) {
+    fail(409, 'That username is already in use.', 'username_taken');
+  }
+  if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) {
+    fail(409, 'That email address is already in use.', 'email_taken');
+  }
+}
+
 authRouter.post('/setup', async (req, res) => {
   if (setupComplete()) fail(409, 'This platform is already configured.', 'already_configured');
   if (!config.setupToken) fail(503, 'Initial setup is unavailable because no bootstrap credential is configured.', 'setup_credential_unavailable');
@@ -526,11 +536,14 @@ authRouter.post('/setup', async (req, res) => {
   if (password !== confirmPassword) fail(400, 'Passwords do not match.', 'password_mismatch');
   const credentialError = validateCredentials(username, password);
   if (credentialError) fail(400, credentialError, 'invalid_credentials');
+  const normalizedUsername = normalizeUsername(username);
   const themePalette = req.body?.themePalette === undefined ? defaultPalette : parsePalette(req.body.themePalette);
   const platformIcon = parsePlatformIcon(req.body?.platformIcon ?? null);
   const connectionProtocol = req.body?.connectionProtocol === undefined ? defaultConnectionProtocol() : parseConnectionProtocol(req.body.connectionProtocol);
   const registrationEnabled = req.body?.registrationEnabled === undefined ? true : parseRegistrationEnabled(req.body.registrationEnabled);
   const userLimit = req.body?.userLimit === undefined ? 0 : parseUserLimit(req.body.userLimit);
+  // Reject known collisions before scrypt, then repeat under the write lock for concurrent setup attempts.
+  assertSetupIdentifiersAvailable(normalizedUsername, email);
   const passwordHash = await hashPassword(password);
   const userId = randomUUID();
   const configure = db.transaction(() => {
@@ -538,11 +551,9 @@ authRouter.post('/setup', async (req, res) => {
     if (db.prepare("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").get()) {
       throw new ApiError(409, 'An administrator already exists. Use the sign-in page.', 'already_configured');
     }
-    if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) {
-      fail(409, 'That email address is already in use.', 'email_taken');
-    }
+    assertSetupIdentifiersAvailable(normalizedUsername, email);
     db.prepare('INSERT INTO users (id, username, email, first_name, last_name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(userId, normalizeUsername(username), email, firstName, lastName, passwordHash, 'admin');
+      .run(userId, normalizedUsername, email, firstName, lastName, passwordHash, 'admin');
     setSetting('platform_name', name);
     setSetting('theme_palette', themePalette);
     setSetting('connection_protocol', connectionProtocol);
@@ -555,7 +566,7 @@ authRouter.post('/setup', async (req, res) => {
     }
     setSetting('setup_complete', '1');
     recordLastLogin(userId);
-    const auditId = writeAuditLog({ actor: { id: userId, username: normalizeUsername(username) }, action: 'platform.setup', entityType: 'platform',
+    const auditId = writeAuditLog({ actor: { id: userId, username: normalizedUsername }, action: 'platform.setup', entityType: 'platform',
       summary: 'Initial platform setup completed', details: { platformName: name, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired: false, userLimit } });
     if (!auditId) fail(500, 'Platform setup could not be completed because the audit log is unavailable.', 'audit_unavailable');
     // Read the complete success payload before commit so a response-read failure rolls setup back.

@@ -1,5 +1,21 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Return first-run identifier conflicts to their fields
+
+- **Reviewed:** Setup username and email normalization, duplicate detection, password-hash cost, the immediate setup transaction, and the two-step setup form's existing field-error patterns.
+- **Improvement:** Reject case-insensitive username and email conflicts before password hashing, recheck both inside the write transaction, and return field-specific errors. First-run setup now returns to the username or email input, focuses it, and announces the error beside that field.
+- **Why it helps:** A pre-existing learner account can no longer turn an attempted first-admin setup into an opaque server error; the server avoids unnecessary scrypt work and administrators can correct the exact conflicting value.
+- **Accessibility:** The username field marks itself invalid and describes both its existing format guidance and the new error until the value changes.
+- **Checked:** Setup route regressions passed (19/19), setup form and username accessibility tests passed (7/7), and account-role/AppSelect hit-area tests passed (24/24). The full `npm test -- --test-reporter=dot` suite, `npm run build` (TypeScript and Vite), and `git diff --check` passed. In an isolated local browser, a duplicate username returned the form to step 1 with the username focused and error announced; changing it cleared the error.
+
+## 2026-10-12 — Verify the reported role-selector width on the current build
+
+- **Reviewed:** The supplied screenshot's old label-wrapped DOM path, current account-role JSX/CSS, menu sizing, pointer-forwarding guard, and the protected account page in a disposable local database.
+- **Result:** No additional selector code change. The current build renders a separate caption and a 136px trigger; the popup also measures 136px. Clicking the gap to its right leaves the closed selector closed, and the same outside click closes it when open.
+- **Why no change:** The screenshot still points to legacy label-wrapped markup, while the current build uses the bounded selector and pointer guard. The check used a disposable signed-in account because the regular local browser session redirects protected pages to sign-in.
+- **Checked:** Account detail route rendered at 1280×720 without a framework overlay. The trigger opened the three expected role options at the same width; an outside click closed it without changing the selected role. The disposable server was stopped; cleanup of its temporary database/log directory was rejected by the local command review, so those files remain in the system temp folder.
+- **Needed to revisit:** A hard-refreshed signed-in browser page that still opens the selector from a point outside its visible 136px trigger, or evidence that the affected page is served by another build.
+
 ## 2026-10-12 — Prevent label-forwarded clicks on nested actions
 
 - **Reviewed:** JSX label structure across all application TSX files, including native fields, buttons, links, and the shared custom selector; also checked the course-media progress/validation flow and its server cleanup boundary.
