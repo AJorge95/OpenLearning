@@ -75,6 +75,20 @@ before(async () => {
     INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES
       ('choice-1', 'question-1', 'Correct answer', 1, 0),
       ('choice-2', 'question-1', 'Another answer', 0, 1);
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('course-2', 'Course two', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position) VALUES
+      ('module-2', 'course-2', 'Module two', 0),
+      ('module-3', 'course-2', 'Module three', 1);
+    INSERT INTO quizzes (id, module_id, title, pass_mark) VALUES
+      ('quiz-2', 'module-2', 'Quiz two', 70),
+      ('quiz-3', 'module-3', 'Quiz three', 70);
+    INSERT INTO quiz_questions (id, quiz_id, prompt, position) VALUES
+      ('question-2', 'quiz-2', 'Question two?', 0),
+      ('question-3', 'quiz-3', 'Question three?', 0);
+    INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES
+      ('choice-3', 'question-2', 'Answer for quiz two', 1, 0),
+      ('choice-4', 'question-3', 'Answer for quiz three', 1, 0);
   `);
   const questions = [{
     id: 'question-1',
@@ -91,6 +105,10 @@ before(async () => {
     (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json)
     VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run('attempt-1', 'quiz-1', 'learner-1', 0, 0, JSON.stringify({ 'question-1': 'choice-2' }), JSON.stringify(questions));
+  database.prepare(`INSERT INTO quiz_attempts
+    (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json) VALUES
+      ('attempt-2', 'quiz-2', 'learner-1', 100, 1, '{}', '[]'),
+      ('attempt-3', 'quiz-3', 'learner-1', 0, 0, '{}', '[]')`).run();
 
   const app = express();
   app.use((req, _res, next) => {
@@ -183,6 +201,39 @@ test('course payload can omit quiz questions without losing quiz status', async 
   assert.deepEqual(await invalidResponse.json(), {
     error: 'Choose a valid quiz question option.', code: 'validation_error',
   });
+});
+
+test('quiz-specific course payload keeps progress but omits other quiz questions and attempts', async () => {
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const baseUrl = `http://127.0.0.1:${address.port}/api`;
+  const headers = { 'x-test-user': 'learner-1', connection: 'close' };
+
+  const fullResponse = await fetch(`${baseUrl}/courses/course-2`, { headers });
+  assert.equal(fullResponse.status, 200);
+  const fullText = await fullResponse.text();
+  const fullCourse = JSON.parse(fullText).course;
+  assert.deepEqual(fullCourse.modules.map((module) => module.quiz.questions[0].prompt), ['Question two?', 'Question three?']);
+
+  const quizResponse = await fetch(`${baseUrl}/courses/course-2?quizId=quiz-2`, { headers });
+  assert.equal(quizResponse.status, 200);
+  const quizText = await quizResponse.text();
+  const quizCourse = JSON.parse(quizText).course;
+  assert.equal(quizCourse.modules[0].quiz.questions[0].prompt, 'Question two?');
+  assert.deepEqual(quizCourse.modules[1].quiz.questions, []);
+  assert.deepEqual(quizCourse.modules[0].quiz.latestAttempt, fullCourse.modules[0].quiz.latestAttempt);
+  assert.equal(quizCourse.modules[1].quiz.latestAttempt, null);
+  assert.deepEqual(quizCourse.modules.map((module) => module.quiz.passed), fullCourse.modules.map((module) => module.quiz.passed));
+  assert.equal(quizCourse.progress, fullCourse.progress);
+  assert.ok(quizText.length < fullText.length);
+
+  const unavailableQuiz = await fetch(`${baseUrl}/courses/course-2?quizId=missing-quiz`, { headers });
+  assert.equal(unavailableQuiz.status, 404);
+  assert.deepEqual(await unavailableQuiz.json(), { error: 'Quiz not found.', code: 'not_found' });
+
+  const invalidQuiz = await fetch(`${baseUrl}/courses/course-2?quizId=`, { headers });
+  assert.equal(invalidQuiz.status, 400);
+  assert.deepEqual(await invalidQuiz.json(), { error: 'Choose a valid quiz.', code: 'validation_error' });
 });
 
 test('quiz submission returns aggregate results only and requires an answer for every question', async () => {

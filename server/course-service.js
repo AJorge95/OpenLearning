@@ -178,7 +178,7 @@ export function courseSummary(course, user, preloadedVersionsByCourse) {
   return courseSummaryDetails([course], user, preloadedVersionsByCourse)[0].summary;
 }
 
-export function getCoursePayload(course, user, { includeAnswers = false, includeQuizQuestions = true, storageCourseId } = {}) {
+export function getCoursePayload(course, user, { includeAnswers = false, includeQuizQuestions = true, quizId = null, storageCourseId } = {}) {
   const logicalId = course.logical_course_id || course.id;
   const editingCopy = Boolean(course.logical_course_id && includeAnswers);
   const version = publishedVersionForLogicalCourse(logicalId);
@@ -197,6 +197,14 @@ export function getCoursePayload(course, user, { includeAnswers = false, include
   } : summary;
   const contentId = content.id;
   const versionProgress = contentId === summaryDetails.contentId ? summaryDetails : progressForStorage(logicalId, contentId, user, version);
+  if (quizId !== null && !includeQuizQuestions) fail(400, 'Quiz question selection requires quiz questions.', 'validation_error');
+  if (quizId !== null && !db.prepare(`SELECT 1 FROM quizzes q
+    JOIN course_modules m ON m.id = q.module_id
+    WHERE m.course_id = ? AND q.id = ?`).get(contentId, quizId)) {
+    fail(404, 'Quiz not found.', 'not_found');
+  }
+  const quizQuestionFilter = quizId === null ? '' : 'AND q.id = ?';
+  const quizQuestionParameters = quizId === null ? [contentId] : [contentId, quizId];
   const lessonResources = new Map();
   for (const resource of db.prepare(`
     SELECT lr.id, lr.lesson_id, lr.resource_type, lr.title, lr.href, lr.original_name
@@ -237,7 +245,7 @@ export function getCoursePayload(course, user, { includeAnswers = false, include
   }
   const completedLessonIds = versionProgress.completedLessonIds;
   const quizChoicesByQuestion = new Map();
-  // Overview and lesson views need quiz status, not prompts or choices, so skip both question-table reads.
+  // Course and lesson views can skip prompts; quiz views load only their own questions and choices.
   if (includeQuizQuestions) {
     for (const choice of db.prepare(`
       SELECT qc.id, qc.question_id, qc.choice_text, qc.is_correct
@@ -245,9 +253,9 @@ export function getCoursePayload(course, user, { includeAnswers = false, include
       JOIN quiz_questions qq ON qq.id = qc.question_id
       JOIN quizzes q ON q.id = qq.quiz_id
       JOIN course_modules m ON m.id = q.module_id
-      WHERE m.course_id = ?
+      WHERE m.course_id = ? ${quizQuestionFilter}
       ORDER BY qq.position, qq.id, qc.position, qc.id
-    `).all(contentId)) {
+    `).all(...quizQuestionParameters)) {
       const choices = quizChoicesByQuestion.get(choice.question_id) ?? [];
       choices.push(choice);
       quizChoicesByQuestion.set(choice.question_id, choices);
@@ -296,9 +304,9 @@ export function getCoursePayload(course, user, { includeAnswers = false, include
       SELECT qq.* FROM quiz_questions qq
       JOIN quizzes q ON q.id = qq.quiz_id
       JOIN course_modules m ON m.id = q.module_id
-      WHERE m.course_id = ?
+      WHERE m.course_id = ? ${quizQuestionFilter}
       ORDER BY m.position, m.id, qq.position, qq.id
-    `).all(contentId)) {
+    `).all(...quizQuestionParameters)) {
       const questions = questionsByQuiz.get(question.quiz_id) ?? [];
       questions.push({
         id: question.id,
@@ -314,15 +322,12 @@ export function getCoursePayload(course, user, { includeAnswers = false, include
     }
   }
 
+  // Pass state comes from versionProgress; this query only supplies latest-attempt details.
   const latestAttemptsByQuiz = new Map();
-  const passedQuizIds = new Set();
   if (user) {
+    const latestAttemptQuizFilter = quizId === null ? '' : 'AND q.id = ?';
     for (const attempt of db.prepare(`
-      SELECT q.id AS quiz_id, a.id, a.score, a.passed, a.submitted_at,
-        EXISTS (
-          SELECT 1 FROM quiz_attempts p
-          WHERE p.user_id = ? AND p.quiz_id = q.id AND p.passed = 1
-        ) AS any_passed
+      SELECT q.id AS quiz_id, a.id, a.score, a.passed, a.submitted_at
       FROM course_modules m
       JOIN quizzes q ON q.module_id = m.id
       LEFT JOIN quiz_attempts a ON a.rowid = (
@@ -330,10 +335,9 @@ export function getCoursePayload(course, user, { includeAnswers = false, include
         WHERE newest.user_id = ? AND newest.quiz_id = q.id
         ORDER BY newest.submitted_at DESC, newest.rowid DESC LIMIT 1
       )
-      WHERE m.course_id = ?
-    `).all(user.id, user.id, contentId)) {
+      WHERE m.course_id = ? ${latestAttemptQuizFilter}
+    `).all(user.id, contentId, ...(quizId === null ? [] : [quizId]))) {
       if (attempt.id !== null) latestAttemptsByQuiz.set(attempt.quiz_id, attempt);
-      if (attempt.any_passed) passedQuizIds.add(attempt.quiz_id);
     }
   }
 

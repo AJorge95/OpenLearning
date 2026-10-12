@@ -5,7 +5,7 @@ import test from 'node:test';
 const learnerPageSource = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
 const apiSource = fs.readFileSync(new URL('../../src/api.ts', import.meta.url), 'utf8');
 
-test('overview and lesson player request compact quiz metadata while quiz pages keep full questions', () => {
+test('overview and lesson player request compact metadata while quiz pages request only their questions', () => {
   const overviewStart = learnerPageSource.indexOf('export function CourseOverviewPage()');
   const playerStart = learnerPageSource.indexOf('export function CoursePlayerPage()', overviewStart);
   const quizStart = learnerPageSource.indexOf('export function QuizPage()', playerStart);
@@ -15,6 +15,7 @@ test('overview and lesson player request compact quiz metadata while quiz pages 
 
   assert.match(overviewSource, /fetchCourse\(courseId, false, \{ signal: requestController\.signal, includeQuizQuestions: false \}\)/);
   assert.match(playerSource, /fetchCourse\(requestedCourseId, false, \{ signal: requestController\.signal, includeQuizQuestions: false \}\)/);
-  assert.match(quizSource, /fetchCourse\(courseId, false, \{ signal: requestController\.signal \}\)/);
-  assert.match(apiSource, /const query = !managed && !includeQuizQuestions \? '\?includeQuizQuestions=0' : '';/);
+  assert.match(quizSource, /fetchCourse\(courseId, false, \{ signal: requestController\.signal, quizId \}\)/);
+  assert.match(apiSource, /params\.set\('quizId', quizId\)/);
+  assert.match(apiSource, /params\.set\('includeQuizQuestions', '0'\)/);
 });
