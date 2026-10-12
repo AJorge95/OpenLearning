@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Enlarge the learning-path prerequisite target
+
+- **Reviewed:** The prerequisite checkbox markup and styles in the learning-path editor, focused path editor regressions, and existing server-side prerequisite access checks.
+- **Improvement:** Give the prerequisite checkbox label a 24px minimum height while retaining its top alignment when the text wraps. Add a regression to the dedicated client accessibility tests and comment the sizing intent beside the CSS rule.
+- **Why it helps:** The whole label is clickable, so the larger row makes this compact setting easier to activate by touch or less precise pointer input without changing the prerequisite value or layout behavior.
+- **Backend review:** Prerequisite validation and access enforcement remain covered by the existing course-analytics and lesson-completion server tests; this change does not alter them.
+- **Checked:** The focused path accessibility and course-selection tests passed (12/12); `npm run build` passed TypeScript and Vite; `git diff --check` passed. In a disposable signed-in session at `/manage/learning-paths` (1265×714), clicking blank space inside the label toggled its checkbox and updated the accessible state. The Browser plugin and Playwright are unavailable, so the rendered check used the in-app computer-use browser. The temporary server and database were stopped and removed.
+
 ## 2026-10-12 — Enlarge the video volume slider target
 
 - **Reviewed:** Existing video playback control markup, slider announcement and focus styling, desktop/mobile width rules, and the dedicated volume-control regression tests.

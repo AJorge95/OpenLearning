@@ -4,6 +4,7 @@ import test from 'node:test';
 import { canAssignLearningPathLearners } from '../../src/path-assignment-availability.ts';
 
 const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
+const stylesSource = fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
 
 test('learning-path assignment removal names identify the learner and path', () => {
   assert.match(pageSource, /aria-label=\{`\$\{removingLearnerId === learner\.id \? 'Removing assignment for' : 'Remove assignment for'\} \$\{learner\.username\} from \$\{path\.title\}`\}/);
@@ -25,6 +26,13 @@ test('learner assignment rows and selector options stay stable during unrelated 
 
 test('assignment confirmation describes the enrollment outcome', () => {
   assert.match(pageSource, /setNotice\('Learner is enrolled in the path\.'\)/);
+});
+
+test('learning-path prerequisite labels provide at least a 24px pointer target', () => {
+  const prerequisiteRule = stylesSource.match(/\.path-prerequisite\s*\{([^}]*)\}/)?.[1];
+
+  assert.ok(prerequisiteRule, 'expected prerequisite label styles');
+  assert.match(prerequisiteRule, /min-height:\s*24px/);
 });
 
 test('only published learning paths can be assigned learners', () => {

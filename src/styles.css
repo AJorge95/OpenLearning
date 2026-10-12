@@ -657,7 +657,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .path-course-number { display: grid; place-items: center; width: 29px; height: 29px; flex: 0 0 29px; border-radius: 50%; color: var(--purple-dark); background: var(--purple-soft); font-size: 12px; font-weight: 700; }
 .path-course-order > li > div:nth-child(2) { display: grid; gap: 7px; min-width: 0; }
 .path-course-order > li > div:nth-child(2) > strong { font-size: 12px; overflow-wrap: anywhere; }
-.path-prerequisite { display: inline-flex; align-items: flex-start; gap: 7px; color: var(--muted); font-size: 11px; line-height: 1.4; cursor: pointer; }
+/* Give the small prerequisite checkbox label a reliable touch target without shifting wrapped text. */
+.path-prerequisite { display: inline-flex; align-items: flex-start; min-height: 24px; gap: 7px; color: var(--muted); font-size: 11px; line-height: 1.4; cursor: pointer; }
 .path-prerequisite input { width: 15px; height: 15px; margin-top: 0; }
 .path-reorder-buttons { display: flex; gap: 5px; }
 .path-reorder-buttons button { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 5px; color: #53596a; background: #fff; }
