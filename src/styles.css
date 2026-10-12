@@ -122,6 +122,8 @@ h1, h2, h3, h4 { color: var(--ink); letter-spacing: -.035em; overflow-wrap: anyw
 .user-menu { margin-left: auto; position: relative; }
 .user-menu summary { list-style: none; display: flex; gap: 10px; align-items: center; cursor: pointer; color: #505567; font-size: 14px; }
 .user-menu summary::-webkit-details-marker { display: none; }
+.user-menu summary > svg { transition: transform .15s ease; }
+.user-menu[open] summary > svg { transform: rotate(180deg); }
 .avatar { width: 38px; height: 38px; display: inline-grid; place-items: center; flex: 0 0 auto; border-radius: 50%; background: var(--purple-soft); color: var(--purple-dark); font-size: 14px; font-weight: 700; }
 .account-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 .user-menu-popover { position: absolute; top: calc(100% + 16px); right: 0; z-index: 50; width: 230px; padding: 8px; background: #fff; border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); }
