@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Review rendering of user-supplied content
+
+- **Reviewed:** The client and server source for raw HTML insertion and HTML-string rendering paths that could bypass React's text escaping.
+- **Result:** No runtime change. The source scan found no `dangerouslySetInnerHTML` or `.innerHTML` use in `src` or `server`; course and account content remains on the standard React rendering path.
+- **Why no change:** No unescaped HTML sink or reproduced display problem was found, so adding a sanitization layer without a rich-text feature would add complexity without changing current behavior.
+- **Checked:** Searched `src`, `server`, and their client/server tests for raw HTML sinks and markup-rendering libraries. No test or build was needed because no code changed.
+- **Needed to continue:** A feature that intentionally renders formatted user content, or a concrete case where text is interpreted as markup or displayed incorrectly.
+
 ## 2026-10-12 — Recheck auth route focus and page titles
 
 - **Reviewed:** The shared route-status effect, auth-page `main-content` targets, page-title updates from route headings, and the registration-to-login navigation path.
