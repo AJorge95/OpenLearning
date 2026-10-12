@@ -169,6 +169,7 @@ test('concurrent registrations cannot exceed the account limit', async () => {
     error: 'The platform has reached its registered-user limit.',
     code: 'user_limit_reached',
   });
+  assert.equal(outcomes.find(({ status }) => status === 201)?.body.registrationAvailable, false);
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, 2);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.registered'").get().count, 1);
 
@@ -198,4 +199,26 @@ test('disabled registration reports unavailable and creates no account', async (
   });
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, userCount);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.registered'").get().count, registrationAuditCount);
+});
+
+test('unlimited registration does not count all users for its success response', async () => {
+  setSetting('user_limit', 0);
+  setSetting('registration_enabled', '1');
+  const originalPrepare = database.prepare;
+  let registeredUserCountReads = 0;
+  database.prepare = function countRegisteredUserQueries(sql, ...parameters) {
+    if (sql === 'SELECT COUNT(*) AS count FROM users') registeredUserCountReads += 1;
+    return originalPrepare.call(this, sql, ...parameters);
+  };
+
+  let response;
+  try {
+    response = await registrationRequest('registration_unlimited_count');
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).registrationAvailable, true);
+  assert.equal(registeredUserCountReads, 0);
 });

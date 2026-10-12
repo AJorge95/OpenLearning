@@ -560,7 +560,7 @@ authRouter.post('/setup', async (req, res) => {
     if (!auditId) fail(500, 'Platform setup could not be completed because the audit log is unavailable.', 'audit_unavailable');
     // Read the complete success payload before commit so a response-read failure rolls setup back.
     const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(userId);
-    return { user: publicUser(user), ...getPlatformConfiguration(registeredUserCount()) };
+    return { user: publicUser(user), ...getPlatformConfiguration() };
   });
   const response = configure.immediate();
   await establishCreatedAccountSession(req, userId, {
@@ -613,8 +613,8 @@ authRouter.post('/auth/register', async (req, res) => {
         details: { registrationStatus } });
       if (!auditId) fail(500, 'Account could not be created because the audit log is unavailable.', 'audit_unavailable');
       if (!approvalRequired) recordLastLogin(createdUser.id);
-      // Registration availability includes the newly inserted learner and is part of the success response.
-      return { user: publicUser(createdUser), registrationAvailable: registrationAvailable(registeredUserCount()), approvalRequired };
+      // Recheck after insertion so finite-cap availability includes the new learner.
+      return { user: publicUser(createdUser), registrationAvailable: registrationAvailable(), approvalRequired };
     }).immediate();
   } catch (error) {
     if (isUserIdentifierUniqueConstraint(error)) registrationConflict();
