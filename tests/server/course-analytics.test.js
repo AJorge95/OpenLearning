@@ -1209,6 +1209,8 @@ test('path edits batch shared course metadata and learner progress for enrolled 
     ['lessons', 'FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id'],
     ['quizzes', 'FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id'],
   ].map(([name, fragment]) => [name, { fragment, count: 0 }]));
+  let stateInsertRuns = 0;
+  const stateInsertParameterCounts = [];
   database.exec(`
     INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES ${learnerRows};
     INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
@@ -1239,6 +1241,16 @@ test('path edits batch shared course metadata and learner progress for enrolled 
       for (const query of learnerProgressReadCounts.values()) {
         if (sql.includes(query.fragment)) query.count += 1;
       }
+      if (sql.includes('INSERT OR IGNORE INTO course_learning_state')) {
+        stateInsertParameterCounts.push((sql.match(/\?/g) ?? []).length);
+        const insertStatement = originalPrepare.call(this, sql, ...parameters);
+        const originalRun = insertStatement.run.bind(insertStatement);
+        insertStatement.run = (...values) => {
+          stateInsertRuns += 1;
+          return originalRun(...values);
+        };
+        return insertStatement;
+      }
     }
     return originalPrepare.call(this, sql, ...parameters);
   };
@@ -1256,6 +1268,8 @@ test('path edits batch shared course metadata and learner progress for enrolled 
     assert.equal(response.status, 200);
     assert.deepEqual([...sharedReadCounts.values()].map(({ count }) => count), [2, 2, 2, 2]);
     assert.deepEqual([...learnerProgressReadCounts.values()].map(({ count }) => count), [2, 2, 2]);
+    assert.equal(stateInsertRuns, 2);
+    assert.deepEqual(stateInsertParameterCounts, [66, 12]);
     for (const learner of learners) {
       assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE user_id = ? AND course_id = ?')
         .get(learner, firstCourseId).count, 1);

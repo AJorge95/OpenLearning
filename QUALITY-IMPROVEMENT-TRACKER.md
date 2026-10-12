@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Combine path-edit state writes across learners
+
+- **Reviewed:** The path-edit learner batch, per-user unlock decisions, bounded multi-row state inserts, and the assignment panel's search, busy/error states, keyboard-select control, and narrow-screen layout.
+- **Improvement:** During path edits, accumulate each learner's newly unlocked states and execute the inserts after evaluating the whole learner batch. Normal enrollment and assignment flows still persist their states immediately. The assignment panel's existing feedback and responsive layout remain clear, so no UI change was needed.
+- **Why it helps:** Sparse progress changes now share a database insert across learners. In the 12-learner regression, 13 new states require two insert executions (11 rows and 2 rows) rather than a separate execution per learner.
+- **Checked:** The route regression verified the two multi-row inserts and distinct prerequisite outcomes; focused path-sync tests passed (4/4); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript and Vite; `git diff --check` passed. Tests remain in `tests/server/`.
+
 ## 2026-10-12 — Batch learner progress reads during path edits
 
 - **Reviewed:** Path-edit synchronization, learner-specific state and completion histories, and the staff assignment panel's accessible search/status/pagination plus narrow-screen controls.

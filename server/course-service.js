@@ -248,7 +248,7 @@ export function courseSummariesWithState(
 // Six bindings per row; 100-row chunks stay below SQLite's traditional 999-variable limit.
 const COURSE_LEARNING_STATE_INSERT_BATCH_SIZE = 100;
 
-export function insertCourseLearningStates(userId, states) {
+export function insertCourseLearningStates(states) {
   if (!states.length) return;
   for (let start = 0; start < states.length; start += COURSE_LEARNING_STATE_INSERT_BATCH_SIZE) {
     const batch = states.slice(start, start + COURSE_LEARNING_STATE_INSERT_BATCH_SIZE);
@@ -256,7 +256,7 @@ export function insertCourseLearningStates(userId, states) {
     const insert = db.prepare(`INSERT OR IGNORE INTO course_learning_state
       (user_id, course_id, target_version_id, deadline_at, deadline_window_days, started_at)
       VALUES ${values}`);
-    insert.run(...batch.flatMap((state) => [userId, state.courseId, state.targetVersionId,
+    insert.run(...batch.flatMap((state) => [state.userId, state.courseId, state.targetVersionId,
       state.deadlineAt, state.deadlineWindowDays, state.startedAt]));
   }
 }

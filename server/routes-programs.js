@@ -98,9 +98,11 @@ export function syncUnlockedPathStates(
   pathRowsById = new Map(),
   summaryDataByPathId = new Map(),
   learnerSummaryDataByPathId = new Map(),
+  { deferStateInsertions = false } = {},
 ) {
   const user = { id: userId, role: 'learner', disabled: false };
   const statesByCourse = new Map();
+  const deferredStateInsertions = [];
   for (const pathId of pathIds) {
     const rows = pathRowsById.get(pathId) ?? pathCourseRows(pathId);
     const summaries = courseSummariesWithState(rows, user, summaryDataByPathId.get(pathId), learnerSummaryDataByPathId.get(pathId));
@@ -143,9 +145,11 @@ export function syncUnlockedPathStates(
       }
       allEarlierCoursesCompleted = allEarlierCoursesCompleted && summary.completed;
     }
-    // Insert newly unlocked states in bounded multi-row batches after evaluating this path's progress.
-    insertCourseLearningStates(userId, pendingStateInsertions);
+    const stateInsertions = pendingStateInsertions.map((state) => ({ userId, ...state }));
+    if (deferStateInsertions) deferredStateInsertions.push(...stateInsertions);
+    else insertCourseLearningStates(stateInsertions);
   }
+  if (deferStateInsertions) return deferredStateInsertions;
 }
 
 function syncUnlockedPathStatesForEnrollments(pathId, enrollments) {
@@ -157,10 +161,20 @@ function syncUnlockedPathStatesForEnrollments(pathId, enrollments) {
   // Ten learners plus two 200-course ID lists use at most 410 bind variables; batching also bounds history memory.
   for (const enrollmentBatch of splitIntoBatches(enrollments, LEARNING_PATH_LEARNER_PROGRESS_BATCH_SIZE)) {
     const progressByUser = prepareCourseLearnerSummaryData(rows, enrollmentBatch.map((enrollment) => enrollment.user_id));
+    // Learner unlock decisions are independent, so defer writes until the whole progress batch is evaluated.
+    const pendingStateInsertions = [];
     for (const enrollment of enrollmentBatch) {
       const learnerSummaryDataByPathId = new Map([[pathId, progressByUser.get(enrollment.user_id)]]);
-      syncUnlockedPathStates([pathId], enrollment.user_id, pathRowsById, summaryDataByPathId, learnerSummaryDataByPathId);
+      pendingStateInsertions.push(...syncUnlockedPathStates(
+        [pathId],
+        enrollment.user_id,
+        pathRowsById,
+        summaryDataByPathId,
+        learnerSummaryDataByPathId,
+        { deferStateInsertions: true },
+      ));
     }
+    insertCourseLearningStates(pendingStateInsertions);
   }
 }
 
