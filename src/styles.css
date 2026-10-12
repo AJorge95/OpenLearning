@@ -927,7 +927,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .quiz-answer-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .form-hint { color: var(--muted); font-size: 11px; margin: 7px 0 9px; }
 .choice-editor-row { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
-.choice-editor-row input[type="radio"] { width: 16px; min-height: 16px; accent-color: var(--purple); flex: 0 0 auto; }
+/* The correct-answer radio sits beside a text field, so give it a full-size pointer target. */
+.choice-editor-row input[type="radio"] { width: 24px; height: 24px; min-height: 24px; accent-color: var(--purple); flex: 0 0 auto; }
 .choice-editor-row input:not([type="radio"]) { min-width: 0; min-height: 36px; font-size: 12px; }
 .choice-editor-row .icon-button { flex: 0 0 auto; }
 .add-choice { margin-top: 1px; font-size: 11px; }
