@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Validate certificate names in account management
+
+- **Reviewed:** The administrator certificate-name form, shared server-compatible account-name validation, saved-name normalization, and the account PATCH route's `invalid_name` response.
+- **Improvement:** Validate first and last names before saving, normalize repeated whitespace before sending, identify and focus the invalid field, and expose its message through `aria-describedby` and an alert. Route authoritative server name errors back to the matching field too.
+- **Why it helps:** Whitespace-only names pass HTML `required`; administrators now see the correction beside the relevant certificate-name field instead of a page-level server error, while valid spacing stays consistent with signup and setup.
+- **Backend:** Reuses the existing shared validator and preserves the server's `invalid_name` response and field constraints.
+- **Checked:** Focused name-validation and account-details tests, full `npm test -- --test-reporter=dot`, `npm run build`, and `git diff --check` passed. The connected browser is signed out, so the authenticated account editor could not be replayed there.
+
 ## 2026-10-12 — Validate certificate names before setup and signup
 
 - **Reviewed:** Server account-name trimming, whitespace collapsing, length and control-character checks; the browser's required text fields; the two-step setup flow; signup; and the account-details certificate-name comparison.
