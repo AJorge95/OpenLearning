@@ -16,6 +16,14 @@
 - **Backend review:** The current backup path guard resolves storage paths through symlinks and rechecks its created output before writing; existing backup tests cover those boundaries. No backend change was indicated by this review.
 - **Checked:** `node --test tests/client/form-control-accessible-name.test.js` passed (6/6), including fixtures for icon-only, visible-text, conditional, and ARIA-named buttons. The full `npm test -- --test-reporter=dot` suite, `node --check tests/client/form-control-accessible-name.test.js`, and `git diff --check` passed.
 
+## 2026-10-12 — Guard accessible names on links
+
+- **Reviewed:** Native anchors and React Router links across the TSX pages, including links with decorative icons, dynamic titles, and conditional children.
+- **Improvement:** Extend the JSX accessibility inventory to require native and shared links to expose visible text or an explicit `aria-label`/`aria-labelledby`. Add fixtures for icon-only links and conditional branches that can render empty.
+- **Why it helps:** New navigation targets cannot silently enter the tab order without a usable name for screen-reader users, including when a conditional label is absent.
+- **Backend review:** The backup command still resolves source and output paths through symlinks and rechecks the created destination before writing; existing server tests cover the failure and cleanup paths. No runtime backend change was indicated.
+- **Checked:** `node --test tests/client/form-control-accessible-name.test.js` passed (8/8), including icon-only, visible-text, dynamic, conditional, and ARIA-named link fixtures. The full `npm test -- --test-reporter=dot` suite, `node --check tests/client/form-control-accessible-name.test.js`, and `git diff --check` passed.
+
 ## 2026-10-12 — Guard accessible names on textareas
 
 - **Reviewed:** Textarea markup across learner, course, lesson, quiz, path, and registration-field forms, including visible labels, visually hidden labels, matching `htmlFor`/`id`, and ARIA naming alternatives.
