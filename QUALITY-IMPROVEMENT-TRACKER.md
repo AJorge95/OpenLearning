@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Verify the account role selector in a signed-in browser
+
+- **Reviewed:** The current account-detail markup, role-control pointer-event boundaries, dropdown positioning, keyboard activation, and the administrator account-update route.
+- **Result:** No runtime change. In the current built app, the visible role trigger opened its menu at the same 136px width. A pointer click in the 13px gap directly to its right left the menu closed and the role unchanged.
+- **Why it helps:** This verifies the reported click boundary in the rendered, signed-in account page and closes the earlier browser-session verification gap.
+- **Backend review:** Role values are validated inside an immediate transaction; the route also prevents demoting or disabling the last active administrator.
+- **Checked:** `npm run build` (TypeScript and Vite), `node --test tests/server/registration-fields.test.js` (31/31), the focused selector and activation tests (21/21), and `git diff --check` passed. Browser check used `http://127.0.0.1:6174` at 1280×720 with an isolated temporary database and disposable admin/learner accounts.
+
 ## 2026-10-12 — Recheck quiz attempt retry and result handling
 
 - **Reviewed:** Quiz answer labels and fieldsets, live submission guidance, saving and route-change locks, responsive quiz layout, answer validation, and transactional attempt/result persistence.
