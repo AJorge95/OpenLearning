@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck shared search behavior across course and admin views
+
+- **Reviewed:** Shared SQL search predicates, ASCII wildcard escaping, Unicode normalization/case matching, course catalog filters, learning-path and account search, and administrator audit/system log filters.
+- **Result:** No runtime change. ASCII searches use escaped SQLite `LIKE`; non-ASCII searches use normalized Unicode matching; the reviewed views trim and bound search input before building parameterized predicates.
+- **Why no change:** Existing behavior matches the visible filter contracts, including literal wildcard characters and canonical Unicode variants. No query mismatch was reproduced.
+- **Checked:** The SQL, course, and admin-log server suites passed (131/131); related catalog and account/path search client tests passed (10/10).
+- **Needed to continue:** A concrete search example that returns an unexpected match or omits an expected course, learner, path, or log record.
+
 ## 2026-10-12 — Recheck course-access and learning-path query bounds
 
 - **Reviewed:** Learner and staff course lists, learning-path payload construction, path assignment directories, prerequisite access checks, page sizes, course-count limits, and the progress batching strategy.
