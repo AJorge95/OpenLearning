@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Verify role-selector boundary in a current signed-in build
+
+- **Reviewed:** The latest account-role click report against the current selector JSX, pointer guard, desktop width rules, existing regression tests, and a fresh signed-in account page.
+- **Result:** No additional runtime change. The current rendered page uses a separate caption and 136px trigger; the popup measures the same width. Clicking 6px to the right leaves the closed selector closed, while clicking the visible trigger opens all three role options.
+- **Why no code change:** The reported behavior does not reproduce in the fresh build, and the supplied screenshot's target path still identifies the older label-wrapped markup. The existing hit-area fix is already in `3bee80b`.
+- **Checked:** At 1280×720, the built client served by a disposable local account database rendered `/admin/users/role-qa-target` without an overlay or console warnings. The selector click-boundary tests passed (19/19). The temporary server and database were stopped and removed.
+- **Needed to revisit:** The same outside click opening the menu on the actual account page after it has loaded the current separate-caption markup.
+
 ## 2026-10-12 — Add administrator email editing to account details
 
 - **Reviewed:** Learner profile settings direct people to an administrator for email changes, while the admin account page displayed email as read-only and its account update route ignored email fields.
