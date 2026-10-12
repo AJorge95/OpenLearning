@@ -197,8 +197,14 @@ test('AppSelect controls are not nested inside native labels', () => {
 
 test('AppSelect ignores pointer clicks forwarded from outside its trigger', () => {
   const componentSource = fs.readFileSync(path.join(sourceDirectory, 'components.tsx'), 'utf8');
+  const activationSource = fs.readFileSync(path.join(sourceDirectory, 'app-select-activation.ts'), 'utf8');
 
-  assert.match(componentSource, /if \(!isAppSelectActivationWithinTrigger\(event\.nativeEvent, event\.currentTarget\.getBoundingClientRect\(\)\)\) return;/);
+  assert.match(componentSource, /const pointerStartedWithinTrigger = isAppSelectPointerDownWithinTrigger\(event\.currentTarget\);/);
+  assert.match(componentSource, /if \(!isAppSelectActivationWithinTrigger\(event\.nativeEvent, event\.currentTarget\.getBoundingClientRect\(\), pointerStartedWithinTrigger\)\) return;/);
+  assert.match(componentSource, /useEffect\(\(\) => subscribeToAppSelectPointerTracking\(\), \[\]\);/);
+  assert.match(componentSource, /clearAppSelectPointerDownTarget\(\);/);
+  assert.match(activationSource, /document\.addEventListener\('pointerdown', rememberPointerDown, true\)/);
+  assert.match(activationSource, /pointerTrackingSubscribers === 0/);
 });
 
 test('the administrator role selector keeps its custom trigger and menu at the visible field width', () => {
