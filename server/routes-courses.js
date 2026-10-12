@@ -191,8 +191,19 @@ async function verifiedVideoDuration(lesson) {
   if (!Number.isFinite(duration) || duration <= 0) {
     fail(422, 'This video duration could not be verified. Contact your course administrator.', 'video_duration_unavailable');
   }
-  db.prepare('UPDATE media_files SET duration_seconds = ? WHERE id = ? AND duration_seconds IS NULL').run(duration, media.id);
-  return db.prepare('SELECT duration_seconds FROM media_files WHERE id = ?').get(media.id).duration_seconds;
+  try {
+    db.prepare('UPDATE media_files SET duration_seconds = ? WHERE id = ? AND duration_seconds IS NULL').run(duration, media.id);
+    const cachedDuration = db.prepare('SELECT duration_seconds FROM media_files WHERE id = ?').get(media.id)?.duration_seconds;
+    return Number.isFinite(cachedDuration) && cachedDuration > 0 ? cachedDuration : duration;
+  } catch (error) {
+    // Persisting the verified duration is only a cache; learners can still load playback progress without it.
+    writeSystemLog('warn', 'video-duration', 'Verified video duration could not be cached', {
+      mediaId: media.id,
+      errorName: String(error?.name || 'Error').slice(0, 100),
+      ...(typeof error?.code === 'string' ? { errorCode: error.code.slice(0, 100) } : {}),
+    });
+    return duration;
+  }
 }
 
 function requireFeedbackLesson(lessonId, user) {
