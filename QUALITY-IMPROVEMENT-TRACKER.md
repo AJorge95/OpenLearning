@@ -1,5 +1,20 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck reported account-role picker hit area
+
+- **Reviewed:** The supplied account-role screenshot and target path, current account-details markup and CSS, and the existing adjacent-click regression coverage.
+- **Result:** No runtime change. The screenshot targets a wide `<label>` wrapper, while the current source and served Vite module render a separate `div.account-role-control` with an 8.5rem selector wrapper whose blank parent area does not receive pointer events.
+- **Why no change:** The adjacent-click fix is already present and covered; changing the width again would duplicate it. The current browser session is signed out, and the supplied DOM path does not match the current markup.
+- **Checked:** The local Vite module returned HTTP 200 and contained the current role-control markup. The focused role hit-area and custom-select activation tests passed (5/5).
+- **Needed to revisit:** If the issue remains after refreshing the page, inspect the current rendered markup and pointer coordinates against the current local Vite bundle.
+
+## 2026-10-12 — Use published-version quiz counts in account activity
+
+- **Reviewed:** Admin account course-activity counts, `courseSummaries` version selection, and the existing course-summary batching behavior.
+- **Improvement:** Include the quiz count from the already-loaded active-version quiz rows in course summaries. Remove the account-details route's separate quiz-count subquery and use the same published-version summary as its progress fields.
+- **Why it helps:** When a published course version changes its quiz count, the admin account page now reports the same version used for progress; the route also avoids a separate count lookup for each course on the page.
+- **Checked:** Added a route regression where the original course has one quiz and its current published version has two; the account activity reports version 2 and a count of two. The full test suite, `npm run build` (including TypeScript), and `git diff --check` passed.
+
 ## 2026-10-12 — Reuse learning-path rows during enrolled-learner synchronization
 
 - **Reviewed:** The learning-path patch transaction, shared course rows, and per-learner progress/state checks when course order changes.

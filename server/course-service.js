@@ -156,6 +156,7 @@ function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloade
         updatedAt: course.updated_at,
         moduleCount: counts.module_count,
         lessonCount: counts.lesson_count,
+        quizCount,
         completedLessons,
         progress,
         completed,
