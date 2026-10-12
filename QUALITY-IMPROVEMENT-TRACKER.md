@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Identify the staff member who submitted a course revision
+
+- **Reviewed:** The course revision's original author, the separate `submitted_by` identity, the versions API response, and the course editor's “Submitted by” status.
+- **Improvement:** Return the submitter's username alongside the existing submitter ID, and render that username in the review status. Keep the ID for the existing self-review control check.
+- **Why it helps:** Staff see who actually sent a revision for review, even when another course manager created the draft.
+- **Backend review:** The read-only version-history response adds the display name without changing publication, review permissions, or the ID contract.
+- **Checked:** Added a route regression with different author and submitter accounts and a UI contract regression. Focused editor/version tests passed (6/6), the route regression passed (1/1), full `npm test -- --test-reporter=dot` and `npm run build` passed, and `git diff --check` passed. The connected browser is signed out and Playwright is not installed, so the protected editor could not be rendered.
+
 ## 2026-10-12 — Skip account-table counts when registration is unlimited
 
 - **Reviewed:** Setup and signup success payloads, registration availability under finite and unlimited caps, the transactional cap recheck, and the reported platform-role selector boundary.
