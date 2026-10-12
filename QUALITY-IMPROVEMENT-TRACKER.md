@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Expose account identities as user-table row headers
+
+- **Reviewed:** The admin account table's column and row structure, identity link and secondary email, existing cell styles and responsive spacing, and the `/api/admin/users` response contract.
+- **Improvement:** Mark each account identity cell as `<th scope="row">` so assistive technology can announce the account when navigating its role, registration status, creation date, and actions. Preserve the existing visual cell treatment and narrow-screen spacing.
+- **Why it helps:** Screen-reader users get the account identity as row context while moving across a user's controls and status.
+- **Backend review:** The existing paginated endpoint already supplies each row's stable ID, username, and email; no API change was needed.
+- **Checked:** Added a client regression for the row-header semantics and responsive styling. The focused identity tests passed (3/3), full `npm test -- --test-reporter=dot` passed, `npm run build` passed strict type-checking and Vite bundling, and `git diff --check` passed. The local browser's existing app session redirected the Users page content to “Sign in to continue,” so authenticated rendered verification was unavailable; no credentials or account data were changed.
+
 ## 2026-10-12 — Normalize calendar deadline timestamps to UTC
 
 - **Reviewed:** The calendar API's accepted timestamp formats, overdue-status calculation, browser-local date grouping, and the existing range-index and completion-summary checks.
