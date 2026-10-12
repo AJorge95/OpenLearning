@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Validate quiz titles before saving
+
+- **Reviewed:** The quiz editor's title field and save flow, the course API's required, trimmed 160-character rule, and the existing focus callback used when adding a quiz.
+- **Improvement:** Validate and normalize the title before saving, associate a field-level error with the input, focus the field when invalid, and map authoritative server title errors back to it. Preserve the parent editor's title-focus callback.
+- **Why it helps:** Blank or whitespace-only titles now receive a direct correction in the quiz editor instead of a generic save error; surrounding spaces are normalized before persistence.
+- **Backend:** Existing API validation remains authoritative; no route or response contract changed.
+- **Checked:** Added helper-boundary and editor-wiring regressions under `tests/client/`; focused quiz validation tests passed (5/5), full `npm test -- --test-reporter=dot` passed, `npm run build` passed TypeScript checking and Vite bundling, and `git diff --check` passed. The connected browser is signed out, so the authenticated editor interaction was not replayed.
+
 ## 2026-10-12 — Validate the required course category in the editor
 
 - **Reviewed:** The course create/update route's required, trimmed, 100-character category rule; the editor field; and both toolbar and curriculum-action save paths.
