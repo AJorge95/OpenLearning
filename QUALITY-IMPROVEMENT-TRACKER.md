@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Refresh registration choices after a stale-answer rejection
+
+- **Reviewed:** Public registration's dynamic custom fields, server-side answer validation, and the existing refresh flow that preserves answers still compatible with an updated schema.
+- **Improvement:** When the server rejects custom registration answers, reload the current field definitions and clear only answers that no longer match. This recovers when an administrator removes a select option while a learner's form is open.
+- **Why it helps:** Learners receive the current choices and can correct the affected answer without losing other form entries or getting stuck with a generic validation error.
+- **Backend review:** Server validation remains authoritative and unchanged; it already rejects answers outside the latest configured options.
+- **Checked:** `node --test tests/client/registration-fields.test.js` passed (13/13), including removal of a previously selected option; `node --test tests/server/registration-fields.test.js` passed (31/31); `npm run build` passed TypeScript and Vite; `git diff --check` passed. The signed-out browser has no configured custom fields, so this specific recovery could not be rendered there.
+
 ## 2026-10-12 — Recheck server validation and readiness boundaries
 
 - **Reviewed:** Environment limits, API page parsing, setup readiness, session-data parsing and expiry handling, registration-field normalization, and bounded/redacted audit and system logs.

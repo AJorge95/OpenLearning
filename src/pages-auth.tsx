@@ -429,7 +429,8 @@ export function RegisterPage() {
       navigate(postLoginPath, { replace: true });
     }
     catch (cause) {
-      if (cause instanceof ApiError && cause.code === 'registration_fields_changed') {
+      if (cause instanceof ApiError && (cause.code === 'registration_fields_changed' || cause.code === 'invalid_registration_answers')) {
+        // Select options may change while the learner's registration form is open; refresh before asking them to retry.
         setRegistrationFieldsChanged(true);
         setRegistrationFieldsLoading(true);
         setRegistrationFieldsRetryVersion((version) => version + 1);

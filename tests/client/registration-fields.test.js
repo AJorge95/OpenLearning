@@ -59,7 +59,7 @@ test('registration field refresh keeps only answers that remain compatible with 
     { id: 'long-text', label: 'Long response', type: 'text', required: false, options: [] },
   ];
   const nextFields = [
-    { ...fields[0], label: 'Team', options: ['Design', 'Research', 'Support'] },
+    { ...fields[0], label: 'Team', options: ['Design', 'Support'] },
     { ...fields[1], label: 'Updated about you' },
     { ...fields[2], required: false },
     { ...fields[3], label: 'Updated policy text' },
@@ -78,7 +78,7 @@ test('registration field refresh keeps only answers that remain compatible with 
     'long-text': 'x'.repeat(2001),
     removed: 'Old field answer',
   }), {
-    department: 'Research',
+    department: '',
     policy: true,
     'start-date': '2026-10-09',
     about: 'Returning learner',
@@ -91,7 +91,8 @@ test('registration field refresh keeps only answers that remain compatible with 
 test('stale registration field answers reload the schema and announce that review is needed', () => {
   const source = fs.readFileSync(new URL('../../src/pages-auth.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /cause instanceof ApiError && cause\.code === 'registration_fields_changed'/);
+  assert.match(source, /cause instanceof ApiError && \(cause\.code === 'registration_fields_changed' \|\| cause\.code === 'invalid_registration_answers'\)/);
+  assert.match(source, /Select options may change while the learner's registration form is open; refresh before asking them to retry\./);
   assert.match(source, /setRegistrationFieldsRetryVersion\(\(version\) => version \+ 1\)/);
   assert.match(source, /refreshRegistrationFieldValues\(previousFields, result\.fields, current\)/);
   assert.match(source, /Answers that still match were kept; review the updated fields and submit again\./);
