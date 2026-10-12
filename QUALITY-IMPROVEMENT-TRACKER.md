@@ -3723,6 +3723,8 @@
 - **Result:** No additional code change. User lists are capped at 50 rows, account updates reject non-object bodies and invalid roles, the last active administrator cannot be demoted or disabled, and sensitive mutations roll back if their required audit event cannot be stored.
 - **Why no change:** The route invariants and current UI refresh/empty states match the existing behavior and tests. Additional search tuning would need representative account counts and query timing evidence.
 - **Checked:** Focused account and user-list regressions passed (32/32), including account creation/profile changes, session revocation, password reset rate limiting, audit failures, user search identity, role-update refresh, and filtered empty states.
+- **Rechecked (2026-10-12):** No new account-update gap appeared. Role/disabled validation and last-active-admin protection remain inside the immediate transaction; audit failure rolls back account changes and session revocation; the client refreshes the latest filter state after a conflicting update.
+- **Checked (2026-10-12):** `tests/server/registration-fields.test.js` and the focused account-structure, disable-confirmation, and user-list-refresh suites passed (39/39). Audit/count failure log messages were expected fault-injection output.
 
 ## 2026-10-11 — Bound the administrator role selector hit area
 
