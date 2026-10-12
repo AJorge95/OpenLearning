@@ -10123,3 +10123,11 @@
 - **Why no change:** The client and server rules align, invalid stored configuration is recoverable through admin settings, and the reviewed stale-schema and persistence failures already have regressions.
 - **Checked:** `node --test tests/client/registration-fields.test.js tests/client/registration-availability.test.js tests/server/registration-fields.test.js` passed (47/47). Expected audit/database failure logs were emitted by rollback tests. No runtime source changed, so the build was not rerun; `git diff --check` passed.
 - **Needed to continue:** A reproducible client/server mismatch after editing registration fields, or a concrete failure updating the form after a schema change.
+
+## 2026-10-12 — Keep calendar overflow inside its panel
+
+- **Reviewed:** The learner calendar grid at 320px, its 640px minimum readable width, the panel's horizontal scrolling, and document-level scroll metrics across key learner and staff routes.
+- **Improvement:** Clip horizontal overflow at the document root while preserving the calendar panel's own scroll container. Include a hidden-overflow fallback for older browsers.
+- **Why it helps:** Narrow learners no longer get a second page-level horizontal scrollbar for the calendar. The full month remains reachable through the focused calendar panel and its existing scroll cue.
+- **Backend review:** The calendar endpoint already bounds the requested month range, validates dates, and returns only accessible deadlines; no server change was indicated.
+- **Checked:** At 320px before the fix, the calendar rendered `documentElement.scrollWidth` wider than the viewport while `.calendar-panel` already had its own scroll width. The focused calendar/responsive checks passed (7/7), the full `npm test` suite passed (854/854), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The signed-in local browser at 320 × 720 showed the calendar panel still scrollable without a second page-level horizontal scrollbar; Previous month changed October 2026 to September 2026 and This month restored October 2026. No console warnings or errors appeared.

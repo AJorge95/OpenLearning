@@ -52,7 +52,12 @@
 }
 
 * { box-sizing: border-box; }
-html { background: #fff; }
+html {
+  /* Keep wide, intentionally scrollable child panels from creating a second page scrollbar. */
+  overflow-x: hidden;
+  overflow-x: clip;
+  background: #fff;
+}
 body { margin: 0; min-height: 100vh; background: #fff; }
 button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
