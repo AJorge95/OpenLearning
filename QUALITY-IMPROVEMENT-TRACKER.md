@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Add row context to administrator logs
+
+- **Reviewed:** Audit and system log table headings, expandable detail rows, existing cell styles, and the admin log response fields for each event.
+- **Improvement:** Mark each audit change summary and system event message as `<th scope="row">`, then style those cells to match the surrounding data cells.
+- **Why it helps:** Screen-reader users hear the change or event being inspected while navigating its timestamp, actor/action or level/source, and details control.
+- **Backend review:** The existing endpoints already return stable event IDs and the summary/message text used as row identities; no API or query changes were needed.
+- **Checked:** Added client regressions for both row headers and their data-cell styling. `node --test tests/client/admin-log-empty-state.test.js` passed (6/6), the full `npm test -- --test-reporter=dot` suite passed, `npm run build` passed strict TypeScript checking and Vite bundling, and `git diff --check` passed. The local browser remains at `/login`, so authenticated admin log rendering could not be checked; no account or log data was changed.
+
 ## 2026-10-12 — Expose learner identities as analytics row headers
 
 - **Reviewed:** The learner-progress table's identity and metric columns, existing row-header styles, and the course analytics payload that supplies each learner's stable ID, username, and progress values.
