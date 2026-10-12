@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Verify duplicate setup requests skip password hashing
+
+- **Reviewed:** The first-run setup identifier preflight and the new duplicate-username/email route regression. Existing assertions proved the route avoids opening a write transaction, but did not lock down the earlier performance boundary.
+- **Improvement:** Instrument `scrypt` during auth-route initialization and assert both known-duplicate requests make zero password-hash calls, alongside the existing no-transaction assertion.
+- **Why it helps:** Prevents a future refactor from moving duplicate checks after expensive password hashing, keeping rejected setup attempts fast and avoiding wasted CPU work.
+- **Checked:** `node --test tests/server/last-login.test.js` passed (19/19), including the zero-scrypt assertion; the full `npm test -- --test-reporter=dot` suite, `npm run build` (TypeScript and Vite), and `git diff --check` passed.
+
 ## 2026-10-12 — Return first-run identifier conflicts to their fields
 
 - **Reviewed:** Setup username and email normalization, duplicate detection, password-hash cost, the immediate setup transaction, and the two-step setup form's existing field-error patterns.

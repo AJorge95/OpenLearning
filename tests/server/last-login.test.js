@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { syncBuiltinESMExports } from 'node:module';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import express from 'express';
@@ -31,6 +33,7 @@ let migrateDatabase;
 let server;
 let sessionStore;
 let httpErrorHandler;
+let scryptCalls = 0;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -65,8 +68,22 @@ before(async () => {
 
   ({ config: serverConfig } = await import('../../server/config.js'));
   ({ db: database, migrateDatabase } = await import('../../server/db.js'));
-  const { authRouter } = await import('../../server/routes-auth.js');
-  const { adminRouter } = await import('../../server/routes-admin.js');
+  // Instrument the auth module's scrypt import so duplicate-identifier tests can guard its early exit.
+  const originalScrypt = crypto.scrypt;
+  crypto.scrypt = function countScryptCalls(...args) {
+    scryptCalls += 1;
+    return originalScrypt.apply(this, args);
+  };
+  syncBuiltinESMExports();
+  let authRouter;
+  let adminRouter;
+  try {
+    ({ authRouter } = await import('../../server/routes-auth.js'));
+    ({ adminRouter } = await import('../../server/routes-admin.js'));
+  } finally {
+    crypto.scrypt = originalScrypt;
+    syncBuiltinESMExports();
+  }
   ({ errorHandler: httpErrorHandler } = await import('../../server/http.js'));
 
   const app = express();
@@ -674,6 +691,7 @@ test('initial setup reports duplicate usernames and emails without opening a tra
   });
 
   try {
+    scryptCalls = 0;
     const duplicateUsernameResponse = await requestSetup('SETUP_EXISTING_LEARNER', 'new.setup@example.invalid');
     assert.equal(duplicateUsernameResponse.status, 409);
     assert.deepEqual(await duplicateUsernameResponse.json(), {
@@ -689,6 +707,7 @@ test('initial setup reports duplicate usernames and emails without opening a tra
     });
 
     assert.equal(transactionsStarted, 0, 'known duplicate identifiers should be rejected before the write transaction');
+    assert.equal(scryptCalls, 0, 'known duplicate identifiers should be rejected before password hashing');
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, 1);
     assert.notEqual(database.prepare("SELECT value FROM app_settings WHERE key = 'setup_complete'").get()?.value, '1');
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'platform.setup'").get().count, 0);
