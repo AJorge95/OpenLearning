@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck account-cap reads during authentication bootstrap
+
+- **Reviewed:** Public setup-status and `/auth/me` responses, login and administrator settings payloads, the registered-user count query, registration closed states, and the signup transaction.
+- **Result:** No runtime change. The public bootstrap only counts users when a finite cap is configured; signup rechecks the cap inside its immediate transaction, and the registration page explains when the cap closes enrollment.
+- **Why no change:** No query-plan or realistic large-account measurement shows the count read is a bottleneck. An incremental count or cache would need complete invalidation across account creation, removal, and platform reset.
+- **Checked:** `node --test tests/server/registration-limits.test.js tests/server/registration-fields.test.js` passed (35/35). Source review confirmed the public closed state and the transactional account-cap guard.
+- **Needed to revisit:** A measured delay at representative account volumes or a reproduced mismatch between the registration page and the server-side cap.
+
 ## 2026-10-12 — Keep keyboard focus visible on the video volume slider
 
 - **Reviewed:** The learner video toolbar's button and range-control focus styles, dark background, narrow-screen sizing, and existing slider label and percentage announcement.
