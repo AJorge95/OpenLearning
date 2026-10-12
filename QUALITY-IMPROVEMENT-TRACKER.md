@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck lesson video controls and completion gating
+
+- **Reviewed:** Video control names and pressed states, captions, playback clock and verified-progress announcements, fullscreen behavior, retry/resume handling, completion controls, and the lesson-watch API.
+- **Result:** No runtime change. Watch-tracked lessons expose named playback controls and a non-seekable progress indicator. The completion route requires a verified watch before recording progress, and watch telemetry rolls back atomically if persistence fails.
+- **Why no change:** Existing client and backend tests cover caption selection, fullscreen failures, retry/resume, watch high-water validation, replay, and near-complete completion. No failing control or progress state surfaced.
+- **Checked:** Video control/recovery client tests passed (22/22); lesson-watch server tests passed (13/13). The protected lesson route redirected to `/login`, so player rendering was not verified live.
+- **Needed to revisit:** A reproduced keyboard or screen-reader control issue, dropped verified progress, incorrect retry/resume position, or a media failure that cannot be recovered.
+
 ## 2026-10-12 — Expose course descriptions to assistive technology
 
 - **Reviewed:** Course overview heading, visible description, start/continue actions, curriculum, and learner enrollment authorization and rollback behavior.
