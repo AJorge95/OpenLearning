@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Check button submit behavior in forms
+
+- **Reviewed:** Native `<button>` elements in the React source, the shared `Button` component default, and buttons nested in search, reset, and editor forms.
+- **Result:** No runtime change. The shared component defaults to `type="button"`; native buttons found in forms explicitly use `type="submit"` for form actions or `type="button"` for other interactions.
+- **Why no change:** The source scan found no accidental form submissions or ambiguous button type, so adding markup changes or speculative tests would not improve current behavior.
+- **Checked:** Inspected every native button match from the source scan and confirmed the only multiline match declares `type="button"`; verified the shared `Button` default. No build or test run was needed because no runtime code changed.
+- **Needed to continue:** A reproduced form that submits from a non-submit action or a future button added without an explicit type.
+
 ## 2026-10-12 — Review remaining checkbox and selection flows
 
 - **Reviewed:** Learner registration checkboxes, learning-path enrollment and prerequisite choices, course competency selection cards, their keyboard focus states, and the matching server-side field and selection validation.
