@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck request parsing and media-stream failure handling
+
+- **Reviewed:** JSON and multipart parser error mapping, media upload validation and temporary-file cleanup, protected byte-range responses, and file-stream cancellation when a client closes early.
+- **Result:** No runtime change. Parser failures return structured 4xx responses; failed media validation and audit writes preserve existing files and remove temporary uploads; interrupted response streams stop reading.
+- **Why no change:** The reviewed failure paths are already explicit and covered by focused tests; this pass found no unhandled request error or stranded upload to justify a code change.
+- **Checked:** Request-body, media upload, and file-stream suites passed (42/42); `git diff --check` passed. No live server fault-injection run was needed for this source-and-test review.
+- **Needed to revisit:** A reproduced parser error reaching 500, a partial upload left behind after rejection, or a response stream continuing after client disconnect.
+
 ## 2026-10-12 — Focus the password confirmation field after a mismatch
 
 - **Reviewed:** Password-confirmation validation in first-run setup, learner registration, account security, and three administrator account-management flows.
