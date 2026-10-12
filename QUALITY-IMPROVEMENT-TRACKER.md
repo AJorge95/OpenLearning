@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recover from stalled authentication startup requests
+
+- **Reviewed:** Setup-status, current-user, and CSRF bootstrap requests; the loading and retry states; API request cancellation; and CSRF refresh coalescing.
+- **Improvement:** Give the three parallel startup reads a shared 20-second deadline, abort them together on timeout or provider unmount, and show a retryable timeout message. Caller-owned CSRF refreshes now honor cancellation without leaving the shared refresh promise stuck for a later retry.
+- **Why it helps:** A connection that stops responding no longer leaves sign-in and registration on an endless loading screen, and retrying starts a fresh bootstrap instead of joining an abandoned CSRF request.
+- **API review:** The change only bounds the read-only setup, user, and CSRF bootstrap calls; no server route or data contract changed.
+- **Checked:** Focused startup and API tests passed (19/19), including cancellation and successful retry after a stalled CSRF fetch. Full `npm test -- --test-reporter=dot`, `npm run build` (TypeScript and Vite), and `git diff --check` passed.
+
 ## 2026-10-12 — Keep learner navigation available after a chunk error
 
 - **Reviewed:** The new learner lazy-route boundary, the existing app-wide and staff-page error boundaries, and navigation behavior after a failed dynamic import.
