@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck account-detail loading and course history
+
+- **Reviewed:** Route changes between user accounts, abortable detail loads, retryable versus permanent errors, last-administrator conflict refresh, and paginated course history assembled from enrollments, grants, and published learning paths.
+- **Result:** No runtime change. The page hides account data when its user ID no longer matches the route, aborts superseded requests, offers retry for transient failures, and returns a deduplicated course list with its assignment source.
+- **Why no change:** Existing client and route regressions cover the stale-route guard, recovery states, overlapping access sources, and published-version quiz summaries. No missing course, stale account display, or failed retry was reproduced.
+- **Checked:** Account-detail client regressions passed (10/10); account course-history server regressions passed (2/2). The protected account page was not rendered in the signed-out browser session.
+- **Needed to revisit:** A reproducible prior-account flash after route changes, a course omitted or duplicated across access sources, or a transient detail failure that cannot be retried.
+
 ## 2026-10-12 — Recheck account creation and shared text search
 
 - **Reviewed:** Manual account form labels, autocomplete and name/password guidance; server-side credential, email, name, role, duplicate, and audit checks; shared ASCII wildcard escaping and Unicode-normalized search.
