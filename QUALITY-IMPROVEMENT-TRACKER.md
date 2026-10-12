@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Verify CSRF refresh stability within a session
+
+- **Reviewed:** Session token generation, the `/api/csrf` route, write middleware validation, and the caller-owned refresh behavior used by startup retries.
+- **Improvement:** Add a server regression that refreshes CSRF twice with the same session cookie, checks that the token remains stable, and sends it through the CSRF-protected test route.
+- **Why it helps:** Repeated bootstrap reads cannot silently invalidate a token still held by another request, and the test verifies the returned token remains accepted for writes.
+- **Runtime review:** The route already reuses the session token and the middleware compares it safely; no runtime change was needed.
+- **Checked:** `node --test tests/server/auth-logout.test.js` passed (3/3), the full `npm test -- --test-reporter=dot` suite passed, and `git diff --check` passed.
+
 ## 2026-10-12 — Limit account role clicks to the visible trigger
 
 - **Reviewed:** The reported role-control click boundary, the account-detail markup and responsive styles, custom-select pointer activation, and the server's role update validation.

@@ -107,6 +107,7 @@ before(async () => {
   });
   app.use(loadCurrentUser);
   app.use('/api', csrfMiddleware);
+  app.post('/api/test/csrf', (_req, res) => res.status(204).end());
   app.use('/api', authRouter);
   app.use(errorHandler);
   server = createServer(app);
@@ -127,6 +128,24 @@ after(async () => {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+});
+
+test('CSRF bootstrap keeps the same token across repeated session reads', async () => {
+  const auth = await createAuthenticatedSession();
+  const refreshResponse = await fetch(apiUrl('/csrf'), {
+    headers: { cookie: auth.cookie, connection: 'close' },
+  });
+
+  assert.equal(refreshResponse.status, 200);
+  const refreshedToken = (await refreshResponse.json()).token;
+  assert.equal(refreshedToken, auth.csrfToken);
+
+  const cookie = refreshResponse.headers.get('set-cookie') ? sessionCookie(refreshResponse) : auth.cookie;
+  const protectedResponse = await fetch(apiUrl('/test/csrf'), {
+    method: 'POST',
+    headers: { cookie, 'x-csrf-token': refreshedToken, connection: 'close' },
+  });
+  assert.equal(protectedResponse.status, 204);
 });
 
 test('sign-out destroys the session and records an audit event', async () => {
