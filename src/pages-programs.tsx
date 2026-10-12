@@ -6,6 +6,7 @@ import { calendarMonthRequestRange, currentCalendarMonth, groupCalendarDeadlines
 import { pathAssignmentRemovalConfirmation } from './path-assignment-confirmation';
 import { pathArchiveConfirmation } from './path-archive-confirmation';
 import { AppSelect, Button, ConfirmationDialog, EmptyState, PageHeading, ProgressBar } from './components';
+import type { AppSelectOption } from './components';
 import type { Competency, Course, CourseDeadline, LearningPath } from './types';
 import { appendPublishedCourseOptions, hasMorePublishedCourseOptions, publishedCourseOptionsPageUrl, type PublishedCoursePage } from './path-course-options';
 import { canAssignLearningPathLearners } from './path-assignment-availability';
@@ -23,6 +24,12 @@ function requestMessage(error: unknown, fallback: string) {
 type PathLearner = { id: string; username: string; email: string | null; enrolled: boolean; source: 'assigned' | 'self' | null };
 type PendingAssignmentRemoval = { pathId: string; pathTitle: string; learnerId: string; learnerUsername: string };
 type PendingPathArchive = { id: string; title: string; discardEditorChanges: boolean };
+
+// PathEditor rerenders as authors edit text and course selections; reuse these fixed options.
+const PATH_AVAILABILITY_OPTIONS: AppSelectOption<'draft' | 'published'>[] = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'published', label: 'Published' },
+];
 type PathLearnerPage = { learners: PathLearner[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type LearningPathListPage = { paths: LearningPath[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type CompetencyAdminPage = { competencies: Competency[]; total: number; page: number; pageSize: number; hasMore: boolean };
@@ -149,7 +156,7 @@ function PathEditor({ existing, busy, onSave, onCancel, onDirtyChange }: {
     <div className="program-card-heading"><div><span className="program-icon"><BookOpen size={18} /></span><div><h2>{existing ? 'Edit learning path' : 'Create a learning path'}</h2><p>Arrange published courses into a guided sequence.</p></div></div>{existing && <Button variant="quiet" onClick={onCancel} disabled={busy}>Cancel</Button>}</div>
     <div className="program-form-grid">
       <label>Path name<input ref={pathTitleInputRef} required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy} /></label>
-      <div className="app-select-field"><span>Availability</span><AppSelect ariaLabel="Path availability" value={status} onChange={setStatus} options={[{ value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }]} disabled={busy} /></div>
+      <div className="app-select-field"><span>Availability</span><AppSelect ariaLabel="Path availability" value={status} onChange={setStatus} options={PATH_AVAILABILITY_OPTIONS} disabled={busy} /></div>
       <label className="program-full-field">Description<textarea id="learning-path-description" aria-describedby="learning-path-description-count" rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={busy} /><small id="learning-path-description-count" className="field-character-count">{description.length} / 6,000 characters</small></label>
     </div>
     <label className="program-toggle"><input type="checkbox" checked={selfEnrollment} onChange={(event) => setSelfEnrollment(event.target.checked)} disabled={busy} /><span><strong>Allow learner self-enrollment</strong><small>Only public courses can be included in an open path.</small></span></label>

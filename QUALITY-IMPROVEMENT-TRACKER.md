@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse fixed availability choices in the path editor
+
+- **Reviewed:** The learning-path editor's title, description, and course-selection state updates, the availability selector, and `AppSelect` option-reference validation.
+- **Improvement:** Hoist the draft/published choices to a typed module-level option array.
+- **Why it helps:** Editing path fields no longer recreates the fixed selector options or reruns active-option validation; the available statuses and their order stay unchanged.
+- **Backend review:** Path creation/update requests and status validation are unchanged.
+- **Checked:** Focused path-editor and selector tests passed (10/10), `npm run build` passed TypeScript and Vite, and `git diff --check` passed. The protected staff page was not rendered in the signed-out browser session.
+
 ## 2026-10-12 — Reuse fixed selector choices in admin forms
 
 - **Reviewed:** Quiz-editor title and question rerenders, the pass-mark selector, manual-account form state, and the shared role-option list.
