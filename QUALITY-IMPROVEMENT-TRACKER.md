@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck learning-path editor interaction and layout
+
+- **Reviewed:** Published-course pagination and retry, the shared 200-course limit, selected-course availability, prerequisite controls, ordering actions, focus restoration, and narrow-screen layout rules.
+- **Result:** No runtime change. The editor retains labeled course checkboxes, status/error announcements, removable selections at the cap, accessible reorder names, abortable page loading, and responsive single-column checklist rules.
+- **Why no change:** Source and focused tests already cover the path-editing states reviewed, with no missing interaction or layout rule identified. The protected staff editor could not be checked in a signed-in rendered browser session.
+- **Checked:** Path editor and assignment accessibility/behavior tests passed (21/21); `node --test tests/server/course-analytics.test.js` passed (121/121); `npm run build` passed TypeScript and Vite.
+- **Needed to revisit:** A signed-in rendered path-editor mismatch at a specific viewport or a reproduced keyboard/focus failure.
+
 ## 2026-10-12 — Batch learning-path course identity validation
 
 - **Reviewed:** Learning-path create/edit validation, the shared 200-course selection cap, and canonical resolution for courses, versions, modules, lessons, and quizzes.
