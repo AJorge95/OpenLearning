@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Expose admin pagination as named navigation landmarks
+
+- **Reviewed:** The shared page controls across course lists, learner progress, course access, user accounts, account course activity, audit logs, and system logs; existing result-count announcements and responsive pagination styles.
+- **Improvement:** Render the shared pagination controls inside a navigation landmark and give each of the seven uses a page-specific accessible name.
+- **Why it helps:** Keyboard and screen-reader users can find the relevant page controls through landmark navigation without confusing them with other page regions.
+- **Backend review:** The existing page requests and response contracts remain unchanged; this improvement only adds accessible structure to the shared controls.
+- **Checked:** The focused pagination and course-version navigation tests passed (2/2); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; and `git diff --check` passed.
+
 ## 2026-10-12 — Keep course analytics responsive while paging learners
 
 - **Reviewed:** The course analytics page's page-change loading state, learner pagination, response payload, and aggregate SQL work performed by `/api/manage/courses/:courseId/analytics`.

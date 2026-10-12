@@ -341,7 +341,7 @@ export function CourseManagementPage() {
         </tr>;
       })}
     </tbody></table></div> : <EmptyState title={emptyCourseState.title} detail={emptyCourseState.detail} action={emptyCourseAction} />}
-    {!loading && !failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
+    {!loading && !failedRequest && total > 0 && <LogPagination ariaLabel="Course list pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
     {pendingDeleteCourse && <ConfirmationDialog {...courseDeletionConfirmation(pendingDeleteCourse.title)} confirmLabel="Delete course" onCancel={() => setPendingDeleteCourse(null)} onConfirm={() => { const courseToDelete = pendingDeleteCourse; setPendingDeleteCourse(null); if (courseToDelete) void deleteCourse(courseToDelete, true); }} />}
   </div>;
 }
@@ -459,7 +459,7 @@ export function CourseAnalyticsPage() {
           <td>{learner.lastActivityAt ? <DateText value={learner.lastActivityAt} /> : '—'}</td>
           <td><span className={`analytics-learner-state ${learner.completed ? 'is-complete' : learner.started ? 'is-started' : ''}`}>{learner.completed ? 'Completed' : learner.started ? 'In progress' : 'Not started'}</span></td>
         </tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No learners assigned or enrolled" detail="Assign learners to this course or wait for learners to open it." action={<Link className="button button-primary" to={`/manage/courses/${courseId}/access`}>Assign learners</Link>} />}
-        {data.summary.learnerCount > 0 && <LogPagination page={page} pageSize={data.pageSize} total={data.summary.learnerCount} loading={learnerPageLoading} onChange={(nextPage) => { setLearnerPageError(''); setPage(nextPage); }} />}
+        {data.summary.learnerCount > 0 && <LogPagination ariaLabel="Learner progress pages" page={page} pageSize={data.pageSize} total={data.summary.learnerCount} loading={learnerPageLoading} onChange={(nextPage) => { setLearnerPageError(''); setPage(nextPage); }} />}
       </section>
     </>}
   </div>;
@@ -2006,7 +2006,7 @@ export function CourseAccessPage() {
         </li>)}
       </ul> : !failedRequest && <div className="access-empty">{appliedQuery ? 'No learners match that search.' : user?.role === 'admin' ? <>No learner accounts are available. <Link className="text-action" to="/admin/users/new">Create a learner account.</Link></> : 'No learner accounts are available. Registered learners and accounts created by an administrator will appear here.'}</div>}
     </div>
-    {!failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(appliedQuery, nextPage)} />}
+    {!failedRequest && total > 0 && <LogPagination ariaLabel="Course access pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(appliedQuery, nextPage)} />}
     <p className="access-footnote"><LockKeyhole size={15} />Assigned learners will find this course in My learning. Public courses remain available in the catalog; private courses require an active assignment. Removing an assignment does not erase learning progress.</p>
   </div>;
 }
@@ -2285,7 +2285,7 @@ export function AdminUsersPage() {
         <td><div className="user-row-actions">{user.registrationStatus === 'pending' && <button type="button" className="text-action" aria-label={`Approve registration for ${user.username}`} disabled={savingIds.has(user.id)} onClick={() => approveRegistration(user)}>{savingIds.has(user.id) ? 'Approving…' : 'Approve'}</button>}<Link className="text-action" to={`/admin/users/${user.id}`} aria-label={`Details for ${user.username}`}>Details</Link><button type="button" className="text-action" aria-label={`Reset password for ${user.username}`} disabled={savingIds.has(user.id)} onClick={(event) => openPasswordReset(user, event.currentTarget)}>Reset password</button><button type="button" className={user.disabled ? 'text-action' : 'text-action danger-text'} aria-label={`${user.disabled ? 'Enable' : 'Disable'} account for ${user.username}`} aria-describedby={user.isLastActiveAdmin ? lastAdminHelpId : undefined} disabled={savingIds.has(user.id) || user.isLastActiveAdmin} onClick={() => updateUser(user, { disabled: !user.disabled })}>{user.disabled ? 'Enable' : 'Disable'}</button></div></td>
       </tr>;
     })}</tbody></table>{!users.length && <div className="access-empty user-list-empty"><p>{userListEmptyMessage(appliedQuery, roleFilter, approvalFilter)}</p></div>}</div>}
-    {!loading && !failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
+    {!loading && !failedRequest && total > 0 && <LogPagination ariaLabel="User accounts pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
     {pendingDisableUser && <ConfirmationDialog {...accountDisableConfirmation(pendingDisableUser.username)} confirmLabel="Disable account" onCancel={() => setPendingDisableUser(null)} onConfirm={() => { const user = pendingDisableUser; setPendingDisableUser(null); if (user) void updateUser(user, { disabled: true }, true); }} />}
     {resetUser && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePasswordReset(); }}><section ref={resetDialogRef} className="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title" aria-describedby="reset-description" tabIndex={-1}><button className="modal-close" type="button" onClick={() => closePasswordReset()} aria-label="Close" disabled={savingIds.has(resetUser.id)}>×</button><h2 id="reset-title">Reset password</h2><p id="reset-description">Set a temporary password for <strong>{resetUser.username}</strong>. Their active sessions will be signed out.</p><form className="form-stack" onSubmit={resetPassword} aria-busy={savingIds.has(resetUser.id)}><PasswordField label="New password" autoFocus required minLength={12} maxLength={256} autoComplete="new-password" value={newPassword} hint="Use at least 12 characters." hintId={resetPasswordHintId} onChange={(event) => { setNewPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={savingIds.has(resetUser.id)} /><PasswordField label="Confirm password" {...passwordConfirmationFieldProps(error, resetPasswordErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={savingIds.has(resetUser.id)} />{error && <Notice id={resetPasswordErrorId}>{error}</Notice>}<Button type="submit" disabled={savingIds.has(resetUser.id)}>{savingIds.has(resetUser.id) ? 'Saving…' : 'Reset password'}</Button></form></section></div>}
   </div>;
@@ -2535,7 +2535,7 @@ export function AdminUserDetailsPage() {
     </section>
     <section className="analytics-section account-courses-section"><div className="analytics-section-heading"><div><h2>Course activity</h2><p>Courses this account has enrolled in or been assigned.</p></div><span>{formatCountLabel(account.total, 'course', 'courses')}</span></div>
       {courses.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable course activity" tabIndex={0}><table className="analytics-table"><caption className="sr-only">Account course activity</caption><thead><tr><th scope="col">Course</th><th scope="col">Assignment</th><th scope="col">Progress</th><th scope="col">Lessons</th><th scope="col">Quizzes</th><th scope="col">Completion</th><th scope="col">Dashboard</th></tr></thead><tbody>{courses.map((course) => <tr key={course.id}><th scope="row"><strong>{course.title}</strong><small><CourseStatus status={course.status} /></small></th><td>{accountCourseAssignmentLabel(course)}</td><td>{course.progress}%</td><td>{course.completedLessons} / {course.lessonCount}</td><td>{course.quizCount}</td><td>{course.completed ? 'Completed' : course.progress ? 'In progress' : 'Not started'}</td><td><Link className="text-action" to={`/manage/courses/${course.id}/analytics`} aria-label={`Open dashboard for ${course.title}`}>Open dashboard</Link></td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No course activity" detail="This account has not enrolled in or been assigned a course." />}
-      {account.total > 0 && <LogPagination page={account.page} pageSize={account.pageSize} total={account.total} loading={loading} onChange={setPage} />}
+      {account.total > 0 && <LogPagination ariaLabel="Course activity pages" page={account.page} pageSize={account.pageSize} total={account.total} loading={loading} onChange={setPage} />}
     </section>
     {pendingDisableAccountId === user.id && user.id === userId && <ConfirmationDialog {...accountDisableConfirmation(user.username)} confirmLabel="Disable account" onCancel={() => setPendingDisableAccountId(null)} onConfirm={() => { const requestedUserId = pendingDisableAccountId; setPendingDisableAccountId(null); if (requestedUserId === user.id) void updateAccount({ disabled: true }, `${user.username}'s account was disabled.`, true); }} />}
   </div>;
@@ -2896,11 +2896,11 @@ function LogDetailsDisclosure({ details, label, columnCount, children }: { detai
   </>;
 }
 
-function LogPagination({ page, pageSize, total, loading, onChange }: { page: number; pageSize: number; total: number; loading: boolean; onChange: (page: number) => void }) {
+function LogPagination({ ariaLabel, page, pageSize, total, loading, onChange }: { ariaLabel: string; page: number; pageSize: number; total: number; loading: boolean; onChange: (page: number) => void }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const first = total ? (page - 1) * pageSize + 1 : 0;
   const last = Math.min(page * pageSize, total);
-  return <div className="log-pagination"><span role="status" aria-live="polite" aria-atomic="true">Showing {first}–{last} of {total}</span><div><Button variant="secondary" disabled={loading || page <= 1} onClick={() => onChange(page - 1)}>Previous</Button><span>Page {page} of {totalPages}</span><Button variant="secondary" disabled={loading || page >= totalPages} onClick={() => onChange(page + 1)}>Next</Button></div></div>;
+  return <nav className="log-pagination" aria-label={ariaLabel}><span role="status" aria-live="polite" aria-atomic="true">Showing {first}–{last} of {total}</span><div><Button variant="secondary" disabled={loading || page <= 1} onClick={() => onChange(page - 1)}>Previous</Button><span>Page {page} of {totalPages}</span><Button variant="secondary" disabled={loading || page >= totalPages} onClick={() => onChange(page + 1)}>Next</Button></div></nav>;
 }
 
 function LogEmptyState({ message }: { message: string }) {
@@ -2982,7 +2982,7 @@ export function AdminAuditLogPage() {
       {failedRequest ? <tr><td colSpan={5} className="log-empty">Audit entries are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} details={entry.details} label={entry.summary} columnCount={5}>{(toggle) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td>{entry.actorUsername}</td><td><span className="log-action">{entry.action.replaceAll('_', ' ')}</span></td><th scope="row"><strong>{entry.summary}</strong><small>{entry.entityType}{entry.entityId ? ` · ${entry.entityId}` : ''}</small></th><td>{toggle}</td></tr>}</LogDetailsDisclosure>)}
       {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty"><LogEmptyState message={emptyMessage} /></td></tr>}
     </tbody></table>{loading && <div className="log-loading" role="status" aria-live="polite">Loading audit entries…</div>}</div>
-    {!failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
+    {!failedRequest && total > 0 && <LogPagination ariaLabel="Audit log pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
   </div>;
 }
 
@@ -3059,6 +3059,6 @@ export function AdminSystemLogPage() {
       {failedRequest ? <tr><td colSpan={5} className="log-empty">System events are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} details={entry.details} label={entry.message} columnCount={5}>{(toggle) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td><span className={`log-level log-level-${entry.level}`}>{entry.level}</span></td><td>{entry.source}</td><th scope="row"><strong>{entry.message}</strong></th><td>{toggle}</td></tr>}</LogDetailsDisclosure>)}
       {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty"><LogEmptyState message={emptyMessage} /></td></tr>}
     </tbody></table>{loading && <div className="log-loading" role="status" aria-live="polite">Loading system events…</div>}</div>
-    {!failedRequest && total > 0 && <LogPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
+    {!failedRequest && total > 0 && <LogPagination ariaLabel="System log pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
   </div>;
 }
