@@ -36,8 +36,8 @@
 
 - **Reviewed:** The latest report and screenshot DOM path, the source module served from the local Vite server, the current account-role JSX and width/pointer rules, and the AppSelect activation guard.
 - **Result:** No additional runtime change. The served page module uses a separate caption and an 8.5rem role control; the selector wrapper ignores pointer input outside its button, and the activation guard rejects forwarded or out-of-bounds clicks while preserving keyboard activation.
-- **Why no code change:** The supplied DOM path still identifies the older label-wrapped markup. The current browser session redirects the requested account route to sign-in, so the authenticated page cannot be checked in that session; changing already-present source rules would be speculative.
-- **Checked:** The local server returned the current JSX. The focused account-role, custom-select, and activation tests passed (19/19), and `git diff --check` passed. A rendered check of the signed-in account page remains unavailable in the current browser session.
+- **Why no code change:** The supplied DOM path still identifies the older label-wrapped markup. The current connected browser is on `/register`, so the authenticated account page cannot be checked in this session; changing already-present source rules would be speculative.
+- **Checked:** The focused account-role, custom-select, activation, and menu-position suites passed (24/24). The current browser route is `/register`, not a signed-in admin account page. `git diff --check` passed; a rendered interaction check remains unavailable until the account page is refreshed in a signed-in session.
 - **Needed to continue:** Hard-refresh the signed-in account page to load the served markup. If the click still opens the menu after refresh, capture a fresh DOM path and the point clicked so the current rendered hit area can be traced.
 
 ## 2026-10-12 — Explain server request timeouts during media uploads
