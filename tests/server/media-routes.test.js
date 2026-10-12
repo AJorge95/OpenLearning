@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { once } from 'node:events';
-import { createServer } from 'node:http';
+import { createServer, request as createRequest } from 'node:http';
 import express from 'express';
 import { after, before, test } from 'node:test';
 
@@ -25,6 +25,7 @@ let fixtureDirectory;
 let database;
 let server;
 let captionPath;
+let errorHandler;
 const captionDownloadContents = Buffer.from('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nWelcome to the lesson.\n');
 const rangeMediaContents = Buffer.from('0123456789');
 const documentDownloadContents = Buffer.from('Course handout content');
@@ -44,10 +45,11 @@ before(async () => {
   });
 
   ({ db: database } = await import('../../server/db.js'));
-  const [{ mediaUploadRouter, protectedMediaRouter }, { errorHandler }] = await Promise.all([
+  const [{ mediaUploadRouter, protectedMediaRouter }, httpHandlers] = await Promise.all([
     import('../../server/routes-media.js'),
     import('../../server/http.js'),
   ]);
+  errorHandler = httpHandlers.errorHandler;
   database.exec(`
     INSERT INTO users (id, username, email, password_hash, role, disabled)
       VALUES ('admin-media', 'media_admin', 'media-admin@example.invalid', 'not-used', 'admin', 0);
@@ -220,6 +222,92 @@ async function uploadCourseCover(filename, contents, mimeType) {
     body: form,
   });
 }
+
+async function waitForPartialUpload(directory, originalFiles) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    for (const filename of await fs.readdir(directory)) {
+      if (originalFiles.has(filename)) continue;
+      const filePath = path.join(directory, filename);
+      try {
+        if ((await fs.stat(filePath)).size > 0) return filePath;
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return null;
+}
+
+async function waitForUploadCleanup(directory, originalFiles) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const currentFiles = (await fs.readdir(directory)).sort();
+    if (currentFiles.length === originalFiles.length
+      && currentFiles.every((filename, index) => filename === originalFiles[index])) return true;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return false;
+}
+
+test('aborted multipart uploads remove partial files without logging a server error', async () => {
+  const courseMediaDirectory = path.dirname(captionPath);
+  const originalFiles = (await fs.readdir(courseMediaDirectory)).sort();
+  const originalFileSet = new Set(originalFiles);
+  const originalAbortLogCount = database.prepare(`SELECT COUNT(*) AS count FROM system_logs
+    WHERE source = 'http' AND message IN ('Request aborted', 'Request closed')`).get().count;
+  const boundary = `openlearning-abort-${Date.now()}`;
+  const prefix = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="kind"\r\n\r\ncover\r\n--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="interrupted-cover.png"\r\nContent-Type: image/png\r\n\r\n`);
+  const partialContents = Buffer.alloc(4 * 1024 * 1024, 0x41);
+  const suffix = Buffer.from(`\r\n--${boundary}--\r\n`);
+  const request = createRequest(new URL(apiUrl('/manage/courses/course-caption-audit/media')), {
+    method: 'POST',
+    headers: {
+      'x-test-user': 'admin-media',
+      'content-type': `multipart/form-data; boundary=${boundary}`,
+      'content-length': String(prefix.length + partialContents.length * 2 + suffix.length),
+    },
+  });
+  request.on('error', () => {});
+
+  let partialFilePath;
+  try {
+    // Wait until Multer has written real file bytes, then disconnect before the file part or body ends.
+    request.write(prefix);
+    request.write(partialContents);
+    partialFilePath = await waitForPartialUpload(courseMediaDirectory, originalFileSet);
+    assert.ok(partialFilePath, 'expected the upload middleware to create a partial file before aborting');
+  } finally {
+    request.destroy();
+  }
+
+  assert.equal(await waitForUploadCleanup(courseMediaDirectory, originalFiles), true);
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM system_logs
+    WHERE source = 'http' AND message IN ('Request aborted', 'Request closed')`).get().count, originalAbortLogCount);
+});
+
+test('destroyed requests that close during upload do not reach the generic error logger', () => {
+  const originalAbortLogCount = database.prepare(`SELECT COUNT(*) AS count FROM system_logs
+    WHERE source = 'http' AND message = 'Request closed'`).get().count;
+  const response = {
+    headersSent: false,
+    status() { assert.fail('A destroyed response should not be written.'); },
+    json() { assert.fail('A destroyed response should not be written.'); },
+  };
+  let nextCalled = false;
+
+  errorHandler(new Error('Request closed'), {
+    aborted: false,
+    destroyed: true,
+    method: 'POST',
+    originalUrl: '/api/manage/courses/course-caption-audit/media',
+  }, response, () => { nextCalled = true; });
+
+  assert.equal(nextCalled, false);
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM system_logs
+    WHERE source = 'http' AND message = 'Request closed'`).get().count, originalAbortLogCount);
+});
 
 test('unsupported document uploads list the supported document formats', async () => {
   const form = new FormData();
