@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Reuse loaded learner states when unlocking path courses
+
+- **Reviewed:** Learning-path state synchronization, batched course summaries, completion deadlines, and version-specific recompletion behavior.
+- **Improvement:** Reuse learner state and version history already loaded with path summaries; prepare one state insert for all newly unlocked courses in each path. Recompletion checks now use exact active-version IDs from the same batch, and deadline calculation shares the existing initializer helper.
+- **Why it helps:** Removes a per-course state lookup and repeated insert-statement preparation while keeping unlock decisions, deadlines, and recompletion semantics consistent.
+- **Checked:** Path synchronization regressions passed (4/4), including multiple new states and version-reset progress; the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript and Vite; `git diff --check` passed.
+
 ## 2026-10-12 — Recheck single-page route focus and announcements
 
 - **Reviewed:** Learner and staff application shells, skip-link targets, main-content focus, route-derived document titles, and page-heading live announcements.

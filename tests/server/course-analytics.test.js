@@ -1380,7 +1380,7 @@ test('course summaries batch database reads and preserve progress across version
   assert.equal(resetSummary.completed, false);
 });
 
-test('learning-path state synchronization reuses completed course summaries for existing states', () => {
+test('learning-path state synchronization reuses loaded course states', () => {
   const pathId = 'path-sync-summary-batch';
   const secondPathId = `${pathId}-second`;
   const courseIds = [1, 2, 3].map((number) => `${pathId}-course-${number}`);
@@ -1436,8 +1436,51 @@ test('learning-path state synchronization reuses completed course summaries for 
   }
 
   assert.equal(singleCourseSummaryReads, 0);
-  assert.equal(existingStateJoinQueries, courseIds.length);
+  assert.equal(existingStateJoinQueries, 0);
   assert.equal(repeatedStateInitializationQueries, 0);
+});
+
+test('learning-path state synchronization prepares one insert for multiple newly unlocked courses', () => {
+  const pathId = 'path-sync-batched-state-inserts';
+  const courseIds = [1, 2, 3, 4, 5].map((number) => `${pathId}-course-${number}`);
+  const originalPrepare = database.prepare;
+  let stateInsertPreparations = 0;
+  let perCourseStateLookups = 0;
+  database.exec(`
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('${pathId}', 'Batched state inserts', 'published', 0, 'admin-1', 'admin-1');
+  `);
+  const addCourse = database.prepare(`INSERT INTO courses
+    (id, title, status, created_by, updated_by, completion_window_days)
+    VALUES (?, ?, 'published', 'admin-1', 'admin-1', 7)`);
+  const addPathCourse = database.prepare(`INSERT INTO learning_path_courses
+    (id, path_id, course_id, position, requires_previous) VALUES (?, ?, ?, ?, 0)`);
+  for (const [index, courseId] of courseIds.entries()) {
+    addCourse.run(courseId, `Newly unlocked course ${index + 1}`);
+    addPathCourse.run(`${pathId}-step-${index + 1}`, pathId, courseId, index);
+  }
+
+  database.prepare = (sql) => {
+    if (sql.includes('INSERT OR IGNORE INTO course_learning_state')) stateInsertPreparations += 1;
+    if (sql.includes('FROM courses c LEFT JOIN course_learning_state s')) perCourseStateLookups += 1;
+    return originalPrepare.call(database, sql);
+  };
+  let states = [];
+  try {
+    syncPathStates([pathId], 'learner-active');
+    states = database.prepare(`SELECT course_id, deadline_at, deadline_window_days, started_at
+      FROM course_learning_state WHERE user_id = ? AND course_id IN (${courseIds.map(() => '?').join(', ')})`)
+      .all('learner-active', ...courseIds);
+  } finally {
+    delete database.prepare;
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run(pathId);
+    database.prepare(`DELETE FROM courses WHERE id IN (${courseIds.map(() => '?').join(', ')})`).run(...courseIds);
+  }
+
+  assert.equal(stateInsertPreparations, 1);
+  assert.equal(perCourseStateLookups, 0);
+  assert.equal(states.length, courseIds.length);
+  assert.ok(states.every((state) => state.deadline_at && state.deadline_window_days === 7 && state.started_at));
 });
 
 test('learning-path synchronization refreshes progress when a new state requires recompletion', () => {

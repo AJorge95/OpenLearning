@@ -39,7 +39,7 @@ export function prepareCourseSummaryData(courses, preloadedVersionsByCourse, pre
   const logicalIds = [...new Set(logicalIdsByCourse)];
   const logicalPlaceholders = logicalIds.map(() => '?').join(', ');
   const latestVersionsByCourse = preloadedVersionsByCourse ?? new Map(db.prepare(`
-    SELECT v.course_id, v.id, v.storage_course_id, v.version_number
+    SELECT v.course_id, v.id, v.storage_course_id, v.version_number, v.requires_recompletion
     FROM course_versions v
     JOIN (
       SELECT course_id, MAX(version_number) AS version_number
@@ -96,7 +96,7 @@ export function prepareCourseSummaryData(courses, preloadedVersionsByCourse, pre
   };
 }
 
-function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloadedContentCoursesById, preloadedCourseSummaryData) {
+function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloadedContentCoursesById, preloadedCourseSummaryData, includeVersionResetCompletion = false) {
   if (!courses.length) return [];
   // Path edits can reuse immutable course metadata while loading each learner's progress separately.
   const summaryData = preloadedCourseSummaryData
@@ -160,6 +160,9 @@ function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloade
     const completedItems = completedLessons + passedQuizzes;
     const progress = requiredItems > 0 ? Math.round((completedItems / requiredItems) * 100) : 0;
     const completed = requiredItems > 0 && completedItems === requiredItems;
+    const completedWithVersionReset = includeVersionResetCompletion && requiredItems > 0
+      && (activeLessons.filter((row) => lessonHistory?.ids.has(row.id)).length
+        + activeQuizzes.filter((row) => quizHistory?.ids.has(row.id)).length) === requiredItems;
     return {
       summary: {
         id: course.id,
@@ -186,12 +189,30 @@ function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloade
       contentId: content.id,
       completedLessonIds,
       passedQuizIds,
+      learningState,
+      version,
+      completedWithVersionReset,
     };
   });
 }
 
 export function courseSummaries(courses, user, preloadedVersionsByCourse, preloadedCourseSummaryData) {
   return courseSummaryDetails(courses, user, preloadedVersionsByCourse, undefined, preloadedCourseSummaryData).map(({ summary }) => summary);
+}
+
+export function courseSummariesWithState(courses, user, preloadedCourseSummaryData) {
+  return courseSummaryDetails(courses, user, undefined, undefined, preloadedCourseSummaryData, true)
+    .map(({ summary, learningState, version, completedWithVersionReset }) => ({ summary, learningState, version, completedWithVersionReset }));
+}
+
+export function insertCourseLearningStates(userId, states) {
+  if (!states.length) return;
+  const insert = db.prepare(`INSERT OR IGNORE INTO course_learning_state
+    (user_id, course_id, target_version_id, deadline_at, deadline_window_days, started_at)
+    VALUES (?, ?, ?, ?, ?, ?)`);
+  for (const state of states) {
+    insert.run(userId, state.courseId, state.targetVersionId, state.deadlineAt, state.deadlineWindowDays, state.startedAt);
+  }
 }
 
 export function courseSummary(course, user, preloadedVersionsByCourse) {
@@ -444,9 +465,7 @@ export function ensureCourseLearningStateWithStatus(courseId, userId, now = new 
   }
   const version = publishedVersion(logicalId);
   const deadlineDays = course.completion_window_days;
-  const deadlineAt = Number.isInteger(deadlineDays) && deadlineDays > 0
-    ? new Date(now.getTime() + deadlineDays * 24 * 60 * 60 * 1000).toISOString()
-    : null;
+  const deadlineAt = courseLearningDeadlineAt(deadlineDays, now);
   const insert = db.prepare(`INSERT OR IGNORE INTO course_learning_state
       (user_id, course_id, target_version_id, deadline_at, deadline_window_days, started_at)
     VALUES (?, ?, ?, ?, ?, ?)`)
@@ -457,6 +476,12 @@ export function ensureCourseLearningStateWithStatus(courseId, userId, now = new 
 
 export function ensureCourseLearningState(courseId, userId, now = new Date()) {
   return ensureCourseLearningStateWithStatus(courseId, userId, now).state;
+}
+
+export function courseLearningDeadlineAt(deadlineDays, now = new Date()) {
+  return Number.isInteger(deadlineDays) && deadlineDays > 0
+    ? new Date(now.getTime() + deadlineDays * 24 * 60 * 60 * 1000).toISOString()
+    : null;
 }
 
 export function assertPublishable(courseId) {
