@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Keep the joined path accurate if its refresh fails
+
+- **Reviewed:** The learner enrollment handler, the route's learner-specific path payload, focus restoration after enrollment, and existing idempotency coverage.
+- **Improvement:** Apply the returned path payload to the visible list as soon as enrollment succeeds, then retain the list refresh because initialized course states can affect other paths.
+- **Why it helps:** The joined card reflects the saved enrollment even if the follow-up read fails, while the refresh keeps progress current across paths that share courses.
+- **Backend review:** The existing transaction returns learner-specific enrollment, progress, and unlock state; enrollment also synchronizes shared course states. The repeated-request behavior remains idempotent.
+- **Checked:** Client regressions passed (2/2), and the repeated self-enrollment route regression passed (1/1), including the path payload fields needed by the list.
+
 ## 2026-10-12 — Preserve focus after joining a learning path
 
 - **Reviewed:** The learner's self-enrollment button lifecycle, the path-list refresh, the route's transactional enrollment behavior, and existing focus-management patterns.

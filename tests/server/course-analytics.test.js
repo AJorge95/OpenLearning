@@ -5196,7 +5196,11 @@ test('repeated self-enrollment requests create one enrollment and one audit even
       headers: userHeaders('learner-unassigned'),
     });
     assert.equal(response.status, attempt === 0 ? 201 : 200);
-    assert.equal((await response.json()).path.enrolled, true);
+    const { path } = await response.json();
+    assert.equal(path.enrolled, true);
+    assert.equal(path.courseCount, 1);
+    assert.equal(path.courses[0].id, 'course-analytics');
+    assert.equal(path.courses[0].unlocked, true);
   }
 
   assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM learning_path_enrollments

@@ -460,7 +460,13 @@ export function LearningPathsPage() {
     joiningPathRef.current = true;
     setJoiningPathId(path.id);
     setError(''); setNotice('');
-    try { await api.post(`/api/learning-paths/${path.id}/enroll`); setNotice(`You joined “${path.title}”.`); await load(); }
+    try {
+      const { path: enrolledPath } = await api.post<{ path: LearningPath }>(`/api/learning-paths/${path.id}/enroll`);
+      // Apply this path immediately, then refresh because its new course states can affect other paths.
+      setPaths((currentPaths) => currentPaths.map((currentPath) => currentPath.id === enrolledPath.id ? enrolledPath : currentPath));
+      setNotice(`You joined “${path.title}”.`);
+      await load();
+    }
     catch (cause) { setError(requestMessage(cause, 'You could not join this learning path.')); }
     finally {
       joiningPathRef.current = false;
