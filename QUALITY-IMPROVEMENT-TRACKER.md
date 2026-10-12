@@ -44,6 +44,7 @@
 - **Improvement:** Remove the decorative vertical shifts from those hover states when reduced motion is requested, while keeping their color, border, and shadow feedback. Add a client regression for both selectors and the shared motion overrides.
 - **Why it helps:** Learners and administrators who prefer less motion can still identify hover state without cards or palette controls shifting on pointer movement.
 - **Checked:** The focused regression passed (1/1); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript and Vite; `git diff --check` passed. In a local browser fixture using the project stylesheet, normal hover transforms were `-2px` and `-1px`, and both became `none` under emulated `prefers-reduced-motion: reduce`; hover border/shadow feedback remained and the console was clear.
+- **Rechecked (2026-10-12):** `node --test tests/client/reduced-motion.test.js` passed (1/1). A source scan found no standalone keyframes or animation declarations; all authored transitions and scrolling remain covered by the shared reduced-motion override. No additional change was indicated.
 
 ## 2026-10-12 — Keep cancelled uploads out of server error logs
 
