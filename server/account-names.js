@@ -1,14 +1,10 @@
 import { fail } from './http.js';
-
-const maximumNameLength = 80;
+import { accountNameError, normalizeAccountName } from '../src/account-name-validation.ts';
 
 export function accountName(value, label) {
-  if (typeof value !== 'string') fail(400, `${label} must be between 1 and ${maximumNameLength} characters.`, 'invalid_name');
-  const normalized = value.trim().replace(/\s+/g, ' ');
-  if (!normalized || normalized.length > maximumNameLength || /[\u0000-\u001f\u007f]/.test(normalized)) {
-    fail(400, `${label} must be between 1 and ${maximumNameLength} characters.`, 'invalid_name');
-  }
-  return normalized;
+  const error = accountNameError(value, label);
+  if (error) fail(400, error, 'invalid_name');
+  return normalizeAccountName(value);
 }
 
 export function accountNames(body) {

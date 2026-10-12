@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Validate certificate names before setup and signup
+
+- **Reviewed:** Server account-name trimming, whitespace collapsing, length and control-character checks; the browser's required text fields; the two-step setup flow; signup; and the account-details certificate-name comparison.
+- **Improvement:** Share account-name normalization and validation with the client. Reject whitespace-only or invalid names before setup hides those fields or signup submits, normalize valid spacing before sending, mark the affected field invalid, and focus it.
+- **Why it helps:** A name containing only spaces passes HTML `required` but fails on the server. People now get the correction beside the field while it remains visible, and valid repeated spacing is normalized consistently.
+- **Backend:** `server/account-names.js` uses the shared helper for the same error code and response message; the account-details page also uses the shared normalizer for certificate-name change detection.
+- **Checked:** Focused account-name, email, and registration tests passed (10/10); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed TypeScript checking and Vite bundling; `git diff --check` passed; and the in-app `/register` check showed the error and focused the first-name field for a whitespace-only value.
+
 ## 2026-10-12 — Keep email validation consistent across setup and signup
 
 - **Reviewed:** The browser email controls, server `validateEmail` rules, the two-step initial setup flow, registration submission, and the existing field-error accessibility pattern.

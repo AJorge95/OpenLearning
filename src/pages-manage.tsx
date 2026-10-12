@@ -22,6 +22,7 @@ import type { BrandingPalette, ConnectionProtocol } from './branding';
 import { useAuth } from './auth-context';
 import { canonicalCaptionLanguageTag, captionFileSizeError, captionLanguageErrorMessage } from './caption-validation';
 import { uploadSizeError } from './upload-size-validation';
+import { normalizeAccountName } from './account-name-validation';
 import { courseEditingNote } from './course-editing-note';
 import { COMPLETION_WINDOW_ERROR, validateCompletionWindowDays } from './course-editor-validation';
 import { isCourseCoverDimensionAllowed, MAX_COURSE_COVER_DIMENSION } from './course-cover-validation';
@@ -2368,10 +2369,6 @@ type AdminAccountDetails = {
   pageSize: number;
 };
 
-function normalizeAccountNameDraft(value: string) {
-  return value.trim().replace(/\s+/g, ' ');
-}
-
 export function AdminUserDetailsPage() {
   const { userId = '' } = useParams();
   const { user: signedInUser, refresh } = useAuth();
@@ -2532,8 +2529,8 @@ export function AdminUserDetailsPage() {
   if (!account) return <div className="management-page">{error && <div className="account-list-error"><Notice>{error}</Notice>{canRetryLoad && <Button type="button" variant="secondary" onClick={() => setLoadRetryVersion((version) => version + 1)}>Try again</Button>}</div>}<Link className="back-link" to="/admin/users"><ArrowLeft size={17} />Back to users</Link></div>;
   const { user, courses, registrationFields } = account;
   const certificateNameReady = profileNamesUserId === user.id;
-  const certificateNameChanged = certificateNameReady && (normalizeAccountNameDraft(profileFirstName) !== (user.firstName || '')
-    || normalizeAccountNameDraft(profileLastName) !== (user.lastName || ''));
+  const certificateNameChanged = certificateNameReady && (normalizeAccountName(profileFirstName) !== (user.firstName || '')
+    || normalizeAccountName(profileLastName) !== (user.lastName || ''));
   return <div className="management-page account-details-page">
     <div className="breadcrumbs"><Link to="/admin/users">Users</Link><span>/</span><span>{user.username}</span></div>
     <PageHeading title={user.username} subtitle="Account controls, enrolled courses, and learning activity." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} />Back to users</Link>} />
