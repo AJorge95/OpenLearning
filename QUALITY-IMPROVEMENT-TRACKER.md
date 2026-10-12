@@ -24,6 +24,14 @@
 - **Backend review:** The backup command still resolves source and output paths through symlinks and rechecks the created destination before writing; existing server tests cover the failure and cleanup paths. No runtime backend change was indicated.
 - **Checked:** `node --test tests/client/form-control-accessible-name.test.js` passed (8/8), including icon-only, visible-text, dynamic, conditional, and ARIA-named link fixtures. The full `npm test -- --test-reporter=dot` suite, `node --check tests/client/form-control-accessible-name.test.js`, and `git diff --check` passed.
 
+## 2026-10-12 — Tighten accessible-name inventory expression checks
+
+- **Reviewed:** The JSX inventory's handling of dynamic child expressions, template text, decorative icons, conditional branches, and empty ARIA labels.
+- **Improvement:** Count only literal JSX text, text-like label/title/name properties, and nonempty template text as names. Reject arbitrary icon JSX/variables, branches that can render empty, and whitespace-only ARIA names.
+- **Why it helps:** The project-wide button and link checks can no longer treat an icon expression or blank label as a usable name, while preserving real dynamic labels and “Load more” text.
+- **Backend review:** Rechecked the backup command's canonical path comparisons and post-create overlap guard; symlink and partial-output cases remain covered. No backend change was indicated.
+- **Checked:** Focused accessible-name tests passed (8/8), including expression-icon and blank-name fixtures; the full `npm test -- --test-reporter=dot` suite, `node --check tests/client/form-control-accessible-name.test.js`, and `git diff --check` passed.
+
 ## 2026-10-12 — Guard accessible names on textareas
 
 - **Reviewed:** Textarea markup across learner, course, lesson, quiz, path, and registration-field forms, including visible labels, visually hidden labels, matching `htmlFor`/`id`, and ARIA naming alternatives.
