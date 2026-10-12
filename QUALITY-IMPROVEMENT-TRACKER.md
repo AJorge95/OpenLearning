@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck progress values at shared bar call sites
+
+- **Reviewed:** The shared progress bar's range clamp and ARIA value, each course/path/competency/analytics caller, and the backend's zero-activity and zero-learner percentage calculations.
+- **Result:** No runtime change. Current callers supply bounded integer percentages or guard empty denominators; analytics emits `null` when a rate is undefined, and the UI omits the progress bar in that state.
+- **Why no change:** No current code path can produce a non-finite or out-of-range value for the shared bar, and adding a defensive fallback would mask a producer defect without fixing one.
+- **Checked:** Course progress and competency client tests plus `node --test tests/server/course-analytics.test.js` passed (134/134).
+- **Needed to revisit:** A reproduced invalid or out-of-range progress value from an API response, or a caller that does not guard an empty denominator.
+
 ## 2026-10-12 — Parse learning deadlines with their UTC timezone
 
 - **Reviewed:** The database's naive SQLite deadline timestamps and ISO deadline values, their course and learning-path API consumers, overdue-status calculation, timer boundary, and localized date display.
