@@ -896,7 +896,11 @@ courseRouter.delete('/manage/modules/:moduleId', requireStaff, async (req, res) 
       WHERE l.module_id = ?
     `).all(module.module_id);
     db.prepare('DELETE FROM course_modules WHERE id = ?').run(module.module_id);
-    for (const item of media) db.prepare('DELETE FROM media_files WHERE id = ?').run(item.id);
+    if (media.length) {
+      // Reuse one row-delete statement for every video attached to the module.
+      const deleteMedia = db.prepare('DELETE FROM media_files WHERE id = ?');
+      for (const item of media) deleteMedia.run(item.id);
+    }
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, module.id);
     const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.module_deleted', entityType: 'module', entityId: module.module_id,
       summary: `Deleted a module from ${module.title}` });
