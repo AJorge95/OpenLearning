@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck learner and program async loading paths
+
+- **Reviewed:** Learner certificate, course, and quiz loading; calendar refreshes; competency pagination; and learning-path list and assignment requests. Checked cancellation, stale-response guards, loading/error states, and retry behavior.
+- **Result:** No runtime change. The inspected flows already prevent superseded requests from overwriting current route state and expose retry actions for failed loads.
+- **Why no change:** No reproducible loading or retry defect appeared in source or existing regression coverage, so a speculative code change would add risk without improving learner or staff behavior.
+- **Checked:** Five focused client test files passed (26/26): calendar dates/loading, competency progress paging, learning-path list search, assignment search, and quiz result accessibility/retry. The open in-app browser is signed out at `/login`, so the authenticated account-selector hit area could not be rechecked in that session.
+- **Needed to continue:** A reproduced stale/failed-request issue or an authenticated current-build account page where a click outside the visible role selector still opens it.
+
 ## 2026-10-12 — Reject malformed page query values consistently
 
 - **Reviewed:** The shared `pageQuery` parser and its use across administrator, course, learning-path, and comment pagination routes. Repeated page keys already return a structured 400, but malformed single values silently selected page one.
