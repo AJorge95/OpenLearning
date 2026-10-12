@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Parse API timestamps consistently across timezones
+
+- **Reviewed:** Server responses for account, audit/system log, course review/version, certificate, and lesson-comment timestamps; their SQLite `CURRENT_TIMESTAMP` source; and every UI renderer that formats those values.
+- **Improvement:** Add a shared `parseApiTimestamp` helper that treats unzoned API date-times as UTC, converts SQLite's space separator to `T`, and preserves explicit UTC and numeric offsets. Use it for admin dates and logs, course review/version history, learner certificates, and lesson comments.
+- **Why it helps:** Activity and publication times no longer shift to the wrong local time or date when the learner's or administrator's browser runs in another timezone. Offset-bearing timestamps remain valid instead of becoming invalid after an extra `Z` is appended.
+- **Backend review:** These endpoints intentionally return the stored timestamp strings; the parser fixes their display without changing the API contract or stored data.
+- **Checked:** Added client regressions for an eastward timezone, naive SQLite and ISO timestamps, explicit `Z` and `+02:00` offsets, invalid values, and renderer wiring. `node --test tests/client/api-timestamp.test.js` passed (4/4); related account, comments, and version-history tests passed (13/13); the full `npm test -- --test-reporter=dot` suite passed; `npm run build` passed strict typechecking and Vite bundling; and `git diff --check` passed. The local browser's requested account route redirected to `/login`, so authenticated timestamp rendering could not be checked; no credentials or account data were changed.
+
 ## 2026-10-12 — Expose account identities as user-table row headers
 
 - **Reviewed:** The admin account table's column and row structure, identity link and secondary email, existing cell styles and responsive spacing, and the `/api/admin/users` response contract.

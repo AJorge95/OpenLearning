@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
 import { AppSelect, Button, ConfirmationDialog, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
 import { formatCountLabel } from './count-label';
+import { parseApiTimestamp } from './api-timestamp';
 import { courseCatalogCategoryOptions, courseCatalogParams, hasCourseCatalogFilters } from './course-catalog-filters';
 import { formatLearningDeadlineDate, getLearningDeadlineStatus } from './learning-deadline';
 import { courseActivityActionLabel, nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from './course-navigation';
@@ -66,7 +67,7 @@ function videoClock(seconds: number) {
 }
 
 function formatCertificateDate(value: string, formatter: Intl.DateTimeFormat) {
-  const date = new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`);
+  const date = parseApiTimestamp(value);
   return Number.isNaN(date.getTime()) ? value : formatter.format(date);
 }
 
@@ -998,7 +999,7 @@ export function CoursePlayerPage() {
   }
 
   function commentTimestamp(value: string) {
-    const date = new Date(value.includes('Z') ? value : `${value.replace(' ', 'T')}Z`);
+    const date = parseApiTimestamp(value);
     const valid = !Number.isNaN(date.getTime());
     return {
       dateTime: valid ? date.toISOString() : undefined,
