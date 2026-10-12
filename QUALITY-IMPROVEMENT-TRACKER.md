@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck the reported Platform role click width
+
+- **Reviewed:** The new browser comment and screenshot, account-role markup served by the local Vite process, selector and menu sizing, and the outside-trigger activation guard.
+- **Result:** No runtime change. The screenshot's DOM path still identifies the previous wrapping `<label>`, while the local Vite server serves the current separate `<div>` field and outside-click guard. The desktop wrapper and trigger use the same 8.5rem width, and the dropdown matches the trigger.
+- **Why no change:** The reported over-wide label is absent from the current source and served module; changing the width again would duplicate the existing fix. The fresh protected account route redirects this browser session to sign-in.
+- **Checked:** `node --test tests/client/account-role-hitbox.test.js tests/client/app-select-label.test.js tests/client/app-select-activation.test.js tests/client/app-select-position.test.js` passed (20/20). The local Vite module served the separate `<div>` and activation guard; the protected route redirected to sign-in. Earlier rendered interaction evidence for this same control is recorded in the 2026-10-11 entry below.
+- **Needed to revisit:** A hard-refreshed signed-in account page that still shows a wider clickable boundary than the visible selector, or confirmation that the affected browser is serving a different workspace/build.
+
 ## 2026-10-12 — Share connection protocol selector choices
 
 - **Reviewed:** First-run setup and admin-settings protocol selectors, form rerender paths, the shared `ConnectionProtocol` type, and session-cookie behavior driven by the saved setting.
