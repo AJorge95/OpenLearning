@@ -4357,7 +4357,7 @@ test('resource link creation rolls back when its audit entry cannot be saved', a
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.resource_link_added' AND entity_id = 'lesson-resource-link-audit'").get().count, initialAuditCount + 1);
 });
 
-test('publication and review notes over their limits are rejected without state changes', async () => {
+test('publication and review note boundaries reject invalid values without state changes', async () => {
   const reviewAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.review_changes_requested' AND entity_id = 'course-empty'").get().count;
   const publishResponse = await fetch(apiUrl('/manage/courses/course-empty'), {
     method: 'PATCH',
@@ -4374,6 +4374,20 @@ test('publication and review notes over their limits are rejected without state 
   database.prepare(`INSERT INTO course_revisions (course_id, revision_course_id, author_id, review_status, submitted_by, submitted_at)
     VALUES ('course-empty', 'course-empty', 'admin-1', 'in_review', 'admin-1', CURRENT_TIMESTAMP)`).run();
   try {
+    for (const note of [undefined, '', ' \t\n ']) {
+      const missingNoteResponse = await fetch(apiUrl('/manage/courses/course-empty/review/decision'), {
+        method: 'POST',
+        headers: { ...userHeaders('reviewer-note-limit'), 'content-type': 'application/json' },
+        body: JSON.stringify({ decision: 'changes_requested', note }),
+      });
+      assert.equal(missingNoteResponse.status, 400);
+      assert.equal((await missingNoteResponse.json()).error, 'Review note is required.');
+      assert.deepEqual(database.prepare('SELECT review_status, review_note FROM course_revisions WHERE course_id = ?').get('course-empty'), {
+        review_status: 'in_review', review_note: '',
+      });
+      assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.review_changes_requested' AND entity_id = 'course-empty'").get().count, reviewAuditCount);
+    }
+
     const reviewResponse = await fetch(apiUrl('/manage/courses/course-empty/review/decision'), {
       method: 'POST',
       headers: { ...userHeaders('reviewer-note-limit'), 'content-type': 'application/json' },

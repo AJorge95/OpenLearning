@@ -662,8 +662,12 @@ programsRouter.post('/manage/courses/:courseId/review/decision', requireStaff, (
     const revision = db.prepare('SELECT * FROM course_revisions WHERE course_id = ?').get(logicalId);
     if (!revision || revision.review_status !== 'in_review') fail(409, 'This revision is not awaiting review.', 'review_not_pending');
     if (revision.submitted_by === req.currentUser.id) fail(403, 'A different administrator or moderator must review this revision.', 'self_review_forbidden');
-    const note = text(req.body?.note, outcome === 'approve' ? 'Publication note' : 'Review note', outcome === 'approve' ? 500 : 1000);
-    if (outcome === 'changes_requested') {
+    const requestsChanges = outcome === 'changes_requested';
+    // A change request must give its editor actionable feedback; approval notes remain optional.
+    const noteLabel = requestsChanges ? 'Review note' : 'Publication note';
+    const noteLimit = requestsChanges ? 1000 : 500;
+    const note = text(req.body?.note, noteLabel, noteLimit, requestsChanges);
+    if (requestsChanges) {
       db.prepare(`UPDATE course_revisions SET review_status = 'changes_requested', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP,
         review_note = ?, updated_at = CURRENT_TIMESTAMP WHERE course_id = ?`).run(req.currentUser.id, note, logicalId);
       logAudit(req.currentUser, 'course.review_changes_requested', 'course', logicalId, `Requested changes to ${current.title}`, { note });

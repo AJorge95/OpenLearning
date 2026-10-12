@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Require useful feedback for course change requests
+
+- **Reviewed:** The review-decision form's required, trimmed note; the server's shared text validator; and the revision transaction and audit event.
+- **Improvement:** Require a nonblank review note when a reviewer requests changes. Keep approval publication notes optional and retain their existing 500-character cap; change-request notes retain the 1,000-character cap.
+- **Why it helps:** The client already blocks blank feedback, but the API previously accepted omitted or whitespace-only notes and could leave an editor with a “changes requested” status and no guidance. The server now enforces the same rule for every caller.
+- **Checked:** The regression first reproduced the bug (HTTP 200), then passed for missing, empty, and whitespace-only notes, confirming no review state or audit change. `npm test -- --test-reporter=dot` and `npm run build` (TypeScript check and Vite bundle) passed; `git diff --check` passed.
+
 ## 2026-10-12 — Reconcile the role-control comment with current source
 
 - **Reviewed:** The supplied screenshot's target markup, the current administrator role-control JSX and hit-area rules, the focused regressions, and the browser surfaces available in this session.
