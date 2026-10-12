@@ -705,8 +705,12 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .calendar-month-controls .button { width: 40px; min-height: 40px; padding: 0; border-radius: 6px; }
 .calendar-month-controls > .calendar-current-month { width: auto; padding: 0 10px; white-space: nowrap; }
 .calendar-month-label { min-width: 145px; color: var(--ink); font-size: 13px; font-weight: 700; text-align: center; }
-.calendar-panel { padding: 15px; overflow-x: auto; }
+.calendar-panel { padding: 15px; overflow-x: auto; container-type: inline-size; container-name: calendar; }
 .calendar-panel:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+/* The seven-column grid stays readable; reveal its scroll cue when the panel is narrower than the grid. */
+@container calendar (max-width: 639px) {
+  .calendar-panel > .table-scroll-hint { display: flex; }
+}
 .calendar-grid { width: 100%; min-width: 640px; table-layout: fixed; border: 1px solid var(--line); border-spacing: 1px; border-radius: 6px; background: var(--line); }
 .calendar-grid th { padding: 7px 3px; color: var(--muted); background: #f9f9fc; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-align: center; text-transform: uppercase; }
 .calendar-day { height: 112px; min-width: 0; padding: 7px; vertical-align: top; background: #fff; }
