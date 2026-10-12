@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck My Learning pagination and load recovery
+
+- **Reviewed:** The learner's independently loaded course and certificate lists, abort and retry behavior, page-drift recovery, duplicate filtering, responsive course-card layout, and the server's access-filtered membership stream.
+- **Result:** No runtime change. The client cancels superseded requests, restarts the course list when totals or page membership drift, and filters overlapping course IDs. The server returns stable 24-course pages after applying current course-access checks while consuming indexed memberships incrementally.
+- **Why no change:** Existing UI and route behavior already protects the reviewed loading and concurrent-membership cases; no reproduced missing/duplicate course or measured large-history bottleneck justified another change.
+- **Checked:** `node --test tests/client/my-learning-loading.test.js` passed (2/2); the targeted My Learning membership paging and path-cache route regressions passed (2/2). No new markup was introduced, and signed-in responsive rendering remains unverified in the current signed-out browser session.
+- **Needed to revisit:** A measured slow membership scan or a reproduced missing/duplicate course after concurrent assignment or grant changes.
+
 ## 2026-10-12 — Refresh learner deadline status at its due time
 
 - **Reviewed:** My Learning deadline labels, the date-status helper, calendar deadline timestamps, and the existing learner deadline tests.
