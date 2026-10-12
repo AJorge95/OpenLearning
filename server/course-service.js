@@ -96,45 +96,25 @@ export function prepareCourseSummaryData(courses, preloadedVersionsByCourse, pre
   };
 }
 
-function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloadedContentCoursesById, preloadedCourseSummaryData, includeVersionResetCompletion = false) {
+function courseSummaryDetails(
+  courses,
+  user,
+  preloadedVersionsByCourse,
+  preloadedContentCoursesById,
+  preloadedCourseSummaryData,
+  includeVersionResetCompletion = false,
+  preloadedLearnerSummaryData,
+) {
   if (!courses.length) return [];
-  // Path edits can reuse immutable course metadata while loading each learner's progress separately.
+  // Path edits can reuse immutable metadata and preload learner progress in bounded batches.
   const summaryData = preloadedCourseSummaryData
     ?? prepareCourseSummaryData(courses, preloadedVersionsByCourse, preloadedContentCoursesById);
   const { logicalIdsByCourse, logicalIds, latestVersionsByCourse, contentIdByCourse, contentCoursesById, countsByCourse, lessonsByCourse, quizzesByCourse } = summaryData;
-  const logicalPlaceholders = logicalIds.map(() => '?').join(', ');
-  const learningStateByCourse = new Map();
-  const lessonHistoryByCourse = new Map();
-  const quizHistoryByCourse = new Map();
-  if (user) {
-    for (const row of db.prepare(`SELECT course_id, target_version_id, deadline_at FROM course_learning_state
-      WHERE user_id = ? AND course_id IN (${logicalPlaceholders})`).all(user.id, ...logicalIds)) {
-      learningStateByCourse.set(row.course_id, row);
-    }
-    for (const row of db.prepare(`SELECT COALESCE(c.logical_course_id, c.id) AS course_id, l.id,
-        COALESCE(l.stable_id, l.id) AS stable_id
-      FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id
-      JOIN course_modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id
-      WHERE p.user_id = ? AND (c.id IN (${logicalPlaceholders}) OR c.logical_course_id IN (${logicalPlaceholders}))`)
-      .all(user.id, ...logicalIds, ...logicalIds)) {
-      const history = lessonHistoryByCourse.get(row.course_id) ?? { ids: new Set(), stableIds: new Set() };
-      history.ids.add(row.id);
-      history.stableIds.add(row.stable_id);
-      lessonHistoryByCourse.set(row.course_id, history);
-    }
-    for (const row of db.prepare(`SELECT DISTINCT COALESCE(c.logical_course_id, c.id) AS course_id, q.id,
-        COALESCE(q.stable_id, q.id) AS stable_id
-      FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-      JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = m.course_id
-      WHERE a.user_id = ? AND a.passed = 1
-        AND (c.id IN (${logicalPlaceholders}) OR c.logical_course_id IN (${logicalPlaceholders}))`)
-      .all(user.id, ...logicalIds, ...logicalIds)) {
-      const history = quizHistoryByCourse.get(row.course_id) ?? { ids: new Set(), stableIds: new Set() };
-      history.ids.add(row.id);
-      history.stableIds.add(row.stable_id);
-      quizHistoryByCourse.set(row.course_id, history);
-    }
-  }
+  const learnerSummaryData = preloadedLearnerSummaryData
+    ?? (user ? loadCourseLearnerSummaryData(logicalIds, [user.id]).get(user.id) : null);
+  const learningStateByCourse = learnerSummaryData?.learningStateByCourse ?? new Map();
+  const lessonHistoryByCourse = learnerSummaryData?.lessonHistoryByCourse ?? new Map();
+  const quizHistoryByCourse = learnerSummaryData?.quizHistoryByCourse ?? new Map();
   return courses.map((course, index) => {
     const logicalId = logicalIdsByCourse[index];
     const contentId = contentIdByCourse.get(logicalId);
@@ -196,12 +176,72 @@ function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloade
   });
 }
 
+function emptyCourseLearnerSummaryData() {
+  return {
+    learningStateByCourse: new Map(),
+    lessonHistoryByCourse: new Map(),
+    quizHistoryByCourse: new Map(),
+  };
+}
+
+// Keep each learner's state and both progress histories together for path unlock decisions.
+function loadCourseLearnerSummaryData(logicalIds, userIds) {
+  const summariesByUser = new Map(userIds.map((userId) => [userId, emptyCourseLearnerSummaryData()]));
+  if (!logicalIds.length || !userIds.length) return summariesByUser;
+
+  const userPlaceholders = userIds.map(() => '?').join(', ');
+  const logicalPlaceholders = logicalIds.map(() => '?').join(', ');
+  for (const row of db.prepare(`SELECT user_id, course_id, target_version_id, deadline_at FROM course_learning_state
+    WHERE user_id IN (${userPlaceholders}) AND course_id IN (${logicalPlaceholders})`).all(...userIds, ...logicalIds)) {
+    summariesByUser.get(row.user_id)?.learningStateByCourse.set(row.course_id, row);
+  }
+  for (const row of db.prepare(`SELECT p.user_id, COALESCE(c.logical_course_id, c.id) AS course_id, l.id,
+      COALESCE(l.stable_id, l.id) AS stable_id
+    FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id
+    JOIN course_modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id
+    WHERE p.user_id IN (${userPlaceholders})
+      AND (c.id IN (${logicalPlaceholders}) OR c.logical_course_id IN (${logicalPlaceholders}))`)
+    .all(...userIds, ...logicalIds, ...logicalIds)) {
+    const historyByCourse = summariesByUser.get(row.user_id)?.lessonHistoryByCourse;
+    if (!historyByCourse) continue;
+    const history = historyByCourse.get(row.course_id) ?? { ids: new Set(), stableIds: new Set() };
+    history.ids.add(row.id);
+    history.stableIds.add(row.stable_id);
+    historyByCourse.set(row.course_id, history);
+  }
+  for (const row of db.prepare(`SELECT DISTINCT a.user_id, COALESCE(c.logical_course_id, c.id) AS course_id, q.id,
+      COALESCE(q.stable_id, q.id) AS stable_id
+    FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
+    JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = m.course_id
+    WHERE a.user_id IN (${userPlaceholders}) AND a.passed = 1
+      AND (c.id IN (${logicalPlaceholders}) OR c.logical_course_id IN (${logicalPlaceholders}))`)
+    .all(...userIds, ...logicalIds, ...logicalIds)) {
+    const historyByCourse = summariesByUser.get(row.user_id)?.quizHistoryByCourse;
+    if (!historyByCourse) continue;
+    const history = historyByCourse.get(row.course_id) ?? { ids: new Set(), stableIds: new Set() };
+    history.ids.add(row.id);
+    history.stableIds.add(row.stable_id);
+    historyByCourse.set(row.course_id, history);
+  }
+  return summariesByUser;
+}
+
+export function prepareCourseLearnerSummaryData(courses, userIds) {
+  const logicalIds = [...new Set(courses.map((course) => course.logical_course_id || course.id))];
+  return loadCourseLearnerSummaryData(logicalIds, userIds);
+}
+
 export function courseSummaries(courses, user, preloadedVersionsByCourse, preloadedCourseSummaryData) {
   return courseSummaryDetails(courses, user, preloadedVersionsByCourse, undefined, preloadedCourseSummaryData).map(({ summary }) => summary);
 }
 
-export function courseSummariesWithState(courses, user, preloadedCourseSummaryData) {
-  return courseSummaryDetails(courses, user, undefined, undefined, preloadedCourseSummaryData, true)
+export function courseSummariesWithState(
+  courses,
+  user,
+  preloadedCourseSummaryData,
+  preloadedLearnerSummaryData,
+) {
+  return courseSummaryDetails(courses, user, undefined, undefined, preloadedCourseSummaryData, true, preloadedLearnerSummaryData)
     .map(({ summary, learningState, version, completedWithVersionReset }) => ({ summary, learningState, version, completedWithVersionReset }));
 }
 
