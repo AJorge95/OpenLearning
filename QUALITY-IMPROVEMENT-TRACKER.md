@@ -10017,3 +10017,11 @@
 - **Backend review:** The last-active-administrator restriction remains enforced by the existing account API and explains why this account cannot be used for an enabled-control click check.
 - **Checked:** The refreshed signed-in account page visibly renders a roughly 136px disabled selector. Existing focused selector, role-hit-area, activation, layout, label, and account-form tests passed (38/38). A previous enabled-account browser check confirmed the adjacent blank area does not open the menu; `git diff --check` passed.
 - **Needed to continue:** If a fresh load still shows the wide label on an account with an enabled role control, capture that current rendered page so the mismatch can be reproduced against the running source.
+
+## 2026-10-12 — Explain empty published course content
+
+- **Reviewed:** The learner course overview's empty curriculum behavior, both “Start learning” actions, activity navigation, and the backend rule that validates course content before publication.
+- **Improvement:** Show a semantic “No learning activities yet” empty state when a published record has no lessons or quizzes. Hide the inert start actions unless a next activity exists, while preserving certificate and progress actions for completed or in-progress records.
+- **Why it helps:** Learners no longer see disabled start controls without an explanation if older or inconsistent published data reaches the course page.
+- **Backend review:** New courses cannot be published without a module and a lesson; quiz content and video media are also validated. No server change was indicated because the empty state is a defensive presentation for existing records.
+- **Checked:** Added the regression in `tests/client/course-overview-accessibility.test.js` under the dedicated client-test folder. Focused course navigation and overview checks passed (16/16), the full Node test suite passed, and `npm run build` passed strict TypeScript checking and Vite bundling. `git diff --check` passed. Rendered empty-state QA was not run because the repository has no Playwright dependency and no empty-course browser fixture was created in the development database.

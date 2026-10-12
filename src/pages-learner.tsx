@@ -575,6 +575,8 @@ export function CourseOverviewPage() {
   if (!course) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to="/courses"><ArrowLeft size={17} />Back to courses</Link></div>;
   const courseActivitiesComplete = summarizeCourseProgress(course.modules ?? []).completed;
   const nextActivity = nextCourseActivity(course.modules);
+  // Older published records can reach learners without activities; explain that state instead of disabling the CTA silently.
+  const hasLearningActivities = (course.modules ?? []).some((module) => module.lessons.length > 0 || Boolean(module.quiz));
   const startButtonLabel = courseActivityActionLabel({
     starting,
     completed: courseActivitiesComplete,
@@ -591,10 +593,12 @@ export function CourseOverviewPage() {
         {/* Keep the description available to screen readers alongside its visible text. */}
         {course.description ? <p className="course-hero-description">{course.description}</p> : null}
         <div className="course-hero-meta"><span><BookOpen size={17} />{formatCountLabel(course.moduleCount, 'module', 'modules')}</span><span><Play size={15} />{formatCountLabel(course.lessonCount, 'lesson', 'lessons')}</span></div>
-        <div className="course-hero-actions">
-          <Button onClick={startLearning} disabled={!nextActivity || starting}>{startButtonLabel}<ArrowRight size={17} /></Button>
-          {user?.role === 'learner' && course.completed ? user.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} />Add name for certificate</Link> : course.progress > 0 && <span className="progress-caption">{course.progress}% complete</span>}
-        </div>
+        {hasLearningActivities || course.completed || course.progress > 0 ? (
+          <div className="course-hero-actions">
+            {nextActivity ? <Button onClick={startLearning} disabled={starting}>{startButtonLabel}<ArrowRight size={17} /></Button> : null}
+            {user?.role === 'learner' && course.completed ? user.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} />Add name for certificate</Link> : course.progress > 0 && <span className="progress-caption">{course.progress}% complete</span>}
+          </div>
+        ) : null}
       </div>
       <CourseCover course={course} className="course-hero-cover" />
     </section>
@@ -602,10 +606,16 @@ export function CourseOverviewPage() {
       <div className="course-description-block"><h2>About this course</h2><p>{course.description || 'Explore the lessons and practical knowledge in this course.'}</p></div>
       <div className="course-curriculum-block">
         <div className="section-heading-row"><div><h2>Course content</h2><p>{formatCountLabel(course.moduleCount, 'module', 'modules')} <span>·</span> {formatCountLabel(course.lessonCount, 'lesson', 'lessons')}</p></div>{course.progress > 0 && <div className="course-progress-summary"><span>{course.completedLessons} of {formatCountLabel(course.lessonCount, 'lesson', 'lessons')} complete</span><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /></div>}</div>
-        {course.modules?.map((module) => <CurriculumModule key={module.id} module={module} courseId={course.id} onOpenActivity={openCurriculumActivity} />)}
+        {hasLearningActivities ? course.modules?.map((module) => <CurriculumModule key={module.id} module={module} courseId={course.id} onOpenActivity={openCurriculumActivity} />)
+          : <EmptyState title="No learning activities yet" detail="This course does not have any lessons or quizzes available yet." headingLevel={3} />}
       </div>
     </section>
-    <div className="course-bottom-cta"><span>{user?.username ? `Ready when you are, ${user.username}.` : 'Ready when you are.'}</span><Button onClick={startLearning} disabled={!nextActivity || starting}>{startButtonLabel}<ArrowRight size={17} /></Button></div>
+    {nextActivity ? (
+      <div className="course-bottom-cta">
+        <span>{user?.username ? `Ready when you are, ${user.username}.` : 'Ready when you are.'}</span>
+        <Button onClick={startLearning} disabled={starting}>{startButtonLabel}<ArrowRight size={17} /></Button>
+      </div>
+    ) : null}
   </div>;
 }
 
