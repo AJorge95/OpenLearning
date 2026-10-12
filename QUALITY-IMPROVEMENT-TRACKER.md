@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck readiness and graceful-shutdown boundaries
+
+- **Reviewed:** Startup listener ordering, deferred orphan-media cleanup, `/healthz` and `/readyz`, reset/shutdown readiness gates, and HTTP drain before SQLite close.
+- **Result:** No runtime change. The listener starts before cleanup, readiness fails closed during reset or shutdown, and the database closes only after active requests drain or the 30-second connection-close deadline.
+- **Why no change:** These paths already provide the intended startup and shutdown behavior; no reproduced lifecycle failure or workload evidence points to a further safe change.
+- **Checked:** `node --test tests/server/readiness.test.js` passed (3/3), and `node --check server/index.js` passed.
+- **Needed to revisit:** A readiness mismatch during real startup/reset/shutdown, a shutdown hang, or representative request-drain evidence showing a bottleneck.
+
 ## 2026-10-12 — Recheck quiz retry and duplicate-attempt boundaries
 
 - **Reviewed:** The learner's per-quiz submission lock, retained answers after errors, saved-score recovery, transactional attempt creation, and per-user attempt throttling.
