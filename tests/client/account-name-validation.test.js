@@ -57,3 +57,12 @@ test('administrator account creation validates names before sending and handles 
   assert.match(createPage, /aria-invalid=\{invalidNameField === 'lastName' \|\| undefined\} aria-describedby=\{invalidNameField === 'lastName' \? accountNameErrorId : undefined\}/);
   assert.match(createPage, /cause\.code === 'invalid_name'[\s\S]*setNameError\(cause\.message\)[\s\S]*lastNameInputRef\.current : firstNameInputRef\.current\)\?\.focus\(\)/);
 });
+
+test('self-service profile editing validates and normalizes certificate names accessibly', () => {
+  const accountPage = source.slice(source.indexOf('export function AccountSecurityPage()'));
+  assert.match(accountPage, /accountNameError\(firstName, 'First name'\)[\s\S]*firstNameInputRef\.current\?\.focus\(\)[\s\S]*accountNameError\(lastName, 'Last name'\)[\s\S]*lastNameInputRef\.current\?\.focus\(\)/);
+  assert.match(accountPage, /firstName: normalizeAccountName\(firstName\),\s*lastName: normalizeAccountName\(lastName\)/);
+  assert.match(accountPage, /aria-invalid=\{invalidProfileNameField === 'firstName' \|\| undefined\} aria-describedby=\{invalidProfileNameField === 'firstName' \? profileNameErrorId : undefined\}/);
+  assert.match(accountPage, /aria-invalid=\{invalidProfileNameField === 'lastName' \|\| undefined\} aria-describedby=\{invalidProfileNameField === 'lastName' \? profileNameErrorId : undefined\}/);
+  assert.match(accountPage, /cause\.code === 'invalid_name'[\s\S]*setProfileError\(cause\.message\)[\s\S]*lastNameInputRef\.current : firstNameInputRef\.current\)\?\.focus\(\)/);
+});
