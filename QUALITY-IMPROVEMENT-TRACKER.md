@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Recheck media upload errors and cleanup
+
+- **Reviewed:** Course-editor file input labels and format help, progress announcements and cancel actions, configured Multer limits, temporary-file cleanup, upload audit rollback, and startup orphan cleanup.
+- **Result:** No runtime change. Upload controls expose accepted formats and progress to assistive technology; server tests cover oversize responses, partial-caption cleanup, invalid-signature cleanup, protected downloads, and rollback when audit writes fail.
+- **Why no change:** The inspected upload boundaries and existing regressions agree. No new failure was found that would justify changing upload behavior.
+- **Checked:** `node --test tests/server/media-routes.test.js tests/server/media-cleanup.test.js` passed (28/28); `node --test tests/client/video-upload-accessibility.test.js tests/client/upload-size-validation.test.js tests/client/resource-validation.test.js` passed (6/6); `git diff --check` passed.
+- **Needed to continue:** A reproduced upload-flow failure or a signed-in course-editor session for rendered responsive and keyboard QA.
+
 ## 2026-10-12 — Keep calendar deadlines in chronological order
 
 - **Reviewed:** The calendar route's indexed date-range query, UTC normalization for ISO and SQLite timestamps, the day-cell and monthly-list rendering order, and responsive horizontal scrolling.
