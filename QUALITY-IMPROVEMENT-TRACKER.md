@@ -1111,7 +1111,7 @@
 - **Reviewed:** Client response parsing, network and abort errors, concurrent CSRF refresh and one-time write retry, multipart cancellation, and server request-body parser errors.
 - **Result:** No runtime change. The client preserves aborts, normalizes transport and malformed-response failures, coalesces CSRF refreshes, and retries a rejected write once. The server maps malformed or oversized request bodies to structured client errors.
 - **Why no change:** Existing behavior and focused tests cover the reviewed failure boundaries; no reproducible response mismatch or backend failure appeared.
-- **Checked:** `node --test tests/client/api.test.js tests/server/last-login.test.js` passed (32/32).
+- **Checked:** `node --test tests/client/api.test.js tests/server/last-login.test.js` passed (34/34 on 2026-10-12).
 - **Needed to revisit:** A concrete API response mismatch, duplicated write after a CSRF retry, cancellation edge case, or request-body parser failure outside these cases.
 
 ## 2026-10-12 — Recheck database indexes on high-traffic read paths
