@@ -10008,3 +10008,12 @@
 - **Why it helps:** New course drafts and platforms without a custom icon now expose the same useful preview name before an image is uploaded, while the visible placeholder stays unchanged.
 - **Backend review:** Branding responses intentionally return `platformIcon: null` when no icon is configured, and course editor payloads return `coverUrl: null` when no cover exists. The settings API already supports icon removal; no backend change was needed.
 - **Checked:** The focused regression failed before the fix because the no-source branch discarded `alt`. The signed-in local course editor rendered a draft with no cover; the accessibility tree exposed “Course cover preview” through the visually hidden image name while the BookOpen placeholder remained visible. No console warnings or errors appeared. `npm test -- --test-reporter=dot` passed (834/834), `npm run build` passed strict TypeScript checking and Vite, and `git diff --check` passed.
+
+## 2026-10-12 — Recheck the reported account-role selector width
+
+- **Reviewed:** The account-detail role control, its fixed-width wrapper and pointer-event boundary, the legacy label-wrapper fallback rules, and the supplied screenshot.
+- **Result:** No additional runtime change was needed. The screenshot shows the older label-wrapped layout; a fresh load of the same account route renders the current narrow selector. The target account is the only active administrator, so its role control is disabled.
+- **Why it helps:** The current implementation separates the caption from the selector and keeps activation on the visible trigger, addressing the blank right-side click area without changing role permissions or adding duplicate behavior.
+- **Backend review:** The last-active-administrator restriction remains enforced by the existing account API and explains why this account cannot be used for an enabled-control click check.
+- **Checked:** The refreshed signed-in account page visibly renders a roughly 136px disabled selector. Existing focused selector, role-hit-area, activation, layout, label, and account-form tests passed (38/38). A previous enabled-account browser check confirmed the adjacent blank area does not open the menu; `git diff --check` passed.
+- **Needed to continue:** If a fresh load still shows the wide label on an account with an enabled role control, capture that current rendered page so the mismatch can be reproduced against the running source.
