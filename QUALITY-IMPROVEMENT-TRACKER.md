@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-12 — Review settings feedback and backend failure paths
+
+- **Reviewed:** Recent tracker history and clean `main`; administrator email, account, and registration-settings form patterns; session expiry cleanup, readiness checks, and invalid saved registration-field handling.
+- **Result:** No runtime change. The inspected fields expose associated help or error text; session expiry cleanup reports failures without preventing startup; readiness fails closed; and invalid registration configuration returns an actionable unavailable response. Existing focused tests cover the reviewed failure paths.
+- **Why no change:** No new interaction defect, unreliable result, or measured performance problem surfaced in these paths, so an implementation would be speculative.
+- **Needed to continue:** A concrete report or reproduction from one of these flows, a changed product requirement, or runtime evidence showing a reliability or performance gap.
+
 ## 2026-10-12 — Explain email changes on issued certificates
 
 - **Reviewed:** Administrator email editing, certificate issuance snapshots, the account details form, and existing client/server regression coverage.
