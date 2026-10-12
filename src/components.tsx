@@ -41,17 +41,19 @@ type ImageWithFallbackProps = {
 };
 
 export function ImageWithFallback(props: ImageWithFallbackProps) {
-  if (!props.src) return <>{props.fallback}</>;
+  if (!props.src) return imageFallback(props.fallback, props.alt);
   // A source change remounts the image so a previous failure cannot hide the new asset.
   return <ImageWithFallbackImage key={props.src} {...props} src={props.src} />;
 }
 
+function imageFallback(fallback: React.ReactNode, alt: string) {
+  // Keep meaningful image context available when a preview has no source or cannot load.
+  return <>{fallback}{alt && <span className="sr-only" role="img" aria-label={alt} />}</>;
+}
+
 function ImageWithFallbackImage({ src, className, alt, fallback, onError, loading, decoding }: ImageWithFallbackProps & { src: string }) {
   const [failed, setFailed] = useState(false);
-  if (failed) {
-    // Keep the image's accessible alternative when replacing a broken image with its visual fallback.
-    return <>{fallback}{alt && <span className="sr-only" role="img" aria-label={alt} />}</>;
-  }
+  if (failed) return imageFallback(fallback, alt);
   return <img className={className} src={src} alt={alt} loading={loading} decoding={decoding} onError={() => { setFailed(true); onError?.(); }} />;
 }
 

@@ -44,7 +44,7 @@ test('ImageWithFallback requires an explicit alt decision', () => {
   assert.ok(altIsRequired, 'ImageWithFallbackProps should require alt');
 });
 
-test('ImageWithFallback resets failed state on source changes and keeps alt text on failure', () => {
+test('ImageWithFallback resets failed state on source changes and names both visual fallbacks', () => {
   const source = fs.readFileSync(path.join(sourceDirectory, 'components.tsx'), 'utf8');
   const wrapperStart = source.indexOf('export function ImageWithFallback');
   const wrapperEnd = source.indexOf('\nfunction ImageWithFallbackImage', wrapperStart);
@@ -54,7 +54,9 @@ test('ImageWithFallback resets failed state on source changes and keeps alt text
   const imageImplementation = source.slice(imageImplementationStart, imageImplementationEnd);
 
   assert.match(wrapper, /<ImageWithFallbackImage key=\{props\.src\}/);
-  assert.match(imageImplementation, /const \[failed, setFailed\] = useState\(false\);[\s\S]*?if \(failed\) \{[\s\S]*?return <>\{fallback\}\{alt && <span className="sr-only" role="img" aria-label=\{alt\} \/>}<\/>;/);
+  assert.match(wrapper, /if \(!props\.src\) return imageFallback\(props\.fallback, props\.alt\);/);
+  assert.match(imageImplementation, /const \[failed, setFailed\] = useState\(false\);[\s\S]*?if \(failed\) return imageFallback\(fallback, alt\);/);
+  assert.match(source, /function imageFallback\(fallback: React\.ReactNode, alt: string\) \{\s*\/\/ Keep meaningful image context available when a preview has no source or cannot load\.\s*return <>\{fallback\}\{alt && <span className="sr-only" role="img" aria-label=\{alt\} \/>}<\/>;/);
   assert.match(imageImplementation, /onError=\{\(\) => \{ setFailed\(true\); onError\?\.\(\); \}\}/);
 });
 

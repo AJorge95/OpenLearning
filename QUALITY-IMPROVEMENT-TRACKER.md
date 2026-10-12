@@ -10000,3 +10000,11 @@
 - **Backend review:** Search, category, sort, and page inputs are validated; regular learners only receive public or explicitly granted courses, while staff may browse private courses. Result pages use bounded limits and deterministic tie-break ordering.
 - **Checked:** `node --test tests/client/course-catalog-filters.test.js tests/client/course-pagination-announcements.test.js tests/server/course-analytics.test.js` passed (134/134); `git diff --check` passed.
 - **Needed to continue:** A reproducible current-build catalog mismatch, an inaccessible filter or paging interaction, or representative catalog size/latency data showing a specific query bottleneck. Rendered responsive catalog behavior was not rechecked in this cycle.
+
+## 2026-10-12 — Keep accessible names on empty image previews
+
+- **Reviewed:** The shared `ImageWithFallback` component and its branding and course-cover call sites. A failed image URL retained meaningful `alt` text, but a valid empty `src` rendered only the visual placeholder.
+- **Improvement:** Reuse one fallback renderer for missing sources and failed loads. It keeps non-empty image alternatives in the accessibility tree while leaving decorative `alt=""` fallbacks unnamed.
+- **Why it helps:** New course drafts and platforms without a custom icon now expose the same useful preview name before an image is uploaded, while the visible placeholder stays unchanged.
+- **Backend review:** Branding responses intentionally return `platformIcon: null` when no icon is configured, and course editor payloads return `coverUrl: null` when no cover exists. The settings API already supports icon removal; no backend change was needed.
+- **Checked:** The focused regression failed before the fix because the no-source branch discarded `alt`. The signed-in local course editor rendered a draft with no cover; the accessibility tree exposed “Course cover preview” through the visually hidden image name while the BookOpen placeholder remained visible. No console warnings or errors appeared. `npm test -- --test-reporter=dot` passed (834/834), `npm run build` passed strict TypeScript checking and Vite, and `git diff --check` passed.
