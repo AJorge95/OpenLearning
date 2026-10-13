@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Clarify administrator account-detail required fields
+
+- **Reviewed:** Administrator account-detail email and certificate-name forms, shared required-cue styling, native validation, field-level error descriptions, and the existing account creation/profile required-field patterns.
+- **Improvement:** Add the shared decorative `Required` cue to the editable Email address, First name, and Last name labels on administrator account details.
+- **Why it helps:** Staff can identify the values required before saving account changes, while the existing native constraints, accessible field names, error focus, and certificate/email behavior remain unchanged.
+- **Backend review:** Account-detail authorization, email/name validation, conflict handling, certificate data, session behavior, and audit contracts are unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/admin-account-detail-required-indicators.test.js` under the dedicated client-test folder and updated the existing email-edit source assertion. Focused account-detail/name checks passed (9/9), the full `npm test -- --test-reporter=spec` suite passed (897/897), `npm run typecheck`, `npm run build`, and `git diff --check` passed. `/healthz`, `/readyz`, the Vite root, and `/login` returned 200. The current browser session is signed out, so the administrator-only form remained source-checked rather than rendered; no credentials or data were changed.
+
 ## 2026-10-13 — Cycle 4 bounded review: no distinct change indicated
 
 - **Reviewed:** Remaining shared, authentication, learner quiz/media, staff curriculum/action, and learning-path icon candidates; each is already directly `aria-hidden` or contained by an intentionally decorative wrapper. Rechecked route input normalization and page bounds, authentication and action rate limits, transactional writes, prepared lookups, upload guards, protected media access, and readiness/health behavior.

@@ -16,7 +16,7 @@ test('administrator account email editing uses the shared email rules', () => {
   assert.ok(validateEmail('a'.repeat(245) + '@example.invalid'));
 
   assert.match(accountPageSource, /<form className="account-profile-form account-email-form form-stack" onSubmit=\{saveAccountEmail\} noValidate/);
-  assert.match(accountPageSource, /<label>Email address<input ref=\{accountEmailInputRef\} name="email" type="email" required maxLength=\{254\} autoComplete="email"/);
+  assert.match(accountPageSource, /<label><span className="form-label-row"><span>Email address<\/span><small className="form-required-indicator" aria-hidden="true">Required<\/small><\/span><input ref=\{accountEmailInputRef\} name="email" type="email" required maxLength=\{254\} autoComplete="email"/);
   assert.match(accountPageSource, /aria-invalid=\{Boolean\(accountEmailError\) \|\| undefined\} aria-describedby=\{accountEmailError \? `\$\{accountEmailHelpId\} \$\{accountEmailErrorId\}` : accountEmailHelpId\}/);
   assert.match(accountPageSource, /<small id=\{accountEmailHelpId\}>New certificates use this address; issued certificates keep their saved email\.<\/small>/);
   assert.match(accountPageSource, /saveAccountEmail[\s\S]*?validateEmail\(accountEmail\)[\s\S]*?setAccountEmailError\(emailError\)[\s\S]*?accountEmailInputRef\.current\?\.focus\(\)[\s\S]*?email: accountEmail\.trim\(\)/);
