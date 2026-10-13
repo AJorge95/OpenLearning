@@ -204,7 +204,9 @@ function RouteStatus({ configured }: { configured: boolean }) {
     return () => observer.disconnect();
   }, [pathname, platformName, configured]);
 
-  return <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</div>;
+  // Do not mount an idle live region; assistive technology only needs a node
+  // when there is a page heading to announce after navigation or loading.
+  return announcement ? <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</div> : null;
 }
 
 function AuthRoutes() {
