@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Clarify program name requirements
+
+- **Reviewed:** Staff learning-path and competency creation/edit forms, their native required constraints, focus restoration, shared form-label styling, and the server-side title validation contracts.
+- **Improvement:** Add the shared decorative `Required` cue to the Learning path name and Competency name labels while retaining native `required` validation and existing accessible names.
+- **Why it helps:** Staff can identify the two required program identity fields before submitting, and these forms now match the required-field pattern used by the course, account, registration, and lesson editors.
+- **Backend review:** Learning-path and competency routes continue to trim and validate the submitted names; no backend change was indicated.
+- **Checked:** Added `tests/client/program-required-indicators.test.js` under the dedicated client-test folder and updated the existing path-focus and competency-focus assertions for the new label structure. Focused program checks passed (10/10), the full `npm test -- --test-reporter=spec` suite passed (901/901), `npm run typecheck`, `npm run build`, and `git diff --check` passed, and `/healthz`, `/readyz`, and the Vite root returned 200. The signed-in learner route rendered the path name label with the visible cue, retained the named textbox, and stayed within the viewport; staff competency creation remained source-checked because the current browser session is learner-facing.
+
 ## 2026-10-13 — Clarify lesson editor required fields
 
 - **Reviewed:** Staff lesson details, link-resource, and WebVTT caption forms, their native required constraints, narrow-layout grid rules, and the shared required cue used by course and account forms.

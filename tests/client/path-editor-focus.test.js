@@ -9,7 +9,7 @@ const pageSource = source.slice(source.indexOf('export function LearningPathsPag
 test('editing a learning path moves focus into its name field without stealing focus on initial load', () => {
   assert.match(editorSource, /const pathTitleInputRef = useRef<HTMLInputElement>\(null\);/);
   assert.match(editorSource, /useEffect\(\(\) => \{\s*if \(!existing\) return;[\s\S]*?pathTitleInputRef\.current\?\.focus\(\);[\s\S]*?\}, \[existing\]\);/);
-  assert.match(editorSource, /<label>Path name<input ref=\{pathTitleInputRef\}/);
+  assert.match(editorSource, /<label><span className="form-label-row"><span>Path name<\/span><small className="form-required-indicator" aria-hidden="true">Required<\/small><\/span><input ref=\{pathTitleInputRef\}/);
 });
 
 test('cancelling a path edit returns focus to its initiating row or the path filters', () => {
