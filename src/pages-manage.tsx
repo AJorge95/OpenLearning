@@ -1949,7 +1949,8 @@ export function CourseEditorPage() {
       onCancel={navigationBlocker.reset}
       onConfirm={navigationBlocker.proceed}
     />}
-    <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{movingCurriculumItems.size ? 'Updating course content order…' : ''}</p>
+    {/* Keep the live region mounted only while a reorder is in flight so settled editors expose no empty status. */}
+    {movingCurriculumItems.size > 0 && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Updating course content order…</p>}
     <p className="course-editing-note">{courseEditingNote(course.status, course.visibility)}</p>
     <section className="editor-section course-details-form" aria-label="Course details">
       <div className="editor-field-grid"><label className="field-wide">Course title<input ref={courseTitleInputRef} required value={title} maxLength={MAX_COURSE_TITLE_LENGTH} aria-invalid={courseTitleError ? true : undefined} aria-describedby={courseTitleError ? 'course-title-error' : undefined} onChange={(event) => { setTitle(event.target.value); setCourseTitleError(''); setError((currentError) => currentError === courseTitleError ? '' : currentError); }} placeholder="Give your course a clear title" disabled={saving} />{courseTitleError && <small id="course-title-error" className="course-detail-field-error" role="alert">{courseTitleError}</small>}</label>
