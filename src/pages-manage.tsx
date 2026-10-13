@@ -1934,7 +1934,7 @@ export function CourseEditorPage() {
   }
 
   if (loading || (course && (!route.courseId || route.courseId !== course.id))) return <div className="page-loading" role="status" aria-live="polite">Loading course editor…</div>;
-  if (!course) return <div className="management-page">{error && <Notice>{error}</Notice>}<Link className="back-link" to="/manage/courses"><ArrowLeft size={17} />Back to courses</Link></div>;
+  if (!course) return <div className="management-page">{error && <Notice>{error}</Notice>}<Link className="back-link" to="/manage/courses"><ArrowLeft size={17} aria-hidden="true" />Back to courses</Link></div>;
 
   return <div className="editor-page">
     <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>{isNewCourseDraft ? 'Create course' : 'Edit course'}</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving || (review?.status === 'in_review' && review.submittedBy === editorUser?.id)} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
@@ -1965,11 +1965,11 @@ export function CourseEditorPage() {
       </div>
       <div className="cover-upload-row" aria-busy={coverValidating || coverProgress !== null || undefined}>
         <div>
-          <ImageWithFallback src={course.coverUrl} className="course-cover-image" alt="Course cover preview" fallback={<span className="cover-preview-empty"><BookOpen size={22} /></span>} />
+          <ImageWithFallback src={course.coverUrl} className="course-cover-image" alt="Course cover preview" fallback={<span className="cover-preview-empty"><BookOpen size={22} aria-hidden="true" /></span>} />
           <div><strong>Course cover</strong><small id={coverHelpId}>JPG, PNG, or WebP · max {MAX_COURSE_COVER_DIMENSION} × {MAX_COURSE_COVER_DIMENSION} px</small></div>
         </div>
         <label className={`button button-secondary file-button ${coverValidating || coverProgress !== null || saving ? 'file-button-busy' : ''}`} aria-disabled={coverValidating || coverProgress !== null || saving}>
-          <Upload size={16} />{coverValidating ? 'Checking cover…' : coverProgress === null ? course.coverUrl ? 'Replace cover' : 'Upload cover' : coverProgress >= 100 ? 'Saving cover…' : 'Uploading cover…'}
+          <Upload size={16} aria-hidden="true" />{coverValidating ? 'Checking cover…' : coverProgress === null ? course.coverUrl ? 'Replace cover' : 'Upload cover' : coverProgress >= 100 ? 'Saving cover…' : 'Uploading cover…'}
           <input type="file" accept="image/jpeg,image/png,image/webp" aria-describedby={coverHelpId} disabled={coverValidating || coverProgress !== null || saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCover(file, event.currentTarget); event.currentTarget.value = ''; }} />
         </label>
         {coverValidating && <span className="upload-percent" role="status">Checking cover dimensions…</span>}
@@ -2075,10 +2075,10 @@ export function CourseEditorPage() {
             }} onError={(message) => { if (routeCourseIdRef.current === course.id) setError(message); }} titleInputRef={(node) => { if (node) quizTitleInputRefs.current.set(module.id, node); else quizTitleInputRefs.current.delete(module.id); }} />}
           </div>}
         </div>)}
-        {!course.modules?.length && <EmptyState headingLevel={3} icon={<BookOpen size={22} />} title="Start with a module" detail="Modules organize the video lessons in your course." action={<Button variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} onClick={(event) => { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); }}><Plus size={16} />Add first module</Button>} />}
+        {!course.modules?.length && <EmptyState headingLevel={3} icon={<BookOpen size={22} />} title="Start with a module" detail="Modules organize the video lessons in your course." action={<Button variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} onClick={(event) => { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); }}><Plus size={16} aria-hidden="true" />Add first module</Button>} />}
       </div>
     </section>
-    {course.status === 'archived' && <div className="delete-course-row"><div><strong>Delete this course permanently</strong><span>This also removes its uploaded media and cannot be undone.</span></div><Button variant="danger" onClick={() => void deleteArchivedCourse()} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} aria-busy={deletingCourse}><Trash2 size={16} />{deletingCourse ? 'Deleting course…' : 'Delete course'}</Button></div>}
+    {course.status === 'archived' && <div className="delete-course-row"><div><strong>Delete this course permanently</strong><span>This also removes its uploaded media and cannot be undone.</span></div><Button variant="danger" onClick={() => void deleteArchivedCourse()} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} aria-busy={deletingCourse}><Trash2 size={16} aria-hidden="true" />{deletingCourse ? 'Deleting course…' : 'Delete course'}</Button></div>}
     {pendingDeleteCourseId === course.id && routeCourseIdRef.current === course.id && <ConfirmationDialog {...courseDeletionConfirmation(course.title)} confirmLabel="Delete course" onCancel={() => setPendingDeleteCourseId(null)} onConfirm={() => { const requestedCourseId = pendingDeleteCourseId; setPendingDeleteCourseId(null); if (requestedCourseId === course.id && routeCourseIdRef.current === course.id) void deleteArchivedCourse(true); }} />}
     {pendingRestoreVersion?.courseId === course.id && routeCourseIdRef.current === course.id && versions.some((version) => version.id === pendingRestoreVersion.versionId) && <ConfirmationDialog
       title={`Restore version ${pendingRestoreVersion.versionNumber}?`}
@@ -2183,7 +2183,7 @@ export function CourseAccessPage() {
 
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading course access…</div>;
   return <div className="access-page"><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><Link to={`/manage/courses/${courseId}/edit`}>{course?.title || 'Course'}</Link><span>/</span><span>Assign learners</span></div>
-    <PageHeading title="Assign learners" subtitle={`Choose which learners should see ${course?.title || 'this course'} in My learning.`} action={<Link className="button button-secondary" to={`/manage/courses/${courseId}/edit`}><ArrowLeft size={16} />Back to course</Link>} />
+    <PageHeading title="Assign learners" subtitle={`Choose which learners should see ${course?.title || 'this course'} in My learning.`} action={<Link className="button button-secondary" to={`/manage/courses/${courseId}/edit`}><ArrowLeft size={16} aria-hidden="true" />Back to course</Link>} />
     {error && (failedRequest
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.query, failedRequest.page); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
@@ -2207,7 +2207,7 @@ export function CourseAccessPage() {
       </ul> : !failedRequest && <div className="access-empty">{appliedQuery ? 'No learners match that search.' : user?.role === 'admin' ? <>No learner accounts are available. <Link className="text-action" to="/admin/users/new">Create a learner account.</Link></> : 'No learner accounts are available. Registered learners and accounts created by an administrator will appear here.'}</div>}
     </div>
     {!failedRequest && total > 0 && <LogPagination ariaLabel="Course access pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(appliedQuery, nextPage)} />}
-    <p className="access-footnote"><LockKeyhole size={15} />Assigned learners will find this course in My learning. Public courses remain available in the catalog; private courses require an active assignment. Removing an assignment does not erase learning progress.</p>
+    <p className="access-footnote"><LockKeyhole size={15} aria-hidden="true" />Assigned learners will find this course in My learning. Public courses remain available in the catalog; private courses require an active assignment. Removing an assignment does not erase learning progress.</p>
   </div>;
 }
 
@@ -2455,7 +2455,7 @@ export function AdminUsersPage() {
     } finally { markSaving(user.id, false); }
   }
 
-  return <div className="management-page users-page"><PageHeading title="Users" subtitle="Create accounts, review learning activity, and manage roles and access." action={<Link className="button button-primary" to="/admin/users/new"><Plus size={17} />Create account</Link>} />
+  return <div className="management-page users-page"><PageHeading title="Users" subtitle="Create accounts, review learning activity, and manage roles and access." action={<Link className="button button-primary" to="/admin/users/new"><Plus size={17} aria-hidden="true" />Create account</Link>} />
     <div className="user-filter-row">
       <form role="search" aria-label="Search users" className="management-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); void load(1, search, roleFilter, approvalFilter); }}>
         <Search size={18} aria-hidden="true" />
@@ -2557,7 +2557,7 @@ export function AdminUserCreatePage() {
   }
 
   return <div className="management-page account-form-page"><div className="breadcrumbs"><Link to="/admin/users">Users</Link><span>/</span><span>Create account</span></div>
-    <PageHeading title="Create account" subtitle="Set up a sign-in account and assign its platform role." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} />Back to users</Link>} />
+    <PageHeading title="Create account" subtitle="Set up a sign-in account and assign its platform role." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} aria-hidden="true" />Back to users</Link>} />
     <section className="account-form-card"><form className="form-stack" onSubmit={createAccount} aria-busy={saving}>
       {/* Keep required creation cues decorative so the accessible field names stay concise. */}
       <label><span className="form-label-row"><span>Email</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input name="email" required type="email" maxLength={254} autoComplete="email" autoFocus value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} /></label>
@@ -2806,7 +2806,7 @@ export function AdminUserDetailsPage() {
   }
 
   if (loading || (account && account.user.id !== userId)) return <div className="management-page page-loading" role="status" aria-live="polite">Loading account details…</div>;
-  if (!account) return <div className="management-page">{error && <div className="account-list-error"><Notice>{error}</Notice>{canRetryLoad && <Button type="button" variant="secondary" onClick={() => setLoadRetryVersion((version) => version + 1)}>Try again</Button>}</div>}<Link className="back-link" to="/admin/users"><ArrowLeft size={17} />Back to users</Link></div>;
+  if (!account) return <div className="management-page">{error && <div className="account-list-error"><Notice>{error}</Notice>{canRetryLoad && <Button type="button" variant="secondary" onClick={() => setLoadRetryVersion((version) => version + 1)}>Try again</Button>}</div>}<Link className="back-link" to="/admin/users"><ArrowLeft size={17} aria-hidden="true" />Back to users</Link></div>;
   const { user, courses, registrationFields } = account;
   const accountEmailReady = accountEmailUserId === user.id;
   const accountEmailChanged = accountEmailReady && accountEmail.trim() !== (user.email || '');
@@ -2815,7 +2815,7 @@ export function AdminUserDetailsPage() {
     || normalizeAccountName(profileLastName) !== (user.lastName || ''));
   return <div className="management-page account-details-page">
     <div className="breadcrumbs"><Link to="/admin/users">Users</Link><span>/</span><span>{user.username}</span></div>
-    <PageHeading title={user.username} subtitle="Account controls, enrolled courses, and learning activity." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} />Back to users</Link>} />
+    <PageHeading title={user.username} subtitle="Account controls, enrolled courses, and learning activity." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} aria-hidden="true" />Back to users</Link>} />
     {error && <Notice id={passwordConfirmationErrorId}>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
     <section className="account-detail-grid">
       <article className="account-detail-card account-overview-card" aria-labelledby="account-overview-heading"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><h2 id="account-overview-heading" className="account-overview-title">Account overview</h2></div></div><span className={`account-state ${user.registrationStatus === 'pending' ? 'account-pending' : user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.registrationStatus === 'pending' ? 'Pending approval' : user.disabled ? 'Disabled' : 'Active'}</span></div>
@@ -3168,7 +3168,7 @@ export function AdminRegistrationFieldsPage() {
         {configurationWarning && <Notice>{configurationWarning}</Notice>}
         <p className="registration-fields-intro">These fields appear after email and username during public registration. Existing learner answers are kept if a field is changed or removed.</p>
         {fields.length ? <div className="registration-field-editor-list">{fields.map((field, index) => <section className="registration-field-editor" key={field.id} aria-labelledby={`registration-field-title-${field.id}`}>
-          <div className="registration-field-editor-heading"><h3 id={`registration-field-title-${field.id}`}>Field {index + 1}</h3><Button type="button" variant="quiet" className="registration-field-remove" aria-label={`Remove ${field.label || `field ${index + 1}`}`} onClick={() => { setFields((current) => current.filter((item) => item.id !== field.id)); setError(''); setSuccess(''); setInvalidField(null); }}><Trash2 size={15} />Remove</Button></div>
+          <div className="registration-field-editor-heading"><h3 id={`registration-field-title-${field.id}`}>Field {index + 1}</h3><Button type="button" variant="quiet" className="registration-field-remove" aria-label={`Remove ${field.label || `field ${index + 1}`}`} onClick={() => { setFields((current) => current.filter((item) => item.id !== field.id)); setError(''); setSuccess(''); setInvalidField(null); }}><Trash2 size={15} aria-hidden="true" />Remove</Button></div>
           <div className="registration-field-editor-grid">
             <label>Field label<input id={`registration-field-editor-${field.id}-label`} required minLength={1} maxLength={80} value={field.label} aria-invalid={invalidField?.fieldId === field.id && invalidField.target === 'label' || undefined} aria-describedby={invalidField?.fieldId === field.id && invalidField.target === 'label' ? 'registration-fields-error' : undefined} onChange={(event) => updateField(field.id, { label: event.target.value })} placeholder="e.g. Department" /></label>
             <div className="app-select-field"><span>Field type</span><AppSelect<RegistrationFieldType> ariaLabel={`Field type for field ${index + 1}`} value={field.type} onChange={(type) => updateField(field.id, { type, options: type === 'select' ? (field.options.length >= 2 ? field.options : ['Option 1', 'Option 2']) : [] })} options={registrationFieldTypeOptions} /></div>
