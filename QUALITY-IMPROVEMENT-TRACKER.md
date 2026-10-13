@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide shared staff-navigation glyphs from assistive technology
+
+- **Reviewed:** The shared staff shell navigation, pending-registration badge label, return-to-learning link, responsive sidebar behavior, and current staff route icon contracts.
+- **Improvement:** Mark the seven management-navigation icons and the return-link chevron as decorative while retaining link text, pending-count announcements, active-link behavior, and visual styling.
+- **Why it helps:** Staff using assistive technology hear each destination once instead of encountering a generic image beside Courses, Users, Learning paths, and the other named links.
+- **Backend review:** Staff route authorization, pending-registration count refresh, sign-out behavior, navigation paths, and server contracts are unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/staff-navigation-icons.test.js` under the dedicated client-test folder. The focused source regression passed (1/1); the full `npm test -- --test-reporter=spec` suite passed (881/881), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The live public registration page retained its labeled fields and password-visibility interaction after the edit; rendered staff-route verification remains limited to source-level evidence because the current local browser session is signed out.
+
 ## 2026-10-13 — No additional backend change indicated
 
 - **Reviewed:** The clean post-cycle tree, full learner/staff route sweep, server health and readiness responses, centralized HTTP error handling, authentication rate limits, route validation, transaction boundaries, media path guards, and the current improvement history.

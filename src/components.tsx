@@ -309,15 +309,16 @@ export function StaffFrame() {
       <aside className="staff-sidebar">
         <PlatformBrand className="staff-brand" />
         <nav ref={staffNavigationRef} aria-label="Management navigation">
-          <NavLink to="/manage/courses"><BookOpen size={18} />Courses</NavLink>
-          {user?.role === 'admin' && <NavLink to="/admin/users" aria-label={pendingRegistrationCountLabel} onClick={() => { if (pathname === '/admin/users') requestPendingRegistrationCountRefresh(); }}><UsersRound size={18} />Users{pendingRegistrationCountBadge}</NavLink>}
-          <NavLink to="/manage/learning-paths"><Route size={18} />Learning paths</NavLink>
-          {user?.role === 'admin' && <NavLink to="/admin/competencies"><Award size={18} />Competencies</NavLink>}
-          {user?.role === 'admin' && <NavLink to="/admin/audit-log"><ClipboardList size={18} />Audit log</NavLink>}
-          {user?.role === 'admin' && <NavLink to="/admin/system-log"><Activity size={18} />System log</NavLink>}
-          {user?.role === 'admin' && <NavLink to="/admin/settings"><Settings2 size={18} />Settings</NavLink>}
+          {/* Link text and the pending-count label carry the meaning; these glyphs stay decorative. */}
+          <NavLink to="/manage/courses"><BookOpen size={18} aria-hidden="true" />Courses</NavLink>
+          {user?.role === 'admin' && <NavLink to="/admin/users" aria-label={pendingRegistrationCountLabel} onClick={() => { if (pathname === '/admin/users') requestPendingRegistrationCountRefresh(); }}><UsersRound size={18} aria-hidden="true" />Users{pendingRegistrationCountBadge}</NavLink>}
+          <NavLink to="/manage/learning-paths"><Route size={18} aria-hidden="true" />Learning paths</NavLink>
+          {user?.role === 'admin' && <NavLink to="/admin/competencies"><Award size={18} aria-hidden="true" />Competencies</NavLink>}
+          {user?.role === 'admin' && <NavLink to="/admin/audit-log"><ClipboardList size={18} aria-hidden="true" />Audit log</NavLink>}
+          {user?.role === 'admin' && <NavLink to="/admin/system-log"><Activity size={18} aria-hidden="true" />System log</NavLink>}
+          {user?.role === 'admin' && <NavLink to="/admin/settings"><Settings2 size={18} aria-hidden="true" />Settings</NavLink>}
         </nav>
-        <Link className="staff-back-link" to="/courses"><ChevronRight size={16} />Back to learning</Link>
+        <Link className="staff-back-link" to="/courses"><ChevronRight size={16} aria-hidden="true" />Back to learning</Link>
         <div className="staff-account"><span className="avatar" aria-hidden="true">{user?.username.slice(0, 1).toUpperCase()}</span><span><strong>{user?.username}</strong><small>{user?.role}</small>{signOutError && <small className="staff-signout-error" role="alert">{signOutError}</small>}</span><button type="button" disabled={signingOut} aria-busy={signingOut} aria-label={signingOut ? 'Signing out' : 'Sign out'} title={signingOut ? 'Signing out' : 'Sign out'} onClick={handleSignOut}><LogOut size={17} aria-hidden="true" /></button></div>
       </aside>
       <main id="main-content" tabIndex={-1} className="staff-content"><Outlet /></main>
