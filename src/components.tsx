@@ -575,7 +575,8 @@ export function AppSelect<T extends string | number>({ value, options, onChange,
 
 export function EmptyState({ icon = <BookOpen size={24} />, title, detail, action, headingLevel = 2 }: { icon?: React.ReactNode; title: string; detail: string; action?: React.ReactNode; headingLevel?: 2 | 3 }) {
   const Heading = headingLevel === 3 ? 'h3' : 'h2';
-  return <div className="empty-state"><span className="empty-icon">{icon}</span><Heading>{title}</Heading><p>{detail}</p>{action}</div>;
+  // The heading and detail provide the empty-state meaning; the illustration is decorative.
+  return <div className="empty-state"><span className="empty-icon" aria-hidden="true">{icon}</span><Heading>{title}</Heading><p>{detail}</p>{action}</div>;
 }
 
 export function ProgressBar({ value, label }: { value: number; label: string }) {
