@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide decorative program heading icons
+
+- **Reviewed:** Learning-path creation and cards, competency summary/cards/forms, the learner locked-lesson state, and the live learning-path accessibility tree.
+- **Improvement:** Mark every shared `program-icon` wrapper as decorative so adjacent headings, statuses, and explanatory text provide the accessible meaning.
+- **Why it helps:** Screen-reader users no longer encounter unlabeled generic image nodes before program headings or the locked-lesson message; visible icon styling and program workflows remain unchanged.
+- **Backend review:** Learning-path and competency loading, filtering, selection, progress calculations, lesson locking, authorization, and persistence are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/program-icon-accessibility.test.js` under the dedicated client-test folder. The live learning-path page retained its create-path heading, field labels, and controls without the generic heading image node; focused checks, the full suite, type-check, build, and `git diff --check` are recorded with the commit.
+
 ## 2026-10-13 — Hide decorative loading and calendar icons
 
 - **Reviewed:** Shared route-loading states, learner deadline links, calendar month navigation, the successful-empty calendar state, and the live accessibility trees for learner calendar and program routes.

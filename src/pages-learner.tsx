@@ -1475,7 +1475,7 @@ export function CoursePlayerPage() {
   if (!course || !current) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
   if (watchRequired && current.locked) {
     const nextUnlockedLesson = lessons.find((lesson) => !lesson.locked);
-    return <div className="narrow-content lesson-locked-page"><span className="program-icon"><LockKeyhole size={19} /></span><h1>Lesson locked</h1><p>Watch and complete the previous lesson before continuing to {current.title}.</p>{nextUnlockedLesson && nextUnlockedLesson.id !== current.id && <Link className="button button-primary" to={`/courses/${course.id}/learn/${nextUnlockedLesson.id}`}>Continue with available lesson<ArrowRight size={17} /></Link>}<Link className="back-link" to={`/courses/${course.id}`}>Back to course</Link></div>;
+    return <div className="narrow-content lesson-locked-page"><span className="program-icon" aria-hidden="true"><LockKeyhole size={19} /></span><h1>Lesson locked</h1><p>Watch and complete the previous lesson before continuing to {current.title}.</p>{nextUnlockedLesson && nextUnlockedLesson.id !== current.id && <Link className="button button-primary" to={`/courses/${course.id}/learn/${nextUnlockedLesson.id}`}>Continue with available lesson<ArrowRight size={17} /></Link>}<Link className="back-link" to={`/courses/${course.id}`}>Back to course</Link></div>;
   }
 
   return <div className={`player-layout ${railOpen ? '' : 'player-layout-wide'}`}>
