@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Keep settled pagination announcements quiet
+
+- **Reviewed:** Learner course catalog, My learning, and certificate-history pagination status regions, including the settled accessibility trees and the existing loading-more announcement regression.
+- **Improvement:** Mount course and certificate pagination live regions only while another page is loading, instead of leaving an empty polite status node in the DOM after loading finishes.
+- **Why it helps:** Screen-reader users hear the meaningful “Loading more…” announcement during pagination without encountering blank status nodes on every settled catalog or learning-history page.
+- **Backend review:** Course and certificate list endpoints already validate page inputs, enforce learner access, and return bounded ordered results; pagination requests and response contracts are unchanged.
+- **Checked:** Added a client regression requiring conditional course and certificate announcements and rejecting the former empty-string pattern. The running `/courses` and `/my-learning` accessibility trees reproduced the settled blank status nodes before the change; after the fix both routes exposed zero blank status nodes and retained their result-count announcements. Focused checks passed (12/12), the full `npm test -- --test-reporter=spec` suite passed (870/870), `npm run typecheck`, `npm run build`, and `git diff --check` passed; no browser console warnings or errors were observed.
+
 ## 2026-10-13 — Hide decorative program heading icons
 
 - **Reviewed:** Learning-path creation and cards, competency summary/cards/forms, the learner locked-lesson state, and the live learning-path accessibility tree.
