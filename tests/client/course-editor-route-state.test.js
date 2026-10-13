@@ -181,6 +181,7 @@ test('blank change-request feedback is announced and associated with its textare
   const source = fs.readFileSync(sourcePath, 'utf8');
 
   assert.match(source, /setChangeRequestNoteError\('Describe the changes the editor should make\.'\);\s*setError\(''\);\s*changeRequestNoteInputRef\.current\?\.focus\(\)/);
+  assert.match(source, /<label htmlFor=\{`review-change-note-\$\{courseId\}`\}><span className="form-label-row"><span>Changes requested \(up to 1,000 characters\)<\/span><small className="form-required-indicator" aria-hidden="true">Required<\/small><\/span>/);
   assert.match(source, /<textarea ref=\{changeRequestNoteInputRef\}[\s\S]*?aria-invalid=\{changeRequestNoteError \? true : undefined\}/);
   assert.match(source, /aria-describedby=\{changeRequestNoteError \? `review-change-note-help-\$\{courseId\} review-change-note-error-\$\{courseId\}`/);
   assert.match(source, /\{changeRequestNoteError && <p id=\{`review-change-note-error-\$\{courseId\}`\} className="form-error" role="alert"/);
