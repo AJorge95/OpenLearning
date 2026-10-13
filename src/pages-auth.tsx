@@ -43,6 +43,7 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
   return <div className="registration-form-fields">
     <div className="registration-form-fields-heading"><h2>About you</h2><span>Share the details requested by this learning space.</span></div>
     {fields.map((field) => {
+      // Native required semantics carry the accessible state; keep the visible cue decorative and shared with core forms.
       if (field.type === 'checkbox') return <label className="registration-checkbox-field" key={field.id}>
         <input
           id={`registration-field-${field.id}`}
@@ -54,10 +55,10 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
           onChange={(event) => onChange(field.id, event.target.checked)}
           disabled={disabled}
         />
-        <span>{field.label}{field.required && <small>Required</small>}</span>
+        <span>{field.label}{field.required && <small className="form-required-indicator" aria-hidden="true">Required</small>}</span>
       </label>;
       if (field.type === 'select') return <div className="registration-custom-field" key={field.id}>
-        <span>{field.label}{field.required && <small>Required</small>}</span>
+        <span>{field.label}{field.required && <small className="form-required-indicator" aria-hidden="true">Required</small>}</span>
         <AppSelect<string>
           controlId={`registration-field-${field.id}`}
           ariaLabel={field.label}
@@ -77,7 +78,7 @@ function RegistrationFieldsForm({ fields, values, disabled, invalidFieldId, onCh
         .filter((id): id is string => Boolean(id))
         .join(' ') || undefined;
       return <label className="registration-custom-field" key={field.id}>
-        <span>{field.label}{field.required && <small>Required</small>}</span>
+        <span>{field.label}{field.required && <small className="form-required-indicator" aria-hidden="true">Required</small>}</span>
         <input
           id={`registration-field-${field.id}`}
           type={field.type === 'date' ? 'date' : 'text'}

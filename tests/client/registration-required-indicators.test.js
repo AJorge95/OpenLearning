@@ -17,6 +17,14 @@ test('public registration visibly marks core fields that are required', () => {
   assert.match(registrationPage, /<PasswordField label="Confirm password"[^>]*required/);
 });
 
+test('custom registration fields reuse the decorative required cue', () => {
+  const registrationForm = authSource.slice(authSource.indexOf('function RegistrationFieldsForm'), authSource.indexOf('export function SetupPage'));
+  const requiredCue = '<small className="form-required-indicator" aria-hidden="true">Required</small>';
+
+  assert.equal(registrationForm.split(requiredCue).length - 1, 3);
+  assert.doesNotMatch(registrationForm, /field\.required && <small>Required<\/small>/);
+});
+
 test('sign-in visibly marks the username field as required', () => {
   const loginPage = authSource.slice(authSource.indexOf('export function LoginPage'), authSource.indexOf('export function RegisterPage'));
 
