@@ -40,6 +40,7 @@ test('platform support check accepts supported releases and rejects unsupported 
 });
 
 test('Linux installer protects first-run credentials and managed paths', () => {
+  assert.match(installer, /ENV_FILE="\$CONFIG_DIR\/\.env"/);
   assert.match(installer, /randomBytes\(48\)/);
   assert.match(installer, /randomBytes\(32\)/);
   assert.match(installer, /chmod 0600 "\$ENV_FILE"/);
@@ -58,10 +59,20 @@ test('updater creates verified backups and restores data when readiness fails', 
   assert.match(installer, /ENDPOINT="healthz"/);
 });
 
+test('installer opens the configured application port in active local firewalls', () => {
+  assert.match(installer, /ufw status.*Status: active/s);
+  assert.match(installer, /ufw allow "\$SERVICE_PORT\/tcp"/);
+  assert.match(installer, /firewall-cmd --state/);
+  assert.match(installer, /--permanent --add-port="\$SERVICE_PORT\/tcp"/);
+  assert.match(installer, /firewall-cmd --reload/);
+  assert.match(readme, /does not enable a firewall/i);
+});
+
 test('README documents the GitHub one-line installer and repeated update command', () => {
   assert.match(readme, /curl -fsSL https:\/\/raw\.githubusercontent\.com\/AJorge95\/OpenLearning\/main\/scripts\/install\.sh \| sudo bash/);
   assert.match(readme, /Run the same command again to update/);
   assert.match(readme, /Ubuntu 22\.04 or newer, or RHEL 9/);
+  assert.match(readme, /creates the protected deployment `\.env` file at `\/etc\/openlearning\/\.env`/);
 });
 
 test('Linux installer has valid Bash syntax when Bash is available', (context) => {
