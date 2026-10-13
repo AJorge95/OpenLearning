@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Keep learning-path deadline cards recoverable
+
+- **Reviewed:** Learning-path card deadline rendering, the shared deadline parser/formatters, learner My learning deadline handling, and the server path/calendar payload contracts for malformed stored timestamps.
+- **Improvement:** Route learning-path cards through a shared date-only formatter that validates parsed timestamps and renders `Date unavailable` instead of passing malformed legacy deadlines to `Intl.DateTimeFormat`.
+- **Why it helps:** A stale or malformed deadline no longer crashes the learning-path page; the affected course remains visible with a clear fallback while the calendar continues to report invalid stored deadlines through its existing warning path.
+- **Backend review:** The learning-path API still returns the stored learner deadline for the card, while the calendar route separately filters invalid timestamps and logs bounded diagnostics. No server change was needed because this closes the client presentation gap on the path-card surface.
+- **Checked:** Added shared formatter and malformed-date assertions in `tests/client/learning-deadline.test.js`, updated `tests/client/program-card-layout.test.js`, and passed focused checks (12/12), the full `npm test -- --test-reporter=spec` suite (904/904), `npm run typecheck`, `npm run build`, and `git diff --check`. The running app returned 200 from `/healthz`, `/readyz`, and the Vite root. The connected signed-out Chrome tab remained on `/register`; no credentials were entered and no form was submitted, so authenticated learning-path rendering remains source/regression-checked rather than live-browser evidence.
+
 ## 2026-10-13 — Keep malformed learner deadlines recoverable
 
 - **Reviewed:** The learner My learning deadline cards, shared deadline status/formatting helpers, calendar timestamp normalization, and the server behavior that omits malformed calendar deadlines while preserving valid results.

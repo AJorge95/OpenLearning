@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { formatLearningDeadlineDate, getLearningDeadlineRefreshDelay, getLearningDeadlineStatus } from '../../src/learning-deadline.ts';
+import { formatLearningDeadlineDate, formatLearningDeadlineDay, getLearningDeadlineRefreshDelay, getLearningDeadlineStatus } from '../../src/learning-deadline.ts';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const pageSource = fs.readFileSync(path.join(repositoryRoot, 'src/pages-learner.tsx'), 'utf8');
@@ -13,6 +13,7 @@ const myLearningSource = pageSource.slice(
   pageSource.indexOf('export function MyLearningPage'),
   pageSource.indexOf('export function CourseCertificatePage'),
 );
+const programsSource = fs.readFileSync(path.join(repositoryRoot, 'src/pages-programs.tsx'), 'utf8');
 
 test('deadline status keeps completed courses complete and separates due-time boundaries', () => {
   const now = Date.parse('2026-10-11T12:00:00Z');
@@ -67,7 +68,14 @@ test('deadline refresh delay handles invalid and long-future dates safely', () =
 test('malformed learner deadlines stay visible without throwing or claiming they are due', () => {
   assert.equal(getLearningDeadlineStatus('not-a-date', false, Date.now()), 'unknown');
   assert.equal(formatLearningDeadlineDate('not-a-date'), 'Date unavailable');
+  assert.equal(formatLearningDeadlineDay('not-a-date'), 'Date unavailable');
   assert.match(pageSource, /status === 'unknown' \? 'Due date unavailable'/);
+});
+
+test('learning-path cards keep malformed deadlines recoverable', () => {
+  assert.equal(formatLearningDeadlineDay('2026-11-01T09:30:00Z'), new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date('2026-11-01T09:30:00Z')));
+  assert.match(programsSource, /formatLearningDeadlineDay\(course\.deadlineAt\)/);
+  assert.doesNotMatch(programsSource, /pathCourseDeadlineFormatter\.format\(parseApiTimestamp\(course\.deadlineAt\)\)/);
 });
 
 test('My Learning deadline links refresh once at the due boundary and clear replaced timers', () => {
@@ -80,9 +88,10 @@ test('My Learning deadline links refresh once at the due boundary and clear repl
   assert.match(linkSource, /if \(completed\) return;/);
 });
 
-test('My Learning deadline cards reuse one module-level date formatter', () => {
-  assert.equal((deadlineSource.match(/new Intl\.DateTimeFormat/g) || []).length, 1);
+test('deadline cards reuse module-level locale formatters', () => {
+  assert.equal((deadlineSource.match(/new Intl\.DateTimeFormat/g) || []).length, 2);
   assert.match(deadlineSource, /const learningDeadlineDateFormatter = new Intl\.DateTimeFormat/);
+  assert.match(deadlineSource, /const learningDeadlineDayFormatter = new Intl\.DateTimeFormat/);
   assert.match(myLearningSource, /<LearningDeadlineLink deadlineAt=\{course\.deadlineAt\} completed=\{course\.completed\} \/>/);
   assert.doesNotMatch(myLearningSource, /new Intl\.DateTimeFormat/);
 });

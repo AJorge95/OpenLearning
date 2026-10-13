@@ -4,6 +4,9 @@ const learningDeadlineDateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
   timeStyle: 'short',
 });
+const learningDeadlineDayFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+});
 
 export type LearningDeadlineStatus = 'completed' | 'overdue' | 'upcoming' | 'unknown';
 
@@ -13,6 +16,12 @@ export function formatLearningDeadlineDate(value: string) {
   const date = parseApiTimestamp(value);
   // Keep one malformed legacy record from crashing the whole My learning page.
   return Number.isFinite(date.getTime()) ? learningDeadlineDateFormatter.format(date) : 'Date unavailable';
+}
+
+export function formatLearningDeadlineDay(value: string) {
+  const date = parseApiTimestamp(value);
+  // Learning-path cards can contain the same legacy deadline data as My learning.
+  return Number.isFinite(date.getTime()) ? learningDeadlineDayFormatter.format(date) : 'Date unavailable';
 }
 
 export function getLearningDeadlineStatus(value: string, completed: boolean, now = Date.now()): LearningDeadlineStatus {

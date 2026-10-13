@@ -11,7 +11,7 @@ import type { Competency, Course, CourseDeadline, LearningPath } from './types';
 import { appendPublishedCourseOptions, hasMorePublishedCourseOptions, publishedCourseOptionsPageUrl, type PublishedCoursePage } from './path-course-options';
 import { canAssignLearningPathLearners } from './path-assignment-availability';
 import { appendUnchangedCompetencyPage } from './competency-progress';
-import { parseApiTimestamp } from './api-timestamp';
+import { formatLearningDeadlineDay } from './learning-deadline';
 import { MAX_LEARNING_PATH_COURSES } from '../shared/learning-path-limits.js';
 import { isPathCourseCheckboxDisabled, togglePathCourseSelection } from './path-course-selection';
 import { useAuth } from './auth-context';
@@ -40,8 +40,6 @@ const learningPathStatusFilters: Array<{ label: string; value: LearningPathStatu
   { label: 'All paths', value: 'all' }, { label: 'Published', value: 'published' },
   { label: 'Drafts', value: 'draft' }, { label: 'Archived', value: 'archived' },
 ];
-// Reuse one locale formatter across all course deadlines rendered in path cards.
-const pathCourseDeadlineFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 const calendarTimeFormatter = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
 const calendarDateTimeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
 // Reuse locale-aware calendar formatters across month navigation and deadline updates.
@@ -637,7 +635,7 @@ export function LearningPathsPage() {
         </>}
         {path.courses.length > 0 ? <ol className="path-course-list">{path.courses.map((course) => <li key={course.id} className={!course.unlocked && !staff ? 'locked' : ''}>
           <span className="path-course-number">{course.completed ? <Check size={14} aria-hidden="true" /> : course.position + 1}</span>
-          <div><strong>{course.title}</strong><small>{course.category}{course.deadlineAt ? ` · Due ${pathCourseDeadlineFormatter.format(parseApiTimestamp(course.deadlineAt))}` : ''}</small></div>
+          <div><strong>{course.title}</strong><small>{course.category}{course.deadlineAt ? ` · Due ${formatLearningDeadlineDay(course.deadlineAt)}` : ''}</small></div>
           {!staff && course.unlocked ? <Link className="text-action" to={`/courses/${course.id}`} aria-label={`${course.completed ? 'Review course' : 'Start course'}: ${course.title}`}>{course.completed ? 'Review course' : 'Start course'}</Link> : !staff ? <span className="muted">Complete earlier courses to unlock</span> : <Link className="text-action" to={`/manage/courses/${course.id}/edit`} aria-label={`Edit course: ${course.title}`}>Edit course</Link>}
         </li>)}</ol> : <p className="path-course-list-empty muted">No courses are currently included in this path.</p>}
         <div className="program-card-footer">
