@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide remaining admin action glyphs from assistive technology
+
+- **Reviewed:** Admin competency creation, platform settings, registration-field settings, branding previews, and their live accessibility trees at a 390px viewport.
+- **Improvement:** Mark competency/settings action glyphs and settings-card heading icons as decorative, while keeping the meaningful platform-icon preview alternative text and all visible action labels.
+- **Why it helps:** Staff using assistive technology hear Add competency, Upload icon, Remove, and Add field once instead of encountering generic image nodes beside the same labels; settings and competency workflows are unchanged.
+- **Backend review:** Competency creation, registration-field validation and persistence, platform branding uploads, account-limit settings, authorization, and reset safeguards are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/admin-action-icons.test.js` under the dedicated client-test folder. The focused check passed (1/1); the full `npm test -- --test-reporter=spec` suite passed (880/880), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live signed-in competency and registration-field trees exposed no generic image nodes; the platform settings tree retained only the meaningful Platform icon preview image and no action/heading glyphs. No browser warnings or errors were observed.
+
 ## 2026-10-13 — Hide quiz-action glyphs from assistive technology
 
 - **Reviewed:** The learner quiz form, disabled and enabled submit action, score/result indicators, certificate and continue actions, and the course-progress link in the live quiz tree.
