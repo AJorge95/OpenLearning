@@ -16,6 +16,14 @@
 - **Backend review:** Review-decision authorization, required-note validation, audit behavior, and course refresh handling are unchanged; no backend change was indicated.
 - **Checked:** Updated the existing `tests/client/course-editor-route-state.test.js` regression under the dedicated client-test folder. Focused review/course-editor/program checks passed (31/31), the full `npm test -- --test-reporter=spec` suite passed (901/901), `npm run typecheck`, `npm run build`, and `git diff --check` passed, and the signed-in admin course-management route rendered its table and actions at the current viewport without overflow. The conditional review-feedback form remains source-checked because the available course is not in a reviewer decision state, and no review action was submitted.
 
+## 2026-10-13 — Clarify registration schema requirements
+
+- **Reviewed:** Administrator custom registration-field editing, required label/options validation, invalid-field focus recovery, responsive editor columns, and the public registration schema contract.
+- **Improvement:** Add the shared decorative `Required` cue to Field label and select-field Options in the administrator registration-field editor while preserving native constraints and accessible names.
+- **Why it helps:** Staff can distinguish the schema values that must be complete before saving, including the conditional options list for select fields, without changing learner-facing validation or saved answers.
+- **Backend review:** Registration-field normalization, duplicate detection, type/option validation, stale-form protection, and audit-backed saves remain unchanged; no backend change was indicated.
+- **Checked:** Updated `tests/client/registration-required-indicators.test.js` under the dedicated client-test folder. Focused registration/settings checks passed (32/32), the full `npm test -- --test-reporter=spec` suite passed (902/902), `npm run typecheck`, `npm run build`, and `git diff --check` passed. In the signed-in admin settings route, an unsaved field preview exposed the Field label cue, and switching its local draft type to Select list exposed the conditional Options cue; no field values were saved.
+
 ## 2026-10-13 — Clarify lesson editor required fields
 
 - **Reviewed:** Staff lesson details, link-resource, and WebVTT caption forms, their native required constraints, narrow-layout grid rules, and the shared required cue used by course and account forms.
