@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Keep idle route announcements quiet
+
+- **Reviewed:** The shared route-status component, route-change focus behavior, document-title updates, heading observation during lazy page loads, and the live learner/staff route shells.
+- **Improvement:** Mount the polite route-announcement live region only after it has a page heading to announce, instead of leaving an empty status node mounted while the route is settled or still loading.
+- **Why it helps:** Screen-reader users no longer encounter a blank global status region on every route, while navigation and asynchronously rendered headings continue to update the document title and announce the active page.
+- **Backend review:** Route authentication and staff/admin authorization remain unchanged; this presentation-only change does not alter API requests, permissions, or persistence.
+- **Checked:** Added `tests/client/route-status-live-regions.test.js` under the dedicated client-test folder. The focused route-status checks passed (2/2), the full `npm test -- --test-reporter=spec` suite passed (889/889), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The signed-in local browser retained the learner and staff shells; route navigation focused `main-content` during loading and settled on the expected heading without a blank status node in the observed accessibility tree. `/healthz`, `/readyz`, and the Vite root returned 200.
+
 ## 2026-10-13 — Clarify core course-editor required fields
 
 - **Reviewed:** The course editor's required Course title, Category, and Quiz title controls, their native validation and accessible names, the existing required-field visual pattern, and the course/quiz server validation contracts.
