@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Cycle 6 bounded progress and request-resilience review: no distinct change indicated
+
+- **Reviewed:** Learning-path progress calculations and zero-course handling, competency/course progress bars, the empty-draft versus published-path contract, calendar timestamp normalization, client CSRF/retry/204/invalid-response handling, startup timeout recovery, and route status/title announcements with learner/staff error boundaries.
+- **Result:** No code change was indicated. Path cards already render progress only when `courseCount > 0`, the shared progress bar clamps values to a safe range, published empty paths are rejected while valid drafts remain supported, calendar responses use normalized ISO timestamps, and client/API recovery paths already expose bounded retry and error states.
+- **Why no change:** The suspected zero-course `NaN` case is guarded by the current source and covered by the existing regression history. Additional progress or transport edits would duplicate established behavior without a reproducible failure, changed requirement, or representative performance evidence.
+- **Checked:** Full `npm test -- --test-reporter=spec` passed (902/902), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The running app returned 200 from `/healthz`, `/readyz`, and the Vite root. The connected Chrome registration page remained non-blank with named fields and password controls; no credentials were entered and no form was submitted. No test file or runtime source change was warranted.
+- **Needed to continue:** A reproducible current-build progress/calendar/request-recovery defect, a changed product requirement, or representative workload/latency evidence identifying a specific safe improvement.
+
 ## 2026-10-13 — Cycle 5 bounded interface/backend review: no distinct change indicated
 
 - **Reviewed:** Public registration markup and mobile layout, shared form controls, navigation and table semantics, responsive overflow rules, route announcements, authentication/session/CSRF handling, request validation, pagination bounds, access checks, transaction boundaries, log retention, and the recent required-cue/icon/live-region improvements.
