@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide the shared platform-brand fallback glyph
+
+- **Reviewed:** The shared `PlatformBrand` wordmark, `ImageWithFallback` alt/fallback behavior, authenticated learner and staff shells, and existing image/icon accessibility regressions.
+- **Improvement:** Mark the missing platform-brand image fallback as decorative while retaining the visible platform name as the link's accessible content.
+- **Why it helps:** A missing or failed brand image no longer adds a redundant generic image announcement before the platform name; the wordmark layout and navigation target remain unchanged.
+- **Backend review:** Branding retrieval, platform-name persistence, authentication, authorization, and image upload validation are unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/platform-brand-fallback.test.js` under the dedicated client-test folder. The focused check passed (1/1), the full `npm test -- --test-reporter=spec` suite passed (896/896), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The signed-in learner shell at `http://127.0.0.1:5173/courses` settled on the expected Browse courses page with its named navigation, search field, course result, and screenshot; no browser warnings or errors were observed. The accessibility tree exposed the wordmark as the named `Learning` link without a separate generic image node. Browser plugin and standalone Playwright were unavailable, so rendered QA used the available Codex in-app browser; the failed-image fallback branch remains source-checked.
+
 ## 2026-10-13 — Hide remaining staff secondary glyphs
 
 - **Reviewed:** Staff course editing, learner assignment, administrator user management, account details, registration-field editing, back navigation, cover upload/fallback, destructive actions, and informational lock cues.
