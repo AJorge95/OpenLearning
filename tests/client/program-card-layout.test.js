@@ -19,12 +19,10 @@ test('enrolled learner list has a heading beneath the assignment panel heading',
   assert.match(styles, /\.path-assigned-heading\s*\{[^}]*font-size:\s*11px;[^}]*font-weight:\s*650;/);
 });
 
-test('learning-path course deadlines reuse a module-level locale formatter', () => {
+test('learning-path course deadlines use the shared safe formatter', () => {
   const pageSource = fs.readFileSync(path.join(sourceDirectory, 'pages-programs.tsx'), 'utf8');
-  const formatterDeclaration = pageSource.indexOf('const pathCourseDeadlineFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: \'medium\' });');
-  const pathPageDeclaration = pageSource.indexOf('export function LearningPathsPage()');
 
-  assert.ok(formatterDeclaration >= 0 && formatterDeclaration < pathPageDeclaration);
-  assert.match(pageSource, /pathCourseDeadlineFormatter\.format\(parseApiTimestamp\(course\.deadlineAt\)\)/);
-  assert.doesNotMatch(pageSource, /pathCourseDeadlineFormatter\.format\(new Date\(course\.deadlineAt\)\)/);
+  assert.match(pageSource, /import \{ formatLearningDeadlineDay \} from '\.\/learning-deadline';/);
+  assert.match(pageSource, /formatLearningDeadlineDay\(course\.deadlineAt\)/);
+  assert.doesNotMatch(pageSource, /pathCourseDeadlineFormatter/);
 });
