@@ -16,6 +16,14 @@
 - **Backend review:** Reaction upserts, comment creation/removal authorization, rate limits, pagination, audit behavior, and response contracts are unchanged; no backend change was indicated.
 - **Checked:** Added `tests/client/lesson-feedback-icons.test.js` under the dedicated client-test folder. Focused feedback/comment checks passed (15/15), the full `npm test -- --test-reporter=spec` suite passed (884/884), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Rendered authenticated lesson QA was not claimed because the Browser plugin is unavailable, the Playwright Chromium executable is not installed, and the available local browser session is signed out.
 
+## 2026-10-13 — Hide course-editor quiz and resource glyphs
+
+- **Reviewed:** Staff quiz editing, answer-choice controls, lesson links/documents, caption resources, upload actions, visible labels, and the existing course-editor action-state contracts.
+- **Improvement:** Mark quiz type/action glyphs, resource-type indicators, remove controls, and upload glyphs as decorative while preserving explicit control names, labels, progress feedback, and editor behavior.
+- **Why it helps:** Course authors using assistive technology hear each quiz or resource action once instead of encountering generic image announcements beside its visible label or accessible name.
+- **Backend review:** Quiz persistence, content validation, resource/caption upload handling, deletion authorization, media cleanup, and API contracts are unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/course-editor-resource-icons.test.js` under the dedicated client-test folder. Focused course-editor checks passed (2/2), the full `npm test -- --test-reporter=spec` suite passed (885/885), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Rendered authenticated editor QA was not claimed because the Browser plugin is unavailable, the Playwright Chromium executable is not installed, and the available local browser session is signed out.
+
 ## 2026-10-13 — Hide course-editor curriculum glyphs from assistive technology
 
 - **Reviewed:** Staff course-editor module and lesson scaffolding, disclosure/reorder/delete controls, upload and status cues, add-lesson/add-quiz actions, and the existing curriculum accessibility contracts.
