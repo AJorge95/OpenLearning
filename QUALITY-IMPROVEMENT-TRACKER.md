@@ -1,12 +1,20 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Clarify lesson editor required fields
+
+- **Reviewed:** Staff lesson details, link-resource, and WebVTT caption forms, their native required constraints, narrow-layout grid rules, and the shared required cue used by course and account forms.
+- **Improvement:** Add the shared decorative `Required` cue to lesson title, link title/URL, caption language/label, and WebVTT file labels without changing the existing save, upload, or validation behavior.
+- **Why it helps:** Staff can see which lesson resources must be complete before saving or uploading, and the six forms now use one consistent visual pattern while native required semantics stay available to assistive technology.
+- **Backend review:** Lesson/resource/caption authorization, URL and WebVTT validation, upload limits, replacement behavior, and audit handling are unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/course-editor-lesson-required-fields.test.js` under the dedicated client-test folder. Focused lesson/course-editor/registration checks passed (6/6), the full `npm test -- --test-reporter=spec` suite passed (900/900), `npm run typecheck`, `npm run build`, and `git diff --check` passed, and `/healthz`, `/readyz`, the Vite root, and `/register` returned 200. The available browser session is signed out, so the staff-only lesson editor remains source-checked rather than rendered; the public registration page stayed non-blank and its existing password-visibility interaction still toggled without entering credentials or changing data.
+
 ## 2026-10-13 — Align custom registration required cues
 
 - **Reviewed:** Public custom text, date, select, and checkbox registration fields, their native required/`aria-required` semantics, and the shared required-field styling used by core forms.
 - **Improvement:** Reuse the shared decorative `Required` cue for custom registration fields and hide the visual marker from assistive technology so the native required state remains the single accessible signal.
 - **Why it helps:** Required custom questions now match the rest of the signup form visually and avoid repeating the same requirement in the accessible label while preserving browser validation and the custom select's `aria-required` behavior.
 - **Backend review:** Registration-field schema validation, required-answer checks, select-option handling, stale-form protection, and signup persistence are unchanged; no backend change was indicated.
-- **Checked:** Updated `tests/client/registration-required-indicators.test.js` in the dedicated client-test folder. Focused registration checks, the full test suite, strict type-check, production build, diff check, local registration rendering, responsive layout, and browser console health are the validation targets for this cycle.
+- **Checked:** Updated `tests/client/registration-required-indicators.test.js` in the dedicated client-test folder. Focused registration checks passed (7/7), the full `npm test -- --test-reporter=spec` suite passed (899/899), `npm run typecheck`, `npm run build`, and `git diff --check` passed, and the local registration page rendered with the existing password-visibility interaction intact. No credentials or data were entered; narrow staff-form rendering remains unverified because the available browser session is signed out.
 
 ## 2026-10-13 — Clarify administrator settings required fields
 
