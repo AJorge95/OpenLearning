@@ -9,7 +9,7 @@ INSTALL_ROOT="/opt/openlearning"
 RELEASES_DIR="$INSTALL_ROOT/releases"
 CURRENT_LINK="$INSTALL_ROOT/current"
 CONFIG_DIR="/etc/openlearning"
-ENV_FILE="$CONFIG_DIR/openlearning.env"
+ENV_FILE="$CONFIG_DIR/.env"
 DATA_DIR="/var/lib/openlearning"
 BACKUP_ROOT="/var/backups/openlearning"
 PORT="6173"
@@ -308,6 +308,9 @@ if systemctl daemon-reload && systemctl enable "$SERVICE_NAME.service" && system
 
 READY=false
 SERVICE_PORT="$(ENV_FILE="$ENV_FILE" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || "6173")')"
+if [[ ! "$SERVICE_PORT" =~ ^[0-9]{1,5}$ ]] || (( 10#$SERVICE_PORT < 1 || 10#$SERVICE_PORT > 65535 )); then
+  fail "The configured service port is invalid: $SERVICE_PORT"
+fi
 if [[ "$STARTED" == true ]]; then
   for _attempt in $(seq 1 30); do
     ENDPOINT="healthz"
@@ -355,6 +358,35 @@ NODE
   if [[ "$OLD_UNIT_PRESENT" == true && "$WAS_ACTIVE" == true ]]; then systemctl start "$SERVICE_NAME.service" || true; fi
   journalctl -u "$SERVICE_NAME.service" -n 30 --no-pager >&2 || true
   fail "OpenLearning did not become ready. The prior code release has been restored; inspect the service logs."
+fi
+
+FIREWALL_CONFIGURED=false
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+  if ufw allow "$SERVICE_PORT/tcp"; then
+    log "Allowed TCP port $SERVICE_PORT through the active UFW firewall."
+    FIREWALL_CONFIGURED=true
+  else
+    log "WARNING: Could not add TCP port $SERVICE_PORT to UFW; configure it manually."
+  fi
+fi
+if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+  mapfile -t FIREWALL_ZONES < <(firewall-cmd --get-active-zones | awk '/^[^[:space:]]/ { print $1 }')
+  if [[ "${#FIREWALL_ZONES[@]}" -eq 0 ]]; then
+    FIREWALL_ZONES=("$(firewall-cmd --get-default-zone)")
+  fi
+  FIREWALL_OK=true
+  for zone in "${FIREWALL_ZONES[@]}"; do
+    firewall-cmd --zone="$zone" --permanent --add-port="$SERVICE_PORT/tcp" >/dev/null || FIREWALL_OK=false
+  done
+  if [[ "$FIREWALL_OK" == true ]] && firewall-cmd --reload >/dev/null; then
+    log "Allowed TCP port $SERVICE_PORT through the active firewalld zone(s): ${FIREWALL_ZONES[*]}."
+    FIREWALL_CONFIGURED=true
+  else
+    log "WARNING: Could not add TCP port $SERVICE_PORT to firewalld; configure it manually."
+  fi
+fi
+if [[ "$FIREWALL_CONFIGURED" == false ]]; then
+  log "No active UFW or firewalld firewall was configured. If another firewall is in use, allow inbound TCP port $SERVICE_PORT there."
 fi
 
 log "OpenLearning is ready at http://localhost:$SERVICE_PORT."
