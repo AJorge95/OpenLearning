@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide remaining staff secondary glyphs
+
+- **Reviewed:** Staff course editing, learner assignment, administrator user management, account details, registration-field editing, back navigation, cover upload/fallback, destructive actions, and informational lock cues.
+- **Improvement:** Mark remaining staff back arrows, cover upload/fallback, add/delete, and assignment-note glyphs as decorative while retaining visible labels, accessible control names, warnings, and management behavior.
+- **Why it helps:** Staff screen-reader users hear each management action and informational note once instead of encountering redundant generic image announcements beside the same text; the course-editor and account-management workflows remain unchanged.
+- **Backend review:** Course editing, media validation/upload, assignment authorization, account-role/status protection, registration-field persistence, and audit behavior are unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/staff-secondary-icons.test.js` under the dedicated client-test folder. The focused check passed (2/2), the full `npm test -- --test-reporter=spec` suite passed (895/895), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The signed-in administrator course editor rendered at `http://127.0.0.1:5173/manage/courses/d74757e0-f149-4286-90b1-570faad73ff8/edit` with the expected page identity, course details, no framework overlay, no generic image nodes, and no browser warnings/errors; collapsing the Fire Mage module exposed the expected Expand control. The administrator user list also rendered cleanly, and searching `abjorge95` filtered the list without warnings or errors. Browser plugin and standalone Playwright were unavailable, so rendered QA used the available Codex in-app browser.
+
 ## 2026-10-13 — Hide redundant learner secondary glyphs
 
 - **Reviewed:** Learner certificate actions and history, certificate rendering, lesson completion actions, missing-video state, resource links, back-navigation links, and the existing decorative-icon accessibility pattern.
