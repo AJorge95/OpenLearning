@@ -8,6 +8,14 @@
 - **Backend review:** Learning-path and competency routes continue to trim and validate the submitted names; no backend change was indicated.
 - **Checked:** Added `tests/client/program-required-indicators.test.js` under the dedicated client-test folder and updated the existing path-focus and competency-focus assertions for the new label structure. Focused program checks passed (10/10), the full `npm test -- --test-reporter=spec` suite passed (901/901), `npm run typecheck`, `npm run build`, and `git diff --check` passed, and `/healthz`, `/readyz`, and the Vite root returned 200. The signed-in learner route rendered the path name label with the visible cue, retained the named textbox, and stayed within the viewport; staff competency creation remained source-checked because the current browser session is learner-facing.
 
+## 2026-10-13 — Clarify review feedback requirements
+
+- **Reviewed:** The staff course-review “Changes requested” form, native required validation, focus/error recovery, shared required-label styling, and the transactional review-decision API contract.
+- **Improvement:** Add the shared decorative `Required` cue to the review feedback label while preserving the existing textarea name, error description, focus behavior, and server-side trimmed-note validation.
+- **Why it helps:** Reviewers can see that feedback is required before sending a change request, reducing avoidable validation failures without repeating the requirement in the accessible textarea name.
+- **Backend review:** Review-decision authorization, required-note validation, audit behavior, and course refresh handling are unchanged; no backend change was indicated.
+- **Checked:** Updated the existing `tests/client/course-editor-route-state.test.js` regression under the dedicated client-test folder. Focused review/course-editor/program checks passed (31/31), the full `npm test -- --test-reporter=spec` suite passed (901/901), `npm run typecheck`, `npm run build`, and `git diff --check` passed, and the signed-in admin course-management route rendered its table and actions at the current viewport without overflow. The conditional review-feedback form remains source-checked because the available course is not in a reviewer decision state, and no review action was submitted.
+
 ## 2026-10-13 — Clarify lesson editor required fields
 
 - **Reviewed:** Staff lesson details, link-resource, and WebVTT caption forms, their native required constraints, narrow-layout grid rules, and the shared required cue used by course and account forms.

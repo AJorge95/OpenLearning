@@ -1993,7 +1993,8 @@ export function CourseEditorPage() {
             <Button type="button" onClick={() => void decideReview('approve')} disabled={saving || savingReviewDecision} aria-busy={savingReviewDecision}>{savingReviewDecision ? 'Saving review…' : 'Approve and publish'}</Button>
           </div>
           {showChangeRequestForm && <form id={`review-change-request-${courseId}`} className="review-request-form" onSubmit={(event) => { event.preventDefault(); void decideReview('changes_requested', changeRequestNote); }} aria-busy={savingReviewDecision}>
-            <label htmlFor={`review-change-note-${courseId}`}>Changes requested (up to 1,000 characters)
+            {/* The cue is decorative; the native required state remains the accessible source of truth. */}
+            <label htmlFor={`review-change-note-${courseId}`}><span className="form-label-row"><span>Changes requested (up to 1,000 characters)</span><small className="form-required-indicator" aria-hidden="true">Required</small></span>
               <textarea ref={changeRequestNoteInputRef} id={`review-change-note-${courseId}`} value={changeRequestNote} onChange={(event) => { setChangeRequestNote(event.target.value); if (event.target.value.trim()) setChangeRequestNoteError(''); }} maxLength={1000} rows={4} required autoFocus disabled={savingReviewDecision} aria-invalid={changeRequestNoteError ? true : undefined} aria-describedby={changeRequestNoteError ? `review-change-note-help-${courseId} review-change-note-error-${courseId}` : `review-change-note-help-${courseId}`} placeholder="Describe what the editor should update before this revision can be published." />
             </label>
             {changeRequestNoteError && <p id={`review-change-note-error-${courseId}`} className="form-error" role="alert">{changeRequestNoteError}</p>}
