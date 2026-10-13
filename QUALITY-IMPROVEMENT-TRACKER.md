@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Clarify administrator settings required fields
+
+- **Reviewed:** Administrator platform-settings identity and account-cap fields, shared required-cue styling, native constraints, platform-name validation, and the existing account-detail/create-account form pattern.
+- **Improvement:** Add the shared decorative `Required` cue to Platform name and Maximum registered accounts in administrator settings.
+- **Why it helps:** Staff can see which settings must contain a value before saving, while the existing validation, error description, account-cap guidance, and save behavior remain unchanged.
+- **Backend review:** Platform-settings authorization, name normalization, account-limit parsing, registered-user count checks, persistence, and audit behavior are unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/admin-settings-required-indicators.test.js` under the dedicated client-test folder. Focused settings/account checks passed (10/10), the full `npm test -- --test-reporter=spec` suite passed (898/898), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The current browser session is signed out, so the staff-only form remains source-checked rather than rendered; no credentials or data were changed.
+
 ## 2026-10-13 — Clarify administrator account-detail required fields
 
 - **Reviewed:** Administrator account-detail email and certificate-name forms, shared required-cue styling, native validation, field-level error descriptions, and the existing account creation/profile required-field patterns.
