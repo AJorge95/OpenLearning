@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide redundant course-list icons from assistive technology
+
+- **Reviewed:** The staff course list, empty-state and create-course actions, cover placeholder fallback, row action menu trigger, course-table labels, and the live management accessibility tree.
+- **Improvement:** Mark the course-list create, cover-placeholder, and “More actions” icons as decorative while preserving the course-title and explicit action labels.
+- **Why it helps:** Staff screen-reader users hear one meaningful course/action label instead of generic image announcements; the course-table layout and menu interaction remain unchanged.
+- **Backend review:** Course-list filtering, pagination, cover delivery, status actions, and authorization are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/course-list-icons.test.js` and updated the course-search empty-state contract regression to cover the course-list action and placeholder call sites. The live signed-in management table now exposes only the course title and named row actions; the placeholder and menu visuals remain unchanged. Focused checks passed (8/8), the full `npm test -- --test-reporter=spec` suite passed (862/862), `npm run typecheck`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-13 — Hide redundant course-overview icons from assistive technology
 
 - **Reviewed:** The learner course overview's metadata counts, start/review actions, certificate links, curriculum disclosures, and the live signed-in accessibility tree.

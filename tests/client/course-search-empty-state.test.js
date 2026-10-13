@@ -36,6 +36,6 @@ test('changing course status applies the visible search draft', () => {
 test('the empty catalog action identifies the first course while the page action stays general', () => {
   const page = courseManagementPage();
 
-  assert.match(page, /const emptyCourseAction = appliedQuery[\s\S]*?: status === 'all' && <Link className="button button-primary" to="\/manage\/courses\/new"><Plus size=\{17\} \/>Create first course<\/Link>;/);
-  assert.match(page, /<PageHeading title="Courses" action=\{<Link className="button button-primary" to="\/manage\/courses\/new"><Plus size=\{18\} \/>Create course<\/Link>\} \/>/);
+  assert.match(page, /const emptyCourseAction = appliedQuery[\s\S]*?: status === 'all' && <Link className="button button-primary" to="\/manage\/courses\/new"><Plus size=\{17\} aria-hidden="true" \/>Create first course<\/Link>;/);
+  assert.match(page, /<PageHeading title="Courses" action=\{<Link className="button button-primary" to="\/manage\/courses\/new"><Plus size=\{18\} aria-hidden="true" \/>Create course<\/Link>\} \/>/);
 });

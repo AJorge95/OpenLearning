@@ -183,7 +183,7 @@ function CourseRowMenu({ course, busyAction, onStatusChange, onDelete }: {
   }
 
   return <div className="row-menu">
-    <button ref={triggerRef} type="button" className="row-menu-trigger" aria-label={`More actions for ${course.title}`} aria-haspopup="menu" aria-expanded={open} aria-controls={`${id}-menu`} onClick={(event) => open ? closeMenu() : openMenu(event.detail === 0)} onKeyDown={(event) => { if (event.key === 'ArrowDown' && !open) { event.preventDefault(); openMenu(true); } }}><MoreVertical size={18} /></button>
+    <button ref={triggerRef} type="button" className="row-menu-trigger" aria-label={`More actions for ${course.title}`} aria-haspopup="menu" aria-expanded={open} aria-controls={`${id}-menu`} onClick={(event) => open ? closeMenu() : openMenu(event.detail === 0)} onKeyDown={(event) => { if (event.key === 'ArrowDown' && !open) { event.preventDefault(); openMenu(true); } }}><MoreVertical size={18} aria-hidden="true" /></button>
     {open && createPortal(<div ref={menuRef} id={`${id}-menu`} className="row-menu-popover" role="menu" aria-label={`Actions for ${course.title}`} style={position} onKeyDown={handleMenuKeyDown}>
       <Link to={`/manage/courses/${course.id}/access`} role="menuitem" onClick={() => closeMenu()}>Assign learners</Link>
       {course.status === 'draft' && <button type="button" role="menuitem" onClick={() => { closeMenu(true); onStatusChange(course, 'published'); }} disabled={isBusy} aria-busy={busyAction === 'publish'}>{busyAction === 'publish' ? 'Publishing…' : 'Publish'}</button>}
@@ -356,9 +356,9 @@ export function CourseManagementPage() {
   const hasEmptyCourseResult = !loading && !failedRequest && courses.length === 0;
   const emptyCourseAction = appliedQuery
     ? <Button type="button" variant="secondary" onClick={clearCourseSearch}>Clear search</Button>
-    : status === 'all' && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} />Create first course</Link>;
+    : status === 'all' && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} aria-hidden="true" />Create first course</Link>;
   return <div className="management-page">
-    <PageHeading title="Courses" action={<Link className="button button-primary" to="/manage/courses/new"><Plus size={18} />Create course</Link>} />
+    <PageHeading title="Courses" action={<Link className="button button-primary" to="/manage/courses/new"><Plus size={18} aria-hidden="true" />Create course</Link>} />
     <div className="management-tabs" role="group" aria-label="Filter courses by status">
       {tabs.map((tab) => <button type="button" key={tab.value} aria-pressed={status === tab.value} className={status === tab.value ? 'active' : ''} onClick={() => changeCourseStatusFilter(tab.value)}>{tab.label}</button>)}
     </div>
@@ -371,7 +371,7 @@ export function CourseManagementPage() {
       {courses.map((course) => {
         const busyAction = busyActions[course.id];
         return <tr key={course.id}>
-        <th scope="row"><div className="table-course"><span className="table-thumb"><ImageWithFallback src={course.coverUrl} className="table-cover-image" alt="" loading="lazy" decoding="async" fallback={<BookOpen size={20} />} /></span><div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category}</small></div></div></th>
+        <th scope="row"><div className="table-course"><span className="table-thumb"><ImageWithFallback src={course.coverUrl} className="table-cover-image" alt="" loading="lazy" decoding="async" fallback={<BookOpen size={20} aria-hidden="true" />} /></span><div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category}</small></div></div></th>
         <td><span className="owner-cell"><UserInitial username={course.owner || ''} />{course.owner}</span></td>
         <td><VisibilityLabel visibility={course.visibility} /></td>
         <td><div className="course-list-status"><CourseStatus status={course.status} />{course.hasUnpublishedChanges && <CourseRevisionBadge status={course.reviewStatus} />}{busyAction && <span className="course-list-action-status" role="status" aria-live="polite" aria-atomic="true">{courseRowActionStatus(busyAction)}</span>}</div></td>
