@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide course-card metadata icons from assistive technology
+
+- **Reviewed:** Learner catalog and My Learning course cards, their module-count metadata, the shared `CourseCard`, and existing course-card accessibility coverage.
+- **Improvement:** Mark the book icon beside each course card's module count as decorative while retaining the visible module count and card link name.
+- **Why it helps:** Screen-reader users hear the course title and module count without a redundant generic image announcement; the card's visual metadata and responsive layout remain unchanged.
+- **Backend review:** Course-card payloads, learner authorization, search/filtering, pagination, progress calculation, and course access are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/course-card-icons.test.js` under the dedicated client-test folder. The focused check passed (1/1), the full `npm test -- --test-reporter=spec` suite passed (872/872), `npm run typecheck`, `npm run build`, and `git diff --check` passed; `/healthz` and the Vite root returned 200. Rendered browser verification was unavailable after the Windows UI controller stopped because it could not identify the existing browser URL reliably.
+
 ## 2026-10-13 — Hide shared empty-state illustrations from assistive technology
 
 - **Reviewed:** Learner catalog and course states, learning paths, competencies, course editor, analytics, account activity, and the shared `EmptyState` component.
