@@ -200,6 +200,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .learning-deadline small { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
 .learning-deadline.completed { border-color: #c6e8d2; color: #176b40; background: var(--green-soft); }
 .learning-deadline.overdue { border-color: #f0c6cd; color: #972d3c; background: var(--danger-soft); }
+.learning-deadline.unknown { border-color: var(--line-strong); color: var(--muted); background: var(--subtle); }
 .learning-deadline:hover { border-color: var(--purple-border-strong); background: var(--purple-hover-bg); }
 
 .certificate-page { width: min(100%, 1320px); margin: 0 auto; padding: 46px 42px 76px; }

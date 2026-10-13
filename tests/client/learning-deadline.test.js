@@ -64,6 +64,12 @@ test('deadline refresh delay handles invalid and long-future dates safely', () =
   assert.equal(getLearningDeadlineRefreshDelay(deadline, Date.parse(deadline) - 2_147_483_700), 2_147_483_647);
 });
 
+test('malformed learner deadlines stay visible without throwing or claiming they are due', () => {
+  assert.equal(getLearningDeadlineStatus('not-a-date', false, Date.now()), 'unknown');
+  assert.equal(formatLearningDeadlineDate('not-a-date'), 'Date unavailable');
+  assert.match(pageSource, /status === 'unknown' \? 'Due date unavailable'/);
+});
+
 test('My Learning deadline links refresh once at the due boundary and clear replaced timers', () => {
   const linkSource = pageSource.slice(pageSource.indexOf('function LearningDeadlineLink'), pageSource.indexOf('\ntype LessonWatchProgress'));
 

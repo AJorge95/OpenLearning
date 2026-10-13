@@ -55,7 +55,7 @@ function LearningDeadlineLink({ deadlineAt, completed }: { deadlineAt: string; c
     const timer = window.setTimeout(() => setNow(Date.now()), delay);
     return () => window.clearTimeout(timer);
   }, [completed, deadlineAt, now]);
-  const label = status === 'completed' ? 'Completed' : status === 'overdue' ? 'Overdue' : 'Due';
+  const label = status === 'completed' ? 'Completed' : status === 'overdue' ? 'Overdue' : status === 'unknown' ? 'Due date unavailable' : 'Due';
   return <Link className={`learning-deadline ${status}`} to="/calendar"><CalendarDays size={15} aria-hidden="true" /><span><strong>{label}</strong><small>{formatLearningDeadlineDate(deadlineAt)}</small></span></Link>;
 }
 
