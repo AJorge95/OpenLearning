@@ -592,11 +592,12 @@ export function CourseOverviewPage() {
         <h1>{course.title}</h1>
         {/* Keep the description available to screen readers alongside its visible text. */}
         {course.description ? <p className="course-hero-description">{course.description}</p> : null}
-        <div className="course-hero-meta"><span><BookOpen size={17} />{formatCountLabel(course.moduleCount, 'module', 'modules')}</span><span><Play size={15} />{formatCountLabel(course.lessonCount, 'lesson', 'lessons')}</span></div>
+        {/* The adjacent counts provide the meaning; these icons are visual reinforcement only. */}
+        <div className="course-hero-meta"><span><BookOpen size={17} aria-hidden="true" />{formatCountLabel(course.moduleCount, 'module', 'modules')}</span><span><Play size={15} aria-hidden="true" />{formatCountLabel(course.lessonCount, 'lesson', 'lessons')}</span></div>
         {hasLearningActivities || course.completed || course.progress > 0 ? (
           <div className="course-hero-actions">
-            {nextActivity ? <Button onClick={startLearning} disabled={starting}>{startButtonLabel}<ArrowRight size={17} /></Button> : null}
-            {user?.role === 'learner' && course.completed ? user.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} />Add name for certificate</Link> : course.progress > 0 && <span className="progress-caption">{course.progress}% complete</span>}
+            {nextActivity ? <Button onClick={startLearning} disabled={starting}>{startButtonLabel}<ArrowRight size={17} aria-hidden="true" /></Button> : null}
+            {user?.role === 'learner' && course.completed ? user.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} aria-hidden="true" />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} aria-hidden="true" />Add name for certificate</Link> : course.progress > 0 && <span className="progress-caption">{course.progress}% complete</span>}
           </div>
         ) : null}
       </div>
@@ -613,7 +614,7 @@ export function CourseOverviewPage() {
     {nextActivity ? (
       <div className="course-bottom-cta">
         <span>{user?.username ? `Ready when you are, ${user.username}.` : 'Ready when you are.'}</span>
-        <Button onClick={startLearning} disabled={starting}>{startButtonLabel}<ArrowRight size={17} /></Button>
+        <Button onClick={startLearning} disabled={starting}>{startButtonLabel}<ArrowRight size={17} aria-hidden="true" /></Button>
       </div>
     ) : null}
   </div>;
