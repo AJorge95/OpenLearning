@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide redundant course-overview icons from assistive technology
+
+- **Reviewed:** The learner course overview's metadata counts, start/review actions, certificate links, curriculum disclosures, and the live signed-in accessibility tree.
+- **Improvement:** Mark the course overview's count, action, certificate, and curriculum-chevron icons as decorative while retaining the adjacent visible labels and native disclosure semantics.
+- **Why it helps:** Screen-reader users hear the course information and actions once, without generic image announcements that add no meaning; the visual hierarchy and interaction affordances remain unchanged.
+- **Backend review:** Course access, completion, certificate links, curriculum navigation, and course payloads are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/course-overview-icons.test.js` to cover all overview icon call sites and the shared curriculum disclosure. The live signed-in overview now exposes the text counts, named review actions, and module disclosure state without the redundant image nodes; the visual layout is unchanged. Focused checks passed (4/4), the full `npm test -- --test-reporter=spec` suite passed (860/860), `npm run typecheck`, `npm run build`, and `git diff --check` passed.
+
 ## 2026-10-13 — Hide redundant course-visibility icons from assistive technology
 
 - **Reviewed:** The shared `VisibilityLabel`, staff course-table cells, public/private text labels, and the live management accessibility tree.

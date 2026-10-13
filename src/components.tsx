@@ -634,7 +634,8 @@ export function CurriculumModule({ module, selectedLessonId, courseId, compact =
   const quiz = module.quiz;
   return (
     <details className={`curriculum-module ${compact ? 'curriculum-module-compact' : ''}`} open>
-      <summary><span className="module-title">{module.title}</span><span className="module-count">{formatCountLabel(module.lessons.length + (quiz ? 1 : 0), 'item', 'items')}</span><ChevronDown size={17} /></summary>
+      {/* The native summary exposes the disclosure state; the chevron is a visual cue only. */}
+      <summary><span className="module-title">{module.title}</span><span className="module-count">{formatCountLabel(module.lessons.length + (quiz ? 1 : 0), 'item', 'items')}</span><ChevronDown size={17} aria-hidden="true" /></summary>
       <div className="curriculum-items">
         {module.lessons.map((lesson) => <CurriculumLesson key={lesson.id} lesson={lesson} selected={selectedLessonId === lesson.id} courseId={courseId} onOpenActivity={onOpenActivity} />)}
         {quiz && <Link className="curriculum-item quiz-item" to={`/courses/${courseId}/quiz/${quiz.id}`} onClick={(event) => openCurriculumActivity(event, `/courses/${courseId}/quiz/${quiz.id}`, onOpenActivity)}><span className="curriculum-icon"><CircleHelp size={17} /></span><span className="curriculum-item-name">{quiz.title}</span>{quiz.passed && <Check className="completion-icon" size={16} />}</Link>}
