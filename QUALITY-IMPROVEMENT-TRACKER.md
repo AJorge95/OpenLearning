@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide lesson-player glyphs from assistive technology
+
+- **Reviewed:** The learner lesson player’s rail controls, restricted video controls, lesson navigation, completion action, comment count, and their live accessibility tree at a narrow viewport.
+- **Improvement:** Mark the player and lesson-action glyphs as decorative while keeping their visible/ARIA labels and state announcements unchanged.
+- **Why it helps:** Screen-reader users receive the control names once—such as Play video, Mute video, Previous lesson, Completed, and Hide course content—instead of an additional generic image for each visual cue.
+- **Backend review:** Lesson access, watch verification, progress persistence, navigation, feedback loading, and course-content authorization are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/lesson-player-icons.test.js` under the dedicated client-test folder. Focused player, caption, and fullscreen checks passed (14/14); the full `npm test -- --test-reporter=spec` suite passed (878/878), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The signed-in local lesson tree at a 390px viewport retained named controls without generic image children, and no browser warnings or errors were observed.
+
 ## 2026-10-13 — Announce curriculum completion status
 
 - **Reviewed:** The shared course curriculum links on learner course-overview and compact lesson surfaces, their completion and quiz-pass glyphs, and the live accessibility tree for a completed course.
