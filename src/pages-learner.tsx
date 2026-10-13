@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownUp, ArrowLeft, ArrowRight, Award, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, Link2, LockKeyhole, Maximize, MessageSquare, Minimize, Pause, Play, Printer, RotateCcw, Search, Send, ThumbsDown, ThumbsUp, Trash2, Volume2, VolumeX, X } from 'lucide-react';
+import { ArrowDownUp, ArrowLeft, ArrowRight, Award, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp, Clock3, Download, ExternalLink, FileText, Filter, FilterX, Link2, LockKeyhole, Maximize, MessageSquare, Minimize, Pause, Play, Printer, RotateCcw, Search, Send, ThumbsDown, ThumbsUp, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, fetchCourse } from './api';
 import { AppSelect, Button, ConfirmationDialog, CourseCard, CourseCover, CurriculumModule, EmptyState, ImageWithFallback, PageHeading, ProgressBar } from './components';
@@ -219,8 +219,9 @@ export function CatalogPage() {
       </div>
       <form role="search" aria-label="Search courses" className="search-field" onSubmit={(event) => { event.preventDefault(); load({ query: query.trim(), category, sort }); }}>
         <Search size={19} aria-hidden="true" /><input ref={searchInputRef} type="search" aria-label="Search courses" placeholder="Search courses" maxLength={120} value={query} onChange={(event) => setQuery(event.target.value)} />
-        {hasAppliedFilters && <button type="button" className="clear-catalog-filters" aria-label="Clear search and filters" title="Clear search and filters" onClick={clearCatalogFilters}><X size={17} /></button>}
-        <button type="submit" aria-label="Submit search"><ArrowRight size={17} /></button>
+        {/* The button labels provide the accessible names; these icons are visual affordances only. */}
+        {hasAppliedFilters && <button type="button" className="clear-catalog-filters" aria-label="Clear search and filters" title="Clear search and filters" onClick={clearCatalogFilters}><FilterX size={17} aria-hidden="true" /></button>}
+        <button type="submit" aria-label="Submit search"><ArrowRight size={17} aria-hidden="true" /></button>
       </form>
     </div>
     {error && <ErrorNotice message={error} onRetry={loadMoreFailed ? loadMore : retryLoad} />}
