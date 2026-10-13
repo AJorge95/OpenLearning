@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Clarify core course-editor required fields
+
+- **Reviewed:** The course editor's required Course title, Category, and Quiz title controls, their native validation and accessible names, the existing required-field visual pattern, and the course/quiz server validation contracts.
+- **Improvement:** Add the shared decorative “Required” cue to those three high-visibility editor labels while retaining native `required` attributes and the existing explicit quiz input name.
+- **Why it helps:** Course authors can identify the fields that must be completed before saving or publishing without changing browser validation, screen-reader names, or editor interaction.
+- **Backend review:** Course and quiz validation, save transactions, publication readiness, and audit behavior are unchanged; the server remains the source of truth for required content.
+- **Checked:** Added `tests/client/course-editor-required-fields.test.js` under the dedicated client-test folder. Focused course-editor checks passed (20/20), the full `npm test -- --test-reporter=spec` suite passed (887/887), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The signed-in course editor at a 320px emulated viewport exposed the course-title, category, and quiz-title `aria-hidden` cue types, retained exact “Course title” and “Category” textbox names, had no blank settled status nodes or document overflow, and produced no browser warning/error logs. `/healthz` and `/readyz` returned 200 with `Cache-Control: no-store`, and the Vite root returned 200.
+
 ## 2026-10-13 — Keep settled course-editor status regions quiet
 
 - **Reviewed:** The course editor's curriculum reorder controls, in-flight move state, accessible names, responsive narrow layout, and the existing module/lesson move endpoints and validation.
