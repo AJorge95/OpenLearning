@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Bounded malformed-response and layout review: no distinct change indicated
+
+- **Reviewed:** Signed-out login and registration structure, required and autocomplete semantics, public form responsiveness, shared custom controls, progress and date fallbacks, calendar normalization, client request and CSRF recovery, route abort cleanup, server body/error handling, authorization, pagination bounds, indexed query paths, and the current user-owned installer files.
+- **Result:** No new code change was indicated. The entry routes rendered meaningful named controls and native empty-form validation without submitting data; malformed stored dates already have bounded calendar/card fallbacks; progress calculations guard zero-activity cases; API middleware returns structured parse/size errors and limits CSRF replay; route requests clean up on cancellation; and reviewed server mutations remain role-gated and bounded.
+- **Why no change:** The current source and regressions cover the reviewed paths, while another shared progress/date or request-middleware edit would be speculative without a reproducible failure or workload evidence. The modified README and untracked installer/test files were preserved and left outside this cycle’s scope.
+- **Checked:** The running app returned 200 from `/healthz`, `/readyz`, and the Vite root. The temporary Codex in-app browser showed non-blank `/login` and `/register` screens; an empty registration attempt stayed local and focused the required Email field. `npm test -- --test-reporter=spec` passed 909/909, `npm run typecheck`, `npm run build`, and `git diff --check` passed. The Browser plugin and project Playwright package were unavailable, so no Playwright desktop/mobile or authenticated browser evidence is claimed; no credentials or application data were changed.
+- **Needed to continue:** A reproducible current-build interaction, accessibility, responsive, request-recovery, or authorization defect; representative performance/session evidence; or an explicit scope decision for the user-owned installer changes.
+
 ## 2026-10-13 — Keep learning-path deadline cards recoverable
 
 - **Reviewed:** Learning-path card deadline rendering, the shared deadline parser/formatters, learner My learning deadline handling, and the server path/calendar payload contracts for malformed stored timestamps.
