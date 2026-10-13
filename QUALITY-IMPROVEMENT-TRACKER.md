@@ -8,6 +8,14 @@
 - **Interface review:** No higher-value current-build layout, interaction, or accessibility defect was reproduced beyond the already-tracked fixes, so the completed change is backend-only and leaves the existing client contract unchanged.
 - **Checked:** Added `tests/server/csrf-session-growth.test.js` under the dedicated server-test folder. The focused CSRF/session and logout checks passed (4/4), the full `npm test -- --test-reporter=spec` suite passed (883/883), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Against the running app, `/api/csrf` returned 200 with no session cookie and a three-part signed token; a signed-token POST reached the expected configured-platform response (409), and the SQLite session count stayed at 4 before and after. Rendered browser QA was not claimed because the Browser plugin is unavailable and the Playwright Chromium executable is not installed.
 
+## 2026-10-13 — Hide lesson-feedback glyphs from assistive technology
+
+- **Reviewed:** Learner lesson reactions, comment composition, moderator comment removal, visible labels and counts, pressed/busy state, and the existing lesson-feedback pagination and moderation behavior.
+- **Improvement:** Mark the Like, Dislike, Post comment, and Remove comment glyphs as decorative while preserving the visible labels, reaction counts, pressed state, confirmation flow, and comment actions.
+- **Why it helps:** Screen-reader users hear each feedback action once instead of encountering a generic image announcement beside its meaningful text.
+- **Backend review:** Reaction upserts, comment creation/removal authorization, rate limits, pagination, audit behavior, and response contracts are unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/lesson-feedback-icons.test.js` under the dedicated client-test folder. Focused feedback/comment checks passed (15/15), the full `npm test -- --test-reporter=spec` suite passed (884/884), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Rendered authenticated lesson QA was not claimed because the Browser plugin is unavailable, the Playwright Chromium executable is not installed, and the available local browser session is signed out.
+
 ## 2026-10-13 — Hide course-editor curriculum glyphs from assistive technology
 
 - **Reviewed:** Staff course-editor module and lesson scaffolding, disclosure/reorder/delete controls, upload and status cues, add-lesson/add-quiz actions, and the existing curriculum accessibility contracts.
