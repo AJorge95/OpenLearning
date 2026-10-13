@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide shared empty-state illustrations from assistive technology
+
+- **Reviewed:** Learner catalog and course states, learning paths, competencies, course editor, analytics, account activity, and the shared `EmptyState` component.
+- **Improvement:** Mark the shared empty-state illustration wrapper as decorative, so the default book, filter, help, and module icons are hidden from assistive technology while the heading, detail, and actions remain available.
+- **Why it helps:** Screen-reader users hear the useful empty-state explanation once instead of encountering a generic image before it; visible illustrations and empty-state actions remain unchanged.
+- **Backend review:** Empty-state data loading, authorization, filtering, pagination, course analytics, competency queries, and persistence are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/empty-state-accessibility.test.js` under the dedicated client-test folder. The focused check passed (1/1), the full `npm test -- --test-reporter=spec` suite passed (871/871), `npm run typecheck`, `npm run build`, and `git diff --check` passed; `/healthz` and the Vite root returned 200. Rendered browser verification was unavailable after the Windows UI controller stopped because it could not identify the existing browser URL reliably.
+
 ## 2026-10-13 — Keep settled pagination announcements quiet
 
 - **Reviewed:** Learner course catalog, My learning, and certificate-history pagination status regions, including the settled accessibility trees and the existing loading-more announcement regression.
