@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide decorative learning-path action icons
+
+- **Reviewed:** Learning-path editor reorder controls, completed-course and enrollment markers, staff path actions, their visible labels, and the learner/staff path source contract.
+- **Improvement:** Mark path reorder arrows, completion/enrollment checks, and restore/assignment/archive icons as decorative while retaining each button's accessible name and visible text.
+- **Why it helps:** Screen-reader users hear one meaningful status or action instead of a generic image followed by the same label; path ordering, enrollment, archive, and restore interactions are unchanged.
+- **Backend review:** Learning-path selection, prerequisite enforcement, enrollment and assignment authorization, status transitions, pagination, and persistence are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/learning-path-icons.test.js` under the dedicated client-test folder. The focused check passed (3/3); the full `npm test -- --test-reporter=spec` suite passed (875/875), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The live signed-in management path page at a 390px viewport retained the named editor fields, course selector, status filters, and empty-state text with no console warnings; the current database has no populated path card, so populated-card rendering remains source-checked rather than data-mutated.
+
 ## 2026-10-13 — Hide course-card metadata icons from assistive technology
 
 - **Reviewed:** Learner catalog and My Learning course cards, their module-count metadata, the shared `CourseCard`, and existing course-card accessibility coverage.
