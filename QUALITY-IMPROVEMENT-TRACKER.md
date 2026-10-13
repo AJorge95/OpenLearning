@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Announce curriculum completion status
+
+- **Reviewed:** The shared course curriculum links on learner course-overview and compact lesson surfaces, their completion and quiz-pass glyphs, and the live accessibility tree for a completed course.
+- **Improvement:** Hide curriculum glyphs that duplicate visible labels and add concise screen-reader-only “Completed” and “Passed” status text to the corresponding lesson and quiz links.
+- **Why it helps:** Learners using assistive technology can distinguish finished activities from unfinished ones without depending on an unlabeled visual check mark; native module disclosure and link navigation remain unchanged.
+- **Backend review:** Course access, published-version resolution, learner completion and quiz-pass state, curriculum ordering, and lesson/quiz authorization are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/curriculum-item-accessibility.test.js` under the dedicated client-test folder. Focused course-overview and curriculum checks passed (4/4); the full `npm test -- --test-reporter=spec` suite passed (877/877), `npm run typecheck`, `npm run build`, and `git diff --check` passed. In the signed-in local course overview at a 390px viewport, the accessibility tree announced “Learn Fire Mage Completed” and “Fire Mage quiz Passed”; no browser warnings or errors were observed.
+
 ## 2026-10-13 — Hide decorative learning-path action icons
 
 - **Reviewed:** Learning-path editor reorder controls, completed-course and enrollment markers, staff path actions, their visible labels, and the learner/staff path source contract.
