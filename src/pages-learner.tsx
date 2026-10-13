@@ -1483,7 +1483,7 @@ export function CoursePlayerPage() {
     <div className="player-main-column">
       <div className="player-breadcrumb"><Link to={`/courses/${course.id}`}>{course.title}</Link><span>/</span><span>{current.moduleTitle}</span></div>
       {error && <ErrorNotice message={error} />}
-      <div className="player-heading"><div><p>{current.moduleTitle}</p><h1 ref={lessonHeadingRef} tabIndex={-1}>{current.title}</h1></div><button ref={railToggleRef} className="rail-toggle" type="button" onClick={toggleCourseRail} aria-label={railOpen ? 'Hide course content' : 'Show course content'} aria-expanded={railOpen} aria-controls="course-content-rail"><ChevronDown size={18} /></button></div>
+      <div className="player-heading"><div><p>{current.moduleTitle}</p><h1 ref={lessonHeadingRef} tabIndex={-1}>{current.title}</h1></div><button ref={railToggleRef} className="rail-toggle" type="button" onClick={toggleCourseRail} aria-label={railOpen ? 'Hide course content' : 'Show course content'} aria-expanded={railOpen} aria-controls="course-content-rail"><ChevronDown size={18} aria-hidden="true" /></button></div>
       {/* Keep the restricted watch controls inside the fullscreen subtree. */}
       <div ref={videoPlayerFrameRef} className="video-player-frame">
       <section className="video-stage">
@@ -1561,15 +1561,16 @@ export function CoursePlayerPage() {
         </video> : <div className="video-missing"><Play size={36} /><span>Video not available</span></div>}
       </section>
       {watchRequired && current.hasVideo && <div className={`lesson-video-controls${current.captions.length ? ' has-caption-tracks' : ''}`} role="group" aria-label="Video playback controls">
-        <button className="video-control-button video-play-button" type="button" aria-label={videoPlaying ? 'Pause video' : 'Play video'} disabled={!watchReadyForCurrent || videoError} onClick={() => void toggleVideoPlayback()}>{videoPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</button>
-        <button className="video-control-button video-rewind-button" type="button" aria-label="Rewind 30 seconds" title="Rewind 30 seconds" disabled={!watchReadyForCurrent || !watchProgress.started || rewindSaving || videoPosition <= 0} onClick={rewindVideo30Seconds}><RotateCcw size={16} /><span>30s</span></button>
+        {/* Button labels name each control; playback glyphs are visual affordances only. */}
+        <button className="video-control-button video-play-button" type="button" aria-label={videoPlaying ? 'Pause video' : 'Play video'} disabled={!watchReadyForCurrent || videoError} onClick={() => void toggleVideoPlayback()}>{videoPlaying ? <Pause size={18} fill="currentColor" aria-hidden="true" /> : <Play size={18} fill="currentColor" aria-hidden="true" />}</button>
+        <button className="video-control-button video-rewind-button" type="button" aria-label="Rewind 30 seconds" title="Rewind 30 seconds" disabled={!watchReadyForCurrent || !watchProgress.started || rewindSaving || videoPosition <= 0} onClick={rewindVideo30Seconds}><RotateCcw size={16} aria-hidden="true" /><span>30s</span></button>
         {/* Timer names the clock while keeping per-second updates out of live announcements. */}
         <span className="video-clock" role="timer" aria-label="Current video time">{videoClock(videoPosition)} <span>/</span> {videoClock(videoDuration)}</span>
         <div className="video-watch-progress" role="progressbar" aria-label="Video watch progress; seeking is disabled" aria-valuemin={0} aria-valuemax={videoWatchProgressDisplay.ariaMax} aria-valuenow={videoWatchProgressDisplay.ariaValue} aria-valuetext={videoWatchProgressDisplay.ariaValueText}><span style={{ width: `${videoWatchProgressDisplay.percentage}%` }} /></div>
-        <button className="video-control-button" type="button" aria-label={videoMuted ? 'Unmute video' : 'Mute video'} aria-pressed={videoMuted} onClick={() => updateVolume(videoMuted ? videoVolume || 1 : 0)}>{videoMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
+        <button className="video-control-button" type="button" aria-label={videoMuted ? 'Unmute video' : 'Mute video'} aria-pressed={videoMuted} onClick={() => updateVolume(videoMuted ? videoVolume || 1 : 0)}>{videoMuted ? <VolumeX size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}</button>
         {/* Describe the normalized slider in the percentage units learners expect. */}
         <input className="video-volume-control" type="range" min="0" max="1" step="0.05" value={videoMuted ? 0 : videoVolume} aria-label="Video volume" aria-valuetext={`${Math.round((videoMuted ? 0 : videoVolume) * 100)}%`} onChange={(event) => updateVolume(Number(event.target.value))} />
-        <button className="video-control-button video-fullscreen-button" type="button" aria-label={videoFullscreen ? 'Exit full screen' : 'Enter full screen'} onClick={() => { void toggleVideoFullscreen(); }}>{videoFullscreen ? <Minimize size={17} /> : <Maximize size={17} />}</button>
+        <button className="video-control-button video-fullscreen-button" type="button" aria-label={videoFullscreen ? 'Exit full screen' : 'Enter full screen'} onClick={() => { void toggleVideoFullscreen(); }}>{videoFullscreen ? <Minimize size={17} aria-hidden="true" /> : <Maximize size={17} aria-hidden="true" />}</button>
         {current.captions.length > 0 && <AppSelect className="video-caption-select" ariaLabel="Captions" portalContainer={videoPlayerFrameRef.current} value={activeCaptionId} onChange={(captionId) => { setSelectedCaptionId(captionId); selectVideoCaptionTrack(videoRef.current, captionId); }} options={captionOptions} />}
       </div>}
       {fullscreenError && <div className="player-video-error" role="alert">{fullscreenError}</div>}
@@ -1581,15 +1582,16 @@ export function CoursePlayerPage() {
       {videoError && <div className="player-video-error" role="alert"><p>The video could not be loaded. Retry, or contact your course administrator if it still will not play.</p><Button type="button" variant="secondary" onClick={() => retryVideo(true)}>Retry video</Button></div>}
       {watchError && <div className="player-video-error" role="alert"><p>{watchError}</p>{canRetryWatchProgressLoad && <Button type="button" variant="secondary" disabled={retryingWatchProgressLoad} aria-busy={retryingWatchProgressLoad} onClick={retryWatchProgressLoad}>{retryingWatchProgressLoad ? 'Checking video…' : 'Retry video check'}</Button>}</div>}
       <div className="player-controls-row">
-        <button className="button button-secondary" type="button" disabled={!previous} onClick={() => previous && navigate(`/courses/${course.id}/learn/${previous.id}`)}><ArrowLeft size={17} />Previous lesson</button>
-        <Button variant={current.completed ? 'secondary' : 'primary'} disabled={saving || !lessonCanBeCompleted} aria-busy={saving} onClick={toggleCompleted}>{saving ? 'Saving progress…' : current.completed ? <><Check size={17} />Completed</> : 'Mark lesson complete'}</Button>
+        {/* Visible navigation labels name these controls; direction and completion glyphs are decorative. */}
+        <button className="button button-secondary" type="button" disabled={!previous} onClick={() => previous && navigate(`/courses/${course.id}/learn/${previous.id}`)}><ArrowLeft size={17} aria-hidden="true" />Previous lesson</button>
+        <Button variant={current.completed ? 'secondary' : 'primary'} disabled={saving || !lessonCanBeCompleted} aria-busy={saving} onClick={toggleCompleted}>{saving ? 'Saving progress…' : current.completed ? <><Check size={17} aria-hidden="true" />Completed</> : 'Mark lesson complete'}</Button>
         {saving && <span className="sr-only" role="status" aria-live="polite">Saving lesson progress…</span>}
         <button className="button button-secondary" type="button" disabled={!nextActivityAfterCurrent || Boolean(watchRequired && !current.completed)} title={watchRequired && !current.completed ? 'Watch and complete this lesson before continuing' : undefined} onClick={() => {
           if (!nextActivityAfterCurrent) return;
           navigate(nextActivityAfterCurrent.type === 'quiz'
             ? `/courses/${course.id}/quiz/${nextActivityAfterCurrent.id}`
             : `/courses/${course.id}/learn/${nextActivityAfterCurrent.id}`);
-        }}>{nextActivityAfterCurrent?.type === 'quiz' ? 'Continue to quiz' : nextActivityAfterCurrent ? 'Next lesson' : 'No next activity'}<ArrowRight size={17} /></button>
+        }}>{nextActivityAfterCurrent?.type === 'quiz' ? 'Continue to quiz' : nextActivityAfterCurrent ? 'Next lesson' : 'No next activity'}<ArrowRight size={17} aria-hidden="true" /></button>
       </div>
       {user?.role === 'learner' && (course.completed || availableCertificate?.courseId === course.id) && <div className="course-completion-certificate"><div role="status" aria-live="polite"><strong>Course complete</strong><p>You have completed all lessons and required quizzes.</p></div>{user.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} />Add name for certificate</Link>}</div>}
       <section className="lesson-notes"><h2>About this lesson</h2><p>{current.description || 'Work through this lesson at your own pace. Mark it complete when you are ready to continue.'}</p></section>
@@ -1605,7 +1607,7 @@ export function CoursePlayerPage() {
         </li>)}</ul>
       </section>}
       {canViewLessonFeedback && <section className="lesson-feedback" aria-labelledby="lesson-feedback-title">
-        <div className="lesson-feedback-heading"><div><h2 ref={commentSectionTitleRef} id="lesson-feedback-title" tabIndex={-1}>{isCourseManager ? 'Learner comments' : 'Lesson feedback'}</h2><p>{isCourseManager ? 'Review comments for this lesson. Removals appear in the administrator audit log.' : 'Share your reaction and discuss this lesson with other learners.'}</p></div>{visibleFeedback && <span><MessageSquare size={16} />{visibleFeedback.total} {visibleFeedback.total === 1 ? 'comment' : 'comments'}</span>}</div>
+        <div className="lesson-feedback-heading"><div><h2 ref={commentSectionTitleRef} id="lesson-feedback-title" tabIndex={-1}>{isCourseManager ? 'Learner comments' : 'Lesson feedback'}</h2><p>{isCourseManager ? 'Review comments for this lesson. Removals appear in the administrator audit log.' : 'Share your reaction and discuss this lesson with other learners.'}</p></div>{visibleFeedback && <span><MessageSquare size={16} aria-hidden="true" />{visibleFeedback.total} {visibleFeedback.total === 1 ? 'comment' : 'comments'}</span>}</div>
         {/* Mount live regions only while they have a message so idle lesson pages stay quiet. */}
         {commentPostedNotice?.courseId === courseId && commentPostedNotice.lessonId === lessonId && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Your comment was posted.</p>}
         {commentModerationNotice?.courseId === courseId && commentModerationNotice.lessonId === lessonId && commentModerationNotice.message && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{commentModerationNotice.message}</p>}
@@ -1642,7 +1644,7 @@ export function CoursePlayerPage() {
         {!feedbackLoading && visibleFeedbackError && !visibleFeedback && <ErrorNotice message={visibleFeedbackError} onRetry={() => setFeedbackRefreshVersion((version) => version + 1)} />}
       </section>}
     </div>
-    <aside id="course-content-rail" className="course-rail" aria-labelledby="course-rail-title" hidden={!railOpen}><div className="course-rail-head"><div><h2 id="course-rail-title">Course content</h2><small>{course.progress}% complete</small></div><button ref={railCloseRef} type="button" aria-label="Hide course content" onClick={() => { focusRailAfterOpenRef.current = false; setRailOpen(false); railToggleRef.current?.focus(); }}><ChevronDown size={18} /></button></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} />
+    <aside id="course-content-rail" className="course-rail" aria-labelledby="course-rail-title" hidden={!railOpen}><div className="course-rail-head"><div><h2 id="course-rail-title">Course content</h2><small>{course.progress}% complete</small></div><button ref={railCloseRef} type="button" aria-label="Hide course content" onClick={() => { focusRailAfterOpenRef.current = false; setRailOpen(false); railToggleRef.current?.focus(); }}><ChevronDown size={18} aria-hidden="true" /></button></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} />
       {modules.map((module) => <CurriculumModule key={module.id} module={module} selectedLessonId={lessonId} courseId={course.id} compact onOpenActivity={openCurriculumActivity} />)}
     </aside>
     {pendingCommentRemoval?.courseId === courseId && pendingCommentRemoval.lessonId === lessonId && isCourseManager
