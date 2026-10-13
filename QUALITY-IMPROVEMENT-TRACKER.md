@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Align custom registration required cues
+
+- **Reviewed:** Public custom text, date, select, and checkbox registration fields, their native required/`aria-required` semantics, and the shared required-field styling used by core forms.
+- **Improvement:** Reuse the shared decorative `Required` cue for custom registration fields and hide the visual marker from assistive technology so the native required state remains the single accessible signal.
+- **Why it helps:** Required custom questions now match the rest of the signup form visually and avoid repeating the same requirement in the accessible label while preserving browser validation and the custom select's `aria-required` behavior.
+- **Backend review:** Registration-field schema validation, required-answer checks, select-option handling, stale-form protection, and signup persistence are unchanged; no backend change was indicated.
+- **Checked:** Updated `tests/client/registration-required-indicators.test.js` in the dedicated client-test folder. Focused registration checks, the full test suite, strict type-check, production build, diff check, local registration rendering, responsive layout, and browser console health are the validation targets for this cycle.
+
 ## 2026-10-13 — Clarify administrator settings required fields
 
 - **Reviewed:** Administrator platform-settings identity and account-cap fields, shared required-cue styling, native constraints, platform-name validation, and the existing account-detail/create-account form pattern.
