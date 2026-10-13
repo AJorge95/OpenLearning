@@ -227,7 +227,8 @@ export function CatalogPage() {
     {error && <ErrorNotice message={error} onRetry={loadMoreFailed ? loadMore : retryLoad} />}
     {hasEmptyCatalogResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyCatalogState.title}. {emptyCatalogState.detail}</p>}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading courses…</div> : courses.length ? <div className="course-grid">{courses.map((course, index) => <CourseCard key={course.id} course={course} coverLoading={index === 0 ? 'eager' : 'lazy'} />)}</div> : error ? null : <EmptyState icon={<Filter size={24} />} title={emptyCatalogState.title} detail={emptyCatalogState.detail} />}
-    {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {formatCountLabel(total, 'course', 'courses')}</p><p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{loadingMore ? 'Loading more courses…' : ''}</p>{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
+    {/* Keep pagination announcements out of the accessibility tree once loading has settled. */}
+    {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {formatCountLabel(total, 'course', 'courses')}</p>{loadingMore && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Loading more courses…</p>}{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
   </div>;
 }
 
@@ -408,7 +409,7 @@ export function MyLearningPage() {
     ) : hasEmptyCourses && !loadingCertificates && !certificates.length ? (
       <EmptyState title={learningEmptyState.title} detail={learningEmptyState.detail} action={<Link className="button button-primary" to="/courses">Browse courses</Link>} />
     ) : null}
-    {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {formatCountLabel(total, 'course', 'courses')}</p><p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{loadingMore ? 'Loading more courses…' : ''}</p>{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
+    {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {formatCountLabel(total, 'course', 'courses')}</p>{loadingMore && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Loading more courses…</p>}{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
     {(loadingCertificates || certificateError || certificates.length > 0) && <section className="certificate-history"><div className="certificate-history-heading"><h2>Your certificates</h2><p>Certificates remain available in your learning history.</p></div>
       {loadingCertificates && <p className="page-loading" role="status" aria-live="polite">Loading certificates…</p>}
       {certificates.length > 0 && (
@@ -427,7 +428,7 @@ export function MyLearningPage() {
         </div>
       )}
       {certificateError && <ErrorNotice message={certificateError} onRetry={certificatesHasMore && certificates.length > 0 ? loadMoreCertificates : loadCertificatesFirstPage} />}
-      {certificates.length > 0 && <div className="catalog-pagination"><p ref={certificatePaginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {certificates.length} of {formatCountLabel(certificateTotal, 'certificate', 'certificates')}</p><p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{loadingMoreCertificates ? 'Loading more certificates…' : ''}</p>{certificatesHasMore && <Button variant="secondary" disabled={loadingCertificates || loadingMoreCertificates} onClick={loadMoreCertificates}>{loadingMoreCertificates ? 'Loading more certificates…' : 'Load more certificates'}</Button>}</div>}
+      {certificates.length > 0 && <div className="catalog-pagination"><p ref={certificatePaginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {certificates.length} of {formatCountLabel(certificateTotal, 'certificate', 'certificates')}</p>{loadingMoreCertificates && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Loading more certificates…</p>}{certificatesHasMore && <Button variant="secondary" disabled={loadingCertificates || loadingMoreCertificates} onClick={loadMoreCertificates}>{loadingMoreCertificates ? 'Loading more certificates…' : 'Load more certificates'}</Button>}</div>}
     </section>}
   </div>;
 }
