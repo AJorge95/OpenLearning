@@ -25,6 +25,12 @@ test('custom registration fields reuse the decorative required cue', () => {
   assert.doesNotMatch(registrationForm, /field\.required && <small>Required<\/small>/);
 });
 
+test('administrator registration-field editors mark schema-required inputs visibly', () => {
+  const manageSource = fs.readFileSync(new URL('../../src/pages-manage.tsx', import.meta.url), 'utf8');
+  assert.match(manageSource, /<label><span className="form-label-row"><span>Field label<\/span><small className="form-required-indicator" aria-hidden="true">Required<\/small><\/span><input id=\{`registration-field-editor-\$\{field\.id\}-label`\} required/);
+  assert.match(manageSource, /<label className="registration-options-field"><span className="form-label-row"><span>Options<\/span><small className="form-required-indicator" aria-hidden="true">Required<\/small><\/span><textarea id=\{`registration-field-editor-\$\{field\.id\}-options`\} required/);
+});
+
 test('sign-in visibly marks the username field as required', () => {
   const loginPage = authSource.slice(authSource.indexOf('export function LoginPage'), authSource.indexOf('export function RegisterPage'));
 
