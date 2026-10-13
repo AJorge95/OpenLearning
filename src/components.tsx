@@ -25,7 +25,8 @@ export function PlatformBrand({ className, to = '/courses' }: { className: strin
   const { platformName, platformIcon } = useAuth();
   return <Link className={className} to={to}>
     <span className="brand-content">
-      <ImageWithFallback src={platformIcon} className="brand-icon" alt="" fallback={<span className="brand-icon brand-icon-fallback"><BookOpen size={18} /></span>} />
+      {/* The platform name names this link; a missing brand image is visual decoration. */}
+      <ImageWithFallback src={platformIcon} className="brand-icon" alt="" fallback={<span className="brand-icon brand-icon-fallback" aria-hidden="true"><BookOpen size={18} /></span>} />
       <span className="brand-name">{platformName}</span>
     </span>
   </Link>;
