@@ -3033,7 +3033,7 @@ export function AdminSettingsPage() {
   return <div className="management-page settings-page"><PageHeading title="Settings" subtitle="Customize platform branding, connection security, and learner registration." /><AdminSettingsTabs />{error && <Notice>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
     <form className="settings-card form-stack" onSubmit={submit} aria-busy={saving}>
       <fieldset className="settings-fields" aria-label="Platform settings" disabled={platformSettingsDisabled}>
-      <div className="settings-card-heading"><span className="settings-icon"><Settings2 size={19} /></span><div><h2>Platform identity</h2><p>Choose the brand learners see throughout the platform.</p></div></div>
+      <div className="settings-card-heading"><span className="settings-icon" aria-hidden="true"><Settings2 size={19} /></span><div><h2>Platform identity</h2><p>Choose the brand learners see throughout the platform.</p></div></div>
       <label>Platform name<input ref={platformNameInputRef} required minLength={MIN_PLATFORM_NAME_LENGTH} maxLength={MAX_PLATFORM_NAME_LENGTH} aria-invalid={platformNameError ? true : undefined} aria-describedby={platformNameError ? platformNameErrorId : undefined} value={name} onChange={(event) => { setName(event.target.value); setPlatformNameError(''); }} /></label>
       {platformNameError && <p id={platformNameErrorId} className="form-error" role="alert">{platformNameError}</p>}
       <PlatformIconPicker value={icon} onChange={(nextIcon) => { setIcon(nextIcon); setIconEdited(true); }} />
@@ -3159,7 +3159,7 @@ export function AdminRegistrationFieldsPage() {
     {success && <Notice kind="success">{success}</Notice>}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading registration fields…</div> : !loadError && <form className="settings-card form-stack registration-fields-card" onSubmit={saveFields} aria-busy={saving}>
       <fieldset className="settings-fields" aria-label="Registration fields" disabled={saving}>
-        <div className="settings-card-heading"><span className="settings-icon"><UsersRound size={19} /></span><div><h2>Registration form</h2><p>Collect the information your organization needs when learners create an account.</p></div></div>
+        <div className="settings-card-heading"><span className="settings-icon" aria-hidden="true"><UsersRound size={19} /></span><div><h2>Registration form</h2><p>Collect the information your organization needs when learners create an account.</p></div></div>
         {configurationWarning && <Notice>{configurationWarning}</Notice>}
         <p className="registration-fields-intro">These fields appear after email and username during public registration. Existing learner answers are kept if a field is changed or removed.</p>
         {fields.length ? <div className="registration-field-editor-list">{fields.map((field, index) => <section className="registration-field-editor" key={field.id} aria-labelledby={`registration-field-title-${field.id}`}>
@@ -3171,7 +3171,7 @@ export function AdminRegistrationFieldsPage() {
           </div>
           {field.type === 'select' && <label className="registration-options-field">Options<textarea id={`registration-field-editor-${field.id}-options`} required rows={4} value={field.options.join('\n')} aria-invalid={invalidField?.fieldId === field.id && invalidField.target === 'options' || undefined} aria-describedby={invalidField?.fieldId === field.id && invalidField.target === 'options' ? 'registration-fields-error' : undefined} onChange={(event) => updateField(field.id, { options: event.target.value.split('\n') })} placeholder={'One option per line\nDepartment A\nDepartment B'} /><small>Enter one choice per line, with 2–30 unique choices.</small></label>}
         </section>)}</div> : <EmptyState headingLevel={3} title="No custom fields yet" detail="Add fields such as department, date of birth, or an acknowledgement checkbox to the signup form." />}
-        <div className="registration-fields-actions"><Button type="button" variant="secondary" onClick={addField} disabled={fields.length >= 30}><Plus size={16} />Add field</Button><span>Choose from free text, date, select list, or checkbox. Up to 30 fields.</span></div>
+        <div className="registration-fields-actions"><Button type="button" variant="secondary" onClick={addField} disabled={fields.length >= 30}><Plus size={16} aria-hidden="true" />Add field</Button><span>Choose from free text, date, select list, or checkbox. Up to 30 fields.</span></div>
         {error && <Notice id="registration-fields-error">{error}</Notice>}
         <div className="settings-card-footer"><span>Changes apply to new registrations. Saved learner responses stay on their account.</span><Button type="submit" disabled={saving}>{saving ? 'Saving fields…' : 'Save fields'}</Button></div>
       </fieldset>
