@@ -27,6 +27,20 @@ If OpenLearning is useful for your team, please [star the repository](https://gi
 - Node.js 24 LTS
 - npm
 
+## Linux install and update
+
+On Ubuntu 22.04 or newer, or RHEL 9 or a compatible derivative, install OpenLearning with the repository-hosted installer:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/AJorge95/OpenLearning/main/scripts/install.sh | sudo bash
+```
+
+The installer installs Node.js 24 and native build prerequisites, creates the `openlearning` systemd service, and builds the latest commit on the repository's `main` branch. It stores application releases in `/opt/openlearning`, protected configuration in `/etc/openlearning/openlearning.env`, and application data in `/var/lib/openlearning`. It generates a production session secret and one-time setup token on first install; the token is printed once for the initial setup wizard. Keep the environment file private. After completing setup, remove `SETUP_TOKEN` from the environment file and restart the service.
+
+Run the same command again to update. The installer preserves recognized `openlearning.service` configuration and resolves relative database and media paths against the existing service working directory. It stops the service, creates a verified database and media backup under `/var/backups/openlearning`, activates the new release, and checks service health. If an already-configured deployment fails its readiness check, it restores the previous release and the pre-update database and media snapshot. First-run installations are checked through `/healthz`; `/readyz` remains unavailable until the setup wizard has been completed.
+
+The installer serves the application on port 6173 by default and does not configure a firewall, reverse proxy, or TLS certificate. Restrict direct access or configure HTTPS termination separately. Set `TRUST_PROXY=true` in the environment file only when a trusted reverse proxy supplies forwarding headers, then restart the service with `sudo systemctl restart openlearning`.
+
 ## Install and run
 
 ```sh
