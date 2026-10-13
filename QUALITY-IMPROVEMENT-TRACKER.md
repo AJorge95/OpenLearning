@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Recheck learning-path access synchronization
+
+- **Reviewed:** Learning-path listing, detail, self-enrollment, staff assignment/removal, course selection, path-course validation, batched learner-state synchronization, role/status/search/page validation, audit handling, and the matching learner/staff controls.
+- **Result:** No code change was indicated. The routes keep learner visibility role-aware, bound path selections to the shared 200-course limit, batch path payload and learner-state work, validate published-path assignment boundaries, and keep assignment mutations transactional with audit handling. Removing an assignment changes access on the next request while preserving learner progress for a later re-assignment.
+- **Why no change:** The focused source and behavior review found no reproducible authorization failure, stale-access defect, duplicate enrollment, unbounded query, or measured latency regression. Changing retained-progress behavior would be a product decision rather than a safe maintenance improvement.
+- **Interface review:** Learner path search, status filtering, pagination, empty states, assignment labels, confirmation messaging, and selection controls remain covered by the existing accessible interaction tests; the live route sweep showed the expected learner and staff shells without a new mismatch.
+- **Checked:** The focused learning-path/access suite passed (45/45), including `tests/server/course-analytics.test.js` path cases and the matching client tests under the dedicated client-test folder. No server behavior, API contract, or schema changed in this cycle; `git diff --check` was run before commit. A reproduced stale-access case, duplicate/missing path course, or representative path/learner workload profile is still needed before changing this area.
+
 ## 2026-10-13 — Keep idle route announcements quiet
 
 - **Reviewed:** The shared route-status component, route-change focus behavior, document-title updates, heading observation during lazy page loads, and the live learner/staff route shells.
