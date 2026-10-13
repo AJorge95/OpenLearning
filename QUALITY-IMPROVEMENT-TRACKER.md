@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Clarify account profile required fields
+
+- **Reviewed:** Learner Account settings profile fields, certificate-name validation and focus handling, native required constraints, the shared form-label cue, and the live accessibility tree.
+- **Improvement:** Add the shared decorative “Required” cue to the editable First name and Last name labels while retaining the existing required attributes, validation, normalization, and error descriptions.
+- **Why it helps:** Learners can see which certificate-name fields must be complete before saving, without adding “Required” to the accessible textbox names or changing the save interaction.
+- **Backend review:** Profile update authorization, account-name validation, normalization, certificate data, and password handling are unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/account-settings-required-indicators.test.js` under the dedicated client-test folder. The focused check passed (1/1) and the full `npm test -- --test-reporter=spec` suite passed (890/890); `npm run typecheck`, `npm run build`, and `git diff --check` passed. The live Account settings page retained the named First name and Last name textboxes, exposed the cue only as visual content, stayed within 390px at the narrow viewport, and produced no browser warnings or errors. `/healthz`, `/readyz`, and the Vite root returned 200.
+
 ## 2026-10-13 — Recheck learning-path access synchronization
 
 - **Reviewed:** Learning-path listing, detail, self-enrollment, staff assignment/removal, course selection, path-course validation, batched learner-state synchronization, role/status/search/page validation, audit handling, and the matching learner/staff controls.
