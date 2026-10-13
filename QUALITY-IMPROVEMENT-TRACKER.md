@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide course-editor curriculum glyphs from assistive technology
+
+- **Reviewed:** Staff course-editor module and lesson scaffolding, disclosure/reorder/delete controls, upload and status cues, add-lesson/add-quiz actions, and the existing curriculum accessibility contracts.
+- **Improvement:** Mark the curriculum editor’s module, lesson, upload, status, reorder, delete, and add-action glyphs as decorative while preserving their visible labels, explicit control names, disclosure state, and interactions.
+- **Why it helps:** Course authors using assistive technology hear each curriculum action and status once instead of encountering generic image announcements beside the same named control.
+- **Backend review:** Course-editor authorization, module/lesson/quiz persistence, upload handling, ordering, deletion safeguards, and API contracts are unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/course-editor-curriculum-icons.test.js` under the dedicated client-test folder. The focused source regression passed (1/1); the full `npm test -- --test-reporter=spec` suite passed (882/882), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The lesson-delete busy/label expressions were rechecked unchanged; `/healthz`, `/readyz`, and the Vite root returned 200. Rendered course-editor verification remains limited to source-level evidence because the current local browser session is signed out.
+
 ## 2026-10-13 — Hide shared staff-navigation glyphs from assistive technology
 
 - **Reviewed:** The shared staff shell navigation, pending-registration badge label, return-to-learning link, responsive sidebar behavior, and current staff route icon contracts.
