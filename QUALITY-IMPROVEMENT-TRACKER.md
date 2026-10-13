@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide decorative loading and calendar icons
+
+- **Reviewed:** Shared route-loading states, learner deadline links, calendar month navigation, the successful-empty calendar state, and the live accessibility trees for learner calendar and program routes.
+- **Improvement:** Mark the shared loading book mark, deadline-link calendar glyph, previous/next month chevrons, and calendar empty-state glyph as decorative with `aria-hidden`, preserving the existing status text and button names.
+- **Why it helps:** Screen-reader users no longer encounter generic image nodes beside already-labelled loading, deadline, and month-navigation content; the visual cues and calendar interactions remain unchanged.
+- **Backend review:** Calendar deadline range selection, timezone grouping, invalid-deadline reporting, refresh timing, and authorization are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/calendar-icon-accessibility.test.js` under the dedicated client-test folder. The live learner calendar retained named Previous month and Next month controls and the readable empty-state message without the generic icon nodes; the route loading state also no longer exposed its decorative book image. Focused checks, the full test suite, type-check, build, and `git diff --check` are recorded with the commit.
+
 ## 2026-10-13 — Keep idle lesson feedback announcements quiet
 
 - **Reviewed:** The learner lesson feedback section, comment posting and moderation notices, paginated comment loading, and the live accessibility tree for a settled lesson.

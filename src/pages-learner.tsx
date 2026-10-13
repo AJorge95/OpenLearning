@@ -56,7 +56,7 @@ function LearningDeadlineLink({ deadlineAt, completed }: { deadlineAt: string; c
     return () => window.clearTimeout(timer);
   }, [completed, deadlineAt, now]);
   const label = status === 'completed' ? 'Completed' : status === 'overdue' ? 'Overdue' : 'Due';
-  return <Link className={`learning-deadline ${status}`} to="/calendar"><CalendarDays size={15} /><span><strong>{label}</strong><small>{formatLearningDeadlineDate(deadlineAt)}</small></span></Link>;
+  return <Link className={`learning-deadline ${status}`} to="/calendar"><CalendarDays size={15} aria-hidden="true" /><span><strong>{label}</strong><small>{formatLearningDeadlineDate(deadlineAt)}</small></span></Link>;
 }
 
 type LessonWatchProgress = {
