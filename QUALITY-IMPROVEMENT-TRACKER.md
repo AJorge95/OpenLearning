@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Clarify administrator account required fields
+
+- **Reviewed:** Administrator Create account identity fields, shared password-label treatment, native required constraints, account-name validation and focus handling, and the existing auth-form required indicator pattern.
+- **Improvement:** Add the shared decorative “Required” cue to Email, First name, Last name, and Username while retaining native constraints, autocomplete, accessible names, and server-side account validation.
+- **Why it helps:** Administrators can identify the identity fields that must be complete before creating a manual account, without changing the existing account workflow or adding redundant text to assistive-technology names.
+- **Backend review:** Account authorization, duplicate checks, account-cap enforcement, name normalization, password handling, audit behavior, and role selection are unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/admin-account-required-indicators.test.js` under the dedicated client-test folder. The focused source check passed (1/1), the full `npm test -- --test-reporter=dot` suite passed (891/891), `npm run build` passed its strict type-check and Vite build, and `git diff --check` passed. The current connected browser session is a learner account, so the staff-only form remained source-checked rather than rendered; no credentials or data were changed.
+
 ## 2026-10-13 — Clarify account profile required fields
 
 - **Reviewed:** Learner Account settings profile fields, certificate-name validation and focus handling, native required constraints, the shared form-label cue, and the live accessibility tree.
