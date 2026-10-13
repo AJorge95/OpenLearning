@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Clarify learner catalog reset actions
+
+- **Reviewed:** The learner catalog search landmark, clear-filter and submit-search controls, empty and filtered states, and the live signed-in accessibility tree.
+- **Improvement:** Mark the submit-search arrow and catalog reset icon as decorative, and use the filter-reset `FilterX` visual for the action that clears both the search and selected filters.
+- **Why it helps:** Screen-reader users hear one meaningful action name instead of a generic image announcement, while sighted users can distinguish the app-wide filter reset from the browser's native text-clear affordance.
+- **Backend review:** Catalog search, category and sort validation, accessible-course filtering, pagination, and authorization are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/course-catalog-action-icons.test.js` under the dedicated client-test folder. The live signed-in catalog now exposes the named search field and action buttons without generic image nodes; the filtered screenshot distinguishes the filter reset from the native text clear, and clearing the reset restores the course result. Focused checks passed (8/8), the full `npm test -- --test-reporter=spec` suite passed (864/864), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Browser plugin was unavailable and the Playwright fallback had no installed browser executable, so the live check used the connected in-app browser accessibility tree and screenshot instead.
+
 ## 2026-10-13 — Hide redundant course-list icons from assistive technology
 
 - **Reviewed:** The staff course list, empty-state and create-course actions, cover placeholder fallback, row action menu trigger, course-table labels, and the live management accessibility tree.
