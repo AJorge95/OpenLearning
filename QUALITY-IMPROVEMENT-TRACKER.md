@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Bounded installer and public-flow review: no distinct change indicated
+
+- **Reviewed:** Signed-out login and registration structure, native validation and password-visibility feedback, public form layout, shared custom controls and decorative-icon semantics, calendar/date fallbacks, client CSRF/retry/abort/malformed-response handling, route cleanup, authentication and role boundaries, paginated query/index paths, and the Linux installer’s update backup, readiness rollback, path-safety, service, and firewall logic.
+- **Result:** No new code change was indicated. The current public flow exposes named controls and recovers through native validation; the calendar and learning-card date paths already guard malformed stored timestamps; the anonymous CSRF bootstrap is stateless in this checkout; and the reviewed backend and installer paths already validate, bound, or fail closed at their current contracts.
+- **Why no change:** No reproducible current-build interaction, accessibility, responsive, authorization, request-recovery, or data-integrity defect was found. Another shared control/date/request edit would duplicate existing coverage, while installer rollback behavior needs a Linux systemd/update harness or representative deployment evidence before a safe change can be justified.
+- **Checked:** The running app returned 200 from `/healthz`, `/readyz`, and the Vite root. The temporary Codex in-app browser rendered `/login` and `/register` with meaningful named controls; an empty registration attempt focused Email; and the password button changed from “Show password” to “Hide password.” The Browser plugin and importable project Playwright package were unavailable; the available Playwright CLI could not run because its Chromium executable was not installed, so no Playwright desktop/mobile or console-log evidence is claimed. No credentials or application data were changed.
+- **Needed to continue:** A reproducible current-build defect, representative Linux installer/update failure evidence, or a measured backend workload/session backlog identifying a safe implementation target.
+
 ## 2026-10-13 — Bounded malformed-response and layout review: no distinct change indicated
 
 - **Reviewed:** Signed-out login and registration structure, required and autocomplete semantics, public form responsiveness, shared custom controls, progress and date fallbacks, calendar normalization, client request and CSRF recovery, route abort cleanup, server body/error handling, authorization, pagination bounds, indexed query paths, and the current user-owned installer files.
