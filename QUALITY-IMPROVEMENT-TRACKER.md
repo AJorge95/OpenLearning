@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Keep malformed learner deadlines recoverable
+
+- **Reviewed:** The learner My learning deadline cards, shared deadline status/formatting helpers, calendar timestamp normalization, and the server behavior that omits malformed calendar deadlines while preserving valid results.
+- **Improvement:** Treat an invalid learner deadline as an explicit `unknown` status, render `Due date unavailable`, and keep the card usable instead of passing an invalid `Date` to `Intl.DateTimeFormat` and crashing the page.
+- **Why it helps:** A single stale or malformed deadline record no longer takes down the learner’s My learning view or falsely claims that the course is due; the card still links to the calendar for recovery.
+- **Backend review:** No server change was needed. The calendar route already filters malformed stored deadlines, logs a bounded warning, and returns valid deadlines; this closes the separate learner-card presentation gap when malformed state reaches another payload.
+- **Checked:** Added malformed-deadline coverage to `tests/client/learning-deadline.test.js`; focused checks passed (8/8), the full `npm test -- --test-reporter=spec` suite passed (903/903), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The running app returned 200 from `/healthz`, `/readyz`, and the Vite root. The connected signed-out Chrome tab remained on `/register` with named fields and password controls; no credentials were entered and no form was submitted.
+
 ## 2026-10-13 — Cycle 7 bounded lifecycle and recovery review: no distinct change indicated
 
 - **Reviewed:** Remaining browser timers and listeners (account menus, custom selects, pending-registration refresh, platform-reset polling, video recovery, deadline refresh, and route-heading observation), suspense/error boundaries, semantic empty states, responsive certificate and registration layouts, session expiry cleanup, graceful shutdown, protected-media stream abort handling, and structured upload/request recovery.

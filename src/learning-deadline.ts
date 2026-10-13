@@ -5,17 +5,21 @@ const learningDeadlineDateFormatter = new Intl.DateTimeFormat(undefined, {
   timeStyle: 'short',
 });
 
-export type LearningDeadlineStatus = 'completed' | 'overdue' | 'upcoming';
+export type LearningDeadlineStatus = 'completed' | 'overdue' | 'upcoming' | 'unknown';
 
 const maximumBrowserTimeout = 2_147_483_647;
 
 export function formatLearningDeadlineDate(value: string) {
-  return learningDeadlineDateFormatter.format(parseApiTimestamp(value));
+  const date = parseApiTimestamp(value);
+  // Keep one malformed legacy record from crashing the whole My learning page.
+  return Number.isFinite(date.getTime()) ? learningDeadlineDateFormatter.format(date) : 'Date unavailable';
 }
 
 export function getLearningDeadlineStatus(value: string, completed: boolean, now = Date.now()): LearningDeadlineStatus {
   if (completed) return 'completed';
-  return parseApiTimestamp(value).getTime() < now ? 'overdue' : 'upcoming';
+  const deadlineAt = parseApiTimestamp(value).getTime();
+  if (!Number.isFinite(deadlineAt)) return 'unknown';
+  return deadlineAt < now ? 'overdue' : 'upcoming';
 }
 
 export function getLearningDeadlineRefreshDelay(value: string, now = Date.now()) {
