@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Keep settled course-editor status regions quiet
+
+- **Reviewed:** The course editor's curriculum reorder controls, in-flight move state, accessible names, responsive narrow layout, and the existing module/lesson move endpoints and validation.
+- **Improvement:** Mount the polite “Updating course content order…” live region only while a module or lesson reorder is running, instead of leaving an empty status node in every settled editor.
+- **Why it helps:** Course authors using assistive technology no longer encounter an idle announcement region with no message, while active reorder progress remains announced and the move interaction is unchanged.
+- **Backend review:** Module and lesson move requests still validate the direction, re-check course-manager authorization, update positions transactionally, and require an audit entry; no server change was indicated.
+- **Checked:** Added `tests/client/course-editor-live-regions.test.js` under the dedicated client-test folder. Focused course-editor checks passed (19/19), the full `npm test -- --test-reporter=spec` suite passed (886/886), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The running signed-in editor at a narrow 390px emulated viewport exposed zero blank status nodes, retained the course editor controls, had no document overflow beyond its client viewport, and produced no browser warning/error logs. `/healthz` and `/readyz` returned 200 with `Cache-Control: no-store`, and the Vite root returned 200.
+
 ## 2026-10-13 — Keep anonymous CSRF bootstrap stateless
 
 - **Reviewed:** The current learner, staff, setup, and authentication interface markup and responsive CSS, plus the CSRF bootstrap, session store, authentication routes, request validation, and recent UI improvement history.
