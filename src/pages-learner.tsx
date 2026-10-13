@@ -1613,14 +1613,15 @@ export function CoursePlayerPage() {
         {commentModerationNotice?.courseId === courseId && commentModerationNotice.lessonId === lessonId && commentModerationNotice.message && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{commentModerationNotice.message}</p>}
         {feedbackLoading || (!visibleFeedback && !visibleFeedbackError) ? <div className="feedback-loading" role="status">Loading lesson feedback…</div> : visibleFeedback && <>
           {user?.role === 'learner' && <>
+            {/* Visible labels and counts carry the feedback meaning; these glyphs are decorative. */}
             <div className="lesson-reactions" role="group" aria-label="React to this lesson">
-              <Button type="button" variant={visibleFeedback.reaction === 'like' ? 'primary' : 'secondary'} aria-pressed={visibleFeedback.reaction === 'like'} disabled={reactionSaving} onClick={() => chooseReaction('like')}><ThumbsUp size={17} />Like<span className="reaction-count">{visibleFeedback.counts.like}</span></Button>
-              <Button type="button" variant={visibleFeedback.reaction === 'dislike' ? 'primary' : 'secondary'} aria-pressed={visibleFeedback.reaction === 'dislike'} disabled={reactionSaving} onClick={() => chooseReaction('dislike')}><ThumbsDown size={17} />Dislike<span className="reaction-count">{visibleFeedback.counts.dislike}</span></Button>
+              <Button type="button" variant={visibleFeedback.reaction === 'like' ? 'primary' : 'secondary'} aria-pressed={visibleFeedback.reaction === 'like'} disabled={reactionSaving} onClick={() => chooseReaction('like')}><ThumbsUp size={17} aria-hidden="true" />Like<span className="reaction-count">{visibleFeedback.counts.like}</span></Button>
+              <Button type="button" variant={visibleFeedback.reaction === 'dislike' ? 'primary' : 'secondary'} aria-pressed={visibleFeedback.reaction === 'dislike'} disabled={reactionSaving} onClick={() => chooseReaction('dislike')}><ThumbsDown size={17} aria-hidden="true" />Dislike<span className="reaction-count">{visibleFeedback.counts.dislike}</span></Button>
             </div>
             <form className="lesson-comment-form" onSubmit={postComment} aria-busy={commentSaving}>
               <label htmlFor="lesson-comment">Add a comment</label>
               <textarea id="lesson-comment" aria-describedby="lesson-comment-hint" rows={4} maxLength={2000} value={commentDraft} onChange={(event) => updateCommentDraft(event.target.value)} placeholder="What did you think of this lesson?" disabled={commentSaving} />
-              <div><small id="lesson-comment-hint">{commentDraft.length}/2,000 characters · visible to learners with course access</small><Button type="submit" disabled={commentSaving || !commentDraft.trim()}>{commentSaving ? 'Posting…' : 'Post comment'}<Send size={16} /></Button></div>
+              <div><small id="lesson-comment-hint">{commentDraft.length}/2,000 characters · visible to learners with course access</small><Button type="submit" disabled={commentSaving || !commentDraft.trim()}>{commentSaving ? 'Posting…' : 'Post comment'}<Send size={16} aria-hidden="true" /></Button></div>
             </form>
             {commentSaving && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Posting comment…</p>}
           </>}
@@ -1634,7 +1635,7 @@ export function CoursePlayerPage() {
             {visibleFeedback.comments.map((comment) => {
               const timestamp = commentTimestamp(comment.createdAt);
               const removing = commentRemovalIds.has(comment.id);
-              return <article className="lesson-comment" key={comment.id}><span className="comment-avatar" aria-hidden="true">{comment.username.slice(0, 1).toUpperCase()}</span><div><header><h3>{comment.username}</h3><time dateTime={timestamp.dateTime}>{timestamp.label}</time>{isCourseManager && <Button type="button" variant="quiet" className="lesson-comment-remove" aria-label={`Remove comment by ${comment.username}`} disabled={removing} onClick={() => requestCommentRemoval(comment)}>{removing ? 'Removing…' : <><Trash2 size={14} />Remove</>}</Button>}</header><p>{comment.body}</p></div></article>;
+              return <article className="lesson-comment" key={comment.id}><span className="comment-avatar" aria-hidden="true">{comment.username.slice(0, 1).toUpperCase()}</span><div><header><h3>{comment.username}</h3><time dateTime={timestamp.dateTime}>{timestamp.label}</time>{isCourseManager && <Button type="button" variant="quiet" className="lesson-comment-remove" aria-label={`Remove comment by ${comment.username}`} disabled={removing} onClick={() => requestCommentRemoval(comment)}>{removing ? 'Removing…' : <><Trash2 size={14} aria-hidden="true" />Remove</>}</Button>}</header><p>{comment.body}</p></div></article>;
             })}
             {!visibleFeedback.comments.length && <p className="comments-empty">{isCourseManager ? 'No learner comments yet.' : 'No comments yet. Start the conversation.'}</p>}
           </div>
