@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide redundant learner secondary glyphs
+
+- **Reviewed:** Learner certificate actions and history, certificate rendering, lesson completion actions, missing-video state, resource links, back-navigation links, and the existing decorative-icon accessibility pattern.
+- **Improvement:** Mark learner certificate, print, navigation, missing-video, and lesson-resource glyphs as decorative while retaining visible labels, explicit new-tab guidance, certificate metadata, and all link/button behavior.
+- **Why it helps:** Screen-reader users hear the certificate or resource action once instead of encountering generic image announcements beside the same meaningful text; fallback and error states remain understandable through their visible copy.
+- **Backend review:** Certificate authorization and issuance, lesson access and watch verification, resource delivery, download behavior, and learner route contracts are unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/learner-secondary-icons.test.js` under the dedicated client-test folder. The focused check passed (2/2), the full `npm test -- --test-reporter=spec` suite passed (893/893), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The signed-in learner course/player route rendered at `http://127.0.0.1:5173/courses/d74757e0-f149-4286-90b1-570faad73ff8/learn/891c513b-061d-408b-97ba-a2051fee3c7f`; its page identity, player controls, screenshot, and console health were clean, the accessibility snapshot exposed no generic image nodes, and the course-content rail closed and reopened with the expected named buttons. Browser plugin and standalone Playwright were unavailable, so rendered QA used the available Codex in-app browser; certificate-history and missing-resource populated states remain source-checked because the current learner data did not expose them.
+
 ## 2026-10-13 — Clarify administrator account required fields
 
 - **Reviewed:** Administrator Create account identity fields, shared password-label treatment, native required constraints, account-name validation and focus handling, and the existing auth-form required indicator pattern.

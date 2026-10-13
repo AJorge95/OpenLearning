@@ -399,8 +399,8 @@ export function MyLearningPage() {
               <>
                 {/* Give repeated certificate actions a course-specific name for screen-reader link lists. */}
                 {user.firstName?.trim() && user.lastName?.trim()
-                  ? <Link className="certificate-card-link" to={`/my-learning/certificates/${course.id}`} aria-label={`View certificate for ${course.title}`}><Award size={16} />View certificate</Link>
-                  : <Link className="certificate-card-link" to="/account/security" aria-label={`Add your name for the ${course.title} certificate`}><Award size={16} />Add your name for certificate</Link>}
+                  ? <Link className="certificate-card-link" to={`/my-learning/certificates/${course.id}`} aria-label={`View certificate for ${course.title}`}><Award size={16} aria-hidden="true" />View certificate</Link>
+                  : <Link className="certificate-card-link" to="/account/security" aria-label={`Add your name for the ${course.title} certificate`}><Award size={16} aria-hidden="true" />Add your name for certificate</Link>}
               </>
             )}
           </div>
@@ -416,7 +416,7 @@ export function MyLearningPage() {
         <div className="certificate-history-list">
           {certificates.map((certificate) => (
             <article className="certificate-history-item" key={certificate.id}>
-              <span className="certificate-history-icon"><Award size={19} /></span>
+              <span className="certificate-history-icon" aria-hidden="true"><Award size={19} /></span>
               <div className="certificate-history-copy">
                 <h3>{certificate.courseTitle}</h3>
                 <p>Awarded {formatCertificateDate(certificate.issuedAt, certificateHistoryDateFormatter)} · {certificate.certificateCode}</p>
@@ -481,23 +481,23 @@ export function CourseCertificatePage() {
   }
 
   if (loading) return <div className="page-loading" role="status" aria-live="polite">Preparing your certificate…</div>;
-  if (!certificate) return <div className="certificate-page"><div className="breadcrumbs"><Link to="/my-learning">My learning</Link><span>/</span><span>Certificate</span></div>{error && <ErrorNotice message={error} onRetry={() => setRefreshVersion((version) => version + 1)} />}{issueAvailable && <><p role="status">Your certificate is ready to issue.</p><Button type="button" disabled={issuing} onClick={() => void issueCertificate()}>{issuing ? 'Issuing certificate…' : 'Issue certificate'}</Button></>}<Link className="back-link" to="/my-learning"><ArrowLeft size={17} />Back to my learning</Link></div>;
+  if (!certificate) return <div className="certificate-page"><div className="breadcrumbs"><Link to="/my-learning">My learning</Link><span>/</span><span>Certificate</span></div>{error && <ErrorNotice message={error} onRetry={() => setRefreshVersion((version) => version + 1)} />}{issueAvailable && <><p role="status">Your certificate is ready to issue.</p><Button type="button" disabled={issuing} onClick={() => void issueCertificate()}>{issuing ? 'Issuing certificate…' : 'Issue certificate'}</Button></>}<Link className="back-link" to="/my-learning"><ArrowLeft size={17} aria-hidden="true" />Back to my learning</Link></div>;
 
   const formattedDate = formatCertificateDate(certificate.issuedAt, certificateIssueDateFormatter);
   return <div className="certificate-page">
-    <div className="certificate-page-heading"><div><div className="breadcrumbs"><Link to="/my-learning">My learning</Link><span>/</span><span>Certificate</span></div><h1>Your achievement</h1><p>A certificate to recognize the knowledge you have gained.</p></div><div className="certificate-actions"><Button variant="secondary" onClick={() => window.print()}><Printer size={17} />Print or save as PDF</Button></div></div>
+    <div className="certificate-page-heading"><div><div className="breadcrumbs"><Link to="/my-learning">My learning</Link><span>/</span><span>Certificate</span></div><h1>Your achievement</h1><p>A certificate to recognize the knowledge you have gained.</p></div><div className="certificate-actions"><Button variant="secondary" onClick={() => window.print()}><Printer size={17} aria-hidden="true" />Print or save as PDF</Button></div></div>
     <article className="certificate-paper" aria-label={`Certificate awarded to ${certificate.recipientName} for ${certificate.courseTitle}`}>
       <div className="certificate-inner-border" aria-hidden="true" />
-      <div className="certificate-brand"><ImageWithFallback src={platformIcon} className="certificate-brand-image" alt="" fallback={<span className="certificate-brand-mark"><Award size={22} /></span>} /><span>{certificate.platformName || platformName}</span></div>
+      <div className="certificate-brand"><ImageWithFallback src={platformIcon} className="certificate-brand-image" alt="" fallback={<span className="certificate-brand-mark"><Award size={22} aria-hidden="true" /></span>} /><span>{certificate.platformName || platformName}</span></div>
       <div className="certificate-kicker">Certificate of completion</div>
       <p className="certificate-intro">This certificate recognizes</p>
       <h2 className="certificate-recipient">{certificate.recipientName}</h2>
       {certificate.recipientEmail && <p className="certificate-recipient-email">{certificate.recipientEmail}</p>}
       <p className="certificate-description">for successfully completing</p>
       <h3 className="certificate-course-title">{certificate.courseTitle}</h3>
-      <div className="certificate-footer"><div><span className="certificate-label">Awarded on</span><strong>{formattedDate}</strong></div><div className="certificate-seal"><Award size={25} /><span>Completed</span></div><div className="certificate-code"><span className="certificate-label">Certificate ID</span><strong>{certificate.certificateCode}</strong></div></div>
+      <div className="certificate-footer"><div><span className="certificate-label">Awarded on</span><strong>{formattedDate}</strong></div><div className="certificate-seal"><Award size={25} aria-hidden="true" /><span>Completed</span></div><div className="certificate-code"><span className="certificate-label">Certificate ID</span><strong>{certificate.certificateCode}</strong></div></div>
     </article>
-    <Link className="back-link certificate-back" to="/my-learning"><ArrowLeft size={17} />Back to my learning</Link>
+    <Link className="back-link certificate-back" to="/my-learning"><ArrowLeft size={17} aria-hidden="true" />Back to my learning</Link>
   </div>;
 }
 
@@ -574,7 +574,7 @@ export function CourseOverviewPage() {
   }
 
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading course…</div>;
-  if (!course) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to="/courses"><ArrowLeft size={17} />Back to courses</Link></div>;
+  if (!course) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to="/courses"><ArrowLeft size={17} aria-hidden="true" />Back to courses</Link></div>;
   const courseActivitiesComplete = summarizeCourseProgress(course.modules ?? []).completed;
   const nextActivity = nextCourseActivity(course.modules);
   // Older published records can reach learners without activities; explain that state instead of disabling the CTA silently.
@@ -1473,10 +1473,10 @@ export function CoursePlayerPage() {
   }
 
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading lesson…</div>;
-  if (!course || !current) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
+  if (!course || !current) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} aria-hidden="true" />Back to course</Link></div>;
   if (watchRequired && current.locked) {
     const nextUnlockedLesson = lessons.find((lesson) => !lesson.locked);
-    return <div className="narrow-content lesson-locked-page"><span className="program-icon" aria-hidden="true"><LockKeyhole size={19} /></span><h1>Lesson locked</h1><p>Watch and complete the previous lesson before continuing to {current.title}.</p>{nextUnlockedLesson && nextUnlockedLesson.id !== current.id && <Link className="button button-primary" to={`/courses/${course.id}/learn/${nextUnlockedLesson.id}`}>Continue with available lesson<ArrowRight size={17} /></Link>}<Link className="back-link" to={`/courses/${course.id}`}>Back to course</Link></div>;
+    return <div className="narrow-content lesson-locked-page"><span className="program-icon" aria-hidden="true"><LockKeyhole size={19} /></span><h1>Lesson locked</h1><p>Watch and complete the previous lesson before continuing to {current.title}.</p>{nextUnlockedLesson && nextUnlockedLesson.id !== current.id && <Link className="button button-primary" to={`/courses/${course.id}/learn/${nextUnlockedLesson.id}`}>Continue with available lesson<ArrowRight size={17} aria-hidden="true" /></Link>}<Link className="back-link" to={`/courses/${course.id}`}>Back to course</Link></div>;
   }
 
   return <div className={`player-layout ${railOpen ? '' : 'player-layout-wide'}`}>
@@ -1558,7 +1558,7 @@ export function CoursePlayerPage() {
             setVideoError(true);
           }}>
           {current.captions.map((caption) => <track key={caption.id} data-caption-id={caption.id} kind="captions" src={caption.url} srcLang={caption.language} label={caption.label} />)}
-        </video> : <div className="video-missing"><Play size={36} /><span>Video not available</span></div>}
+        </video> : <div className="video-missing"><Play size={36} aria-hidden="true" /><span>Video not available</span></div>}
       </section>
       {watchRequired && current.hasVideo && <div className={`lesson-video-controls${current.captions.length ? ' has-caption-tracks' : ''}`} role="group" aria-label="Video playback controls">
         {/* Button labels name each control; playback glyphs are visual affordances only. */}
@@ -1593,16 +1593,17 @@ export function CoursePlayerPage() {
             : `/courses/${course.id}/learn/${nextActivityAfterCurrent.id}`);
         }}>{nextActivityAfterCurrent?.type === 'quiz' ? 'Continue to quiz' : nextActivityAfterCurrent ? 'Next lesson' : 'No next activity'}<ArrowRight size={17} aria-hidden="true" /></button>
       </div>
-      {user?.role === 'learner' && (course.completed || availableCertificate?.courseId === course.id) && <div className="course-completion-certificate"><div role="status" aria-live="polite"><strong>Course complete</strong><p>You have completed all lessons and required quizzes.</p></div>{user.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} />Add name for certificate</Link>}</div>}
+      {user?.role === 'learner' && (course.completed || availableCertificate?.courseId === course.id) && <div className="course-completion-certificate"><div role="status" aria-live="polite"><strong>Course complete</strong><p>You have completed all lessons and required quizzes.</p></div>{user.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} aria-hidden="true" />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} aria-hidden="true" />Add name for certificate</Link>}</div>}
       <section className="lesson-notes"><h2>About this lesson</h2><p>{current.description || 'Work through this lesson at your own pace. Mark it complete when you are ready to continue.'}</p></section>
       {current.transcript && <section className="lesson-transcript" aria-labelledby={`lesson-transcript-heading-${current.id}`}><h2 id={`lesson-transcript-heading-${current.id}`}>Lesson transcript</h2><details><summary>Read transcript</summary><div className="lesson-transcript-text">{current.transcript}</div></details></section>}
       {current.resources.length > 0 && <section className="learner-lesson-resources" aria-label="Lesson links and documents">
         <h2>Links and documents</h2>
         <ul>{current.resources.map((resource) => <li key={resource.id}>
-          {resource.kind === 'link' ? <Link2 size={17} /> : <FileText size={17} />}
+          {/* Resource text and the explicit new-tab hint carry the meaning; glyphs are visual cues. */}
+          {resource.kind === 'link' ? <Link2 size={17} aria-hidden="true" /> : <FileText size={17} aria-hidden="true" />}
           <a href={resource.url} {...(resource.kind === 'link' ? { target: '_blank', rel: 'noopener noreferrer' } : { download: true })}>
             <span><strong>{resource.title}{resource.kind === 'link' && <span className="sr-only"> (opens in a new tab)</span>}</strong><small>{resource.kind === 'document' ? resource.fileName : resource.url}</small></span>
-            {resource.kind === 'link' ? <ExternalLink size={15} /> : <Download size={15} />}
+            {resource.kind === 'link' ? <ExternalLink size={15} aria-hidden="true" /> : <Download size={15} aria-hidden="true" />}
           </a>
         </li>)}</ul>
       </section>}
