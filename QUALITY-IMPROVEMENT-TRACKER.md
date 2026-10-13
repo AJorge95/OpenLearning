@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Keep idle lesson feedback announcements quiet
+
+- **Reviewed:** The learner lesson feedback section, comment posting and moderation notices, paginated comment loading, and the live accessibility tree for a settled lesson.
+- **Improvement:** Mount the comment-posted, moderation, posting, and load-more live regions only while they contain an announcement; retain the existing polite status semantics and messages during each action.
+- **Why it helps:** Screen-reader users no longer encounter several blank status nodes on every lesson page, while meaningful comment feedback remains announced when it happens.
+- **Backend review:** Lesson feedback access, comment creation/removal authorization, pagination, audit logging, and response ordering are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/lesson-feedback-live-regions.test.js` and updated the existing lesson-comment announcement regression. The live lesson accessibility tree no longer exposes the idle blank status nodes; the comment flow remains source-covered for posting, moderation, and pagination announcements. Focused checks passed (13/13), the full `npm test -- --test-reporter=spec` suite passed (866/866), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The live signed-in lesson accessibility tree retained the meaningful comment count/status while removing the four idle blank action/loading status nodes, and the API/Vite endpoints returned 200.
+
 ## 2026-10-13 — Clarify learner catalog reset actions
 
 - **Reviewed:** The learner catalog search landmark, clear-filter and submit-search controls, empty and filtered states, and the live signed-in accessibility tree.

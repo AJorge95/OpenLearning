@@ -1605,12 +1605,9 @@ export function CoursePlayerPage() {
       </section>}
       {canViewLessonFeedback && <section className="lesson-feedback" aria-labelledby="lesson-feedback-title">
         <div className="lesson-feedback-heading"><div><h2 ref={commentSectionTitleRef} id="lesson-feedback-title" tabIndex={-1}>{isCourseManager ? 'Learner comments' : 'Lesson feedback'}</h2><p>{isCourseManager ? 'Review comments for this lesson. Removals appear in the administrator audit log.' : 'Share your reaction and discuss this lesson with other learners.'}</p></div>{visibleFeedback && <span><MessageSquare size={16} />{visibleFeedback.total} {visibleFeedback.total === 1 ? 'comment' : 'comments'}</span>}</div>
-        <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-          {commentPostedNotice?.courseId === courseId && commentPostedNotice.lessonId === lessonId ? 'Your comment was posted.' : ''}
-        </p>
-        <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-          {commentModerationNotice?.courseId === courseId && commentModerationNotice.lessonId === lessonId ? commentModerationNotice.message : ''}
-        </p>
+        {/* Mount live regions only while they have a message so idle lesson pages stay quiet. */}
+        {commentPostedNotice?.courseId === courseId && commentPostedNotice.lessonId === lessonId && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Your comment was posted.</p>}
+        {commentModerationNotice?.courseId === courseId && commentModerationNotice.lessonId === lessonId && commentModerationNotice.message && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{commentModerationNotice.message}</p>}
         {feedbackLoading || (!visibleFeedback && !visibleFeedbackError) ? <div className="feedback-loading" role="status">Loading lesson feedback…</div> : visibleFeedback && <>
           {user?.role === 'learner' && <>
             <div className="lesson-reactions" role="group" aria-label="React to this lesson">
@@ -1622,7 +1619,7 @@ export function CoursePlayerPage() {
               <textarea id="lesson-comment" aria-describedby="lesson-comment-hint" rows={4} maxLength={2000} value={commentDraft} onChange={(event) => updateCommentDraft(event.target.value)} placeholder="What did you think of this lesson?" disabled={commentSaving} />
               <div><small id="lesson-comment-hint">{commentDraft.length}/2,000 characters · visible to learners with course access</small><Button type="submit" disabled={commentSaving || !commentDraft.trim()}>{commentSaving ? 'Posting…' : 'Post comment'}<Send size={16} /></Button></div>
             </form>
-            <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{commentSaving ? 'Posting comment…' : ''}</p>
+            {commentSaving && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Posting comment…</p>}
           </>}
           {visibleFeedbackError && <ErrorNotice message={visibleFeedbackError} />}
           <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
@@ -1638,7 +1635,7 @@ export function CoursePlayerPage() {
             })}
             {!visibleFeedback.comments.length && <p className="comments-empty">{isCourseManager ? 'No learner comments yet.' : 'No comments yet. Start the conversation.'}</p>}
           </div>
-          <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{commentsLoading ? 'Loading more comments.' : ''}</p>
+          {commentsLoading && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Loading more comments.</p>}
           {visibleFeedback.comments.length < visibleFeedback.total && <Button type="button" variant="secondary" className="load-comments-button" disabled={commentsLoading} onClick={loadMoreComments}>{commentsLoading ? 'Loading…' : 'Load more comments'}</Button>}
         </>}
         {!feedbackLoading && visibleFeedbackError && !visibleFeedback && <ErrorNotice message={visibleFeedbackError} onRetry={() => setFeedbackRefreshVersion((version) => version + 1)} />}

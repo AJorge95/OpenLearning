@@ -39,7 +39,7 @@ test('lesson feedback reloads when any requested page overlaps loaded comments',
 test('loading another comment page announces progress to assistive technology', () => {
   const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /<p className="sr-only" role="status" aria-live="polite" aria-atomic="true">\{commentsLoading \? 'Loading more comments\.' : ''\}<\/p>/);
+  assert.match(source, /\{commentsLoading && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Loading more comments\.<\/p>\}/);
 });
 
 test('lesson comment composer keeps a visible label and associated audience guidance', () => {
