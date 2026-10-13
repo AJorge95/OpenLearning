@@ -17,7 +17,8 @@ import { getHorizontalRevealScrollLeft } from './navigation-scroll';
 import type { Course, CourseModule, Lesson } from './types';
 
 export function LoadingScreen({ label = 'Loading your learning space…' }: { label?: string }) {
-  return <div className="loading-screen" role="status" aria-live="polite"><span className="loading-mark"><BookOpen size={22} /></span><span>{label}</span></div>;
+  // The status text names the current wait; the book mark is visual decoration.
+  return <div className="loading-screen" role="status" aria-live="polite"><span className="loading-mark" aria-hidden="true"><BookOpen size={22} /></span><span>{label}</span></div>;
 }
 
 export function PlatformBrand({ className, to = '/courses' }: { className: string; to?: string }) {
