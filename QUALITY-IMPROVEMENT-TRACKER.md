@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Hide quiz-action glyphs from assistive technology
+
+- **Reviewed:** The learner quiz form, disabled and enabled submit action, score/result indicators, certificate and continue actions, and the course-progress link in the live quiz tree.
+- **Improvement:** Mark quiz arrows, score icons, and certificate/result glyphs as decorative while retaining the visible action names, native radio semantics, and status text.
+- **Why it helps:** Screen-reader users hear quiz actions and results once instead of encountering generic image nodes beside the same labels; quiz scoring, retry behavior, and navigation are unchanged.
+- **Backend review:** Quiz question delivery, answer validation, attempt throttling, saved-result access, completion state, and course authorization are unchanged; no server change was indicated.
+- **Checked:** Added `tests/client/quiz-action-icons.test.js` under the dedicated client-test folder. Focused quiz accessibility and forced-colors checks passed (7/7); the full `npm test -- --test-reporter=spec` suite passed (879/879), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The signed-in local quiz tree at a 390px viewport retained native radio names, answer-count guidance, the progress indicator, and the named Submit answers control without a generic arrow image; no browser warnings or errors were observed.
+
 ## 2026-10-13 — Hide lesson-player glyphs from assistive technology
 
 - **Reviewed:** The learner lesson player’s rail controls, restricted video controls, lesson navigation, completion action, comment count, and their live accessibility tree at a narrow viewport.
