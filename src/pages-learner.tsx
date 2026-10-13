@@ -1802,7 +1802,7 @@ export function QuizPage() {
   }
 
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading quiz…</div>;
-  if (!course || !quiz) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} />Back to course</Link></div>;
+  if (!course || !quiz) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} aria-hidden="true" />Back to course</Link></div>;
   const answeredCount = quiz.questions.filter((question) => Boolean(answers[question.id || ''])).length;
   const allAnswered = quiz.questions.length > 0 && answeredCount === quiz.questions.length;
   const courseFinished = course.completed || availableCertificate?.courseId === course.id;
@@ -1831,25 +1831,25 @@ export function QuizPage() {
             </fieldset>)}
             {!quiz.questions.length && <EmptyState icon={<CircleHelp size={24} />} title="This quiz is being prepared" detail="Check back when your course moderator has added questions." />}
             {quiz.questions.length > 0 && <p id="quiz-submit-hint" className="quiz-submit-hint" role="status" aria-live="polite" aria-atomic="true">{allAnswered ? `All ${formatCountLabel(quiz.questions.length, 'question', 'questions')} answered.` : `${answeredCount} of ${formatCountLabel(quiz.questions.length, 'question', 'questions')} answered. Answer the rest to enable submission.`}</p>}
-            <Button type="submit" aria-describedby={quiz.questions.length > 0 ? 'quiz-submit-hint' : undefined} disabled={!allAnswered || saving}>{saving ? 'Checking answers…' : 'Submit answers'}<ArrowRight size={17} /></Button>
+            <Button type="submit" aria-describedby={quiz.questions.length > 0 ? 'quiz-submit-hint' : undefined} disabled={!allAnswered || saving}>{saving ? 'Checking answers…' : 'Submit answers'}<ArrowRight size={17} aria-hidden="true" /></Button>
           </form>
         </> : <div className="quiz-results">
           {attemptDetailsFailure && <ErrorNotice message={error} onRetry={attemptDetailsFailure === 'retryable' ? () => setCourseLoadRetryVersion((version) => version + 1) : undefined} />}
-          <div className={`score-panel ${currentResult.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{currentResult.passed ? <Check size={22} /> : <Clock3 size={22} />}</span><div><span className="score-label">{currentResult.passed ? 'Quiz passed' : 'Quiz not passed'}</span><strong>{hasQuizAttemptBreakdown(currentResult) ? `${currentResult.correctCount} of ${currentResult.questionCount} correct` : 'Question breakdown unavailable'}</strong><small>Score {currentResult.score}% · {currentResult.passed ? `Pass mark: ${quiz.passMark}%.` : `You need ${quiz.passMark}% to pass.`}</small></div></div>
+          <div className={`score-panel ${currentResult.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{currentResult.passed ? <Check size={22} aria-hidden="true" /> : <Clock3 size={22} aria-hidden="true" />}</span><div><span className="score-label">{currentResult.passed ? 'Quiz passed' : 'Quiz not passed'}</span><strong>{hasQuizAttemptBreakdown(currentResult) ? `${currentResult.correctCount} of ${currentResult.questionCount} correct` : 'Question breakdown unavailable'}</strong><small>Score {currentResult.score}% · {currentResult.passed ? `Pass mark: ${quiz.passMark}%.` : `You need ${quiz.passMark}% to pass.`}</small></div></div>
           <h2 ref={resultHeadingRef} tabIndex={-1}>Quiz result</h2>
           <div className="quiz-result-actions">
-            {courseFinished && (user?.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} />Add name for certificate</Link>)}
+            {courseFinished && (user?.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} aria-hidden="true" />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} aria-hidden="true" />Add name for certificate</Link>)}
             {nextResultActivity && <Link className="button button-primary" to={nextResultActivity.type === 'quiz'
               ? `/courses/${course.id}/quiz/${nextResultActivity.id}`
               : `/courses/${course.id}/learn/${nextResultActivity.id}`}>
-              {nextResultActivity.type === 'quiz' ? 'Continue to quiz' : 'Continue learning'}<ArrowRight size={17} />
+              {nextResultActivity.type === 'quiz' ? 'Continue to quiz' : 'Continue learning'}<ArrowRight size={17} aria-hidden="true" />
             </Link>}
             {!currentResult.passed && <Button variant="secondary" onClick={retryQuiz}>Try again</Button>}
             <Link className={`button ${nextResultActivity ? 'button-secondary' : 'button-primary'}`} to={`/courses/${course.id}`}>Back to course</Link>
           </div>
         </div>}
       </div>
-      <aside className="quiz-aside"><span className="quiz-aside-label">Course progress</span><strong>{course.progress}%</strong><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /><p>Complete lessons and pass module quizzes to finish this course.</p><Link to={`/courses/${course.id}`}>View course content<ArrowRight size={16} /></Link></aside>
+      <aside className="quiz-aside"><span className="quiz-aside-label">Course progress</span><strong>{course.progress}%</strong><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /><p>Complete lessons and pass module quizzes to finish this course.</p><Link to={`/courses/${course.id}`}>View course content<ArrowRight size={16} aria-hidden="true" /></Link></aside>
     </div>
   </div>;
 }
