@@ -1,4 +1,4 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { db } from './db.js';
 import { writeSystemLog } from './log-store.js';
 import { editableCourse, logicalCourseId } from './course-versioning.js';
@@ -33,6 +33,35 @@ const enrolledCoursePathsStatement = db.prepare(`SELECT lp.id AS path_id, lp.sta
   WHERE e.user_id = ? AND pc.course_id = ? AND lp.status = 'published'`);
 const pathPrerequisiteCoursesStatement = db.prepare(`SELECT prior.course_id
   FROM learning_path_courses prior WHERE prior.path_id = ? AND prior.position < ? ORDER BY prior.position`);
+
+const anonymousCsrfTokenLifetimeMs = 12 * 60 * 60 * 1000;
+
+function createAnonymousCsrfToken() {
+  const payload = `${Date.now()}.${randomBytes(32).toString('base64url')}`;
+  const signature = createHmac('sha256', config.sessionSecret).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function isAnonymousCsrfToken(value) {
+  if (typeof value !== 'string' || value.length > 256) return false;
+  const parts = value.split('.');
+  if (parts.length !== 3) return false;
+  const [issuedAtText, nonce, signature] = parts;
+  if (!issuedAtText || !nonce || !signature || !/^\d+$/.test(issuedAtText)) return false;
+  const issuedAt = Number(issuedAtText);
+  const now = Date.now();
+  if (!Number.isSafeInteger(issuedAt) || issuedAt > now + 5_000 || now - issuedAt > anonymousCsrfTokenLifetimeMs) return false;
+  const expectedSignature = createHmac('sha256', config.sessionSecret).update(`${issuedAtText}.${nonce}`).digest('base64url');
+  const expectedBuffer = Buffer.from(expectedSignature);
+  const providedBuffer = Buffer.from(signature);
+  return expectedBuffer.length === providedBuffer.length && timingSafeEqual(expectedBuffer, providedBuffer);
+}
+
+function tokensMatch(expected, provided) {
+  const expectedBuffer = Buffer.from(expected);
+  const providedBuffer = Buffer.from(provided);
+  return expectedBuffer.length === providedBuffer.length && timingSafeEqual(expectedBuffer, providedBuffer);
+}
 
 function formatUploadLimit(bytes) {
   const units = ['bytes', 'KiB', 'MiB', 'GiB', 'TiB'];
@@ -106,18 +135,22 @@ export const requireStaff = requireRole('admin', 'moderator');
 export const requireAdmin = requireRole('admin');
 
 export function newCsrfToken(req) {
-  if (!req.session.csrfToken) req.session.csrfToken = randomBytes(32).toString('base64url');
+  if (req.session?.csrfToken) return req.session.csrfToken;
+  // Anonymous bootstrap requests must not create a persistent SQLite session row.
+  if (!req.session?.userId) return createAnonymousCsrfToken();
+  req.session.csrfToken = randomBytes(32).toString('base64url');
   return req.session.csrfToken;
 }
 
 export function csrfMiddleware(req, _res, next) {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
-  const expected = req.session?.csrfToken;
   const provided = req.get('x-csrf-token');
-  if (!expected || !provided) return next(new ApiError(403, 'Refresh the page and try again.', 'csrf_missing'));
-  const expectedBuffer = Buffer.from(expected);
-  const providedBuffer = Buffer.from(provided);
-  if (expectedBuffer.length !== providedBuffer.length || !timingSafeEqual(expectedBuffer, providedBuffer)) {
+  if (!provided) return next(new ApiError(403, 'Refresh the page and try again.', 'csrf_missing'));
+  const expected = req.session?.csrfToken;
+  const valid = expected
+    ? tokensMatch(expected, provided)
+    : !req.session?.userId && isAnonymousCsrfToken(provided);
+  if (!valid) {
     return next(new ApiError(403, 'Refresh the page and try again.', 'csrf_invalid'));
   }
   next();

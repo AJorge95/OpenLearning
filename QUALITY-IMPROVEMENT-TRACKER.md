@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-13 — Keep anonymous CSRF bootstrap stateless
+
+- **Reviewed:** The current learner, staff, setup, and authentication interface markup and responsive CSS, plus the CSRF bootstrap, session store, authentication routes, request validation, and recent UI improvement history.
+- **Improvement:** Anonymous `GET /api/csrf` responses now use a short-lived HMAC-signed token without mutating `express-session`; authenticated sessions keep their existing session-bound token behavior.
+- **Why it helps:** Public page loads and sign-up/setup visitors no longer create persistent SQLite session rows just to obtain a CSRF token, reducing unauthenticated session-storage growth while preserving CSRF rejection and automatic client refresh behavior.
+- **Interface review:** No higher-value current-build layout, interaction, or accessibility defect was reproduced beyond the already-tracked fixes, so the completed change is backend-only and leaves the existing client contract unchanged.
+- **Checked:** Added `tests/server/csrf-session-growth.test.js` under the dedicated server-test folder. The focused CSRF/session and logout checks passed (4/4), the full `npm test -- --test-reporter=spec` suite passed (883/883), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Against the running app, `/api/csrf` returned 200 with no session cookie and a three-part signed token; a signed-token POST reached the expected configured-platform response (409), and the SQLite session count stayed at 4 before and after. Rendered browser QA was not claimed because the Browser plugin is unavailable and the Playwright Chromium executable is not installed.
+
 ## 2026-10-13 — Hide course-editor curriculum glyphs from assistive technology
 
 - **Reviewed:** Staff course-editor module and lesson scaffolding, disclosure/reorder/delete controls, upload and status cues, add-lesson/add-quiz actions, and the existing curriculum accessibility contracts.
