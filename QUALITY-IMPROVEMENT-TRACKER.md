@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Bounded registration and resilience review: no distinct change indicated
+
+- **Reviewed:** The running signed-out registration structure and default layout, native labels and required constraints, password visibility controls, direct client timestamp formatting paths, calendar invalid-date filtering, session cleanup and expiry handling, request-body error mapping, protected media cleanup, and recent improvement history.
+- **Result:** No new code change was indicated. The public form exposes one meaningful heading, named controls, explicit password actions, and native validation without document overflow; malformed API timestamps use safe fallbacks where they reach locale formatters; calendar data skips invalid deadlines and reports partial data; and the reviewed server paths bound, validate, authorize, or fail closed.
+- **Why no change:** No reproducible current-build interface, accessibility, responsive, authorization, request-recovery, media-integrity, or data-integrity defect was found. Changing the remaining server-generated reset-expiry display or adding another timestamp guard without a failing contract would be speculative and would duplicate the preceding resilience work.
+- **Checked:** The connected Codex in-app browser rendered `/register` at the default viewport with one h1, native required controls, named password buttons, and 1265px client/scroll widths. `npm test -- --test-reporter=spec` passed (913/913); `npm run typecheck`, `npm run build`, and `git diff --check` passed. `/healthz`, `/readyz`, and the Vite root were checked before shutdown. No credentials, forms, or application data were changed.
+- **Needed to continue:** A reproducible current-build interaction or accessibility defect, representative backend/session/upload workload evidence, or a concrete product decision that changes the reviewed contracts.
+
 ## 2026-10-14 — Bounded public-flow and backend review: no distinct change indicated
 
 - **Reviewed:** The current signed-out registration DOM and 390px layout, heading and label structure, native required and autocomplete semantics, empty-submit focus recovery, password visibility controls, registration-schema loading state, calendar date normalization and bounds, protected media range/signature validation and cleanup, authentication/account-limit validation, platform-reset state and rollback contracts, and recent malformed-timestamp safeguards.
