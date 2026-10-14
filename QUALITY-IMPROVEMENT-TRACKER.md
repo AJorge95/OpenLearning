@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Cycle 36 bounded current-build review: no distinct change indicated
+
+- **Reviewed:** The clean current checkout and recent tracker/history; the launched signed-out `/login` and `/register` surfaces; heading, label, required-field, password-action, route, image-fallback, custom-select, modal, pagination, calendar, and error-boundary structures; responsive CSS breakpoints, focus states, forced-colors, reduced-motion, and touch-input rules; client request/CSRF/retry/cancellation behavior; course, learning-path, calendar, media, session, authorization, validation, logging, and reset boundaries; and the dedicated client/server regressions.
+- **Result:** No distinct runtime or test change was indicated. The live public forms exposed meaningful headings and named controls, the registration screen remained visually coherent, the reviewed markup retained native semantics and explicit action labels, and the current backend paths continued to validate, bound, recover, authorize, or fail closed at their existing contracts.
+- **Why no change:** No reproducible interface, accessibility, responsive, request-recovery, authorization, data-integrity, or measured performance defect surfaced. Another edit in the recently hardened auth, calendar, pagination, custom-select, media, session, or confirmation paths would duplicate existing safeguards without a failing fixture, changed requirement, or representative workload signal.
+- **Checked:** `npm test -- --test-reporter=spec` passed (921/921); `npm run typecheck`, `npm run build`, and `git diff --check` passed. The launched API and Vite root returned 200 from `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and `/`; the in-app browser rendered settled `/login` and `/register` with one meaningful heading, named controls, native required semantics, and password actions. No credentials, forms, or application data were changed.
+- **Needed to continue:** A reproducible current-build interaction or accessibility defect, representative production-size workload or latency data, a changed product requirement, or a concrete failure state not covered by the existing regressions.
+
 ## 2026-10-14 — Cycle 35 bounded current-build review: no distinct change indicated
 
 - **Reviewed:** The clean current checkout and recent improvement history; live signed-out login and registration structure at the default and 320×720 viewports; shared form controls, password actions, route announcements, responsive overflow, learner My learning and certificate pagination, certificate links and date formatting, current anonymous CSRF/session behavior, media and request bounds, authorization, and the dedicated client/server regression suites.
