@@ -347,12 +347,20 @@ export function ConfirmationDialog({ title, description, confirmLabel, cancelLab
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const dialogId = useId().replaceAll(':', '');
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog || dialog.open) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.showModal();
-    return () => { if (dialog.open) dialog.close(); };
+    return () => {
+      if (dialog.open) dialog.close();
+      // Return focus to the invoking control after the modal leaves the DOM.
+      // This keeps keyboard and screen-reader users anchored in the original workflow.
+      if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus();
+      previousFocusRef.current = null;
+    };
   }, []);
 
   return <dialog ref={dialogRef} className="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby={`${dialogId}-title`} aria-describedby={`${dialogId}-description`} onCancel={(event) => { event.preventDefault(); onCancel(); }} onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}>

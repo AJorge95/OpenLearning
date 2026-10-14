@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Restore focus after confirmation dialogs close
+
+- **Reviewed:** The shared native confirmation dialog and every course, lesson, learning-path, account, and unsaved-change flow that uses it.
+- **Improvement:** Capture the focused invoking control when a confirmation opens and restore focus to it when the dialog unmounts after cancel, Escape, backdrop dismissal, or completion. The modal layer, alert semantics, and default Cancel focus remain unchanged.
+- **Why it helps:** Keyboard and screen-reader users return to the action they just initiated instead of losing their place in the underlying page after a confirmation closes.
+- **Backend review:** Confirmation dialogs guard existing client mutations; the server-side deletion, archive, account, assignment, and reset authorization contracts were not changed.
+- **Checked:** Added the dedicated `tests/client/confirmation-dialog.test.js` regression for focus capture and restoration. Focused confirmation checks passed (4/4); the full `npm test -- --test-reporter=spec` suite passed (919/919); `npm run typecheck`, `npm run build`, and `git diff --check` passed. The running API returned 200 from `/healthz` and `/readyz`, the Vite root returned 200, and the settled registration page exposed one heading, six named inputs, no document overflow, and no warning/error logs. No destructive confirmation was submitted in the running app.
+
 ## 2026-10-14 — Fail closed when platform reset status is unavailable
 
 - **Reviewed:** Administrator platform-reset status polling, the reset preparation gate, backup/confirmation concurrency rules, and the existing reset-status client and server regressions.
