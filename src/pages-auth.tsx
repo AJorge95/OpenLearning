@@ -479,7 +479,7 @@ export function RegisterPage() {
     finally { releaseSubmissionLock(submissionInFlightRef); setSaving(false); }
   }
 
-  // Clear field-level email feedback on edit so aria-invalid reflects the current value.
+  // Clear field-level and generic submit feedback as the learner edits the value it describes.
   return <AuthPanel><h1>Create your account</h1><p className="auth-description">Join your learning space and explore available courses.</p>
     {registrationApprovalRequired && <p className="auth-approval-note" role="note">New accounts need administrator approval before they can sign in.</p>}
     <form onSubmit={submit} className="form-stack" aria-busy={saving}>
@@ -528,7 +528,7 @@ export function RegisterPage() {
           />
         </div>
       </div>
-      <div className="form-stack-username-field"><label htmlFor={usernameInputId}><span className="form-label-row"><span>Username</span><small className="form-required-indicator" aria-hidden="true">Required</small></span></label><input id={usernameInputId} name="username" aria-describedby={usernameHelpId} required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small id={usernameHelpId}>Letters, numbers, dots, underscores, and hyphens.</small></div>
+      <div className="form-stack-username-field"><label htmlFor={usernameInputId}><span className="form-label-row"><span>Username</span><small className="form-required-indicator" aria-hidden="true">Required</small></span></label><input id={usernameInputId} name="username" aria-describedby={usernameHelpId} required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => { setUsername(event.target.value); setError(''); }} disabled={saving} /><small id={usernameHelpId}>Letters, numbers, dots, underscores, and hyphens.</small></div>
       {registrationFieldsLoading ? <p className="registration-fields-loading" role="status">Loading registration details…</p> : registrationFieldsError
         ? <div className="registration-fields-load-error"><p className="form-error" role="alert">{registrationFieldsError}</p><Button type="button" variant="secondary" onClick={() => setRegistrationFieldsRetryVersion((version) => version + 1)}>Retry</Button></div>
         : <RegistrationFieldsForm fields={registrationFields} values={registrationFieldValues} disabled={saving} invalidFieldId={invalidRegistrationFieldId} onChange={(id, value) => { setRegistrationFieldValues((current) => ({ ...current, [id]: value })); setRegistrationFieldsChanged(false); if (id === invalidRegistrationFieldId) { setInvalidRegistrationFieldId(''); setError(''); } }} />}

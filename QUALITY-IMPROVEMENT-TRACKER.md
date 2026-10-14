@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Clear stale registration feedback while editing username
+
+- **Reviewed:** The public registration form, its generic collision response, the staff account-creation field-level feedback pattern, and the existing registration/email regressions.
+- **Improvement:** Clear the generic registration alert when the learner edits Username, matching the existing email behavior while preserving the server’s generic `registration_conflict` response.
+- **Why it helps:** After a username collision, the form no longer keeps an old failure message attached to a new username attempt; the alert now describes the current form state.
+- **Backend review:** No server change was indicated. Collision privacy, validation, uniqueness checks, and registration/session behavior remain unchanged.
+- **Checked:** Added `tests/client/registration-username-feedback.test.js`; focused registration/auth checks passed (26/26), the full suite passed (921/921), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The live registration page retained one heading, named controls, and no warning/error logs; `/healthz`, `/readyz`, and the Vite root returned 200.
+
 ## 2026-10-14 — Cycle 29 bounded current-build review: no distinct change indicated
 
 - **Reviewed:** The running signed-out registration and login pages, their heading and control semantics, narrow public-form layout, native validation and password actions, route and lazy-page error boundaries, shared custom-select, confirmation, account-menu, and focus behavior, learner calendar/deadline and course-recovery paths, management pagination/log/reset flows, protected media and upload cleanup, authorization and enrollment boundaries, request parsing, CSRF/session handling, and the existing dedicated regressions.
