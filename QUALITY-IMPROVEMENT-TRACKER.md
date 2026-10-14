@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Cycle 35 bounded current-build review: no distinct change indicated
+
+- **Reviewed:** The clean current checkout and recent improvement history; live signed-out login and registration structure at the default and 320×720 viewports; shared form controls, password actions, route announcements, responsive overflow, learner My learning and certificate pagination, certificate links and date formatting, current anonymous CSRF/session behavior, media and request bounds, authorization, and the dedicated client/server regression suites.
+- **Result:** No runtime or test change was indicated. Public controls retained meaningful names and native constraints, the narrow registration page stayed within its viewport, certificate and course list flows already guard stale pages and retry failures, and the reviewed backend paths remain validated, bounded, authorized, or fail closed at their current contracts.
+- **Why no change:** No reproducible interface, accessibility, responsive, request-recovery, authorization, data-integrity, or measured performance defect surfaced. Another edit to the recently reviewed auth feedback, focus, pagination, certificate, CSRF/session, or media paths would duplicate existing safeguards without a failing fixture, changed requirement, or representative workload signal.
+- **Checked:** Full `npm test -- --test-reporter=spec` passed (921/921). The launched API and Vite root returned 200 from `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and `/`; the in-app browser rendered settled `/login` and `/register`, and at 320×720 registration exposed one meaningful heading, named controls, and no document overflow. No credentials, forms, or application data were changed.
+- **Needed to continue:** A reproducible current-build interaction or accessibility defect, representative production-size workload or latency data, a changed product requirement, or a concrete failure state not covered by the existing regressions.
+
 ## 2026-10-14 — Cycle 34 bounded current-build review: no distinct change indicated
 
 - **Reviewed:** The current clean checkout and recent improvement history; the live signed-out login and registration surfaces; form headings, labels, native constraints, password actions, route announcements, and narrow-viewport layout; shared custom-select, confirmation, loading/error, learner course/player/feedback, management pagination/log/reset, authorization/enrollment, request parsing, CSRF/session, protected-media/upload, and existing client/server regression paths.
