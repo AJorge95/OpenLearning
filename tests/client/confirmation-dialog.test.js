@@ -15,7 +15,7 @@ test('confirmation dialog uses the browser modal layer and names its title and d
   assert.ok(dialogStart >= 0 && dialogEnd > dialogStart);
   assert.match(dialogSource, /<dialog ref=\{dialogRef\} className="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby=\{`\$\{dialogId\}-title`\} aria-describedby=\{`\$\{dialogId\}-description`\}/);
   assert.match(dialogSource, /dialog\.showModal\(\)/);
-  assert.match(dialogSource, /return \(\) => \{ if \(dialog\.open\) dialog\.close\(\); \}/);
+  assert.match(dialogSource, /return \(\) => \{[\s\S]*?if \(dialog\.open\) dialog\.close\(\);/);
 });
 
 test('confirmation dialog cancels on Escape or backdrop click and focuses Cancel by default', () => {
@@ -24,6 +24,13 @@ test('confirmation dialog cancels on Escape or backdrop click and focuses Cancel
   assert.match(dialogSource, /cancelLabel = 'Cancel'/);
   assert.match(dialogSource, /variant="secondary" autoFocus onClick=\{onCancel\}>\{cancelLabel\}/);
   assert.match(dialogSource, /variant=\{confirmVariant\} disabled=\{confirmDisabled\} onClick=\{onConfirm\}>\{confirmLabel\}/);
+});
+
+test('confirmation dialog restores focus to the invoking control when it closes', () => {
+  assert.match(dialogSource, /const previousFocusRef = useRef<HTMLElement \| null>\(null\);/);
+  assert.match(dialogSource, /previousFocusRef\.current = document\.activeElement instanceof HTMLElement \? document\.activeElement : null;/);
+  assert.match(dialogSource, /if \(previousFocusRef\.current\?\.isConnected\) previousFocusRef\.current\.focus\(\);/);
+  assert.match(dialogSource, /previousFocusRef\.current = null;/);
 });
 
 test('confirmation dialog stays within narrow viewports and preserves app styling', () => {
