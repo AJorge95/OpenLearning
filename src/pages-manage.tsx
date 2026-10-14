@@ -2498,7 +2498,12 @@ export function AdminUserCreatePage() {
   const roleHelpId = useId();
   const passwordConfirmationErrorId = useId();
   const accountNameErrorId = useId();
+  const accountEmailErrorId = useId();
+  const accountUsernameErrorId = useId();
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const usernameInputRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [nameError, setNameError] = useState('');
@@ -2507,6 +2512,7 @@ export function AdminUserCreatePage() {
   const lastNameInputRef = useRef<HTMLInputElement>(null);
   const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
   const [username, setUsername] = useState('');
+  const [usernameError, setUsernameError] = useState('');
   const [role, setRole] = useState<Role>('learner');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -2516,7 +2522,13 @@ export function AdminUserCreatePage() {
   async function createAccount(event: React.FormEvent) {
     event.preventDefault();
     if (saving) return;
-    setError(''); setNameError(''); setInvalidNameField(null);
+    setError(''); setEmailError(''); setUsernameError(''); setNameError(''); setInvalidNameField(null);
+    const currentEmailError = validateEmail(email);
+    if (currentEmailError) {
+      setEmailError(currentEmailError);
+      window.requestAnimationFrame(() => emailInputRef.current?.focus());
+      return;
+    }
     const firstNameError = accountNameError(firstName, 'First name');
     if (firstNameError) {
       setInvalidNameField('firstName');
@@ -2552,6 +2564,13 @@ export function AdminUserCreatePage() {
         setInvalidNameField(invalidField);
         setNameError(cause.message);
         window.requestAnimationFrame(() => (invalidField === 'lastName' ? lastNameInputRef.current : firstNameInputRef.current)?.focus());
+      } else if (cause instanceof ApiError && (cause.code === 'invalid_email' || cause.code === 'email_taken')) {
+        // Keep identifier conflicts attached to the value an administrator needs to change.
+        setEmailError(cause.message);
+        window.requestAnimationFrame(() => emailInputRef.current?.focus());
+      } else if (cause instanceof ApiError && cause.code === 'username_taken') {
+        setUsernameError(cause.message);
+        window.requestAnimationFrame(() => usernameInputRef.current?.focus());
       } else setError(cause instanceof ApiError ? cause.message : 'The account could not be created.');
     }
     finally { setSaving(false); }
@@ -2561,13 +2580,15 @@ export function AdminUserCreatePage() {
     <PageHeading title="Create account" subtitle="Set up a sign-in account and assign its platform role." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} aria-hidden="true" />Back to users</Link>} />
     <section className="account-form-card"><form className="form-stack" onSubmit={createAccount} aria-busy={saving}>
       {/* Keep required creation cues decorative so the accessible field names stay concise. */}
-      <label><span className="form-label-row"><span>Email</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input name="email" required type="email" maxLength={254} autoComplete="email" autoFocus value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving} /></label>
+      <label><span className="form-label-row"><span>Email</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={emailInputRef} name="email" required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? accountEmailErrorId : undefined} autoFocus value={email} onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} disabled={saving} /></label>
+      {emailError && <p id={accountEmailErrorId} className="form-error" role="alert">{emailError}</p>}
       <div className="account-name-fields">
         <label><span className="form-label-row"><span>First name</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={firstNameInputRef} name="firstName" required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="given-name" aria-invalid={invalidNameField === 'firstName' || undefined} aria-describedby={invalidNameField === 'firstName' ? accountNameErrorId : undefined} value={firstName} onChange={(event) => { setFirstName(event.target.value); if (invalidNameField === 'firstName') { setInvalidNameField(null); setNameError(''); } }} disabled={saving} /></label>
         <label><span className="form-label-row"><span>Last name</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={lastNameInputRef} name="lastName" required maxLength={MAX_ACCOUNT_NAME_LENGTH} autoComplete="family-name" aria-invalid={invalidNameField === 'lastName' || undefined} aria-describedby={invalidNameField === 'lastName' ? accountNameErrorId : undefined} value={lastName} onChange={(event) => { setLastName(event.target.value); if (invalidNameField === 'lastName') { setInvalidNameField(null); setNameError(''); } }} disabled={saving} /></label>
       </div>
       {nameError && <p id={accountNameErrorId} className="form-error" role="alert">{nameError}</p>}
-      <label><span className="form-label-row"><span>Username</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input name="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /><small>3–32 letters, numbers, dots, underscores, or hyphens.</small></label>
+      <label><span className="form-label-row"><span>Username</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={usernameInputRef} name="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.-]+" autoComplete="username" autoCapitalize="none" spellCheck={false} aria-invalid={usernameError ? true : undefined} aria-describedby={usernameError ? accountUsernameErrorId : undefined} value={username} onChange={(event) => { setUsername(event.target.value); setUsernameError(''); }} disabled={saving} /><small>3–32 letters, numbers, dots, underscores, or hyphens.</small></label>
+      {usernameError && <p id={accountUsernameErrorId} className="form-error" role="alert">{usernameError}</p>}
       <div className="account-form-role-field"><span>Platform role</span><AppSelect<Role> ariaLabel="Platform role" describedBy={roleHelpId} value={role} onChange={setRole} disabled={saving} options={ACCOUNT_ROLE_OPTIONS} /><small id={roleHelpId}>Choose administrator or moderator only when the person needs management access.</small></div>
       <PasswordField label="Password" name="password" required minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => { setPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} hint="Use at least 12 characters. You can reset it later from account details." />
       <PasswordField label="Confirm password" name="confirmPassword" inputRef={confirmPasswordInputRef} {...passwordConfirmationFieldProps(error, passwordConfirmationErrorId)} required minLength={12} maxLength={256} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError((currentError) => clearPasswordConfirmationError(currentError)); }} disabled={saving} />

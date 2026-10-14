@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Route administrator account identifier errors to their fields
+
+- **Reviewed:** The administrator account-creation form, its native email and username constraints, the server's `invalid_email`, `email_taken`, and `username_taken` responses, and the existing field-level error patterns used by registration and account details.
+- **Improvement:** Validate the creation email with the shared rules before sending, and attach server-side email or username conflicts to the matching field with `aria-invalid`, an alert description, edit-time clearing, and focus recovery.
+- **Why it helps:** Staff can correct the exact identifier that blocked account creation without hunting through a generic alert, while the response codes and server authority remain unchanged.
+- **Backend review:** No server change was indicated. The admin route already validates and distinguishes these identifier errors before writing; this closes the client association and recovery gap.
+- **Checked:** Added `tests/client/admin-account-create-validation.test.js`; focused account/email/password checks passed (20/20), the full `npm test -- --test-reporter=spec` suite passed (916/916), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The running app returned 200 from `/healthz`, `/readyz`, and the Vite root; the connected in-app browser retained the signed-out registration structure with named controls. No credentials, forms, or application data were changed.
+
 ## 2026-10-14 — Clear stale registration email errors while editing
 
 - **Reviewed:** The signed-out registration form's client/server email validation, field-level error association, focus recovery, native constraints, and the existing setup-form error-clearing behavior.
