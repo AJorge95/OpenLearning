@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Keep management course history recoverable
+
+- **Reviewed:** Course-editor publication review status, current and previous version history timestamps, shared API timestamp parsing, management log timestamp fallbacks, and the existing course-history pagination regressions.
+- **Improvement:** Added a shared `formatApiTimestamp` helper that validates parsed API timestamps before formatting, then routed review-submission and published-version history labels through it. Malformed legacy values now render a neutral `—` fallback instead of throwing during management-page render; existing log timestamps retain their raw-value fallback.
+- **Why it helps:** One corrupt or stale timestamp no longer takes down a staff course editor while loading governance history. The affected review/version data remains visible and actionable, and valid timestamps keep the existing locale-aware presentation.
+- **Backend review:** No server change was indicated. The API continues returning the stored review/version timestamps; this closes a client rendering gap in the management surface that already had a shared parser and safe fallbacks elsewhere.
+- **Checked:** Added `tests/client/management-timestamp-fallback.test.js` and updated the timestamp renderer contract. Focused timestamp/history checks passed (7/7), the full `npm test -- --test-reporter=spec` suite passed (913/913), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The running app returned 200 from `/healthz`, `/readyz`, and the Vite root. The signed-out registration page retained named controls and measured 375px client/document width at the narrow viewport; staff course-governance rendering remains source/regression-checked because no credentials were entered and no application data was changed.
+
 ## 2026-10-14 — Bounded auth, media, and reliability review: no distinct change indicated
 
 - **Reviewed:** Signed-out login and registration markup, native required and autocomplete semantics, password visibility controls, dynamic registration-field loading/retry behavior, narrow responsive layout, custom-select activation and focus handling, protected media/upload signature validation and cleanup, calendar date-range bounds, paginated query validation, and the current deployment-owned files.

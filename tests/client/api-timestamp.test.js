@@ -29,9 +29,9 @@ test('all database timestamp renderers use the shared parser', () => {
 
   for (const expression of [
     'parseApiTimestamp(value)',
-    'parseApiTimestamp(review.submittedAt)',
-    'parseApiTimestamp(currentVersion.published_at)',
-    'parseApiTimestamp(version.published_at)',
+    'formatApiTimestamp(review.submittedAt, logTimestampFormatter)',
+    'formatApiTimestamp(currentVersion.published_at, logTimestampFormatter)',
+    'formatApiTimestamp(version.published_at, logTimestampFormatter)',
   ]) assert.ok(manageSource.includes(expression), `${expression} should be used by management timestamp renderers`);
   assert.ok(learnerSource.includes('parseApiTimestamp(value)'), 'certificate and comment timestamps should use the shared parser');
   assert.doesNotMatch(manageSource, /new Date\((?:review\.submittedAt|currentVersion\.published_at|version\.published_at)\)/);
