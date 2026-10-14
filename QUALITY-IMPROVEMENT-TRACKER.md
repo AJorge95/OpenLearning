@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Reject impossible stored calendar deadlines
+
+- **Reviewed:** The learner calendar's bounded date-range query, stored deadline normalization, malformed-date warning path, client month grouping, and existing invalid-deadline coverage.
+- **Improvement:** Validate the calendar date portion before constructing a JavaScript `Date`, so impossible stored values such as `2099-02-31` are omitted and reported instead of being silently normalized into a different month.
+- **Why it helps:** Learners no longer receive a deadline outside the requested calendar range with no warning when legacy or corrupted storage contains a rollover date; valid deadlines remain ordered and available.
+- **Backend review:** The route still uses the existing bounded SQL range, access checks, summary batching, warning log, and additive `hasInvalidDeadlines` response flag. The change only tightens timestamp parsing before response serialization.
+- **Checked:** Added a dedicated server regression covering an impossible February date alongside a valid deadline. The focused course-analytics suite passed (127/127); the full `npm test -- --test-reporter=spec` suite passed (917/917); `npm run typecheck`, `npm run build`, and `git diff --check` passed. The running app returned 200 from `/healthz`, `/readyz`, and the Vite root, and the connected in-app browser rendered `/register` with one heading and named controls. No credentials, forms, or application data were changed.
+
 ## 2026-10-14 — Route administrator account identifier errors to their fields
 
 - **Reviewed:** The administrator account-creation form, its native email and username constraints, the server's `invalid_email`, `email_taken`, and `username_taken` responses, and the existing field-level error patterns used by registration and account details.
