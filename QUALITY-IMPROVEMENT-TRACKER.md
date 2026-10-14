@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Clear stale sign-in feedback while editing credentials
+
+- **Reviewed:** The signed-out login form, its generic authentication alert, existing registration and account-security error-clearing patterns, native field constraints, and the current client regression set.
+- **Improvement:** Clear the login error whenever the learner edits Username or Password, while preserving the existing submit-time API error and sign-in flow.
+- **Why it helps:** Learners no longer see an old invalid-credentials or connection message attached to a new credential attempt; the alert now describes the current state of the form.
+- **Backend review:** No server change was indicated. Authentication errors, rate limits, session handling, and CSRF behavior remain unchanged.
+- **Checked:** Added `tests/client/login-error-reset.test.js`; focused login/auth checks passed (18/18), the full `npm test -- --test-reporter=spec` suite passed (920/920), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The running app served `/healthz`, `/readyz`, and the Vite root with 200 responses, and the live `/login` page retained its named Username and Password controls with no warning/error logs; no credentials or application data were submitted.
+
 ## 2026-10-14 — Cycle 27 bounded current-build review: no distinct change indicated
 
 - **Reviewed:** The launched signed-out registration and login flows, their rendered heading/label structure, native validation and password actions, empty-submit focus recovery, the shared confirmation and custom-select controls, learner course/calendar/video recovery paths, management pagination/log details, learning-path and competency loading states, course-version access, authentication/session/CSRF handling, request parsing, media cleanup, authorization, and the existing dedicated regressions.

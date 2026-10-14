@@ -333,8 +333,9 @@ export function LoginPage() {
   return <AuthPanel><h1>Welcome back</h1><p id="login-description" className="auth-description">{hasRequestedDestination ? 'Sign in to return to the page you requested.' : 'Sign in to continue learning.'}</p>
     <form onSubmit={submit} className="form-stack" aria-busy={saving}>
       {/* Match PasswordField's visual cue while keeping required native for validation and assistive technology. */}
-      <label><span className="form-label-row"><span>Username</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input name="username" aria-describedby="login-description" required maxLength={32} autoComplete="username" autoCapitalize="none" spellCheck={false} autoFocus value={username} onChange={(event) => setUsername(event.target.value)} disabled={saving} /></label>
-      <PasswordField label="Password" name="password" required maxLength={256} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={saving} />
+      {/* Clear stale sign-in feedback as either credential changes so the alert reflects the current attempt. */}
+      <label><span className="form-label-row"><span>Username</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input name="username" aria-describedby="login-description" required maxLength={32} autoComplete="username" autoCapitalize="none" spellCheck={false} autoFocus value={username} onChange={(event) => { setUsername(event.target.value); setError(''); }} disabled={saving} /></label>
+      <PasswordField label="Password" name="password" required maxLength={256} autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value); setError(''); }} disabled={saving} />
       {error && <p className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving}>{saving ? 'Signing in…' : 'Sign in'}</Button>
     </form>
