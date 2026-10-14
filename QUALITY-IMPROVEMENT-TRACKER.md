@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Clear stale registration email errors while editing
+
+- **Reviewed:** The signed-out registration form's client/server email validation, field-level error association, focus recovery, native constraints, and the existing setup-form error-clearing behavior.
+- **Improvement:** Clear the registration email error when the learner edits the email field, removing stale `aria-invalid`, error-description, and error styling state before the next submit. The setup form already followed this pattern; registration now matches it.
+- **Why it helps:** Learners get immediate, accurate feedback while correcting an invalid or already-used address instead of seeing an old error attached to the new value.
+- **Backend review:** No server change was indicated. Server-side email validation and conflict responses remain authoritative; this is a client state-reset fix after the user changes the field.
+- **Checked:** Added a dedicated client regression in `tests/client/email-validation.test.js` covering the registration input's edit handler. The focused email suite passed (4/4), the full `npm test -- --test-reporter=spec` suite passed (914/914), `npm run typecheck`, `npm run build`, and `git diff --check` passed, and `/healthz`, `/readyz`, and the Vite root returned 200. The connected Codex in-app browser rendered `/register` with one heading and named controls; an empty Create account action stayed local and returned focus to Email. No credentials or application data were changed.
+
 ## 2026-10-14 — Bounded calendar, reset, and public-flow review: no distinct change indicated
 
 - **Reviewed:** The running signed-out registration structure and native validation, the responsive public form layout, calendar deadline grouping and invalid-date filtering, overdue refresh timers, platform-reset confirmation expiry and request gate, and the recent timestamp/resilience improvements.

@@ -37,3 +37,8 @@ test('registration validates email before submission and associates errors with 
   assert.match(registerPage, /cause\.code === 'invalid_email'[\s\S]*emailInputRef\.current\?\.focus\(\)\)/);
   assert.match(registerPage, /aria-invalid=\{emailError \? true : undefined\} aria-describedby=\{emailError \? emailErrorId : undefined\}/);
 });
+
+test('registration clears the email error as soon as the learner edits the field', () => {
+  const registerPage = source.slice(source.indexOf('export function RegisterPage()'), source.indexOf('export function AccountSecurityPage()'));
+  assert.match(registerPage, /name="email"[\s\S]*onChange=\{\(event\) => \{ setEmail\(event\.target\.value\); setEmailError\('\'\); setError\('\'\); \}\}/);
+});

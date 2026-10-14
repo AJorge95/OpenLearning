@@ -478,10 +478,11 @@ export function RegisterPage() {
     finally { releaseSubmissionLock(submissionInFlightRef); setSaving(false); }
   }
 
+  // Clear field-level email feedback on edit so aria-invalid reflects the current value.
   return <AuthPanel><h1>Create your account</h1><p className="auth-description">Join your learning space and explore available courses.</p>
     {registrationApprovalRequired && <p className="auth-approval-note" role="note">New accounts need administrator approval before they can sign in.</p>}
     <form onSubmit={submit} className="form-stack" aria-busy={saving}>
-      <label><span className="form-label-row"><span>Email</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={emailInputRef} name="email" required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? emailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setError(''); }} disabled={saving} /></label>
+      <label><span className="form-label-row"><span>Email</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={emailInputRef} name="email" required type="email" maxLength={254} autoComplete="email" aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? emailErrorId : undefined} value={email} onChange={(event) => { setEmail(event.target.value); setEmailError(''); setError(''); }} disabled={saving} /></label>
       {emailError && <p id={emailErrorId} className="form-error" role="alert">{emailError}</p>}
       {/* Keep certificate guidance in each field's description instead of its accessible name. */}
       <div className="account-name-fields registration-name-fields">
