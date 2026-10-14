@@ -2939,6 +2939,8 @@ export function AdminSettingsPage() {
     let active = true;
     let requestInFlight = false;
     let controller: AbortController | null = null;
+    // Keep the destructive reset action disabled until this page has a fresh, trusted status.
+    setResetStatusLoaded(false);
     async function refreshResetStatus() {
       // Focus and visibility events can coincide with an interval tick.
       if (!active || requestInFlight || document.visibilityState === 'hidden') return;
@@ -2947,13 +2949,15 @@ export function AdminSettingsPage() {
       controller = requestController;
       try {
         const result = await api.get<PlatformResetStatus>('/api/admin/platform-reset', { signal: requestController.signal });
-        if (active) { setResetState(result); setResetStatusError(''); }
+        if (active) { setResetState(result); setResetStatusError(''); setResetStatusLoaded(true); }
       } catch (cause) {
-        if (active && !requestController.signal.aborted) setResetStatusError(cause instanceof ApiError ? cause.message : 'Reset status could not be refreshed.');
+        if (active && !requestController.signal.aborted) {
+          setResetStatusLoaded(false);
+          setResetStatusError(cause instanceof ApiError ? cause.message : 'Reset status could not be refreshed.');
+        }
       } finally {
         requestInFlight = false;
         if (controller === requestController) controller = null;
-        if (active) setResetStatusLoaded(true);
       }
     }
     function refreshOnReturn() { void refreshResetStatus(); }
