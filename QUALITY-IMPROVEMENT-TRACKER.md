@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Cycle 41 bounded course-integrity review: no distinct change indicated
+
+- **Reviewed:** Course analytics summary and learner-page loading, retry, pagination, and table semantics; course-version history and review/restore boundaries; course-editor stale-route and published-version handling; media upload type/signature validation, temporary-file cleanup, protected range/document/caption access, and version-aware storage; and the corresponding client/server regressions.
+- **Result:** No distinct runtime or test change was indicated. Analytics keeps aggregate and learner-page requests separate, version history remains bounded and newest-first, editor responses stay scoped to the current course, and media routes validate signatures, authorize access, protect ranges, and clean up failed or replaced files.
+- **Why no change:** The focused source review found no reproducible stale response, page-boundary error, authorization gap, media-integrity failure, cleanup leak, or measured performance issue. Another edit in these recently hardened paths would duplicate existing safeguards without a failing fixture, changed requirement, or representative workload signal.
+- **Checked:** Focused client/server course, version, analytics, and media suites passed (173/173); the prior cycle’s full suite, strict typecheck, production build, and `git diff --check` remain green for this tracker-only follow-up. No course edits, uploads, review decisions, restores, or other application data changes were submitted. Existing test files remain in the dedicated `tests/client` and `tests/server` folders.
+- **Needed to continue:** A reproducible current-build course-integrity or media interaction defect, representative production-size workload or latency data, a changed product requirement, or a concrete failure state not covered by the existing regressions.
+
 ## 2026-10-15 — Cycle 40 bounded current-build review: no distinct change indicated
 
 - **Reviewed:** The clean current checkout and recent tracker/history; the live signed-out registration schema-loading surface; public heading, label, native required-field, password-action, route-status, responsive-overflow, and retry semantics; shared custom-select, confirmation, loading, and error-boundary behavior; client CSRF, retry, abort, malformed-response, and upload recovery; and server request parsing, session, authorization, media, pagination, logging, reset, and readiness boundaries.
