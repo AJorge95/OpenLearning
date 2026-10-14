@@ -38,6 +38,20 @@ test('settings explain when live reset status could not be refreshed', () => {
   assert.match(settingsPage.getText(sourceFile), /resetStatusError && <Notice>\{resetStatusError\} The displayed reset status may be out of date\.<\/Notice>/);
 });
 
+test('reset preparation stays disabled until live status is successfully loaded', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const settingsPage = sourceFile.statements.find((statement) => ts.isFunctionDeclaration(statement)
+    && statement.name?.text === 'AdminSettingsPage');
+  assert.ok(settingsPage, 'expected to find the admin settings page');
+
+  const pageSource = settingsPage.getText(sourceFile);
+  assert.match(pageSource, /setResetStatusLoaded\(false\);\s*async function refreshResetStatus\(\)/);
+  assert.match(pageSource, /setResetState\(result\); setResetStatusError\(''\); setResetStatusLoaded\(true\);/);
+  assert.match(pageSource, /setResetStatusLoaded\(false\);\s*setResetStatusError\(cause instanceof ApiError/);
+  assert.match(pageSource, /disabled=\{resetBusy \|\| !resetStatusLoaded\}/);
+});
+
 test('platform settings become read-only while a reset pauses API requests', () => {
   const source = fs.readFileSync(sourcePath, 'utf8');
   const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

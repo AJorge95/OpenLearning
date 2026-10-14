@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Fail closed when platform reset status is unavailable
+
+- **Reviewed:** Administrator platform-reset status polling, the reset preparation gate, backup/confirmation concurrency rules, and the existing reset-status client and server regressions.
+- **Improvement:** Keep reset preparation disabled until a live status request succeeds, and disable it again when a refresh fails. A successful response clears the stale-status error and re-enables the action; the server-side reset gate and verified-backup workflow remain unchanged.
+- **Why it helps:** An administrator cannot mistake an unavailable or stale status response for confirmation that no other reset is active. The destructive workflow now fails closed while preserving the existing retry and conflict-recovery message.
+- **Backend review:** The server continues to serialize reset preparation, pause protected requests, require a verified backup, and reject competing reset attempts. No server change was needed.
+- **Checked:** Added the dedicated `tests/client/platform-reset-status.test.js` regression; focused reset checks passed (8/8), the full `npm test -- --test-reporter=spec` suite passed (918/918), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The launched API returned 200 from `/healthz` and `/readyz`, the Vite root returned 200, and the reloaded signed-out registration page retained its named controls with no credentials or application data changed. The administrator-only reset interaction was not submitted.
+
 ## 2026-10-14 — Cycle 24 bounded current-build review: no distinct change indicated
 
 - **Reviewed:** The launched signed-out login and registration structures, shared custom-select semantics and positioning, route loading/error boundaries, learner catalog and learning-path paging, versioned platform-icon caching, CSRF/session cleanup, request-body error handling, protected media access, and the existing dedicated client/server regressions.
