@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Bounded calendar, reset, and public-flow review: no distinct change indicated
+
+- **Reviewed:** The running signed-out registration structure and native validation, the responsive public form layout, calendar deadline grouping and invalid-date filtering, overdue refresh timers, platform-reset confirmation expiry and request gate, and the recent timestamp/resilience improvements.
+- **Result:** No new code change was indicated. Registration renders a meaningful heading and named controls, empty submission remains local and focuses Email, calendar items are filtered before locale formatting and refresh logic ignores invalid deadlines, and reset confirmation state is server-generated, time-bounded, and cleared before protected mutations can proceed.
+- **Why no change:** No reproducible current-build interface, accessibility, responsive, authorization, request-recovery, reset-integrity, or data-integrity defect was found. Adding another reset timestamp guard or calendar formatter would duplicate the existing resilience contracts without a failing fixture or workload evidence.
+- **Checked:** The local Vite client rendered `/register` at `http://127.0.0.1:5174/register` with one h1, named controls, and the expected visual form; an empty Create account action focused Email without navigation. The Browser plugin and standalone Playwright browser were unavailable, so rendered QA used the available Codex in-app browser. `npm test -- --test-reporter=spec` passed (913/913); `npm run typecheck`, `npm run build`, and `git diff --check` passed; `/healthz`, `/readyz`, and the Vite root returned 200. No credentials, forms, or application data were changed.
+- **Needed to continue:** A reproducible current-build interaction or accessibility defect, representative session/upload/reset workload evidence, or a concrete product decision that changes the reviewed contracts.
+
 ## 2026-10-14 — Bounded registration and resilience review: no distinct change indicated
 
 - **Reviewed:** The running signed-out registration structure and default layout, native labels and required constraints, password visibility controls, direct client timestamp formatting paths, calendar invalid-date filtering, session cleanup and expiry handling, request-body error mapping, protected media cleanup, and recent improvement history.
