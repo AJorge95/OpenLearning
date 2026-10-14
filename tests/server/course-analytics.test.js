@@ -3511,6 +3511,43 @@ test('calendar omits malformed stored deadlines without failing valid results', 
   }
 });
 
+test('calendar omits impossible stored dates that JavaScript would normalize', async () => {
+  const validCourseId = 'calendar-valid-overflow-deadline';
+  const overflowCourseId = 'calendar-overflow-deadline';
+  const warningMessage = 'Malformed course deadlines were omitted from the calendar response.';
+  database.prepare(`INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+    VALUES (?, ?, 'public', 'published', 'admin-1', 'admin-1')`).run(validCourseId, 'Valid February deadline');
+  database.prepare(`INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+    VALUES (?, ?, 'public', 'published', 'admin-1', 'admin-1')`).run(overflowCourseId, 'Impossible February deadline');
+  const insertDeadline = database.prepare('INSERT INTO course_learning_state (user_id, course_id, deadline_at) VALUES (?, ?, ?)');
+  insertDeadline.run('learner-active', validCourseId, '2099-02-15T12:00:00.000Z');
+  insertDeadline.run('learner-active', overflowCourseId, '2099-02-31T12:00:00.000Z');
+
+  try {
+    const response = await fetch(apiUrl('/calendar?from=2099-02-01&to=2099-03-01'), {
+      headers: userHeaders('learner-active'),
+    });
+
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.hasInvalidDeadlines, true);
+    assert.deepEqual(body.items.map((item) => item.courseId), [validCourseId]);
+
+    const warning = database.prepare(`SELECT level, details_json FROM system_logs
+      WHERE source = 'calendar' AND message = ? ORDER BY id DESC LIMIT 1`).get(warningMessage);
+    assert.equal(warning.level, 'warn');
+    assert.deepEqual(JSON.parse(warning.details_json), {
+      invalidDeadlineCount: 1,
+      courseIds: [overflowCourseId],
+    });
+  } finally {
+    database.prepare('DELETE FROM system_logs WHERE source = ? AND message = ?').run('calendar', warningMessage);
+    database.prepare('DELETE FROM course_learning_state WHERE user_id = ? AND course_id IN (?, ?)')
+      .run('learner-active', validCourseId, overflowCourseId);
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(validCourseId, overflowCourseId);
+  }
+});
+
 test('calendar deadline results use version-aware course completion and batched summaries', async () => {
   database.prepare(`INSERT INTO course_learning_state (user_id, course_id, deadline_at, started_at)
     VALUES (?, ?, ?, CURRENT_TIMESTAMP)

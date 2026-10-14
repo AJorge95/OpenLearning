@@ -50,8 +50,12 @@ function isCalendarDate(value) {
 
 function calendarDeadlineDate(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
+  const trimmed = value.trim();
+  const datePart = /^(\d{4}-\d{2}-\d{2})(?:T| |$)/.exec(trimmed)?.[1];
+  // JavaScript normalizes impossible dates such as 2099-02-31 instead of rejecting them.
+  if (!datePart || !isCalendarDate(datePart)) return null;
   // SQLite's space-separated timestamps have no zone; interpret them as UTC like stored deadlines.
-  const normalized = value.trim().replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
+  const normalized = trimmed.replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
   const hasDateTime = /^\d{4}-\d{2}-\d{2}T/.test(normalized);
   const hasTimezone = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(normalized);
   const date = new Date(hasDateTime && !hasTimezone ? `${normalized}Z` : normalized);
