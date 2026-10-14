@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-14 — Bounded public-flow and backend review: no distinct change indicated
+
+- **Reviewed:** The current signed-out registration DOM and 390px layout, heading and label structure, native required and autocomplete semantics, empty-submit focus recovery, password visibility controls, registration-schema loading state, calendar date normalization and bounds, protected media range/signature validation and cleanup, authentication/account-limit validation, platform-reset state and rollback contracts, and recent malformed-timestamp safeguards.
+- **Result:** No new code change was indicated. The public form has one meaningful heading, every text control is label-associated with native required state, password actions are explicitly named buttons, empty submission stays local and focuses Email, and the narrow render has no document overflow. The reviewed server paths continue to validate, bound, authorize, or fail closed at their current contracts.
+- **Why no change:** No reproducible current-build interface, accessibility, responsive, authorization, request-recovery, media-integrity, or data-integrity defect was found. Another registration cue, date guard, upload edit, or reset-state change would duplicate existing coverage without a concrete failure or measured workload signal.
+- **Checked:** The connected Codex in-app browser rendered `/register` at the default viewport and a temporary 390×720 viewport; the empty Create account action retained the route and focused Email, the document measured 375px client and scroll width, and no warning/error logs were captured. `npm test -- --test-reporter=spec` passed (913/913), `npm run typecheck`, `npm run build`, `git diff --check`, `/healthz`, `/readyz`, and the Vite root returned success. No credentials, forms, or application data were changed.
+- **Needed to continue:** A reproducible current-build interaction or accessibility defect, representative backend/session/upload workload evidence, or a concrete product decision that changes the reviewed contracts.
+
 ## 2026-10-14 — Keep management course history recoverable
 
 - **Reviewed:** Course-editor publication review status, current and previous version history timestamps, shared API timestamp parsing, management log timestamp fallbacks, and the existing course-history pagination regressions.
