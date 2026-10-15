@@ -2192,6 +2192,7 @@ export function CourseAccessPage() {
   }
 
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading course access…</div>;
+  const hasEmptyAccessResult = !failedRequest && users.length === 0;
   return <div className="access-page"><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><Link to={`/manage/courses/${courseId}/edit`}>{course?.title || 'Course'}</Link><span>/</span><span>Assign learners</span></div>
     <PageHeading title="Assign learners" subtitle={`Choose which learners should see ${course?.title || 'this course'} in My learning.`} action={<Link className="button button-secondary" to={`/manage/courses/${courseId}/edit`}><ArrowLeft size={16} aria-hidden="true" />Back to course</Link>} />
     {error && (failedRequest
@@ -2199,6 +2200,8 @@ export function CourseAccessPage() {
       : <Notice>{error}</Notice>)}
     {notice && <div className="inline-notice inline-notice-success" role="status">{notice}</div>}
     <form role="search" aria-label="Search course learners" className="access-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); setPage(1); load(search, 1); }}><Search size={18} aria-hidden="true" /><input type="search" placeholder="Search learners by username or email" aria-label="Search learners by username or email" maxLength={100} value={query} onChange={(event) => setQuery(event.target.value)} /><Button variant="secondary" type="submit">Search</Button></form>
+    {/* Announce the empty result without moving focus or duplicating the visible recovery content. */}
+    {hasEmptyAccessResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{appliedQuery ? 'No learners match that search.' : 'No learner accounts are available.'}</p>}
     <div className="access-list">
       <div className="access-list-head"><span>Learner</span><span>Assignment</span><span>Action</span></div>
       {!failedRequest && users.length ? <ul className="access-rows" aria-label="Learner access">
