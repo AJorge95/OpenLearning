@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Avoid duplicate learner empty-state announcements
+
+- **Reviewed:** The learner catalog and My learning loading, filtered-empty, baseline-empty, certificate-history, and error branches, along with the existing empty-state accessibility regressions and route-status behavior.
+- **Improvement:** Keep the catalog's hidden polite announcement only for filtered no-match results, and remove the redundant hidden My learning announcement because the shared visible `EmptyState` already exposes the same heading and detail.
+- **Why it helps:** Screen-reader users now hear one clear baseline empty-state message instead of the same content twice, while a catalog search or category that removes all matches still announces the changed result without moving focus.
+- **Backend review:** No server change was indicated. Catalog and My learning authorization, pagination, certificate loading, and error/retry behavior remain unchanged.
+- **Checked:** Added `tests/client/learner-empty-state-announcements.test.js`; the new regression failed before the source change and passed afterward. The focused learner/program empty-state suite passed 8/8, `npm run typecheck`, `npm run build`, and `git diff --check` passed, and the launched API and Vite client returned 200 from `/healthz` and `/`. The full `npm test -- --test-reporter=spec` run still has failures from the preserved dirty backup/course-access worktree (backup audit save returns 500, migration fixture expects 35 while the dirty schema is 36, and a course-access row assertion reflects the dirty access markup); the new learner empty-state tests pass within that run.
+- **Needed to continue:** A reproducible current-build empty-state announcement regression, changed accessibility requirement, or a representative learner workload signal beyond the preserved in-progress backup feature.
+
 ## 2026-10-15 — Announce course completion-window validation errors
 
 - **Reviewed:** The course editor's optional completion-window field, its bounded day validation, focus recovery before both save paths, description links, and neighboring course-detail validation messages.

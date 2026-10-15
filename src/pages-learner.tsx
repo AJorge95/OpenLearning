@@ -209,6 +209,8 @@ export function CatalogPage() {
     ? { title: 'No matching courses', detail: 'Try a different search or category.' }
     : { title: 'No courses are available yet', detail: 'When courses are published for your learning space, they will appear here.' };
   const hasEmptyCatalogResult = !loading && !error && courses.length === 0;
+  // The visible EmptyState already provides the baseline announcement; announce only filtered result changes here.
+  const hasFilteredEmptyCatalogResult = hasEmptyCatalogResult && hasAppliedFilters;
 
   return <div className="catalog-page">
     <PageHeading title="Browse courses" subtitle="Find a course to build your skills." />
@@ -225,7 +227,7 @@ export function CatalogPage() {
       </form>
     </div>
     {error && <ErrorNotice message={error} onRetry={loadMoreFailed ? loadMore : retryLoad} />}
-    {hasEmptyCatalogResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyCatalogState.title}. {emptyCatalogState.detail}</p>}
+    {hasFilteredEmptyCatalogResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyCatalogState.title}. {emptyCatalogState.detail}</p>}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading courses…</div> : courses.length ? <div className="course-grid">{courses.map((course, index) => <CourseCard key={course.id} course={course} coverLoading={index === 0 ? 'eager' : 'lazy'} />)}</div> : error ? null : <EmptyState icon={<Filter size={24} />} title={emptyCatalogState.title} detail={emptyCatalogState.detail} />}
     {/* Keep pagination announcements out of the accessibility tree once loading has settled. */}
     {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {formatCountLabel(total, 'course', 'courses')}</p>{loadingMore && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Loading more courses…</p>}{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
@@ -382,11 +384,9 @@ export function MyLearningPage() {
   }, []);
   const learningEmptyState = { title: 'Your learning starts here', detail: 'Open a course from the catalog to add it to your learning list.' };
   const hasEmptyCourses = !loading && !error && courses.length === 0;
-  const hasEmptyLearning = hasEmptyCourses && !loadingCertificates && !certificateError && certificates.length === 0;
   return <div className="catalog-page my-learning-page">
     <PageHeading title="My learning" subtitle="Start, continue, or review your courses." />
     {error && <ErrorNotice message={error} onRetry={courseLoadMoreFailed ? loadMore : load} />}
-    {hasEmptyLearning && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{learningEmptyState.title}. {learningEmptyState.detail}</p>}
     {loading ? (
       <div className="page-loading" role="status" aria-live="polite">Loading your courses…</div>
     ) : courses.length ? (
