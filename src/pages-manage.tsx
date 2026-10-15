@@ -2477,6 +2477,8 @@ export function AdminUsersPage() {
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest.query, failedRequest.roleFilter, failedRequest.approvalFilter); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
     {success && <Notice kind="success">{success}</Notice>}
+    {/* Announce empty results while focus stays in the search and filter controls. */}
+    {!loading && !failedRequest && !users.length && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{userListEmptyMessage(appliedQuery, roleFilter, approvalFilter)}</p>}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading accounts…</div> : failedRequest ? null : <div className="user-table-wrap" role="region" aria-label="Scrollable account list" tabIndex={0}><p className="table-scroll-hint">Scroll horizontally to see all account columns.</p><table className="user-table"><caption className="sr-only">Accounts</caption><thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Account</th><th scope="col">Created</th><th scope="col">Actions</th></tr></thead><tbody>{users.map((user) => {
       const lastAdminHelpId = `last-active-admin-${user.id}`;
       return <tr key={user.id}>

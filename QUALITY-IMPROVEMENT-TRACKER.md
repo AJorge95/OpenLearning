@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Announce empty administrator account search results
+
+- **Reviewed:** The rendered administrator Users page, its search/filter reset behavior, the account-list empty-state helper, and the existing staff-list status announcements. A no-match search leaves focus in the search field while replacing the account table with a visible message.
+- **Improvement:** Add a visually hidden polite live region that announces the existing filter-specific empty message whenever the administrator account list has no results.
+- **Why it helps:** Screen-reader users now receive immediate feedback after a search or filter removes the table, without moving focus or duplicating the visible recovery control.
+- **Backend review:** The account-list query, role/approval filters, authorization, pagination, and reset-password/account actions were not changed; no backend defect was indicated by this focused review.
+- **Checked:** Added `tests/client/admin-user-empty-state-live-region.test.js` under the dedicated client-test folder. Focused account-management checks passed (10/10). The live `/admin/users` search rendered the empty result while focus stayed on Search username or email, and the DOM exposed a polite status region containing “No users match this search.” The browser had no runtime exception or log events. The full `npm test -- --test-reporter=spec` suite passed (922/922), `npm run typecheck`, `npm run build`, and `git diff --check` passed, and `/healthz`, `/readyz`, `/api/setup/status`, and the Vite root returned 200. No account edits, password resets, credentials, or other application data were submitted.
+
 ## 2026-10-15 — Surface the staff course-table scroll cue at the desktop breakpoint
 
 - **Reviewed:** The rendered staff course-management table at the current 1280px QA viewport, its scroll-region markup, the responsive table rules, and the existing course-list interaction and accessibility coverage.
