@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Announce course completion-window validation errors
+
+- **Reviewed:** The course editor's optional completion-window field, its bounded day validation, focus recovery before both save paths, description links, and neighboring course-detail validation messages.
+- **Improvement:** Mark the completion-window error as a live alert while retaining the field's `aria-invalid` and conditional `aria-describedby` references.
+- **Why it helps:** Authors using assistive technology now receive the same immediate validation announcement as the title and category fields when an invalid deadline is rejected.
+- **Backend review:** No server change was indicated. The existing completion-window parser, range validation, course-save transactions, and deadline persistence remain unchanged.
+- **Checked:** Extended `tests/client/course-editor-validation.test.js`; the regression failed before the markup change and passed afterward. All 932 tests passed, the focused course-editor suite passed 9/9, `npm run typecheck`, `npm run build`, and `git diff --check` passed. The launched API and Vite client returned 200 from `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, and `/`; the configured development browser remained on the public `/login` route with the expected heading and named controls and no browser warnings/errors, so the authenticated editor interaction was not exercised.
+- **Needed to continue:** A current-build course-editor validation or deadline mismatch, changed product requirement, or representative course-editing workload signal.
+
 ## 2026-10-15 — Associate platform-icon validation with its file input
 
 - **Reviewed:** The shared platform-icon picker used by first-run setup and administrator settings, its format/size guidance, decoded-image validation, alert rendering, and the existing icon accessibility regression.
