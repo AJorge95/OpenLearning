@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Associate platform-icon validation with its file input
+
+- **Reviewed:** The shared platform-icon picker used by first-run setup and administrator settings, its format/size guidance, decoded-image validation, alert rendering, and the existing icon accessibility regression.
+- **Improvement:** Mark the file input invalid while an icon validation error is present, give the error a stable id, and include that id in `aria-describedby` alongside the existing format guidance.
+- **Why it helps:** Screen-reader users can revisit the upload control and hear the specific reason the selected image was rejected, while the existing alert still announces the new error immediately.
+- **Backend review:** No server change was indicated. Server-side image type, byte-size, dimension, persistence, and audit rollback validation remain authoritative and unchanged.
+- **Checked:** Added `tests/client/platform-icon-picker-errors.test.js` and updated `tests/client/platform-icon-picker-accessibility.test.js` for the conditional description contract. The new regression failed before the source change and passed afterward; all 932 tests passed, `npm run typecheck`, `npm run build`, and `git diff --check` passed. The launched API and Vite client returned 200 from `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, and `/`; the configured setup route redirected to sign-in, so live picker interaction was not exercised without authentication or upload-side effects. The public `/login` page settled with its expected heading and named controls and no browser warnings/errors.
+- **Needed to continue:** A current-build picker or upload-validation mismatch, changed branding requirement, or representative image-upload workload signal.
+
 ## 2026-10-15 — Cycle 62 bounded public-flow and backend review: no distinct change indicated
 
 - **Reviewed:** The freshly launched current build's signed-out `/login` and `/register` surfaces at the default desktop viewport; page identity, headings, labels, native required semantics, password visibility actions, route status, registration-field loading/retry structure, horizontal overflow, and browser warnings/errors; the current client authentication request, registration-field refresh, validation, focus, and failure paths; and the server's stateless anonymous CSRF bootstrap, SQLite session storage and cleanup, authentication-rate-limit mounts, registration/setup validation, readiness/health boundaries, request/media bounds, and recent tracker history.

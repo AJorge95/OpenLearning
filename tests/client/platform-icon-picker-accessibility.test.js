@@ -22,6 +22,11 @@ function identifierExpression(attribute) {
     ? attribute.initializer.expression.text : '';
 }
 
+function expressionText(attribute) {
+  if (!attribute?.initializer || !ts.isJsxExpression(attribute.initializer) || !attribute.initializer.expression) return '';
+  return attribute.initializer.expression.getText(sourceFile);
+}
+
 function iconHintBinding(component) {
   let hintId = '';
   let hintText = '';
@@ -45,7 +50,7 @@ function iconHintBinding(component) {
     if (ts.isJsxSelfClosingElement(node) && ts.isIdentifier(node.tagName) && node.tagName.text === 'input') {
       const type = jsxAttribute(node, 'type');
       if (type?.initializer && ts.isStringLiteral(type.initializer) && type.initializer.text === 'file') {
-        inputDescription = identifierExpression(jsxAttribute(node, 'aria-describedby'));
+        inputDescription = expressionText(jsxAttribute(node, 'aria-describedby'));
       }
       return;
     }
@@ -62,7 +67,7 @@ test('platform icon file input exposes its format and size guidance as a descrip
   const binding = iconHintBinding(component);
   assert.ok(binding.hintId, 'the visible icon hint should have an id');
   assert.equal(binding.hintText, 'PNG, JPG, or WebP · up to 512 KB · 1024 × 1024 px max');
-  assert.equal(binding.inputDescription, binding.hintId);
+  assert.equal(binding.inputDescription, 'error ? `${iconHelpId} ${iconErrorId}` : iconHelpId');
 });
 
 test('platform icon picker validates decoded dimensions before staging the data URL', () => {
