@@ -613,13 +613,16 @@ export function LearningPathsPage() {
     ? <Button type="button" variant="secondary" onClick={clearPathSearch}>Clear search</Button>
     : undefined;
   const hasEmptyPathResult = !loading && !loadFailed && !error && paths.length === 0;
+  // The visible empty state already names the initial empty collection. Announce only
+  // search or status-filter results, where the content changed without moving focus.
+  const shouldAnnounceEmptyPathResult = hasEmptyPathResult && (Boolean(appliedPathSearch) || (staff && pathStatus !== 'all'));
   const pendingRemovalPath = pendingAssignmentRemoval && paths.find((path) => path.id === pendingAssignmentRemoval.pathId && path.title === pendingAssignmentRemoval.pathTitle && canAssignLearningPathLearners(path.status));
   const pendingRemovalLearner = pendingAssignmentRemoval && learners.find((learner) => learner.id === pendingAssignmentRemoval.learnerId && learner.username === pendingAssignmentRemoval.learnerUsername && learner.enrolled && learner.source === 'assigned');
 
   return <div className="management-page programs-page">
     <PageHeading title="Learning paths" subtitle={staff ? 'Guide learners through a course sequence and assign paths.' : 'Follow a guided sequence of courses and track your progress.'} />
     {error && (loadFailed ? <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => void load(requestedPathPageRef.current)}>Try again</Button></div> : <div className="inline-notice" role="alert">{error}</div>)}{notice && <div className="inline-notice inline-notice-success" role="status">{notice}</div>}
-    {hasEmptyPathResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyPathState.title}. {emptyPathState.detail}</p>}
+    {shouldAnnounceEmptyPathResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyPathState.title}. {emptyPathState.detail}</p>}
     {staff && <PathEditor key={editing?.id || 'new'} existing={editing} busy={saving} onSave={savePath} onCancel={cancelPathEdit} onDirtyChange={updatePathEditorDirty} />}
     {staff && <div className="management-tabs" role="group" aria-label="Filter learning paths by status">{learningPathStatusFilters.map((filter) => <button type="button" key={filter.value} ref={(button) => { if (button) pathStatusFilterButtonsRef.current[filter.value] = button; else delete pathStatusFilterButtonsRef.current[filter.value]; }} aria-pressed={pathStatus === filter.value} className={pathStatus === filter.value ? 'active' : ''} disabled={loading || saving || assignmentBusy} onClick={() => changePathStatus(filter.value)}>{filter.label}</button>)}</div>}
     <form role="search" aria-label="Search learning paths" className="management-search" onSubmit={submitPathSearch}><Search size={19} aria-hidden="true" /><input ref={pathSearchInputRef} type="search" value={pathSearch} onChange={(event) => setPathSearch(event.target.value)} placeholder="Search by name or description" aria-label="Search learning paths" maxLength={120} /><button type="submit" disabled={loading || saving || assignmentBusy}>Search</button></form>
@@ -852,10 +855,7 @@ export function CompetenciesPage() {
           </Button>}
         </div>
       )}
-    </> : <>
-      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">No competencies have been added. Your organization’s skills map will appear here when competencies are configured.</p>
-      <EmptyState title="No competencies have been added" detail="Your organization’s skills map will appear here when competencies are configured." />
-    </>}
+    </> : <EmptyState title="No competencies have been added" detail="Your organization’s skills map will appear here when competencies are configured." />}
   </div>;
 }
 

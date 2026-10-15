@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Avoid duplicate baseline empty-state announcements
+
+- **Reviewed:** The live learner/staff Learning paths and learner Competencies empty states, their visible headings and details, filtered-result announcements, and the existing route-status behavior.
+- **Improvement:** Keep the Learning paths live region for search/status-filtered empty results, but omit it for the initial unfiltered empty collection; remove the duplicate hidden live region from the baseline empty Competencies state.
+- **Why it helps:** Screen-reader users hear one clear empty-state message on initial load instead of the same title and detail being announced twice, while filtered results still announce the content change without moving focus.
+- **Backend review:** No server change was indicated. Learning-path and competency authorization, pagination, filtering, and API failure handling remain unchanged.
+- **Checked:** Added `tests/client/program-empty-state-announcements.test.js`. Before the fix, live `/learning-paths` exposed both a hidden status and the visible “No learning paths yet” empty state; after the fix, only the route status and published-course loader status remained. The filtered no-match search still exposed the polite result announcement, and the empty Competencies page exposed only its route status. Focused program checks passed (14/14), the full `npm test -- --test-reporter=spec` suite passed (930/930), `npm run typecheck`, `npm run build`, and `git diff --check` passed, local health/readiness/setup/registration/root probes returned 200, and browser warning/error logs were empty.
+- **Needed to continue:** A current-build filtered empty-result regression, changed accessibility requirement, or backend workload signal outside the reviewed program-page contracts.
+
 ## 2026-10-15 — Announce empty course-access search results
 
 - **Reviewed:** The live staff Assign learners page, learner search and focus behavior, empty-result markup, assignment controls, course-access pagination, and the related client/server access boundaries.
