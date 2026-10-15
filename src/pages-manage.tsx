@@ -2892,6 +2892,8 @@ export function AdminUserDetailsPage() {
 }
 
 export function AdminSettingsPage() {
+  const [appVersion, setAppVersion] = useState('');
+  const [appVersionError, setAppVersionError] = useState('');
   const { platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, userLimit, setBranding, setPlatformAccessSettings } = useAuth();
   const platformNameErrorId = useId();
   const platformNameInputRef = useRef<HTMLInputElement>(null);
