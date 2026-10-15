@@ -109,6 +109,24 @@ test('backup command snapshots configured SQLite and media paths into a fresh di
   assert.deepEqual(await fs.readFile(path.join(backupDirectory, 'course-media', 'course-one', 'cover.png')), mediaContents);
 });
 
+test('database-only and media-only backups contain only the selected data components', async () => {
+  const databaseOnly = await createBackup({ appConfig: { dbPath: databasePath, mediaRoot }, destinationRoot: path.join(fixtureDirectory, 'database-only'), scope: 'database' });
+  const mediaOnly = await createBackup({ appConfig: { dbPath: databasePath, mediaRoot }, destinationRoot: path.join(fixtureDirectory, 'media-only'), scope: 'media' });
+
+  assert.deepEqual((await fs.readdir(databaseOnly)).sort(), ['manifest.json', 'openlearning.sqlite']);
+  const databaseManifest = JSON.parse(await fs.readFile(path.join(databaseOnly, 'manifest.json'), 'utf8'));
+  assert.equal(databaseManifest.scope, 'database');
+  assert.equal(databaseManifest.database, 'openlearning.sqlite');
+  assert.equal(databaseManifest.mediaDirectory, null);
+  assert.deepEqual((await fs.readdir(mediaOnly)).sort(), ['course-media', 'manifest.json']);
+  assert.deepEqual(await fs.readFile(path.join(mediaOnly, 'course-media', 'course-one', 'cover.png')), mediaContents);
+  const mediaManifest = JSON.parse(await fs.readFile(path.join(mediaOnly, 'manifest.json'), 'utf8'));
+  assert.equal(mediaManifest.scope, 'media');
+  assert.equal(mediaManifest.database, null);
+  assert.equal(mediaManifest.mediaFileCount, 1);
+  assert.equal(mediaManifest.mediaBytes, mediaContents.length);
+});
+
 test('backup help prints usage without creating a backup', async () => {
   const helpDestination = path.join(fixtureDirectory, 'help-output');
   const result = await runBackup(helpDestination, ['--help']);

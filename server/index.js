@@ -20,6 +20,7 @@ import { cleanupOrphanedCourseMedia, getOrphanedMediaCleanupLog } from './media-
 import { programsRouter } from './routes-programs.js';
 import { isReadyToServe } from './readiness.js';
 import { isPlatformResetActive, platformResetGate } from './platform-reset.js';
+import { backupWriteGate, startBackupScheduler, stopBackupScheduler } from './backup-scheduler.js';
 
 const app = express();
 let isShuttingDown = false;
@@ -82,6 +83,7 @@ app.use(session({
 app.use(createSessionCookieProtocolMiddleware(setting, config.nodeEnv));
 app.use(loadCurrentUser);
 app.use(platformResetGate);
+app.use(backupWriteGate);
 
 const authRateLimitOptions = {
   windowMs: 15 * 60 * 1000,
@@ -144,11 +146,13 @@ const server = app.listen(config.port, () => {
   setImmediate(cleanupOrphanedMedia);
 });
 server.requestTimeout = config.requestTimeoutMs;
+startBackupScheduler({ shouldDefer: isPlatformResetActive });
 
 function shutdown() {
   if (isShuttingDown) return;
   isShuttingDown = true;
   writeSystemLog('info', 'server', 'OpenLearning server is shutting down');
+  const backupShutdown = stopBackupScheduler();
   const shutdownDeadline = setTimeout(() => {
     writeSystemLog('warn', 'server', 'Graceful shutdown exceeded 30 seconds; closing active connections');
     server.closeAllConnections();
@@ -156,9 +160,11 @@ function shutdown() {
   shutdownDeadline.unref?.();
   server.close(() => {
     clearTimeout(shutdownDeadline);
-    sessionStore.close();
-    db.close();
-    process.exit(0);
+    void backupShutdown.finally(() => {
+      sessionStore.close();
+      db.close();
+      process.exit(0);
+    });
   });
 }
 process.on('SIGINT', shutdown);

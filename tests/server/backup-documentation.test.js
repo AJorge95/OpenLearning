@@ -6,6 +6,11 @@ const readme = fs.readFileSync(new URL('../../README.md', import.meta.url), 'utf
 const backupSection = readme.split('## Back up and restore')[1]?.split('\n## ')[0] ?? '';
 
 test('backup instructions follow configured database and media paths', () => {
+  assert.match(backupSection, /Settings.*Backups/);
+  assert.match(backupSection, /daily or weekly jobs/i);
+  assert.match(backupSection, /database.*course-media.*both/i);
+  assert.match(backupSection, /14 successful backup artifacts/i);
+  assert.match(backupSection, /Missed schedules are not replayed after downtime/i);
   assert.match(backupSection, /`npm run backup`/);
   assert.match(backupSection, /same `DATA_DIR`, `DB_PATH`, and `MEDIA_ROOT` configuration/i);
   assert.match(backupSection, /reads the project `\.env` file/i);

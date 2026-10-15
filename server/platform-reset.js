@@ -7,6 +7,7 @@ import { db, setSetting } from './db.js';
 import { config } from './config.js';
 import { fail } from './http.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
+import { isBackupInProgress } from './backup-scheduler.js';
 
 const confirmationLifetimeMs = 15 * 60 * 1000;
 const resetDefaults = {
@@ -181,6 +182,7 @@ async function createBackup() {
 
 export async function preparePlatformReset(actor) {
   if (resetState) fail(409, 'A platform reset is already in progress.', 'platform_reset_in_progress');
+  if (isBackupInProgress()) fail(409, 'A platform reset cannot start while a scheduled or manual backup is queued or running.', 'backup_in_progress');
   const initialState = {
     phase: 'preparing',
     actorId: actor.id,
