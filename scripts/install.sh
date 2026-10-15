@@ -42,6 +42,7 @@ Usage: install.sh [--help]
 
 Installs or updates the OpenLearning systemd service from the latest main
 branch on Ubuntu 22.04+ and RHEL 9+ (including compatible derivatives).
+Set OPENLEARNING_COMMIT to a full 40-character commit SHA to install that exact source revision.
 Use --check-support <distribution> <version> to check distro support without installing.
 Run as root, for example:
   curl -fsSL https://raw.githubusercontent.com/AJorge95/OpenLearning/main/scripts/install.sh | sudo bash
@@ -58,6 +59,10 @@ if [[ "${1:-}" == "--check-support" ]]; then
   fail "Unsupported distribution or version: $2 $3"
 fi
 [[ $# -eq 0 ]] || fail "Unknown option: $1"
+SOURCE_COMMIT="${OPENLEARNING_COMMIT:-}"
+if [[ -n "$SOURCE_COMMIT" && ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+  fail "OPENLEARNING_COMMIT must be a full 40-character lowercase commit SHA."
+fi
 [[ "$(id -u)" -eq 0 ]] || fail "Run this installer as root, for example: curl -fsSL https://raw.githubusercontent.com/$REPOSITORY/$BRANCH/scripts/install.sh | sudo bash"
 
 command -v systemctl >/dev/null 2>&1 || fail "systemd is required."
@@ -133,14 +138,20 @@ RELEASE_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 NEW_RELEASE="$RELEASES_DIR/$RELEASE_ID"
 ARCHIVE="$(mktemp /tmp/openlearning-main.XXXXXX.tar.gz)"
 STAGING="$(mktemp -d /tmp/openlearning-source.XXXXXX)"
+SOURCE_ARCHIVE_URL="https://codeload.github.com/$REPOSITORY/tar.gz/refs/heads/$BRANCH"
+SOURCE_LABEL="latest $BRANCH source"
+if [[ -n "$SOURCE_COMMIT" ]]; then
+  SOURCE_ARCHIVE_URL="https://codeload.github.com/$REPOSITORY/tar.gz/$SOURCE_COMMIT"
+  SOURCE_LABEL="commit $SOURCE_COMMIT"
+fi
 if [[ "$OLD_UNIT_PRESENT" == true ]]; then
   UNIT_SNAPSHOT="$(mktemp -d /tmp/openlearning-unit.XXXXXX)"
   cp -a "$OLD_UNIT_FRAGMENT" "$UNIT_SNAPSHOT/original-unit"
 fi
 cleanup() { rm -f "$ARCHIVE" "${NODE_SETUP_FILE:-}"; rm -rf "$STAGING" "${UNIT_SNAPSHOT:-}"; }
 trap cleanup EXIT
-log "Downloading the latest $BRANCH source from GitHub."
-curl -fL --retry 3 "https://codeload.github.com/$REPOSITORY/tar.gz/refs/heads/$BRANCH" -o "$ARCHIVE"
+log "Downloading $SOURCE_LABEL from GitHub."
+curl -fL --retry 3 "$SOURCE_ARCHIVE_URL" -o "$ARCHIVE"
 tar -xzf "$ARCHIVE" -C "$STAGING" --strip-components=1
 install -d -m 0755 "$NEW_RELEASE"
 cp -a "$STAGING/." "$NEW_RELEASE/"

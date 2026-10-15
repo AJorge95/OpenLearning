@@ -14,6 +14,8 @@ const bashPath = process.platform === 'win32' && fs.existsSync('C:\\Program File
 test('Linux installer targets supported systems and repository main', () => {
   assert.match(installer, /REPOSITORY="AJorge95\/OpenLearning"/);
   assert.match(installer, /BRANCH="main"/);
+  assert.match(installer, /OPENLEARNING_COMMIT must be a full 40-character lowercase commit SHA/);
+  assert.match(installer, /codeload\.github\.com\/\$REPOSITORY\/tar\.gz\/\$SOURCE_COMMIT/);
   assert.match(installer, /ubuntu\)/);
   assert.match(installer, /Ubuntu 22\.04\+/);
   assert.match(installer, /RHEL 9\+/);
@@ -89,6 +91,7 @@ test('README documents the GitHub one-line installer and repeated update command
   assert.match(readme, /Run the same command again to update/);
   assert.match(readme, /Ubuntu 22\.04 or newer, or RHEL 9/);
   assert.match(readme, /creates the protected deployment `\.env` file at `\/etc\/openlearning\/\.env`/);
+  assert.match(readme, /OPENLEARNING_COMMIT/);
 });
 
 test('Linux installer has valid Bash syntax when Bash is available', (context) => {

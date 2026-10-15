@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,8 +32,26 @@ if (rawRequestTimeout && (!/^\d+$/.test(rawRequestTimeout) || !Number.isSafeInte
 }
 const defaultSessionSecret = 'development-only-change-this-session-secret';
 const exampleSessionSecret = 'change-this-to-a-random-secret-of-at-least-32-characters';
-const sessionSecret = process.env.SESSION_SECRET?.trim() || defaultSessionSecret;
-const setupToken = process.env.SETUP_TOKEN?.trim() || '';
+
+function readSecret(name) {
+  const environmentValue = process.env[name]?.trim() || '';
+  const filePath = process.env[`${name}_FILE`]?.trim() || '';
+  if (environmentValue && filePath) {
+    throw new Error(`Set either ${name} or ${name}_FILE, not both.`);
+  }
+  if (!filePath) return environmentValue;
+  let value;
+  try {
+    value = fs.readFileSync(filePath, 'utf8').trim();
+  } catch {
+    throw new Error(`${name}_FILE must point to a readable UTF-8 secret file.`);
+  }
+  if (!value) throw new Error(`${name}_FILE must point to a non-empty secret file.`);
+  return value;
+}
+
+const sessionSecret = readSecret('SESSION_SECRET') || defaultSessionSecret;
+const setupToken = readSecret('SETUP_TOKEN');
 if (setupToken && (setupToken.length < 32 || setupToken.length > 256)) {
   throw new Error('SETUP_TOKEN must be between 32 and 256 characters when configured.');
 }
