@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Return focus after clearing administrator competency search
+
+- **Reviewed:** The administrator competency-map search, filtered empty state, clear-search action, surrounding management filters, and existing focus-return regressions.
+- **Improvement:** Return focus to the persistent competency search field after clearing a filtered result and reloading the unfiltered first page.
+- **Why it helps:** Keyboard and screen-reader users stay anchored to the control they just used instead of losing focus when the clear action disappears.
+- **Backend review:** The competency query, pagination, authorization, active-state updates, and persistence paths were not changed; no backend defect was indicated by this focused review.
+- **Checked:** Added `tests/client/competency-search-focus.test.js` under the dedicated client-test folder. Focused competency/program checks passed (4/4); live `/admin/competencies` search and clear recovery returned focus to Search competency names and descriptions while restoring the unfiltered empty state; `npm test -- --test-reporter=spec` passed (923/923); `npm run typecheck`, `npm run build`, and `git diff --check` passed. No competency was created or changed, and no credentials or other application data were submitted.
+
 ## 2026-10-15 — Announce empty administrator account search results
 
 - **Reviewed:** The rendered administrator Users page, its search/filter reset behavior, the account-list empty-state helper, and the existing staff-list status announcements. A no-match search leaves focus in the search field while replacing the account table with a visible message.
