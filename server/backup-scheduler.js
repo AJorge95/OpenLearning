@@ -194,9 +194,20 @@ export function removeBackupJob(jobId, actor) {
 
 export function readBackupDashboard() {
   const now = new Date();
+  // The dashboard polls frequently, so resolve every job's latest run in one query
+  // instead of issuing a separate lookup for each configured job.
+  const latestRunsByJob = new Map();
+  const latestRuns = db.prepare(`SELECT candidate.* FROM backup_runs AS candidate
+    WHERE NOT EXISTS (
+      SELECT 1 FROM backup_runs AS newer
+      WHERE newer.job_id = candidate.job_id
+        AND (newer.created_at > candidate.created_at
+          OR (newer.created_at = candidate.created_at AND newer.id > candidate.id))
+    )`).all();
+  for (const run of latestRuns) latestRunsByJob.set(run.job_id, run);
   const jobs = db.prepare('SELECT * FROM backup_jobs ORDER BY created_at, name COLLATE NOCASE').all().map((row) => {
     const job = jobFromRow(row);
-    const lastRun = db.prepare('SELECT * FROM backup_runs WHERE job_id = ? ORDER BY created_at DESC, id DESC LIMIT 1').get(job.id);
+    const lastRun = latestRunsByJob.get(job.id);
     return { ...job, nextRunAt: job.enabled ? (nextRunByJob.get(job.id) || nextBackupAt(job, now)).toISOString() : null,
       lastRun: lastRun ? runFromRow(lastRun) : null };
   });

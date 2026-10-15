@@ -154,6 +154,14 @@ test('admins can create, run, inspect, update, and remove a backup job without d
     assert.equal(snapshot.prepare('SELECT status FROM backup_runs WHERE id = ?').get(queuedRun.id).status, 'success');
   } finally { snapshot.close(); }
 
+  const secondRunResponse = await fetch(apiUrl(`/backups/jobs/${job.id}/run`), { method: 'POST', headers: { 'x-test-role': 'admin' } });
+  assert.equal(secondRunResponse.status, 202);
+  const { run: secondQueuedRun } = await secondRunResponse.json();
+  const secondCompletedRun = await waitForRun(secondQueuedRun.id);
+  assert.equal(secondCompletedRun.status, 'success');
+  const dashboardAfterSecondRun = await (await fetch(apiUrl('/backups'), { headers: { 'x-test-role': 'admin' } })).json();
+  assert.equal(dashboardAfterSecondRun.jobs.find((item) => item.id === job.id)?.lastRun?.id, secondQueuedRun.id);
+
   const updatePayload = { ...payload, name: 'Weekly database', frequency: 'weekly', weekday: 5, runTimeUtc: '03:30', enabled: false };
   const updateResponse = await fetch(apiUrl(`/backups/jobs/${job.id}`), {
     method: 'PUT', headers: { 'content-type': 'application/json', 'x-test-role': 'admin' }, body: JSON.stringify(updatePayload),
@@ -166,7 +174,7 @@ test('admins can create, run, inspect, update, and remove a backup job without d
   assert.deepEqual(await removeResponse.json(), { removed: true, backupsKept: true });
   assert.equal(fs.existsSync(completedRun.backupPath), true);
   const historyResponse = await fetch(apiUrl('/backups'), { headers: { 'x-test-role': 'admin' } });
-  assert.equal((await historyResponse.json()).runs[0].id, queuedRun.id);
+  assert.equal((await historyResponse.json()).runs[0].id, secondQueuedRun.id);
 });
 
 test('backup job validation rejects a destination that overlaps course media', async () => {

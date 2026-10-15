@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Cycle 72 consolidate backup dashboard latest-run reads
+
+- **Reviewed:** The freshly launched signed-out login structure and browser diagnostics; the backup settings polling, job/history presentation, scheduler queue, destination validation, retention, shutdown, and media-write coordination; and the existing backup server/client regressions and dirty-worktree boundary.
+- **Improvement:** Replaced the backup dashboard's per-job latest-run lookup with one latest-run query and a job-id map. Extended the existing admin-backups regression to run the same job twice and confirm the dashboard presents the newest run.
+- **Why it helps:** Frequent five-second dashboard refreshes now use a constant number of database reads as backup-job count grows, reducing avoidable SQLite work while preserving the existing latest-run ordering and response shape.
+- **Interface review:** No new public login accessibility, structure, responsive, or browser-diagnostic defect was evidenced. The clean public route remained read-only; the preserved course-access/staff-markup changes remain out of scope.
+- **Checked:** `node --test tests/server/admin-backups.test.js`, `npm run typecheck`, `npm run build`, and `git diff --check` passed. The full suite remains bounded by the two known expectations that conflict with the preserved dirty course-access/staff-markup files; no user data, credentials, forms, uploads, or application actions were submitted.
+- **Commit title:** `perf(backup): consolidate dashboard latest-run reads`.
+- **Commit description:** `Resolve latest backup runs in one query for the polling admin dashboard and verify the newest run remains visible.`
+
 ## 2026-10-15 — Cycle 71 bounded backup, shared-control, and public-flow review: no distinct change indicated
 
 - **Reviewed:** The freshly launched signed-out login surface and browser-visible control names; the scheduled-backup settings page and scheduler's validation, queue, shutdown, retention, and media-write coordination; the shared custom select, forms, notices, empty states, status regions, pagination, responsive overflow, and focus patterns; and the related course, learning-path, authorization, request, session, media, logging, and readiness boundaries.
