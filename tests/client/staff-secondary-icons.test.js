@@ -16,7 +16,7 @@ test('staff actions and informational cues hide redundant glyphs', () => {
     /<Upload size=\{16\} aria-hidden="true" \/>/,
     /<Plus size=\{16\} aria-hidden="true" \/>Add first module/,
     /<Trash2 size=\{16\} aria-hidden="true" \/>\{deletingCourse/,
-    /<LockKeyhole size=\{15\} aria-hidden="true" \/>Assigned learners/,
+    /<LockKeyhole size=\{15\} aria-hidden="true" \/>Private-course access/,
     /<Plus size=\{17\} aria-hidden="true" \/>Create account/,
     /<Trash2 size=\{15\} aria-hidden="true" \/>Remove/,
   ]) assert.match(source, pattern);

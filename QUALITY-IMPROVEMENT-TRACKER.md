@@ -1,5 +1,16 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Centralize course-access status labels and align regression coverage
+
+- **Reviewed:** The latest private-course access UI and API contract, including direct assignments, path-unlocked access, public-course availability, disabled learners, assignment actions, accessibility labels, and the current clean working tree.
+- **Improvement:** Moved course-access status and action wording into small pure helpers with explicit precedence, then updated the management page to consume them. Added focused coverage for direct, learning-path, public, unavailable, assign, direct-assignment, and revoke states; refreshed the decorative-lock assertion to match the current private-course guidance.
+- **Why it helps:** The access table now keeps its business wording readable and testable in one place, while the regression suite protects the distinctions administrators rely on when deciding whether to add a direct assignment or leave path/public access unchanged.
+- **Backend review:** The current course-access endpoint, learner-role filtering, private-course path checks, grant/revoke authorization, enrollment side effects, and audit rollback behavior were reviewed read-only and left unchanged; no new authorization or data-integrity defect was indicated.
+- **Checked:** Focused course-access/refresh/icon checks passed 9/9; the full `npm test -- --test-reporter=dot` run passed; `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and the Vite root returned 200. The launched browser still exposed named login controls, no horizontal overflow at `1280×720`, and no browser warning/error logs. No credentials, forms, uploads, account/course actions, or application data were submitted.
+- **Preserved:** The latest private-course access commit was reviewed as the current baseline; no unrelated user files were present or staged.
+- **Commit title:** `test(course-access): cover access-state wording`.
+- **Commit description:** `Centralize course-access labels and align focused regressions with direct, path-unlocked, and public access states.`
+
 ## 2026-10-16 — Ignore stale backup dashboard responses
 
 - **Reviewed:** The scheduled-backup settings page's five-second polling, manual refreshes after create/run/update/remove actions, dashboard loading/error/empty-state branches, and the existing admin backup scheduler and dashboard response contract.
