@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Align completed-lesson watch guidance
+
+- **Reviewed:** The live completed lesson player, its verified video-watch status, completion toggle, next-lesson action, and the existing watch-progress recovery paths.
+- **Improvement:** Show completed learners a review-oriented status—“This lesson is complete. Review the video or mark it incomplete to watch it again.”—instead of the incomplete-lesson instruction that says completion is still locked. Keep the existing playback-preparation and watch-to-unlock messages for incomplete lessons.
+- **Why it helps:** The player now agrees with its pressed “Mark lesson incomplete” control and does not tell a learner to unlock a completion they already have.
+- **Backend review:** No server change was indicated. Verified playback, completion eligibility, progress persistence, and retry boundaries remain unchanged.
+- **Checked:** Added `tests/client/completed-lesson-watch-guidance.test.js`. Live completed lesson QA reproduced the contradictory guidance before the fix and exposed the completion-aware message after it, with the existing explicit reverse action still marked pressed. Focused lesson/player checks passed (19/19), the full `npm test -- --test-reporter=spec` suite passed (931/931), `npm run typecheck`, `npm run build`, and `git diff --check` passed, local health/readiness/setup/registration/root probes returned 200, and browser warning/error logs were empty.
+- **Needed to continue:** A current-build playback or completion mismatch, changed course requirement, or representative media workload signal.
+
 ## 2026-10-15 — Avoid duplicate baseline empty-state announcements
 
 - **Reviewed:** The live learner/staff Learning paths and learner Competencies empty states, their visible headings and details, filtered-result announcements, and the existing route-status behavior.

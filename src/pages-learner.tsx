@@ -862,6 +862,14 @@ export function CoursePlayerPage() {
   const watchRequired = Boolean(current?.hasVideo);
   const watchReadyForCurrent = watchProgress.lessonId === lessonId && watchProgress.ready;
   const watchedForCurrent = watchProgress.lessonId === lessonId && watchProgress.complete;
+  // Completed lessons keep review playback available without implying that completion is still locked.
+  const watchGuidance = current?.completed
+    ? 'This lesson is complete. Review the video or mark it incomplete to watch it again.'
+    : !watchReadyForCurrent
+      ? 'Preparing lesson playback…'
+      : watchedForCurrent
+        ? 'Full video watched. Mark this lesson complete to continue.'
+        : 'Watch the full video to unlock lesson completion. Forward seeking and speed changes are disabled.';
   const activeCaptionId = current?.captions.some((caption) => caption.id === selectedCaptionId) ? selectedCaptionId : '';
   // Playback progress rerenders this page frequently; keep options stable until tracks change.
   const captionOptions = useMemo(() => [
@@ -1581,7 +1589,7 @@ export function CoursePlayerPage() {
       </div>}
       {fullscreenError && <div className="player-video-error" role="alert">{fullscreenError}</div>}
       </div>
-      {watchRequired && current.hasVideo && <p className={`video-watch-guidance ${watchedForCurrent ? 'is-watched' : ''}`} role="status" aria-live="polite">{!watchReadyForCurrent ? 'Preparing lesson playback…' : watchedForCurrent ? 'Full video watched. Mark this lesson complete to continue.' : 'Watch the full video to unlock lesson completion. Forward seeking and speed changes are disabled.'}</p>}
+      {watchRequired && current.hasVideo && <p className={`video-watch-guidance ${watchedForCurrent || current.completed ? 'is-watched' : ''}`} role="status" aria-live="polite">{watchGuidance}</p>}
       {videoBuffering && <p className="video-watch-guidance" role="status" aria-live="polite">{getVideoRecoveryStatusMessage('buffering', watchRequired)}</p>}
       {videoRecovering && <p className="video-watch-guidance" role="status" aria-live="polite">{getVideoRecoveryStatusMessage('reconnecting', watchRequired)}</p>}
       {videoStalled && !videoRecovering && !videoError && <div className="player-video-error" role="alert"><p>Playback is still waiting for video data. Retry from your saved position.</p><Button type="button" variant="secondary" onClick={() => retryVideo(true)}>Retry playback</Button></div>}
