@@ -3089,8 +3089,9 @@ export function AdminSettingsPage() {
       <label><span className="form-label-row"><span>Maximum registered accounts</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input className="user-limit-input" type="number" min={0} max={1000000} step={1} required value={userLimitValue} onChange={(event) => setUserLimitValue(event.target.value)} /><small>0 means no limit. The cap includes administrators, moderators, and learners.</small></label>
       {registeredUserCountError
         ? <div className="registered-count-recovery"><Notice>{registeredUserCountError}</Notice><Button type="button" variant="secondary" onClick={() => setRegisteredUserCountRetryVersion((version) => version + 1)}>Retry account count</Button></div>
-        : <div className="registered-account-usage" role="status" aria-live="polite" aria-atomic="true">
-          <div className="registered-count-status">
+        : <div className="registered-account-usage">
+          {/* Keep the live region limited to changing status text, not the refresh control or progress bar. */}
+          <div className="registered-count-status" role="status" aria-live="polite" aria-atomic="true">
             <span>{registeredUserCount === null ? 'Loading registered accounts…' : accountLimit > 0 ? `${registeredUserCount} of ${accountLimit} accounts registered` : `${registeredUserCount} registered accounts · no account cap`}</span>
             {accountLimit > 0 && registeredUserCount !== null && <strong>{accountUsagePercent}%</strong>}
           </div>
