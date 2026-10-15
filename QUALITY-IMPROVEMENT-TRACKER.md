@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Associate setup account-limit errors with their field
+
+- **Reviewed:** The two-step setup wizard's access-configuration form, native number constraints, server `invalid_user_limit` validation contract, field focus recovery, and existing setup identifier/error regressions.
+- **Improvement:** Give the maximum registered accounts input a stable error id and ref, map the server's invalid-limit response to field-level `aria-invalid`/`aria-describedby` state, return focus to the field, and clear the message when the value changes or the user goes back.
+- **Why it helps:** A first-time administrator now knows exactly which setup value needs correction, including when a server-side limit rejects the submission, instead of receiving an unassociated form alert.
+- **Backend review:** No server change was indicated. The existing bounded `parseUserLimit` validation and `invalid_user_limit` response contract remain authoritative and unchanged.
+- **Checked:** Added `tests/client/setup-user-limit-errors.test.js`; the regression failed before the source change and passed afterward. The focused setup/settings suite passed 6/6, `npm run typecheck`, `npm run build`, and `git diff --check` passed, and the launched API and Vite client returned 200 from `/healthz` and `/`. The full suite remains bounded by the preserved dirty backup/course-access worktree failures recorded in the previous cycle.
+- **Needed to continue:** A reproducible current-build setup validation mismatch, changed bootstrap requirement, or representative first-run setup feedback signal.
+
 ## 2026-10-15 — Avoid duplicate learner empty-state announcements
 
 - **Reviewed:** The learner catalog and My learning loading, filtered-empty, baseline-empty, certificate-history, and error branches, along with the existing empty-state accessibility regressions and route-status behavior.
