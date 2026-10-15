@@ -216,7 +216,16 @@ function CourseRevisionBadge({ status }: { status: Course['reviewStatus'] }) {
   const label = status === 'in_review' ? 'In review'
     : status === 'changes_requested' ? 'Changes requested'
       : 'Draft changes';
-  return <span className={status === 'in_review' ? 'program-status' : 'program-status draft'}>{label}</span>;
+  return <span className={status === 'in_review' ? 'program-status' : 'program-status draft'} aria-hidden="true">{label}</span>;
+}
+
+// Keep the compact badge visual while giving assistive technology the pending-publication meaning.
+function courseRevisionAnnouncement(status: Course['reviewStatus']) {
+  return status === 'in_review'
+    ? 'A revision is awaiting review.'
+    : status === 'changes_requested'
+      ? 'A revision has changes requested.'
+      : 'There are unpublished draft changes.';
 }
 
 export function CourseManagementPage() {
@@ -373,7 +382,7 @@ export function CourseManagementPage() {
         <th scope="row"><div className="table-course"><span className="table-thumb"><ImageWithFallback src={course.coverUrl} className="table-cover-image" alt="" loading="lazy" decoding="async" fallback={<BookOpen size={20} aria-hidden="true" />} /></span><div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category}</small></div></div></th>
         <td><span className="owner-cell"><UserInitial username={course.owner || ''} />{course.owner}</span></td>
         <td><VisibilityLabel visibility={course.visibility} /></td>
-        <td><div className="course-list-status"><CourseStatus status={course.status} />{course.hasUnpublishedChanges && <CourseRevisionBadge status={course.reviewStatus} />}{busyAction && <span className="course-list-action-status" role="status" aria-live="polite" aria-atomic="true">{courseRowActionStatus(busyAction)}</span>}</div></td>
+        <td><div className="course-list-status"><CourseStatus status={course.status} />{course.hasUnpublishedChanges && <><CourseRevisionBadge status={course.reviewStatus} /><span className="sr-only">{courseRevisionAnnouncement(course.reviewStatus)}</span></>}{busyAction && <span className="course-list-action-status" role="status" aria-live="polite" aria-atomic="true">{courseRowActionStatus(busyAction)}</span>}</div></td>
         <td><DateText value={course.updatedAt} /></td>
         <td><div className="table-actions"><Link className="text-action" to={`/manage/courses/${course.id}/edit`}>Edit</Link><Link className="text-action" to={`/manage/courses/${course.id}/analytics`}>Analytics</Link><CourseRowMenu course={course} busyAction={busyAction} onStatusChange={changeStatus} onDelete={deleteCourse} /></div></td>
         </tr>;

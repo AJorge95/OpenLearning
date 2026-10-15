@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Clarify pending course revisions in the staff table
+
+- **Reviewed:** The live staff course-management table, its published/draft status badges, course revision review states, and the existing status and screen-reader regressions. The accessibility tree exposed a published course with pending work as the unpunctuated combined text “Published Draft Changes.”
+- **Improvement:** Keep the compact visual status badges, hide the duplicate revision badge text from assistive technology, and add one explicit sentence describing the pending revision state (`awaiting review`, `changes requested`, or `unpublished draft changes`).
+- **Why it helps:** Staff using screen readers can distinguish the currently published course from work that is not yet published, reducing the chance of treating an editable revision as the live course.
+- **Backend review:** Course publication, review-state persistence, permissions, and list queries were not changed; no backend defect was indicated by this focused review.
+- **Checked:** Added `tests/client/course-list-status-accessibility.test.js` under the dedicated client-test folder. Focused course-management/accessibility checks passed (11/11); the full `npm test -- --test-reporter=spec` suite passed (924/924), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live `/manage/courses` QA changed the row’s accessibility text from “Published Draft Changes” to “Published There are unpublished draft changes.” without changing the visible badges or submitting any course action.
+
 ## 2026-10-15 — Cycle 46 bounded learning-path and competency review: no distinct change indicated
 
 - **Reviewed:** The live learner competency page and empty state; learner and staff learning-path search, pagination, enrollment, assignment, and access behavior; learner competency pagination and achievement summaries; administrator competency filtering, pagination, updates, and audit boundaries; and the corresponding client/server regressions.
