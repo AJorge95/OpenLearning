@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Announce learning-path course selection changes
+
+- **Reviewed:** The live signed-out login and registration structures; the learning-path editor's course checklist, selection cap, selected-course ordering, prerequisite controls, loading/retry states, and responsive styling; the analogous competency-selection announcement; and the related path-course validation and access boundaries.
+- **Improvement:** Keep the learning-path course count as a polite atomic status region for every selection change, not only when the 200-course limit is reached. The visible count and existing cap/over-limit wording remain unchanged.
+- **Why it helps:** Staff using assistive technology now hear how many courses are selected after ordinary additions and removals, so the announced state stays aligned with the visible editor while they build a path.
+- **Backend review:** No server change was indicated. The shared 200-course limit, published-course filtering, selected-course removability, prerequisite ordering, and save validation remain authoritative and unchanged.
+- **Checked:** Added `tests/client/path-course-selection-announcements.test.js`; the focused path/competency selection suite passed 7/7, `npm run typecheck`, `npm run build`, and `git diff --check` passed. The full suite remains non-green only because the preserved dirty course-access changes still conflict with the existing disabled-row markup expectation; the dirty deployment, backup, and course-access files were not staged or changed by this cycle.
+- **Commit title:** `fix(a11y): announce learning path selection count`.
+- **Commit description:** `Announce every learning-path course selection count change to assistive technology while preserving the existing visible cap guidance and server-side limit.`
+
 ## 2026-10-15 — Keep installer updates compatible with managed backups
 
 - **Improvement:** The generated systemd unit now permits app-managed backups to write to their selected local destinations while retaining `NoNewPrivileges`, the dedicated service user, read-only system directories, and explicit persistent-storage paths. `/var/backups/openlearning` is the installer-managed default and is added to the unit's writable paths.

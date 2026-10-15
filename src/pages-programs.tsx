@@ -161,7 +161,8 @@ function PathEditor({ existing, busy, onSave, onCancel, onDirtyChange }: {
     </div>
     <label className="program-toggle"><input type="checkbox" checked={selfEnrollment} onChange={(event) => setSelfEnrollment(event.target.checked)} disabled={busy} /><span><strong>Allow learner self-enrollment</strong><small>Only public courses can be included in an open path.</small></span></label>
     <fieldset className="path-course-selector" disabled={busy}><legend>Courses in this path</legend>
-      <p className={`path-course-selection-count${selectionOverLimit ? ' over-limit' : selectionAtLimit ? ' at-limit' : ''}`} role={selectionAtLimit ? 'status' : undefined} aria-live={selectionAtLimit ? 'polite' : undefined} aria-atomic={selectionAtLimit || undefined}>
+      {/* Announce every selection change so assistive-technology users can track the visible count. */}
+      <p className={`path-course-selection-count${selectionOverLimit ? ' over-limit' : selectionAtLimit ? ' at-limit' : ''}`} role="status" aria-live="polite" aria-atomic="true">
         {selectionOverLimit
           ? `This path has ${selected.length} courses. Remove ${selected.length - MAX_LEARNING_PATH_COURSES} before saving.`
           : selectionAtLimit
