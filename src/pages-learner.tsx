@@ -1474,6 +1474,12 @@ export function CoursePlayerPage() {
 
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading lesson…</div>;
   if (!course || !current) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setCourseLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to={`/courses/${courseId}`}><ArrowLeft size={17} aria-hidden="true" />Back to course</Link></div>;
+  // Keep the completion toggle's current state and next action clear to all learners.
+  const completionButtonLabel = saving
+    ? 'Saving lesson progress'
+    : current.completed
+      ? 'Mark lesson incomplete'
+      : 'Mark lesson complete';
   if (watchRequired && current.locked) {
     const nextUnlockedLesson = lessons.find((lesson) => !lesson.locked);
     return <div className="narrow-content lesson-locked-page"><span className="program-icon" aria-hidden="true"><LockKeyhole size={19} /></span><h1>Lesson locked</h1><p>Watch and complete the previous lesson before continuing to {current.title}.</p>{nextUnlockedLesson && nextUnlockedLesson.id !== current.id && <Link className="button button-primary" to={`/courses/${course.id}/learn/${nextUnlockedLesson.id}`}>Continue with available lesson<ArrowRight size={17} aria-hidden="true" /></Link>}<Link className="back-link" to={`/courses/${course.id}`}>Back to course</Link></div>;
@@ -1584,7 +1590,7 @@ export function CoursePlayerPage() {
       <div className="player-controls-row">
         {/* Visible navigation labels name these controls; direction and completion glyphs are decorative. */}
         <button className="button button-secondary" type="button" disabled={!previous} onClick={() => previous && navigate(`/courses/${course.id}/learn/${previous.id}`)}><ArrowLeft size={17} aria-hidden="true" />Previous lesson</button>
-        <Button variant={current.completed ? 'secondary' : 'primary'} disabled={saving || !lessonCanBeCompleted} aria-busy={saving} onClick={toggleCompleted}>{saving ? 'Saving progress…' : current.completed ? <><Check size={17} aria-hidden="true" />Completed</> : 'Mark lesson complete'}</Button>
+        <Button variant={current.completed ? 'secondary' : 'primary'} disabled={saving || !lessonCanBeCompleted} aria-busy={saving} aria-label={completionButtonLabel} aria-pressed={current.completed} title={current.completed && !saving ? completionButtonLabel : undefined} onClick={toggleCompleted}>{saving ? 'Saving progress…' : current.completed ? <><Check size={17} aria-hidden="true" />Completed</> : 'Mark lesson complete'}</Button>
         {saving && <span className="sr-only" role="status" aria-live="polite">Saving lesson progress…</span>}
         <button className="button button-secondary" type="button" disabled={!nextActivityAfterCurrent || Boolean(watchRequired && !current.completed)} title={watchRequired && !current.completed ? 'Watch and complete this lesson before continuing' : undefined} onClick={() => {
           if (!nextActivityAfterCurrent) return;

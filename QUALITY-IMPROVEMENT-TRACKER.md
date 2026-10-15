@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Clarify the completed-lesson toggle action
+
+- **Reviewed:** The live learner course overview and lesson player, completion state and reverse-completion route, keyboard/screen-reader control names, and the existing lesson-progress regressions.
+- **Improvement:** Keep the visible `Completed` treatment, but expose the completion button's current state through `aria-pressed`, announce `Mark lesson incomplete` as its next action, and provide the same explanation on hover. Saving keeps the temporary accessible name `Saving lesson progress`.
+- **Why it helps:** Learners no longer have to infer that activating a button named only `Completed` removes the lesson completion; the toggle's state and reversible action are explicit without changing the completion API or layout.
+- **Backend review:** No server change was indicated. The existing completion transaction, watch gate, and path-access revocation remain unchanged.
+- **Checked:** Added `tests/client/lesson-completion-toggle.test.js`; focused lesson/completion checks passed (5/5), the full `npm test -- --test-reporter=spec` suite passed (925/925), `npm run typecheck`, `npm run build`, and `git diff --check` passed, the live player exposed `Mark lesson incomplete` with pressed state while retaining the visible `Completed` label, and `/healthz`, `/readyz`, `/api/setup/status`, and the Vite root returned 200. No forms, credentials, comments, completion actions, or other application data were submitted in live QA.
+
 ## 2026-10-15 — Cycle 52 bounded program, calendar, and account-management review: no distinct change indicated
 
 - **Reviewed:** The current post-push tree and prior-cycle boundaries; live learner Learning paths, Calendar, and Competencies pages plus administrator Users; empty states, creation controls, search and status filters, custom selects, month navigation, calendar scroll behavior, account identity and last-administrator protection, row actions, pagination, route titles, and loading/retry recovery; and the corresponding learning-path, competency, calendar, account, publication-readiness, pagination, and readiness paths.
