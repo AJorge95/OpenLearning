@@ -1,12 +1,21 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Announce empty course-access search results
+
+- **Reviewed:** The live staff Assign learners page, learner search and focus behavior, empty-result markup, assignment controls, course-access pagination, and the related client/server access boundaries.
+- **Improvement:** Add a polite, visually hidden status announcement when the course-access list has no learners, using the existing search-specific result wording while keeping the visible empty state and recovery link unchanged.
+- **Why it helps:** Staff using a screen reader now receive immediate feedback when a learner search replaces the access rows with an empty result, without moving focus or duplicating the visible message.
+- **Backend review:** No server change was indicated. Course-access authorization, learner filtering, pagination, assignment/unassignment transactions, and audit behavior remain unchanged.
+- **Checked:** Added `tests/client/course-access-empty-state-live-region.test.js`. Live `/manage/courses/:courseId/access` reproduced the no-match state before the fix, and after the change exposed a separate polite status while retaining the visible message. Focused course-access checks passed (6/6); the full `npm test -- --test-reporter=spec` suite passed (928/928), `npm run build` passed strict typecheck and production bundling, `git diff --check` passed, `/healthz`, `/readyz`, `/api/setup/status`, and `/` returned 200, and browser warning/error logs were empty. No learner assignments, account changes, or other application data were submitted.
+- **Needed to continue:** A reproducible current-build course-access interaction or authorization defect, changed accessibility requirement, representative workload signal, or concrete failure state not covered by existing regressions.
+
 ## 2026-10-15 — Keep the account-cap live status text-only
 
 - **Reviewed:** The live administrator Settings page, registered-account count refresh and progress semantics, the surrounding form controls, and the existing account-cap accessibility regression.
 - **Improvement:** Scope the polite live region to the changing registered-account count and percentage instead of wrapping the refresh button, progress bar, and cap warning.
 - **Why it helps:** Screen-reader users now receive the account-cap update without having the live region repeatedly announce an unrelated interactive control; the visible layout and refresh behavior remain unchanged.
 - **Backend review:** No server change was indicated. Account-count retrieval, stale-response cancellation, cap validation, and settings persistence remain unchanged.
-- **Checked:** Extended `tests/client/admin-account-capacity.test.js` to assert the text-only live region and focused control boundary. Live `/admin/settings` exposed the account count as a status separate from the “Refresh account count” button; no settings were saved, no reset was started, and no browser warning/error logs were observed. Full test, typecheck, build, diff-check, and local health validation follow in this cycle.
+- **Checked:** Extended `tests/client/admin-account-capacity.test.js` to assert the text-only live region and focused control boundary. Live `/admin/settings` exposed the account count as a status separate from the “Refresh account count” button; no settings were saved, no reset was started, and no browser warning/error logs were observed. Focused checks passed (3/3); the full `npm test -- --test-reporter=spec` suite passed (927/927), `npm run build` passed strict typecheck and production bundling, `git diff --check` passed, and `/healthz`, `/readyz`, `/api/setup/status`, and `/` returned 200.
 - **Needed to continue:** A reproducible current-build Settings or account-cap interaction defect, changed accessibility requirement, representative workload signal, or a concrete failure state not covered by existing regressions.
 
 ## 2026-10-15 — Cycle 57 bounded certificate-history and issuance review: no distinct change indicated
