@@ -875,6 +875,7 @@ export function AdminCompetenciesPage() {
   const [notice, setNotice] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
   const competencyTitleInputRef = useRef<HTMLInputElement>(null);
+  const competencySearchInputRef = useRef<HTMLInputElement>(null);
   const loadControllerRef = useRef<AbortController | null>(null);
   async function load(requestedPage = page, requestedQuery = appliedQuery) {
     loadControllerRef.current?.abort();
@@ -918,6 +919,8 @@ export function AdminCompetenciesPage() {
   function clearSearch() {
     setQuery(''); setAppliedQuery(''); setPage(1);
     void load(1, '');
+    // Keep keyboard users in the persistent search control after the clear action disappears.
+    competencySearchInputRef.current?.focus();
   }
   async function create(event: React.FormEvent) {
     event.preventDefault(); if (loading || saving || savingId !== null || !title.trim()) return;
@@ -962,7 +965,7 @@ export function AdminCompetenciesPage() {
     <form className="program-editor-card competency-create-form" onSubmit={create} aria-busy={loading || saving || savingId !== null}><div className="program-card-heading"><div><span className="program-icon" aria-hidden="true"><CircleHelp size={18} /></span><div><h2>Add a competency</h2><p>Course completions can demonstrate this competency.</p></div></div></div><div className="program-form-grid"><label><span className="form-label-row"><span>Name</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={competencyTitleInputRef} required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} disabled={loading || saving || savingId !== null} /></label><label className="program-full-field">Description<textarea id="competency-description" aria-describedby="competency-description-count" rows={2} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={loading || saving || savingId !== null} /><small id="competency-description-count" className="field-character-count">{description.length} / 2,000 characters</small></label></div><div className="program-form-actions"><Button type="submit" disabled={loading || saving || savingId !== null || !title.trim()}><Plus size={16} aria-hidden="true" />{saving ? 'Adding…' : 'Add competency'}</Button></div></form>
     <form role="search" className="management-search competency-search" aria-label="Search competencies" onSubmit={searchCompetencies} aria-busy={loading}>
       <Search size={18} aria-hidden="true" />
-      <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search competencies" aria-label="Search competency names and descriptions" maxLength={100} disabled={saving || savingId !== null} />
+      <input ref={competencySearchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search competencies" aria-label="Search competency names and descriptions" maxLength={100} disabled={saving || savingId !== null} />
       <Button type="submit" variant="quiet" disabled={saving || savingId !== null}>Search</Button>
     </form>
     {loading ? <div className="page-loading" role="status">Loading competencies…</div> : loadError ? null : items.length ? <>
