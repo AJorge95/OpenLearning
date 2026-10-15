@@ -20,6 +20,7 @@ If OpenLearning is useful for your team, please [star the repository](https://gi
 - Optional platform icon and selectable violet, ocean, forest, rose, and amber color palettes.
 - MP4 video upload with browser upload progress and authenticated byte-range delivery for seeking.
 - Administrator-only audit and system logs with search, filters, and pagination.
+- Administrator-configured automatic backups with independent full, database-only, or course-media-only schedules, per-job local destinations and retention, manual runs, and run history.
 - Native Node deployment: one Express process serves the API and production web client. Docker is not required.
 
 ## Requirements
@@ -127,13 +128,15 @@ The media upload accepts MP4 video, JPG, PNG, or WebP course covers, and WebVTT 
 
 ## Back up and restore
 
-Back up both the SQLite database and the complete media root. Platform identity, connection, and registration settings and the optional icon are stored in SQLite, so they are included in the database backup. The app includes a portable online-backup command that uses the same `DATA_DIR`, `DB_PATH`, and `MEDIA_ROOT` configuration as the server:
+Administrators can open **Settings** → **Backups** to create independent daily or weekly jobs for the SQLite database, the complete course-media root, or both. Each job has its own UTC run time, existing writable server-side destination, and retention count. New jobs default to daily at 02:00 UTC and retain the newest 14 successful backup artifacts. The panel shows next and last run status, recent history and output location, and supports **Run now**. Media and full backups pause data-changing requests while media files are copied; course reads remain available. Missed schedules are not replayed after downtime; the next run waits for its normal schedule. Removing a job keeps its previous backup files and run history.
+
+Full backups include both SQLite and the complete media root. Platform identity, connection, and registration settings and the optional icon are stored in SQLite, so they are included in database backups. The app also includes a portable online-backup command that uses the same `DATA_DIR`, `DB_PATH`, and `MEDIA_ROOT` configuration as the server; `npm run backup` continues to create a full backup:
 
 ```sh
 npm run backup
 ```
 
-Each run creates a new timestamped directory under `./backup` containing `openlearning.sqlite` and `course-media`. Set `BACKUP_DIR` to use another destination root; for example, in PowerShell run `$env:BACKUP_DIR = '.\backups'` before `npm run backup`. The command reads the project `.env` file and resolves relative paths from the same working directory used by OpenLearning. It uses the bundled SQLite driver, so the SQLite CLI is not required. Before copying media or reporting success, it verifies the SQLite snapshot with `quick_check`; if the check fails, incomplete output is removed. The database snapshot can run while the app is online; pause course edits and uploads during the media copy so the database and files describe the same point in time. The command rejects backup destinations inside the media root and removes incomplete output when a backup fails.
+Each CLI run creates a new timestamped directory under `./backup` containing `openlearning.sqlite`, `course-media`, and a manifest describing the selected components. Set `BACKUP_DIR` to use another destination root; for example, in PowerShell run `$env:BACKUP_DIR = '.\backups'` before `npm run backup`. The command reads the project `.env` file and resolves relative paths from the same working directory used by OpenLearning. It uses the bundled SQLite driver, so the SQLite CLI is not required. Before copying media or reporting success, it verifies the SQLite snapshot with `quick_check`; if the check fails, incomplete output is removed. The database snapshot can run while the app is online; pause course edits and uploads during the media copy so the database and files describe the same point in time. The command rejects backup destinations inside the media root and removes incomplete output when a backup fails.
 
 To restore, stop OpenLearning, choose a timestamped backup directory, restore its database to `DB_PATH` and its media tree to `MEDIA_ROOT`, then start the app again. Keep the directory layout and course folders intact. Restoring only one of the database or media tree can leave course records without their uploaded files, or files without their course records.
 

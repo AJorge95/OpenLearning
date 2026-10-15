@@ -44,51 +44,120 @@ function verifyDatabaseBackup(databasePath, DatabaseClass) {
   }
 }
 
+async function removeDatabaseSidecars(databasePath) {
+  await Promise.all(['-wal', '-shm'].map((suffix) => fs.rm(`${databasePath}${suffix}`, { force: true })));
+}
+
+async function copyMediaTree(source, destination) {
+  await fs.mkdir(destination, { recursive: true });
+  let fileCount = 0;
+  let byteCount = 0;
+  const entries = await fs.readdir(source, { withFileTypes: true });
+  for (const entry of entries) {
+    const from = path.join(source, entry.name);
+    const to = path.join(destination, entry.name);
+    if (entry.isSymbolicLink()) throw new Error('The course media directory contains a symbolic link; the backup cannot safely include it.');
+    if (entry.isDirectory()) {
+      const nested = await copyMediaTree(from, to);
+      fileCount += nested.fileCount;
+      byteCount += nested.byteCount;
+    } else if (entry.isFile()) {
+      const stats = await fs.stat(from);
+      await fs.copyFile(from, to);
+      const copied = await fs.stat(to);
+      if (copied.size !== stats.size) throw new Error(`Media file verification failed for ${entry.name}.`);
+      fileCount += 1;
+      byteCount += stats.size;
+    } else {
+      throw new Error(`Unsupported entry in course media directory: ${entry.name}.`);
+    }
+  }
+  return { fileCount, byteCount };
+}
+
 export async function createBackup({
   appConfig = config,
   destinationRoot = path.resolve(process.cwd(), process.env.BACKUP_DIR?.trim() || './backup'),
+  scope = 'full',
+  jobId = null,
+  runId = null,
   DatabaseClass = Database,
-  copyMedia = fs.cp,
+  copyMedia = copyMediaTree,
   now = new Date(),
 } = {}) {
+  if (!['full', 'database', 'media'].includes(scope)) throw new Error('Backup scope must be full, database, or media.');
   const databasePath = await fs.realpath(path.resolve(appConfig.dbPath));
   const mediaRoot = await fs.realpath(path.resolve(appConfig.mediaRoot));
   const backupRoot = await resolveCanonicalPath(destinationRoot);
   const backupDirectory = path.join(backupRoot, timestampedDirectoryName(now));
   const databaseBackupPath = path.join(backupDirectory, 'openlearning.sqlite');
   const mediaBackupPath = path.join(backupDirectory, 'course-media');
+  const includesDatabase = scope !== 'media';
+  const includesMedia = scope !== 'database';
 
   // Canonical paths ensure symlinked backup roots cannot bypass the recursive-copy guard.
   if (pathsOverlap(mediaRoot, backupDirectory)) {
     throw new Error('BACKUP_DIR must resolve outside the configured media root.');
   }
-  if (pathsOverlap(databasePath, databaseBackupPath) || pathsOverlap(databaseBackupPath, mediaBackupPath)) {
+  if ((includesDatabase && pathsOverlap(databasePath, backupDirectory))
+    || (includesMedia && pathsOverlap(mediaRoot, backupDirectory))
+    || pathsOverlap(databaseBackupPath, mediaBackupPath)) {
     throw new Error('Backup output paths must be separate from the source database and each other.');
   }
 
-  const mediaDetails = await fs.stat(mediaRoot);
-  if (!mediaDetails.isDirectory()) throw new Error('The configured media root is not a directory.');
+  if (includesMedia) {
+    const mediaDetails = await fs.stat(mediaRoot);
+    if (!mediaDetails.isDirectory()) throw new Error('The configured media root is not a directory.');
+  }
 
   let sourceDatabase;
   let backupDirectoryCreated = false;
+  let mediaStats = { fileCount: 0, byteCount: 0 };
   try {
-    sourceDatabase = new DatabaseClass(databasePath, { readonly: true, fileMustExist: true });
-    sourceDatabase.pragma('busy_timeout = 5000');
+    if (includesDatabase) {
+      sourceDatabase = new DatabaseClass(databasePath, { readonly: true, fileMustExist: true });
+      sourceDatabase.pragma('busy_timeout = 5000');
+    }
 
     await fs.mkdir(backupRoot, { recursive: true });
     await fs.mkdir(backupDirectory);
     backupDirectoryCreated = true;
 
     const createdBackupDirectory = await fs.realpath(backupDirectory);
-    if (pathsOverlap(mediaRoot, createdBackupDirectory) || pathsOverlap(databasePath, createdBackupDirectory)) {
+    if (pathsOverlap(mediaRoot, createdBackupDirectory)
+      || (includesDatabase && pathsOverlap(databasePath, createdBackupDirectory))) {
       throw new Error('Backup output paths must remain separate from the configured storage paths.');
     }
 
-    await sourceDatabase.backup(databaseBackupPath);
-    sourceDatabase.close();
-    sourceDatabase = null;
-    verifyDatabaseBackup(databaseBackupPath, DatabaseClass);
-    await copyMedia(mediaRoot, mediaBackupPath, { recursive: true, errorOnExist: true, force: false });
+    if (includesDatabase) {
+      await sourceDatabase.backup(databaseBackupPath);
+      sourceDatabase.close();
+      sourceDatabase = null;
+      verifyDatabaseBackup(databaseBackupPath, DatabaseClass);
+    }
+    if (includesMedia) mediaStats = await copyMedia(mediaRoot, mediaBackupPath);
+    if (includesDatabase && runId) {
+      const snapshot = new DatabaseClass(databaseBackupPath);
+      try {
+        snapshot.prepare(`UPDATE backup_runs SET status = 'success', finished_at = ?, backup_path = ?
+          WHERE id = ? AND status = 'running'`).run(new Date().toISOString(), backupDirectory, runId);
+      } finally {
+        if (snapshot.open) snapshot.close();
+      }
+    }
+    if (includesDatabase && runId) verifyDatabaseBackup(databaseBackupPath, DatabaseClass);
+    if (includesDatabase) await removeDatabaseSidecars(databaseBackupPath);
+    const manifest = {
+      createdAt: now.toISOString(),
+      scope,
+      jobId,
+      runId,
+      database: includesDatabase ? 'openlearning.sqlite' : null,
+      mediaDirectory: includesMedia ? 'course-media' : null,
+      mediaFileCount: includesMedia ? mediaStats.fileCount : null,
+      mediaBytes: includesMedia ? mediaStats.byteCount : null,
+    };
+    await fs.writeFile(path.join(backupDirectory, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' });
     return backupDirectory;
   } catch (cause) {
     if (backupDirectoryCreated) {

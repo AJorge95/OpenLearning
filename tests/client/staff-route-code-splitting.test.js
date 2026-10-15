@@ -59,6 +59,8 @@ test('staff pages remain out of the entry bundle until their route is opened', (
     assert.ok(appSource.includes(`<Route path="${path}" element={<${page} />} />`), `${path} should render its lazy ${page}.`);
     assert.ok(appSource.indexOf(`<Route path="${path}"`) > staffOutletIndex, `${path} should remain within the staff page boundary.`);
   }
+  assert.match(appSource, /const AdminBackupsPage = lazy\(\(\) => import\('\.\/pages-backups'\)\.then\(\(pages\) => \(\{ default: pages\.AdminBackupsPage \}\)\)\);/);
+  assert.ok(appSource.includes('<Route path="/admin/settings/backups" element={<AdminBackupsPage />} />'), 'The backup settings route should render its lazy page.');
   assert.ok(/function CourseEditorRoute\(\) \{[\s\S]*?<CourseEditorPage key=\{pathname\} \/>/.test(appSource), 'Course editor routes should render the lazy page export.');
 });
 

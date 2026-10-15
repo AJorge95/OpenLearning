@@ -6,7 +6,7 @@ import test, { after, before } from 'node:test';
 import Database from 'better-sqlite3';
 
 const fixturePrefix = 'openlearning-database-migrations-';
-const expectedLatestMigrationVersion = 35;
+const expectedLatestMigrationVersion = 36;
 const configEnvironment = {
   NODE_ENV: 'test',
   DATA_DIR: '',
@@ -79,6 +79,8 @@ test('fresh startup applies every migration and can be rerun without changing th
     'lesson_watch_progress',
     'lesson_watch_telemetry',
     'user_registration_field_values',
+    'backup_jobs',
+    'backup_runs',
   ]) {
     assert.ok(tables.has(table), `expected migrated table ${table}`);
   }

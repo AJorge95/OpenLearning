@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Add configurable scheduled backups
+
+- **Improvement:** Added admin-configurable independent daily or weekly backup jobs for full, database-only, or course-media-only backups, with UTC scheduling, local destination validation, per-job retention, manual runs, and recent run history. Database schema v36 records jobs and runs. Backup manifests identify scope and source job/run; database snapshots record their own successful completion. Full/media jobs pause data-changing API requests during media copying while reads remain available.
+- **Admin experience:** Added Settings → Backups with create/edit, enable/pause, run now, remove while keeping artifacts, next/last run status, and recent errors. Schedules resume at the next occurrence after restart; no catch-up is attempted.
+- **Checked:** The focused backup/admin/migration/UI/doc suite passed 16/16. `npm run typecheck`, `npm run build`, JavaScript syntax checks, and `git diff --check` passed. The full suite remains non-green: existing course-access markup assertions fail against the preserved in-progress course-access edits, and many legacy HTTP fixtures fail to connect to loopback (`EACCES`) in this runner. Updated the migration-history test to expect schema v36.
+- **Limit:** Backup storage is a configured existing writable local directory. This implementation does not add remote storage or restore controls.
+
 ## 2026-10-15 — Cycle 67 bounded auth, shared-control, and request-boundary review: no distinct change indicated
 
 - **Reviewed:** The freshly launched signed-out login and registration surfaces; public-form headings, labels, native required semantics, password visibility actions, loading and retry structure, route identity, narrow-layout safeguards, and browser-visible controls; the shared `PasswordField`, `AppSelect`, upload-label, dialog, button, empty-state, progress, and error/status patterns; and the clean-scope HTTP, CSRF/session, pagination, readiness, media-range, upload-cleanup, rate-limit, configuration, and session-cookie paths.

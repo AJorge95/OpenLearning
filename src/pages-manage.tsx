@@ -3136,6 +3136,7 @@ function AdminSettingsTabs() {
   return <nav className="settings-tabs" aria-label="Settings sections">
     <NavLink to="/admin/settings" end className={({ isActive }) => isActive ? 'settings-tab active' : 'settings-tab'}>Platform</NavLink>
     <NavLink to="/admin/settings/registration-fields" className={({ isActive }) => isActive ? 'settings-tab active' : 'settings-tab'}>Registration fields</NavLink>
+    <NavLink to="/admin/settings/backups" className={({ isActive }) => isActive ? 'settings-tab active' : 'settings-tab'}>Backups</NavLink>
   </nav>;
 }
 

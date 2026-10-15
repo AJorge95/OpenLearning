@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 import { sessionUserIdFromJson } from './session-data.js';
 
-const latestSchemaVersion = 35;
+const latestSchemaVersion = 36;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -838,6 +838,49 @@ export function migrateDatabase(database = db) {
         CREATE INDEX users_registration_status_created
           ON users(registration_status, created_at, username COLLATE NOCASE);
         INSERT INTO schema_migrations (version) VALUES (35);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 36) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE backup_jobs (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          scope TEXT NOT NULL CHECK (scope IN ('full', 'database', 'media')),
+          frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly')),
+          weekday INTEGER CHECK (weekday BETWEEN 0 AND 6),
+          run_time_utc TEXT NOT NULL,
+          destination_path TEXT NOT NULL,
+          retention_count INTEGER NOT NULL CHECK (retention_count BETWEEN 1 AND 365),
+          enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CHECK ((frequency = 'daily' AND weekday IS NULL) OR (frequency = 'weekly' AND weekday IS NOT NULL))
+        );
+        CREATE INDEX backup_jobs_enabled ON backup_jobs(enabled, frequency, run_time_utc);
+        CREATE TABLE backup_runs (
+          id TEXT PRIMARY KEY,
+          job_id TEXT NOT NULL,
+          job_name TEXT NOT NULL,
+          scope TEXT NOT NULL CHECK (scope IN ('full', 'database', 'media')),
+          destination_path TEXT NOT NULL,
+          trigger_type TEXT NOT NULL CHECK (trigger_type IN ('scheduled', 'manual')),
+          triggered_by TEXT,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'success', 'failed')),
+          scheduled_for TEXT,
+          started_at TEXT,
+          finished_at TEXT,
+          backup_path TEXT,
+          artifact_deleted_at TEXT,
+          error_message TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX backup_runs_created ON backup_runs(created_at DESC, id DESC);
+        CREATE INDEX backup_runs_job_status ON backup_runs(job_id, status, created_at DESC);
+        INSERT INTO schema_migrations (version) VALUES (36);
       `);
     });
     migration();

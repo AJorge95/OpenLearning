@@ -12,9 +12,33 @@ import { courseSummaries } from './course-service.js';
 import { normalizeRegistrationFields, readRegistrationFields, saveRegistrationFields } from './registration-fields.js';
 import { adminPasswordResetLimiter } from './rate-limits.js';
 import { cancelPlatformReset, confirmPlatformReset, finishPlatformReset, getPlatformResetStatus, preparePlatformReset } from './platform-reset.js';
+import { readBackupDashboard, removeBackupJob, runBackupNow, saveBackupJob } from './backup-scheduler.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
+
+adminRouter.get('/backups', (_req, res) => {
+  res.json(readBackupDashboard());
+});
+
+adminRouter.post('/backups/jobs', async (req, res) => {
+  const job = await saveBackupJob(requireObjectBody(req.body, 'Backup job'), req.currentUser);
+  res.status(201).json({ job });
+});
+
+adminRouter.put('/backups/jobs/:jobId', async (req, res) => {
+  const job = await saveBackupJob(requireObjectBody(req.body, 'Backup job'), req.currentUser, req.params.jobId);
+  res.json({ job });
+});
+
+adminRouter.delete('/backups/jobs/:jobId', (req, res) => {
+  res.json(removeBackupJob(req.params.jobId, req.currentUser));
+});
+
+adminRouter.post('/backups/jobs/:jobId/run', (req, res) => {
+  const run = runBackupNow(req.params.jobId, req.currentUser);
+  res.status(202).json({ run });
+});
 
 function isLastActiveAdministrator(user, activeAdminCount) {
   if (user.role !== 'admin' || Boolean(user.disabled)) return false;

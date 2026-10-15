@@ -298,3 +298,41 @@ export interface CourseAccessUser {
   grantedAt: string | null;
   grantedBy: string | null;
 }
+
+export type BackupScope = 'full' | 'database' | 'media';
+export type BackupFrequency = 'daily' | 'weekly';
+export type BackupRunStatus = 'pending' | 'running' | 'success' | 'failed';
+
+export interface BackupRun {
+  id: string;
+  jobId: string;
+  jobName: string;
+  scope: BackupScope;
+  destinationPath: string;
+  triggerType: 'scheduled' | 'manual';
+  triggeredBy: string | null;
+  status: BackupRunStatus;
+  scheduledFor: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  backupPath: string | null;
+  artifactDeletedAt: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface BackupJob {
+  id: string;
+  name: string;
+  scope: BackupScope;
+  frequency: BackupFrequency;
+  weekday: number | null;
+  runTimeUtc: string;
+  destinationPath: string;
+  retentionCount: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  nextRunAt: string | null;
+  lastRun: BackupRun | null;
+}
