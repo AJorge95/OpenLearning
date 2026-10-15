@@ -41,9 +41,10 @@ test('table scroll hints follow the width of each scroll region', () => {
     maxWidth: Number(match[2]),
     rules: match[3],
   }));
-  // Keep each query threshold aligned with the table's minimum width.
+  // The course table can overflow at the desktop breakpoint because its action
+  // columns need more room than the 1280px staff content area provides.
   const expectedContainerQueries = [
-    ['course-table', 850, '.course-table-wrap'],
+    ['course-table', 960, '.course-table-wrap'],
     ['user-table', 690, '.user-table-wrap'],
     ['analytics-table', 780, '.analytics-table-wrap:not(.analytics-learners-table-wrap)'],
     ['analytics-table', 940, '.analytics-learners-table-wrap'],
