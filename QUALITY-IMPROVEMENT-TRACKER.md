@@ -1,5 +1,17 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Cycle 75 bounded path, public-flow, and readiness review: no distinct change indicated
+
+- **Reviewed:** The freshly launched development tree and current dirty-worktree boundary; learning-path course-option loading/retry, selection limits, assignment recovery, pagination, and focus/accessibility contracts; competency pagination and search recovery; calendar deadline normalization; the signed-out login DOM and browser diagnostics; and health/readiness/setup/registration/root probes.
+- **Result:** No distinct current-build interface, responsive, accessibility, validation, authorization, recovery, data-integrity, or measured-performance defect was evidenced outside the four preserved course-access/staff-markup files. The reviewed path editor exposes a retry when course options fail, keeps unavailable selections explainable, and preserves bounded selection; management recovery branches retain retry actions and filter/page state; the public login exposes named controls without browser warnings.
+- **Why no code change:** The remaining plausible edits either duplicate already-covered contracts or would overlap the user's in-progress course-access behavior. A further implementation would be speculative without a reproducible rendered mismatch, changed requirement, authenticated fixture, or representative workload signal.
+- **Backend review:** Learning-path and competency pagination, learner-role/access filtering, calendar invalid-row handling, login/setup boundaries, and local readiness endpoints were reviewed read-only; no safe backend change was indicated.
+- **Checked:** The bounded client suite passed 33/33; the full suite passed 957/959 with only the two known course-access/staff-markup expectations failing against the preserved dirty edits; `npm run typecheck`, `npm run build`, and `git diff --check` passed; `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, and the Vite root returned 200; and the live login DOM had no warning/error logs. No credentials, forms, uploads, account/course actions, or application data were submitted.
+- **Preserved:** `README.md`, `server/routes-courses.js`, `src/pages-manage.tsx`, and `src/types.ts` remain unstaged and untouched by this cycle.
+- **Commit title:** `docs(quality): record cycle 75 bounded review`.
+- **Commit description:** `Record the fresh path, public-flow, and readiness review, its passing bounded evidence, and the boundary around preserved user edits.`
+- **Needed to continue:** A reproducible current-build interaction or accessibility defect, changed product/security requirement, representative workload or latency signal, or an authenticated fixture that exposes a concrete failure outside the preserved in-progress edits.
+
 ## 2026-10-15 — Keep backup load failures out of empty states
 
 - **Reviewed:** The freshly launched signed-out login structure and live API probes; backup dashboard loading, polling, refresh, error, job, and run-history branches; and the preserved dirty course-access/staff-markup files.
