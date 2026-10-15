@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Keep the account-cap live status text-only
+
+- **Reviewed:** The live administrator Settings page, registered-account count refresh and progress semantics, the surrounding form controls, and the existing account-cap accessibility regression.
+- **Improvement:** Scope the polite live region to the changing registered-account count and percentage instead of wrapping the refresh button, progress bar, and cap warning.
+- **Why it helps:** Screen-reader users now receive the account-cap update without having the live region repeatedly announce an unrelated interactive control; the visible layout and refresh behavior remain unchanged.
+- **Backend review:** No server change was indicated. Account-count retrieval, stale-response cancellation, cap validation, and settings persistence remain unchanged.
+- **Checked:** Extended `tests/client/admin-account-capacity.test.js` to assert the text-only live region and focused control boundary. Live `/admin/settings` exposed the account count as a status separate from the “Refresh account count” button; no settings were saved, no reset was started, and no browser warning/error logs were observed. Full test, typecheck, build, diff-check, and local health validation follow in this cycle.
+- **Needed to continue:** A reproducible current-build Settings or account-cap interaction defect, changed accessibility requirement, representative workload signal, or a concrete failure state not covered by existing regressions.
+
 ## 2026-10-15 — Cycle 57 bounded certificate-history and issuance review: no distinct change indicated
 
 - **Reviewed:** The live completed-course and My learning states, direct certificate-history navigation, learner/admin certificate eligibility, print/view presentation, explicit issuance boundaries, version-specific certificate persistence, and the related client/server certificate paths.

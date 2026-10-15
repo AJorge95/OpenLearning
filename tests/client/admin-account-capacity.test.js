@@ -21,8 +21,17 @@ test('settings explain when the selected account cap blocks new accounts', () =>
 
   assert.match(page, /const accountLimitReached = accountLimit > 0 && registeredUserCount !== null && registeredUserCount >= accountLimit/);
   assert.match(page, /accountLimitReached && <p className="registered-count-limit-warning">The cap has no room for additional accounts\. Increase it to create more\.<\/p>/);
-  assert.match(page, /<div className="registered-account-usage" role="status" aria-live="polite" aria-atomic="true">/);
+  assert.match(page, /<div className="registered-account-usage">\s*\{\/\* Keep the live region limited to changing status text, not the refresh control or progress bar\. \*\/\}\s*<div className="registered-count-status" role="status" aria-live="polite" aria-atomic="true">/);
   assert.match(styles, /\.registered-count-limit-warning\s*\{[^}]*color:\s*#80570a;[^}]*background:\s*#fff4d9;/);
+});
+
+test('account-cap status announcements do not include interactive refresh controls', () => {
+  const page = adminSettingsPage();
+  const statusRegion = page.match(/<div className="registered-count-status" role="status" aria-live="polite" aria-atomic="true">([\s\S]*?)<\/div>/)?.[1] || '';
+
+  assert.match(statusRegion, /registeredUserCount === null/);
+  assert.match(statusRegion, /accountUsagePercent/);
+  assert.doesNotMatch(statusRegion, /registered-count-refresh|account-usage-track|<Button/);
 });
 
 test('settings can refresh a stale registered-account count without saving other edits', () => {
