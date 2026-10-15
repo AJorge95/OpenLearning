@@ -104,7 +104,7 @@ test('course editor describes invalid completion-window values and validates bef
   const source = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
   assert.match(source, /step="1"[^>]*aria-invalid=\{completionWindow\.error \? true : undefined\}/);
   assert.match(source, /aria-describedby=\{completionWindow\.error \? 'completion-window-help completion-window-error' : 'completion-window-help'\}/);
-  assert.match(source, /id="completion-window-error" className="completion-window-error"/);
+  assert.match(source, /id="completion-window-error" className="completion-window-error" role="alert"/);
   assert.equal((source.match(/if \(completionWindow\.error\) \{/g) || []).length, 2);
   assert.match(source, /completionWindowInputRef\.current\?\.focus\(\);\s*throw new ApiError\(400, completionWindow\.error, 'validation_error'\)/);
   assert.match(source, /completionWindowDays: completionWindow\.value/);
