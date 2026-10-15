@@ -406,7 +406,8 @@ export function MyLearningPage() {
           </div>
         ))}
       </div>
-    ) : hasEmptyCourses && !loadingCertificates && !certificates.length ? (
+    // Wait for certificate history to settle before showing the combined empty state.
+    ) : hasEmptyCourses && !loadingCertificates && !certificateError && certificates.length === 0 ? (
       <EmptyState title={learningEmptyState.title} detail={learningEmptyState.detail} action={<Link className="button button-primary" to="/courses">Browse courses</Link>} />
     ) : null}
     {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {formatCountLabel(total, 'course', 'courses')}</p>{loadingMore && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Loading more courses…</p>}{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}

@@ -15,6 +15,15 @@
 - **Checked:** Focused clean-scope checks passed 76/76 (`35` client and `41` server tests); `npm run typecheck`, `npm run build`, and `git diff --check` passed. The launched API returned 200 from `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, and `/api/csrf`; the Vite root returned 200; the connected in-app browser exposed the expected public login/registration controls. The full suite remains non-green only because the preserved dirty backup/course-access worktree changes currently fail their backup audit, schema-version, and course-access markup expectations; those files were not changed. No credentials, forms, uploads, account actions, or application data were submitted.
 - **Needed to continue:** A reproducible current-build interaction or accessibility defect, representative production-size workload or latency evidence, a changed product requirement, or a concrete failure state outside the preserved in-progress backup/course-access work.
 
+## 2026-10-15 — Keep My Learning certificate errors out of the empty state
+
+- **Reviewed:** My Learning's independent course and certificate requests, the combined empty-state condition, certificate retry/error rendering, and the existing learner-loading regression.
+- **Improvement:** Keep the empty “Your learning starts here” state hidden when certificate history failed, even when the course list is empty. The visible empty state now appears only after certificate loading succeeds with zero certificates, preserving the certificate error and retry action as the authoritative feedback.
+- **Why it helps:** Learners no longer receive contradictory “your learning starts here” guidance alongside a certificate-history failure, and the existing intent is documented beside the condition.
+- **Backend review:** No server change was indicated. Course and certificate authorization, pagination, and retry endpoints remain unchanged.
+- **Checked:** The focused My Learning and learner empty-state suite passed 4/4; the focused clean-scope suite passed 216/216; `npm run typecheck`, `npm run build`, and `git diff --check` passed. The full suite passed 953/955; the two remaining failures are the preserved dirty course-access/staff-markup expectations. Live public registration, `/healthz`, `/readyz`, setup status, registration fields, CSRF, version, and Vite root probes returned 200. No credentials, forms, uploads, or application data were submitted.
+- **Commit:** `fix(learner): keep certificate errors out of empty state`.
+
 ## 2026-10-15 — Associate setup account-limit errors with their field
 
 - **Reviewed:** The two-step setup wizard's access-configuration form, native number constraints, server `invalid_user_limit` validation contract, field focus recovery, and existing setup identifier/error regressions.
