@@ -151,30 +151,7 @@ npm run build
 
 if [[ "$OLD_UNIT_PRESENT" == true ]]; then
   log "Reading the current service configuration and resolving its data paths."
-  OLD_WORKING_DIRECTORY="$OLD_WORKING_DIRECTORY" OLD_ENV_FILE="$OLD_ENV_FILE" NEW_ENV_FILE="$ENV_FILE" node --input-type=module <<'NODE'
-import fs from 'node:fs';
-import path from 'node:path';
-import dotenv from 'dotenv';
-
-const cwd = process.env.OLD_WORKING_DIRECTORY;
-const envPath = process.env.OLD_ENV_FILE;
-const targetPath = process.env.NEW_ENV_FILE;
-const source = dotenv.parse(fs.readFileSync(envPath));
-const resolveFromOldCwd = (value) => path.resolve(cwd, value);
-const dataDir = resolveFromOldCwd(source.DATA_DIR || './data');
-const dbPath = resolveFromOldCwd(source.DB_PATH || path.join(dataDir, 'openlearning.sqlite'));
-const mediaRoot = resolveFromOldCwd(source.MEDIA_ROOT || path.join(dataDir, 'course-media'));
-const preserve = { ...source, DATA_DIR: dataDir, DB_PATH: dbPath, MEDIA_ROOT: mediaRoot };
-preserve.NODE_ENV = 'production';
-preserve.PORT ||= '6173';
-preserve.SESSION_SECRET ||= '';
-preserve.SETUP_TOKEN ||= '';
-preserve.TRUST_PROXY ||= 'false';
-if (!preserve.SESSION_SECRET) throw new Error('Existing environment has no SESSION_SECRET; refusing adoption.');
-const lines = Object.entries(preserve).map(([key, value]) => `${key}=${JSON.stringify(String(value))}`);
-fs.writeFileSync(targetPath, `${lines.join('\n')}\n`, { mode: 0o600 });
-fs.chmodSync(targetPath, 0o600);
-NODE
+  OLD_WORKING_DIRECTORY="$OLD_WORKING_DIRECTORY" OLD_ENV_FILE="$OLD_ENV_FILE" NEW_ENV_FILE="$ENV_FILE" node scripts/migrate-install-config.js
   EXPECT_READY=false
   EXISTING_PORT="$(ENV_FILE="$ENV_FILE" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || "6173")')"
   if curl -fsS "http://127.0.0.1:$EXISTING_PORT/readyz" >/dev/null 2>&1; then EXPECT_READY=true; fi
@@ -188,6 +165,7 @@ else
 NODE_ENV=production
 PORT=$PORT
 DATA_DIR=$DATA_DIR
+BACKUP_DIR=$BACKUP_ROOT
 SESSION_SECRET=$SESSION_SECRET
 SETUP_TOKEN=$SETUP_TOKEN
 TRUST_PROXY=false
@@ -262,7 +240,7 @@ NODE
 )
 [[ "${#STORAGE_PATHS[@]}" -eq 4 ]] || fail "Could not safely resolve persistent storage paths from $ENV_FILE."
 for storage_path in "${STORAGE_PATHS[0]}" "${STORAGE_PATHS[1]}" "${STORAGE_PATHS[2]}"; do install -d -m 0750 "$storage_path"; done
-READ_WRITE_PATHS="${STORAGE_PATHS[0]} ${STORAGE_PATHS[1]} ${STORAGE_PATHS[2]}"
+READ_WRITE_PATHS="${STORAGE_PATHS[0]} ${STORAGE_PATHS[1]} ${STORAGE_PATHS[2]} $BACKUP_ROOT"
 
 PREVIOUS_RELEASE=""
 if [[ -L "$CURRENT_LINK" ]]; then
@@ -288,7 +266,7 @@ RestartSec=5
 UMask=0027
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=strict
+ProtectSystem=full
 ReadWritePaths=$READ_WRITE_PATHS
 
 [Install]

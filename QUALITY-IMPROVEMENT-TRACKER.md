@@ -1,5 +1,18 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Keep installer updates compatible with managed backups
+
+- **Improvement:** The generated systemd unit now permits app-managed backups to write to their selected local destinations while retaining `NoNewPrivileges`, the dedicated service user, read-only system directories, and explicit persistent-storage paths. `/var/backups/openlearning` is the installer-managed default and is added to the unit's writable paths.
+- **Compatibility:** Existing environment keys and storage paths remain preserved. Existing relative `BACKUP_DIR` values are resolved against the old service working directory; deployments without that setting gain the default backup directory. The npm prepare hook remains safe in the installer's source tarball, which has no `.git` metadata.
+- **Checked:** The combined installer, legacy-config migration, versioning, API, backup, and database migration suite passed 35/35. Bash syntax, typecheck, production build, JavaScript syntax checks, and `git diff --check` passed.
+
+## 2026-10-15 — Add x.y app versioning
+
+- **Improvement:** Use the package version as the source of truth, display x.y in Admin Settings, and expose it through `GET /api/version`. The pre-commit hook updates package metadata once for app behavior/test commits and excludes documentation, tooling, and dependency-only commits. `npm run version:major` increments x and resets y; an explicit major bump wins over the automatic minor bump.
+- **Setup:** npm prepare configures the repository's `.githooks` directory. Package and lockfile metadata stay synchronized, with patch fixed at zero.
+- **Checked:** Focused version hook, endpoint, and admin display tests passed 10/10, including a real temporary Git commit through the hook. Typecheck, production build, JavaScript syntax checks, and `git diff --check` passed. The local `.githooks` path is enabled for this checkout.
+- **Default:** The existing package `0.1.0` is presented as `0.1`; the next counted app commit will become `0.2`.
+
 ## 2026-10-15 — Add configurable scheduled backups
 
 - **Improvement:** Added admin-configurable independent daily or weekly backup jobs for full, database-only, or course-media-only backups, with UTC scheduling, local destination validation, per-job retention, manual runs, and recent run history. Database schema v36 records jobs and runs. Backup manifests identify scope and source job/run; database snapshots record their own successful completion. Full/media jobs pause data-changing API requests during media copying while reads remain available.

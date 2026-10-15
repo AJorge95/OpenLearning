@@ -1761,3 +1761,27 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   #root textarea,
   #root select { font-size: 16px; }
 }
+.app-version-card {
+  margin-top: 1.25rem;
+}
+
+.app-version-card > small {
+  display: block;
+  margin-top: 0.75rem;
+  color: var(--muted);
+}
+
+.app-version-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+.app-version-value strong {
+  font-variant-numeric: tabular-nums;
+}

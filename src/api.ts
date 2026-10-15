@@ -258,6 +258,10 @@ export const api = {
   },
 };
 
+export function fetchAppVersion(options: Pick<RequestInit, 'signal'> = {}) {
+  return api.get<{ version: string }>('/api/version', options);
+}
+
 export async function getSetupStatus(options: Pick<RequestInit, 'signal'> = {}) {
   return api.get<{ configured: boolean; setupAvailable: boolean } & PlatformConfiguration>('/api/setup/status', options);
 }
