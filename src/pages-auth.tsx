@@ -104,6 +104,7 @@ export function SetupPage() {
   const setupErrorId = useId();
   const setupEmailErrorId = useId();
   const setupPlatformNameErrorId = useId();
+  const setupUserLimitErrorId = useId();
   const setupUsernameInputId = useId();
   const setupUsernameHelpId = `${setupUsernameInputId}-help`;
   const setupUsernameErrorId = `${setupUsernameInputId}-error`;
@@ -112,6 +113,7 @@ export function SetupPage() {
   const setupUsernameInputRef = useRef<HTMLInputElement>(null);
   const setupFirstNameInputRef = useRef<HTMLInputElement>(null);
   const setupLastNameInputRef = useRef<HTMLInputElement>(null);
+  const setupUserLimitInputRef = useRef<HTMLInputElement>(null);
   const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<1 | 2>(1);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -133,6 +135,7 @@ export function SetupPage() {
   const [platformNameError, setPlatformNameError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [setupUsernameError, setSetupUsernameError] = useState('');
+  const [userLimitError, setUserLimitError] = useState('');
   const [invalidNameField, setInvalidNameField] = useState<'firstName' | 'lastName' | null>(null);
   const [saving, setSaving] = useState(false);
   const setupSubmissionInFlightRef = useRef(false);
@@ -205,6 +208,7 @@ export function SetupPage() {
     event.preventDefault();
     if (!acquireSubmissionLock(setupSubmissionInFlightRef)) return;
     setError('');
+    setUserLimitError('');
     setSaving(true);
     try {
       await completeSetup(platformName, email, firstName, lastName, username, password, confirmPassword, setupToken, {
@@ -230,6 +234,9 @@ export function SetupPage() {
         setError(cause.message);
         setStep(1);
         window.requestAnimationFrame(() => (invalidField === 'lastName' ? setupLastNameInputRef.current : setupFirstNameInputRef.current)?.focus());
+      } else if (cause instanceof ApiError && cause.code === 'invalid_user_limit') {
+        setUserLimitError(cause.message);
+        window.requestAnimationFrame(() => setupUserLimitInputRef.current?.focus());
       } else setError(cause instanceof ApiError ? cause.message : 'Setup could not be completed. Try again.');
     } finally {
       releaseSubmissionLock(setupSubmissionInFlightRef);
@@ -293,9 +300,10 @@ export function SetupPage() {
             <div className="app-select-field"><span>Public connection protocol</span><AppSelect<ConnectionProtocol> ariaLabel="Public connection protocol" describedBy="setup-protocol-help" value={connectionProtocol} onChange={setConnectionProtocol} disabled={saving} options={CONNECTION_PROTOCOL_OPTIONS} /></div>
             <p id="setup-protocol-help" className="protocol-help">HTTPS requires a TLS certificate on this server or a reverse proxy. When a proxy handles TLS, set <code>TRUST_PROXY=true</code> in the server environment.</p>
             <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={registrationEnabled} onChange={(event) => setRegistrationEnabled(event.target.checked)} disabled={saving} /></label>
-            <label><span className="form-label-row"><span>Maximum registered accounts</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input type="number" min={0} max={1000000} step={1} required value={userLimit} onChange={(event) => setUserLimit(event.target.value)} disabled={saving} /><small>Set to 0 for no limit. The cap includes this administrator account, moderators, and learners.</small></label>
+            <label><span className="form-label-row"><span>Maximum registered accounts</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={setupUserLimitInputRef} type="number" min={0} max={1000000} step={1} required aria-invalid={userLimitError ? true : undefined} aria-describedby={userLimitError ? setupUserLimitErrorId : undefined} value={userLimit} onChange={(event) => { setUserLimit(event.target.value); setUserLimitError(''); }} disabled={saving} /><small>Set to 0 for no limit. The cap includes this administrator account, moderators, and learners.</small></label>
+            {userLimitError && <p id={setupUserLimitErrorId} className="form-error" role="alert">{userLimitError}</p>}
             {error && <p className="form-error" role="alert">{error}</p>}
-            <div className="setup-step-actions"><Button type="button" variant="secondary" disabled={saving} onClick={() => { setError(''); setStep(1); }}>Back</Button><Button type="submit" disabled={saving}>{saving ? 'Creating platform…' : 'Create platform'}</Button></div>
+            <div className="setup-step-actions"><Button type="button" variant="secondary" disabled={saving} onClick={() => { setError(''); setUserLimitError(''); setStep(1); }}>Back</Button><Button type="submit" disabled={saving}>{saving ? 'Creating platform…' : 'Create platform'}</Button></div>
           </form>
         </>}
       </section>
