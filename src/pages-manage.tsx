@@ -2194,7 +2194,9 @@ export function CourseAccessPage() {
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading course access…</div>;
   const hasEmptyAccessResult = !failedRequest && users.length === 0;
   return <div className="access-page"><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><Link to={`/manage/courses/${courseId}/edit`}>{course?.title || 'Course'}</Link><span>/</span><span>Assign learners</span></div>
-    <PageHeading title="Assign learners" subtitle={`Choose which learners should see ${course?.title || 'this course'} in My learning.`} action={<Link className="button button-secondary" to={`/manage/courses/${courseId}/edit`}><ArrowLeft size={16} aria-hidden="true" />Back to course</Link>} />
+    <PageHeading title="Assign learners" subtitle={course?.visibility === 'private'
+      ? `Manage direct assignments and review access through learning paths for ${course.title}.`
+      : `Published public courses are available to all signed-in learners. Direct assignment adds ${course?.title || 'this course'} to My learning.`} action={<Link className="button button-secondary" to={`/manage/courses/${courseId}/edit`}><ArrowLeft size={16} aria-hidden="true" />Back to course</Link>} />
     {error && (failedRequest
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.query, failedRequest.page); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
@@ -2203,24 +2205,33 @@ export function CourseAccessPage() {
     {/* Announce the empty result without moving focus or duplicating the visible recovery content. */}
     {hasEmptyAccessResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{appliedQuery ? 'No learners match that search.' : 'No learner accounts are available.'}</p>}
     <div className="access-list">
-      <div className="access-list-head"><span>Learner</span><span>Assignment</span><span>Action</span></div>
+      <div className="access-list-head"><span>Learner</span><span>Assignment / access</span><span>Action</span></div>
       {!failedRequest && users.length ? <ul className="access-rows" aria-label="Learner access">
         {users.map((learner) => {
           const assignmentAction = courseAccessAction(learner);
           const unassign = assignmentAction === 'unassign';
+          const assignmentLabel = learner.granted
+            ? 'Directly assigned'
+            : learner.accessViaPath
+              ? 'Access through learning path'
+              : course?.visibility === 'public' && learner.hasAccess
+                ? 'Public access'
+                : 'No access';
+          const actionLabel = assignmentAction === 'assign' && learner.accessViaPath ? 'Add direct assignment'
+            : assignmentAction === 'unassign' ? 'Unassign' : 'Assign course';
           return <li className="access-row" key={learner.id}>
             <div className="access-user"><UserInitial username={learner.username} /><div><strong>{learner.username}</strong>{learner.granted && learner.grantedAt && <small>Assigned <DateText value={learner.grantedAt} />{learner.grantedBy ? ` by ${learner.grantedBy}` : ''}</small>}</div></div>
-            <span className={learner.granted ? 'access-state access-state-granted' : 'access-state'}>{learner.granted ? 'Assigned' : 'Not assigned'}</span>
+            <span className={learner.hasAccess ? 'access-state access-state-granted' : 'access-state'}>{assignmentLabel}</span>
             <div className="access-row-actions">
               {learner.disabled && <span className="muted">Account disabled</span>}
-              {assignmentAction && <button type="button" className={unassign ? 'text-action danger-text' : 'text-action'} aria-label={unassign ? `Unassign ${learner.username} from ${course?.title || 'this course'}` : `Assign ${learner.username} to ${course?.title || 'this course'}`} disabled={savingIds.has(learner.id)} onClick={() => toggle(learner)}>{unassign ? 'Unassign' : 'Assign course'}</button>}
+              {assignmentAction && <button type="button" className={unassign ? 'text-action danger-text' : 'text-action'} aria-label={`${actionLabel} for ${learner.username} on ${course?.title || 'this course'}`} disabled={savingIds.has(learner.id)} onClick={() => toggle(learner)}>{actionLabel}</button>}
             </div>
           </li>;
         })}
       </ul> : !failedRequest && <div className="access-empty">{appliedQuery ? 'No learners match that search.' : user?.role === 'admin' ? <>No learner accounts are available. <Link className="text-action" to="/admin/users/new">Create a learner account.</Link></> : 'No learner accounts are available. Registered learners and accounts created by an administrator will appear here.'}</div>}
     </div>
     {!failedRequest && total > 0 && <LogPagination ariaLabel="Course access pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(appliedQuery, nextPage)} />}
-    <p className="access-footnote"><LockKeyhole size={15} aria-hidden="true" />Assigned learners will find this course in My learning. Public courses remain available in the catalog; private courses require an active assignment. Removing an assignment does not erase learning progress.</p>
+    <p className="access-footnote"><LockKeyhole size={15} aria-hidden="true" />Private-course access can come from a direct assignment or an unlocked learning path. Public courses are available to all signed-in learners; direct assignment also adds them to My learning. Removing an assignment does not erase learning progress.</p>
   </div>;
 }
 
