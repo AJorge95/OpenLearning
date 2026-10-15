@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Cycle 42 bounded staff-course review: no distinct change indicated
+
+- **Reviewed:** The live staff course-management page and source, including status filtering, draft search state, empty-result recovery, table landmarks and row actions; the course-list query and ordering path; publication, unpublish, archive, deletion, audit, and media-cleanup transaction boundaries; shared request/CSRF/retry handling; and the existing client/server regressions around course lists, row-menu focus, pagination, readiness, and publication.
+- **Result:** No distinct runtime or test change was indicated. A no-match staff search exposed a named empty state and clear action; clearing it restored the course table and returned focus to the persistent search field. The reviewed server path kept filtering, pagination, status transitions, audit requirements, authorization, and post-delete media cleanup bounded at their current contracts.
+- **Why no change:** No reproducible interface, accessibility, responsive, request-recovery, authorization, data-integrity, cleanup, or measured performance defect surfaced. Another edit in this recently covered course-management path would be speculative without a failing fixture, changed requirement, or representative workload signal.
+- **Checked:** The exact launched development process served the API on port 6173 and Vite on port 5173. Live `/manage/courses` search and clear recovery rendered as expected with no browser warning/error logs. Focused course-management, row-menu, pagination, readiness, and publication checks passed (16/16); the full `npm test -- --test-reporter=spec` suite passed (921/921); `npm run typecheck`, `npm run build`, and `git diff --check` passed; `/healthz`, `/readyz`, `/api/setup/status`, and the Vite root returned 200. No course edits, status changes, deletions, credentials, or other application data were submitted. Existing test files remain in the dedicated `tests/client` and `tests/server` folders.
+- **Needed to continue:** A reproducible current-build course-management or backend defect, representative production-size workload or latency data, a changed product requirement, or a concrete failure state not covered by the existing regressions.
+
 ## 2026-10-15 — Cycle 41 bounded course-integrity review: no distinct change indicated
 
 - **Reviewed:** Course analytics summary and learner-page loading, retry, pagination, and table semantics; course-version history and review/restore boundaries; course-editor stale-route and published-version handling; media upload type/signature validation, temporary-file cleanup, protected range/document/caption access, and version-aware storage; and the corresponding client/server regressions.
