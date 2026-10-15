@@ -567,8 +567,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .course-table, .user-table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; }
 /* Keep guidance styled while hidden; each wrapper reveals it when its table can overflow. */
 .table-scroll-hint { display: none; align-items: center; min-height: 34px; margin: 0; padding: 0 11px; border-bottom: 1px solid var(--line); color: var(--muted); background: #fff; font-size: 11px; }
-/* Match each scroll cue to the minimum width of the table it describes. */
-@container course-table (max-width: 850px) {
+/* Surface the cue before the course actions disappear beyond the desktop viewport. */
+@container course-table (max-width: 960px) {
   .course-table-wrap > .table-scroll-hint { display: flex; }
 }
 @container user-table (max-width: 690px) {

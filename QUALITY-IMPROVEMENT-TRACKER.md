@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Surface the staff course-table scroll cue at the desktop breakpoint
+
+- **Reviewed:** The rendered staff course-management table at the current 1280px QA viewport, its scroll-region markup, the responsive table rules, and the existing course-list interaction and accessibility coverage.
+- **Improvement:** Reveal the existing “Scroll horizontally to see all course columns” cue when the course-table container is 960px wide or less. The table already scrolls at the desktop content width, but the previous 850px query hid the guidance while the right-side actions were outside the first view.
+- **Why it helps:** Staff can discover that Edit, Analytics, and row actions continue to the right without relying on the scrollbar alone; the existing table structure and action behavior remain unchanged.
+- **Backend review:** Course-list filtering, pagination, ordering, status transitions, authorization, audit handling, and cleanup were not changed; no backend defect was indicated by this focused review.
+- **Checked:** `node --test tests/client/staff-table-scroll-hints.test.js tests/client/responsive-viewport.test.js` passed (7/7). After reload, live `/manage/courses` QA at the current viewport exposed the cue in both the rendered table region and accessibility tree, with no framework overlay or visible interaction error. The full `npm test -- --test-reporter=spec` suite passed (921/921), `npm run typecheck`, `npm run build`, and `git diff --check` passed, and `/healthz`, `/readyz`, and the Vite root returned 200. No course edits, status changes, deletions, credentials, or other application data were submitted. Existing test files remain in the dedicated `tests/client` and `tests/server` folders.
+
 ## 2026-10-15 — Cycle 42 bounded staff-course review: no distinct change indicated
 
 - **Reviewed:** The live staff course-management page and source, including status filtering, draft search state, empty-result recovery, table landmarks and row actions; the course-list query and ordering path; publication, unpublish, archive, deletion, audit, and media-cleanup transaction boundaries; shared request/CSRF/retry handling; and the existing client/server regressions around course lists, row-menu focus, pagination, readiness, and publication.
