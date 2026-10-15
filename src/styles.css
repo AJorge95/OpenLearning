@@ -1624,6 +1624,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .account-settings-section { display: grid; gap: 10px; }
 .account-settings-section h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
 .account-settings-section > p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.account-settings-page .profile-email-field input[readonly] { color: var(--muted); background: var(--subtle); cursor: text; }
 .account-profile-form { display: grid; gap: 12px; }
 .account-profile-form h3 { margin: 0 0 4px; font-size: 14px; }
 .account-profile-form p { margin: 0; color: var(--muted); font-size: 12px; }

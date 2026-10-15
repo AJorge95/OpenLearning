@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Clarify the administrator-managed account email
+
+- **Reviewed:** The live Account settings profile form, read-only email semantics and visual treatment, certificate-name fields, password controls, and the existing account/accessibility regressions.
+- **Improvement:** Keep the email input natively read-only and copyable, add an explicit `aria-readonly` state, and give it the existing subtle surface treatment so learners can distinguish administrator-managed account data from editable certificate-name fields.
+- **Why it helps:** The account page now makes the email's ownership and editability clear at a glance and to assistive technology without adding an account-management action or changing the profile API.
+- **Backend review:** No server change was indicated. Email ownership and profile-update validation remain unchanged.
+- **Checked:** Added `tests/client/account-email-readonly.test.js`; focused account/accessibility checks passed (18/18), the full `npm test -- --test-reporter=spec` suite passed (926/926), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live Account settings showed `aria-readonly="true"`, retained text selection/copy behavior, applied the subtle background, and had no browser warning/error logs; `/healthz`, `/readyz`, `/api/setup/status`, and the Vite root returned 200. No forms, credentials, password changes, or account data were submitted.
+
 ## 2026-10-15 — Cycle 55 bounded catalog, responsive, and operational-log review: no distinct change indicated
 
 - **Reviewed:** The live learner catalog's custom filter keyboard interaction, submitted-search empty state, clear-filter recovery, course overview, calendar month navigation and deadline status, staff course and account tables, system-log detail disclosure, and the narrow 320px layouts; the matching catalog, calendar, pagination, log, authorization, and request-validation boundaries in the client and server.
