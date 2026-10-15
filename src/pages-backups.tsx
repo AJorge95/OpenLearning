@@ -175,6 +175,8 @@ export function AdminBackupsPage() {
 
   const dashboardDefaultPath = dashboard?.defaultDestinationPath || '';
   const isRunning = dashboard?.backupInProgress ?? false;
+  // An unavailable dashboard is not an empty configuration; keep the recovery notice authoritative.
+  const dashboardLoaded = dashboard !== null;
   return <div className="management-page settings-page backup-settings-page">
     <PageHeading title="Settings" subtitle="Configure and monitor automatic backups." />
     <BackupSettingsTabs />
@@ -203,13 +205,13 @@ export function AdminBackupsPage() {
               <button type="button" className="text-action danger-text" disabled={busyId === job.id} onClick={() => setPendingDelete(job)}><Trash2 size={14} aria-hidden="true" />Remove</button>
             </div>
           </article>)}</div>
-          : !editor && <div className="backup-empty-state"><strong>No backup jobs configured</strong><span>Add a job to schedule a database backup, course-media backup, or full backup.</span></div>}
+          : dashboardLoaded && !editor && <div className="backup-empty-state"><strong>No backup jobs configured</strong><span>Add a job to schedule a database backup, course-media backup, or full backup.</span></div>}
     </section>
     <section className="backup-section" aria-labelledby="backup-history-heading">
       <div className="backup-section-heading"><div><h2 id="backup-history-heading">Recent backup runs</h2><p>The latest 50 scheduled and manually started runs.</p></div><Button type="button" variant="secondary" onClick={() => void reload()} disabled={loading}><RefreshCw size={15} aria-hidden="true" />Refresh</Button></div>
       {dashboard?.runs.length ? <div className="backup-history-wrap" role="region" aria-label="Scrollable backup run history" tabIndex={0}><table className="backup-history-table"><caption className="sr-only">Recent backup run history</caption><thead><tr><th scope="col">Started</th><th scope="col">Job</th><th scope="col">Contents</th><th scope="col">Trigger</th><th scope="col">Status</th><th scope="col">Backup location or details</th></tr></thead><tbody>{dashboard.runs.map((run) => <tr key={run.id}>
         <td>{formatTimestamp(run.startedAt || run.createdAt)}</td><th scope="row">{run.jobName}</th><td>{scopeLabels[run.scope]}</td><td>{run.triggerType === 'scheduled' ? 'Scheduled' : `Manual${run.triggeredBy ? ` by ${run.triggeredBy}` : ''}`}</td><td><span className={`backup-run-status backup-run-${run.status}`}>{runStatusLabel(run)}</span></td><td className="backup-history-detail">{run.errorMessage ? <span className="backup-run-error">{run.errorMessage}</span> : run.artifactDeletedAt ? <span>Removed by retention on {formatTimestamp(run.artifactDeletedAt)}</span> : run.backupPath ? <code>{run.backupPath}</code> : '—'}</td>
-      </tr>)}</tbody></table></div> : <div className="backup-empty-state">No backup runs yet. Scheduled runs and “Run now” requests will appear here.</div>}
+      </tr>)}</tbody></table></div> : dashboardLoaded && <div className="backup-empty-state">No backup runs yet. Scheduled runs and “Run now” requests will appear here.</div>}
       <p className="backup-safety-note">Media backups briefly pause changes and uploads while files are copied. Learners can continue viewing courses. A server restart does not trigger missed schedules; the next run waits for its normal time. Removing a job does not delete its existing backup files.</p>
     </section>
     {pendingDelete && <ConfirmationDialog title={`Remove “${pendingDelete.name}”?`} description="This removes the schedule only. Existing backup files and run history will be kept." confirmLabel="Remove schedule" confirmDisabled={busyId === pendingDelete.id} onCancel={() => setPendingDelete(null)} onConfirm={() => void removeJob()} />}

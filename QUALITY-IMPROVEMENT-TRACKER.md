@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Keep backup load failures out of empty states
+
+- **Reviewed:** The freshly launched signed-out login structure and live API probes; backup dashboard loading, polling, refresh, error, job, and run-history branches; and the preserved dirty course-access/staff-markup files.
+- **Improvement:** Backup job and run-history empty states now render only after a dashboard response has loaded. An initial dashboard failure leaves the error notice and refresh action authoritative instead of presenting unavailable data as an empty configuration.
+- **Why it helps:** Administrators can distinguish “no backups configured” from “backup status could not be loaded,” reducing the risk of assuming schedules or history were lost during a transient API or server failure.
+- **Backend review:** Backup authorization, dashboard queries, job validation, scheduler queueing, retention, and artifact preservation remain unchanged; the existing admin-only backup contract continues to provide the data used by the page.
+- **Checked:** Added `tests/client/backup-load-error-state.test.js`; the focused backup client/server checks passed (5/5), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The full suite passed 954/956 with only the two known expectations conflicting with the preserved dirty course-access/staff-markup edits. Live `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and `/` returned 200; the local browser remained read-only on the named public login controls.
+- **Commit title:** `fix(backup): distinguish load failures from empty state`.
+- **Commit description:** `Hide backup empty states until the dashboard loads so transient status failures keep their recovery guidance clear.`
+
 ## 2026-10-15 — Cycle 72 consolidate backup dashboard latest-run reads
 
 - **Reviewed:** The freshly launched signed-out login structure and browser diagnostics; the backup settings polling, job/history presentation, scheduler queue, destination validation, retention, shutdown, and media-write coordination; and the existing backup server/client regressions and dirty-worktree boundary.
