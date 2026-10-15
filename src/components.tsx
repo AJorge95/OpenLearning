@@ -71,6 +71,8 @@ export function PalettePicker({ value, onChange }: { value: BrandingPalette; onC
 export function PlatformIconPicker({ value, onChange }: { value: string | null; onChange: (icon: string | null) => void }) {
   const [error, setError] = useState('');
   const iconHelpId = useId().replaceAll(':', '');
+  // Keep the validation message in the file input's description while it is present.
+  const iconErrorId = `${iconHelpId}-error`;
   const readSequenceRef = useRef(0);
 
   useEffect(() => () => { readSequenceRef.current += 1; }, []);
@@ -122,10 +124,10 @@ export function PlatformIconPicker({ value, onChange }: { value: string | null; 
       <strong>Platform icon</strong>
       <span id={iconHelpId} className="muted">PNG, JPG, or WebP · up to 512 KB · {MAX_BRAND_ICON_DIMENSION} × {MAX_BRAND_ICON_DIMENSION} px max</span>
       <div className="platform-icon-actions">
-        <label className="button button-secondary platform-icon-upload"><ImagePlus size={16} aria-hidden="true" />Upload icon<input type="file" accept="image/png,image/jpeg,image/webp" aria-describedby={iconHelpId} onChange={selectFile} /></label>
+        <label className="button button-secondary platform-icon-upload"><ImagePlus size={16} aria-hidden="true" />Upload icon<input type="file" accept="image/png,image/jpeg,image/webp" aria-invalid={error ? true : undefined} aria-describedby={error ? `${iconHelpId} ${iconErrorId}` : iconHelpId} onChange={selectFile} /></label>
         {value && <button type="button" className="button button-quiet platform-icon-remove" onClick={() => { readSequenceRef.current += 1; setError(''); onChange(null); }}><X size={15} aria-hidden="true" />Remove</button>}
       </div>
-      {error && <span className="form-error platform-icon-error" role="alert">{error}</span>}
+      {error && <span id={iconErrorId} className="form-error platform-icon-error" role="alert">{error}</span>}
     </div>
   </div>;
 }
