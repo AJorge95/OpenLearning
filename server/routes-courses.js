@@ -1362,7 +1362,25 @@ courseRouter.get('/manage/courses/:courseId/access', requireStaff, (req, res) =>
     )${searchClause}
     ORDER BY u.username COLLATE NOCASE, u.id ASC LIMIT ? OFFSET ?
   `).all(course.id, ...searchParams, unassignedLimit, Math.max(0, offset - assignedCount)));
-  res.json({ users: users.map((user) => ({ id: user.id, username: user.username, disabled: Boolean(user.disabled), granted: Boolean(user.grant_id), grantedAt: user.granted_at, grantedBy: user.granted_by })), total, page, pageSize });
+  const accessUsers = users.map((user) => {
+    const granted = Boolean(user.grant_id);
+    const disabled = Boolean(user.disabled);
+    const activeAndPublished = !disabled && course.status === 'published';
+    const accessViaPath = activeAndPublished && course.visibility === 'private' && !granted
+      && canLearnerAccess(course, { id: user.id, role: 'learner', disabled: false });
+    const hasAccess = activeAndPublished && (course.visibility === 'public' || granted || accessViaPath);
+    return {
+      id: user.id,
+      username: user.username,
+      disabled,
+      granted,
+      hasAccess,
+      accessViaPath,
+      grantedAt: user.granted_at,
+      grantedBy: user.granted_by,
+    };
+  });
+  res.json({ users: accessUsers, total, page, pageSize });
 });
 
 courseRouter.put('/manage/courses/:courseId/access/:userId', requireStaff, (req, res) => {

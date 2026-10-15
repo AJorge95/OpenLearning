@@ -295,6 +295,8 @@ export interface CourseAccessUser {
   username: string;
   disabled: boolean;
   granted: boolean;
+  hasAccess: boolean;
+  accessViaPath: boolean;
   grantedAt: string | null;
   grantedBy: string | null;
 }
