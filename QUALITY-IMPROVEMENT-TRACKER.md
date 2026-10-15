@@ -1,5 +1,16 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Ignore stale backup dashboard responses
+
+- **Reviewed:** The scheduled-backup settings page's five-second polling, manual refreshes after create/run/update/remove actions, dashboard loading/error/empty-state branches, and the existing admin backup scheduler and dashboard response contract.
+- **Improvement:** Added a monotonically increasing dashboard request revision so an older polling or refresh response cannot replace a newer response after an action or another refresh has started. Stale success and error results are both ignored, while the existing abort and recovery behavior remains unchanged.
+- **Why it helps:** Administrators no longer see a briefly stale job status, run history, or error message when a slow poll completes after a more recent action-triggered refresh.
+- **Backend review:** Backup authorization, scheduling, queue deduplication, destination validation, retention, and latest-run aggregation remain unchanged; the client continues to consume the same admin-only dashboard response.
+- **Checked:** Added `tests/client/backup-dashboard-request-order.test.js`; the focused backup client/server checks passed (6/6), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The full suite passed 957/959 with only the two known course-access/staff-markup expectations failing against preserved dirty user edits. Live `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and `/` returned 200; the local login DOM retained named controls without browser warning/error logs. No credentials, forms, uploads, account/course actions, or application data were submitted.
+- **Preserved:** `README.md`, `server/routes-courses.js`, `src/pages-manage.tsx`, and `src/types.ts` remain unstaged and untouched by this cycle.
+- **Commit title:** `fix(backup): ignore stale dashboard responses`.
+- **Commit description:** `Guard scheduled-backup polling and action refreshes so stale responses cannot replace newer dashboard state.`
+
 ## 2026-10-15 — Cycle 75 bounded path, public-flow, and readiness review: no distinct change indicated
 
 - **Reviewed:** The freshly launched development tree and current dirty-worktree boundary; learning-path course-option loading/retry, selection limits, assignment recovery, pagination, and focus/accessibility contracts; competency pagination and search recovery; calendar deadline normalization; the signed-out login DOM and browser diagnostics; and health/readiness/setup/registration/root probes.

@@ -93,6 +93,8 @@ export function AdminBackupsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<BackupJob | null>(null);
   const requestActiveRef = useRef(false);
+  // Polling and action-triggered refreshes can overlap; only the newest response may replace the dashboard.
+  const dashboardRevisionRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -100,13 +102,15 @@ export function AdminBackupsPage() {
     const load = async () => {
       if (requestActiveRef.current) return;
       requestActiveRef.current = true;
+      const requestRevision = dashboardRevisionRef.current + 1;
+      dashboardRevisionRef.current = requestRevision;
       const controller = new AbortController();
       controllers.add(controller);
       try {
         const result = await api.get<Dashboard>('/api/admin/backups', { signal: controller.signal });
-        if (active) { setDashboard(result); setError(''); setLoading(false); }
+        if (active && requestRevision === dashboardRevisionRef.current) { setDashboard(result); setError(''); setLoading(false); }
       } catch (cause) {
-        if (active && !(cause instanceof Error && cause.name === 'AbortError')) {
+        if (active && requestRevision === dashboardRevisionRef.current && !(cause instanceof Error && cause.name === 'AbortError')) {
           setError(cause instanceof ApiError ? cause.message : 'Backup status could not be loaded.');
           setLoading(false);
         }
@@ -121,11 +125,15 @@ export function AdminBackupsPage() {
   }, []);
 
   async function reload() {
+    const requestRevision = dashboardRevisionRef.current + 1;
+    dashboardRevisionRef.current = requestRevision;
     try {
       const result = await api.get<Dashboard>('/api/admin/backups');
+      if (requestRevision !== dashboardRevisionRef.current) return;
       setDashboard(result);
       setError('');
     } catch (cause) {
+      if (requestRevision !== dashboardRevisionRef.current) return;
       setError(cause instanceof ApiError ? cause.message : 'Backup status could not be refreshed.');
     }
   }
