@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Cycle 71 bounded backup, shared-control, and public-flow review: no distinct change indicated
+
+- **Reviewed:** The freshly launched signed-out login surface and browser-visible control names; the scheduled-backup settings page and scheduler's validation, queue, shutdown, retention, and media-write coordination; the shared custom select, forms, notices, empty states, status regions, pagination, responsive overflow, and focus patterns; and the related course, learning-path, authorization, request, session, media, logging, and readiness boundaries.
+- **Result:** No distinct current-build interface, accessibility, responsive, recovery, authorization, data-integrity, or measured-performance defect was evidenced. Backup jobs expose labeled contents, UTC schedule, destination, retention, run status, and recovery-safe actions; the reviewed client and server paths continue to validate, bound, recover, audit, or fail closed at their existing contracts.
+- **Why no change:** The current regressions and recent tracker entries already cover the observed backup, shared-control, status, pagination, request, and public-form risks. A new edit would be speculative or duplicate existing safeguards without a failing fixture, changed requirement, or representative workload signal. The preserved dirty course-access/staff-markup files remain out of scope.
+- **Checked:** `npm test -- --test-reporter=dot` passed 953/955, with only the two known course-access/staff-markup expectations failing; `npm run typecheck`, `npm run build`, and `git diff --check` passed. The launched API returned 200 from `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, and `/api/csrf`; the Vite root returned 200 without a CSRF session cookie; and the connected browser exposed the expected public login heading and named controls. No credentials, forms, uploads, account/course actions, or application data were submitted.
+- **Needed to continue:** A reproducible current-build interaction or accessibility defect, changed product/security requirement, representative workload or latency signal, or concrete failure state outside the preserved in-progress course-access work.
+- **Commit title:** `docs(quality): record cycle 71 bounded review`.
+- **Commit description:** `Record the current backup, shared-control, and public-flow review, its passing build and live-probe evidence, and the preserved dirty-worktree test boundary.`
+
 ## 2026-10-15 — Cycle 70 bounded public, management, and backend review: no distinct change indicated
 
 - **Reviewed:** The freshly launched public login and registration screens, their headings, labels, required cues, password visibility interaction, first viewport, and registration form layout; the untouched backup settings, course analytics, audit/system logs, learning paths, calendar, course editor, shared controls, error/retry, pagination, and responsive structures; and the corresponding authentication, registration-field, backup-scheduler, authorization, media, request-boundary, session, logging, and readiness code paths.
