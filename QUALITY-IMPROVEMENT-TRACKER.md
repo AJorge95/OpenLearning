@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-15 — Cycle 67 bounded auth, shared-control, and request-boundary review: no distinct change indicated
+
+- **Reviewed:** The freshly launched signed-out login and registration surfaces; public-form headings, labels, native required semantics, password visibility actions, loading and retry structure, route identity, narrow-layout safeguards, and browser-visible controls; the shared `PasswordField`, `AppSelect`, upload-label, dialog, button, empty-state, progress, and error/status patterns; and the clean-scope HTTP, CSRF/session, pagination, readiness, media-range, upload-cleanup, rate-limit, configuration, and session-cookie paths.
+- **Result:** No distinct current-build interface, accessibility, responsive, recovery, authorization, data-integrity, or measured-performance defect was evidenced. The live public routes exposed meaningful headings and named controls without horizontal overflow, and the reviewed server paths continued to validate, bound, protect, clean up, and return structured errors at their existing boundaries.
+- **Why no change:** The recent auth, shared-control, media, and request-boundary regressions already cover the observed risks. A new edit would be speculative or duplicate existing safeguards without a failing fixture, changed requirement, or representative workload signal.
+- **Checked:** Focused clean-scope checks passed 76/76 (`35` client and `41` server tests); `npm run typecheck`, `npm run build`, and `git diff --check` passed. The launched API returned 200 from `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, and `/api/csrf`; the Vite root returned 200; the connected in-app browser exposed the expected public login/registration controls. The full suite remains non-green only because the preserved dirty backup/course-access worktree changes currently fail their backup audit, schema-version, and course-access markup expectations; those files were not changed. No credentials, forms, uploads, account actions, or application data were submitted.
+- **Needed to continue:** A reproducible current-build interaction or accessibility defect, representative production-size workload or latency evidence, a changed product requirement, or a concrete failure state outside the preserved in-progress backup/course-access work.
+
 ## 2026-10-15 — Associate setup account-limit errors with their field
 
 - **Reviewed:** The two-step setup wizard's access-configuration form, native number constraints, server `invalid_user_limit` validation contract, field focus recovery, and existing setup identifier/error regressions.
