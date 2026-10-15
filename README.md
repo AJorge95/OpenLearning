@@ -21,7 +21,7 @@ If OpenLearning is useful for your team, please [star the repository](https://gi
 - MP4 video upload with browser upload progress and authenticated byte-range delivery for seeking.
 - Administrator-only audit and system logs with search, filters, and pagination.
 - Administrator-configured automatic backups with independent full, database-only, or course-media-only schedules, per-job local destinations and retention, manual runs, and run history.
-- Native Node deployment: one Express process serves the API and production web client. Docker is not required.
+- Native Node and Docker deployments: one Express process serves the API and production web client. Docker is optional.
 
 ## Requirements
 
@@ -36,11 +36,148 @@ On Ubuntu 22.04 or newer, or RHEL 9 or a compatible derivative, install OpenLear
 curl -fsSL https://raw.githubusercontent.com/AJorge95/OpenLearning/main/scripts/install.sh | sudo bash
 ```
 
-The installer installs Node.js 24 and native build prerequisites, creates the `openlearning` systemd service, and builds the latest commit on the repository's `main` branch. It stores application releases in `/opt/openlearning`, creates the protected deployment `.env` file at `/etc/openlearning/.env`, and stores application data in `/var/lib/openlearning`. It generates a production session secret and one-time setup token on first install; the token is printed once for the initial setup wizard. Keep the environment file private. After completing setup, remove `SETUP_TOKEN` from the environment file and restart the service. The installer configures `/var/backups/openlearning` as the default app backup destination and preserves existing custom backup paths during updates.
+The Ubuntu/RHEL installer, Docker image, and Swarm stack all use this repository as their source of truth. By default, the systemd installer builds the latest commit on `main`; its `OPENLEARNING_COMMIT` setting can pin an install to a full 40-character commit SHA. The Docker workflow builds the same source commit and publishes a matching immutable `sha-<commit>` image tag, alongside the moving `latest` tag and app `x.y` tag. Use the same commit SHA in `OPENLEARNING_COMMIT` and `OPENLEARNING_IMAGE` when deployments must run identical source. The image can take a few minutes to publish after a GitHub push, so its `latest` tag may briefly trail `main`.
+
+The installer installs Node.js 24 and native build prerequisites, creates the `openlearning` systemd service, and builds the latest commit on the repository's `main` branch unless `OPENLEARNING_COMMIT` is set. It stores application releases in `/opt/openlearning`, creates the protected deployment `.env` file at `/etc/openlearning/.env`, and stores application data in `/var/lib/openlearning`. It generates a production session secret and one-time setup token on first install; the token is printed once for the initial setup wizard. Keep the environment file private. After completing setup, remove `SETUP_TOKEN` from the environment file and restart the service. The installer configures `/var/backups/openlearning` as the default app backup destination and preserves existing custom backup paths during updates.
+
+To pin the native installer to a published image's source revision, use the full commit SHA from its `sha-<commit>` tag:
+
+```sh
+# Run from a checkout of the desired source revision.
+export OPENLEARNING_COMMIT="$(git rev-parse HEAD)"
+curl -fsSL https://raw.githubusercontent.com/AJorge95/OpenLearning/main/scripts/install.sh | sudo env OPENLEARNING_COMMIT="$OPENLEARNING_COMMIT" bash
+```
 
 Run the same command again to update. The installer preserves recognized `openlearning.service` configuration and resolves relative database and media paths against the existing service working directory. It stops the service, creates a verified database and media backup under `/var/backups/openlearning`, activates the new release, and checks service health. If an already-configured deployment fails its readiness check, it restores the previous release and the pre-update database and media snapshot. First-run installations are checked through `/healthz`; `/readyz` remains unavailable until the setup wizard has been completed.
 
 The installer serves the application on port 6173 by default (or the existing `PORT` setting) and allows that TCP port through an already-active UFW or firewalld firewall. It does not enable a firewall, configure external cloud firewall rules, a reverse proxy, or a TLS certificate. If neither UFW nor firewalld is active, allow the port through your firewall manually. Restrict direct access or configure HTTPS termination separately. Set `TRUST_PROXY=true` in the environment file only when a trusted reverse proxy supplies forwarding headers, then restart the service with `sudo systemctl restart openlearning`.
+
+## Docker and Docker Swarm
+
+The Docker image runs the same Node server as the systemd installer, as the non-root `node` user. Both deployment examples use one app process, persistent host directories for application data and backups, and a container health check against `/healthz`. SQLite, session data, and the in-process backup scheduler are not configured for multiple concurrent replicas. For Swarm, the service is constrained to one node labeled for OpenLearning storage and uses stop-first updates.
+
+### Move an existing systemd installation to Docker
+
+Create and verify a full backup from **Settings** → **Backups** while the systemd service is running. Then stop the service and copy the files from that backup into the Docker data directory (replace `<backup-directory>` with the full backup's timestamped directory):
+
+```sh
+sudo systemctl stop openlearning
+sudo install -d -o 1000 -g 1000 -m 0750 /srv/openlearning/data
+sudo cp -a /var/backups/openlearning/<backup-directory>/openlearning.sqlite /srv/openlearning/data/
+sudo cp -a /var/backups/openlearning/<backup-directory>/course-media /srv/openlearning/data/
+sudo chown -R 1000:1000 /srv/openlearning/data
+```
+
+Set `OPENLEARNING_DATA_PATH=/srv/openlearning/data` and start Docker Compose without the initial-setup override because the restored database already contains the setup state. Keep the original `/var/lib/openlearning` and systemd configuration intact until the Docker instance is verified. Starting with a new session secret will require users to sign in again. Do not run the systemd service and Docker container against the same SQLite files concurrently.
+
+### Docker Compose on one host
+
+Install Docker Engine and the Docker Compose v2 plugin. After the first image publish, set the GHCR package visibility to **Public** once so clients can pull without registry credentials. Create persistent directories owned by the image's `node` user (UID 1000), and create protected secret files readable by that user. To run the same source revision as a native install, also export `OPENLEARNING_IMAGE` with that commit's full SHA tag; otherwise Compose defaults to `latest`.
+
+```sh
+sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0750 /srv/openlearning
+sudo install -d -o 1000 -g 1000 -m 0750 /srv/openlearning/data /srv/openlearning/backups
+umask 077
+openssl rand -hex 32 > /srv/openlearning/session_secret
+openssl rand -hex 32 > /srv/openlearning/setup_token
+sudo chown 1000:"$(id -g)" /srv/openlearning/session_secret /srv/openlearning/setup_token
+sudo chmod 0440 /srv/openlearning/session_secret /srv/openlearning/setup_token
+export OPENLEARNING_DATA_PATH=/srv/openlearning/data
+export OPENLEARNING_BACKUP_PATH=/srv/openlearning/backups
+export SESSION_SECRET_FILE=/srv/openlearning/session_secret
+export SETUP_TOKEN_FILE=/srv/openlearning/setup_token
+# Optional, after exporting OPENLEARNING_COMMIT to the same 40-character SHA as the native install:
+# export OPENLEARNING_IMAGE="ghcr.io/ajorge95/openlearning:sha-$OPENLEARNING_COMMIT"
+```
+
+To pin Compose to that same revision, set `OPENLEARNING_IMAGE` to `ghcr.io/ajorge95/openlearning:sha-${OPENLEARNING_COMMIT}` before starting the service.
+
+Start the initial setup by pulling and running the published image with the one-time setup secret mounted:
+
+```sh
+docker compose -f compose.yaml -f compose.initial-setup.yaml up -d --pull always --no-build
+cat /srv/openlearning/setup_token
+```
+
+Open the server on port 6173, complete the setup wizard with the displayed token, then redeploy without the setup override and remove its host file:
+
+```sh
+docker compose -f compose.yaml up -d --pull always --no-build
+rm /srv/openlearning/setup_token
+```
+
+The Compose service is named `openlearning` and defaults to `ghcr.io/ajorge95/openlearning:latest`. To pull it directly with Docker, run:
+
+```sh
+docker pull ghcr.io/ajorge95/openlearning:latest
+```
+
+For an immutable source revision, run `docker pull "ghcr.io/ajorge95/openlearning:sha-${OPENLEARNING_COMMIT}"` after setting `OPENLEARNING_COMMIT` to the full commit SHA.
+
+To download it through Compose without restarting the app, run `docker compose pull openlearning`. To pull and apply it in one command, run `docker compose up -d --pull always --no-build openlearning`. The `docker-compose` hyphenated CLI can be used where installed; `docker compose` is the Docker Compose v2 plugin syntax. Docker Hub interprets the bare name `openlearning` as `library/openlearning`; the GHCR image therefore needs its registry and owner in the pull name.
+
+Set `OPENLEARNING_PORT` to change the host port. Set `TRUST_PROXY=true` only when a trusted reverse proxy supplies forwarding headers. Limit direct access to the published port when TLS terminates at that proxy. The admin backup page's default destination is `/var/backups/openlearning`; other backup destinations must also be mounted into the container. `docker compose down` leaves the host data and backup directories intact. To build the image from a local checkout instead of pulling it, run `docker compose up -d --build --pull never`.
+
+### Docker Swarm
+
+Swarm uses `docker stack deploy` rather than `docker compose up`; the Compose pull command does not update a running Swarm service. The published workflow builds the repository commit that triggered it and creates `latest`, the app's `x.y` version, and an immutable `sha-<full-commit-sha>` tag for both `linux/amd64` and `linux/arm64`. Use that SHA tag in `OPENLEARNING_IMAGE` to pin Swarm to the same code as a native or Compose install. After the first image publish, set the GHCR package visibility to **Public** once so nodes can pull without registry credentials. See [GitHub's package visibility guide](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility).
+
+#### Manual Swarm deployment
+
+For a manually managed deployment, use a published image or build and push from a checked-out repository commit. The workflow publishes the `sha-<full-commit-sha>` tag for the exact source commit; the local build below uses the same tag convention:
+
+```sh
+SOURCE_COMMIT="$(git rev-parse HEAD)"
+export OPENLEARNING_IMAGE="ghcr.io/ajorge95/openlearning:sha-$SOURCE_COMMIT"
+printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_USERNAME" --password-stdin
+docker build -t "$OPENLEARNING_IMAGE" .
+docker push "$OPENLEARNING_IMAGE"
+docker logout ghcr.io
+```
+
+For local publishing, set `GHCR_TOKEN` to a GitHub classic personal access token with `write:packages` and `GITHUB_USERNAME` to your GitHub username. Public pulls do not require authentication.
+
+On the node that stores the SQLite database, media, and backups, create the directories with ownership for UID 1000:
+
+```sh
+sudo install -d -o 1000 -g 1000 -m 0750 /srv/openlearning/data /srv/openlearning/backups
+```
+
+On a Swarm manager, set the node name and exact host paths, then label that storage node. These same path values are expanded into the stack file and must exist on the labeled node:
+
+```sh
+export OPENLEARNING_NODE=worker-1
+export OPENLEARNING_DATA_PATH=/srv/openlearning/data
+export OPENLEARNING_BACKUP_PATH=/srv/openlearning/backups
+docker node update --label-add openlearning-data=true "$OPENLEARNING_NODE"
+```
+
+Create the permanent session secret and temporary setup secret. Keep the setup token available to enter in the first-run wizard:
+
+```sh
+umask 077
+openssl rand -hex 32 > ./openlearning_session_secret
+openssl rand -hex 32 > ./openlearning_setup_token
+docker secret create openlearning_session_secret ./openlearning_session_secret
+docker secret create openlearning_setup_token ./openlearning_setup_token
+cat ./openlearning_setup_token
+```
+
+Deploy the stack with the initial-setup override, complete the wizard at `http://<storage-node>:6173`, then redeploy without that override and remove the one-time secret:
+
+```sh
+docker stack deploy --with-registry-auth -c docker-stack.yml -c docker-stack.initial-setup.yml openlearning
+docker stack deploy --with-registry-auth -c docker-stack.yml openlearning
+docker secret rm openlearning_setup_token
+rm ./openlearning_setup_token
+rm ./openlearning_session_secret
+```
+
+The stack publishes port 6173 in host mode and sets `TRUST_PROXY=false` by default. Export `TRUST_PROXY=true` before `docker stack deploy` only when traffic arrives through a trusted reverse proxy. Restrict the port with the host firewall to the proxy and intended clients. In the backup settings, use `/var/backups/openlearning` or another path mounted into the service.
+
+Before upgrading, create and verify a backup. Build and push a new immutable image tag, set `OPENLEARNING_IMAGE` to it, and redeploy `docker-stack.yml`. Swarm's rollback restores the prior image if an update fails its health check; it does not roll back SQLite migrations or restore the bind-mounted data. Keep an independent copy of backups off the storage node. To recover on a replacement node, restore the data and backup directories there before moving the `openlearning-data` label.
+
+`/healthz` checks that the HTTP process responds. `/readyz` reports application readiness after setup is complete. Swarm does not move the local SQLite files with the service, so do not label multiple nodes for this single-replica stack unless they are guaranteed to see the same valid data and backup paths. Multi-replica high availability requires a different shared database, session, media, and backup architecture.
 
 ## Install and run
 
@@ -120,10 +257,13 @@ Environment variables can be set in `.env` or in the process environment:
 | `DATA_DIR` | `./data` | Parent directory used to derive database and media paths when their overrides are unset. |
 | `DB_PATH` | `./data/openlearning.sqlite` | SQLite database file path. If unset, defaults to `openlearning.sqlite` inside `DATA_DIR`. |
 | `MEDIA_ROOT` | `./data/course-media` | Root directory for course media; if unset, defaults to `course-media` inside `DATA_DIR`. Each course gets its own subdirectory. |
+| `BACKUP_DIR` | `./backup` | Default server-side destination for backup jobs and the `npm run backup` command. |
 | `MAX_UPLOAD_BYTES` | `2147483648` | Maximum size for a single uploaded video, cover, or lesson document, as a positive whole number of bytes. Invalid values stop startup. |
 | `REQUEST_TIMEOUT_MS` | `300000` | Maximum time in milliseconds for Node to receive an entire HTTP request, from 1 to 2147483647. Set a larger value for slower large uploads; invalid values stop startup. |
 | `SESSION_SECRET` | Development-only value | Session signing secret. Production requires at least 32 characters; use a random secret and keep it private. |
+| `SESSION_SECRET_FILE` | Unset | Read the session signing secret from a UTF-8 file, such as a mounted Docker secret. Set either this or `SESSION_SECRET`, not both. |
 | `SETUP_TOKEN` | Unset | Private, random first-run administrator bootstrap credential, required only until initial setup succeeds. When set, it must contain 32 to 256 characters. |
+| `SETUP_TOKEN_FILE` | Unset | Read the first-run setup token from a UTF-8 file, such as a mounted Docker secret. Set either this or `SETUP_TOKEN`, not both. |
 | `TRUST_PROXY` | `false` | Accepts `true` or `false` (case-insensitive). Set `true` only behind a trusted reverse proxy that sets forwarding headers; other non-empty values stop startup. |
 
 `DB_PATH` and `MEDIA_ROOT` are independent overrides. The example leaves them unset so changing `DATA_DIR` moves the database and media together. Set either override explicitly when you need to store it elsewhere.
