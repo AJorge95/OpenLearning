@@ -13,7 +13,7 @@ import { parseApiTimestamp } from './api-timestamp';
 import { formatApiTimestamp } from './format-api-timestamp';
 import { accountCourseAssignmentLabel } from './account-course-activity';
 import { accountDisableConfirmation } from './account-disable-confirmation';
-import { courseAccessAction } from './course-access-action';
+import { courseAccessAction, courseAccessActionLabel, courseAccessStatusLabel } from './course-access-action';
 import { courseDeletionConfirmation } from './course-deletion-confirmation';
 import { courseRowActionStatus } from './course-row-action-status';
 import { isCourseCreationEditorState } from './course-editor-state';
@@ -2210,15 +2210,8 @@ export function CourseAccessPage() {
         {users.map((learner) => {
           const assignmentAction = courseAccessAction(learner);
           const unassign = assignmentAction === 'unassign';
-          const assignmentLabel = learner.granted
-            ? 'Directly assigned'
-            : learner.accessViaPath
-              ? 'Access through learning path'
-              : course?.visibility === 'public' && learner.hasAccess
-                ? 'Public access'
-                : 'No access';
-          const actionLabel = assignmentAction === 'assign' && learner.accessViaPath ? 'Add direct assignment'
-            : assignmentAction === 'unassign' ? 'Unassign' : 'Assign course';
+          const assignmentLabel = courseAccessStatusLabel(course || { visibility: 'public' }, learner);
+          const actionLabel = courseAccessActionLabel(assignmentAction, learner.accessViaPath);
           return <li className="access-row" key={learner.id}>
             <div className="access-user"><UserInitial username={learner.username} /><div><strong>{learner.username}</strong>{learner.granted && learner.grantedAt && <small>Assigned <DateText value={learner.grantedAt} />{learner.grantedBy ? ` by ${learner.grantedBy}` : ''}</small>}</div></div>
             <span className={learner.hasAccess ? 'access-state access-state-granted' : 'access-state'}>{assignmentLabel}</span>
