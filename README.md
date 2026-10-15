@@ -36,7 +36,7 @@ On Ubuntu 22.04 or newer, or RHEL 9 or a compatible derivative, install OpenLear
 curl -fsSL https://raw.githubusercontent.com/AJorge95/OpenLearning/main/scripts/install.sh | sudo bash
 ```
 
-The installer installs Node.js 24 and native build prerequisites, creates the `openlearning` systemd service, and builds the latest commit on the repository's `main` branch. It stores application releases in `/opt/openlearning`, creates the protected deployment `.env` file at `/etc/openlearning/.env`, and stores application data in `/var/lib/openlearning`. It generates a production session secret and one-time setup token on first install; the token is printed once for the initial setup wizard. Keep the environment file private. After completing setup, remove `SETUP_TOKEN` from the environment file and restart the service.
+The installer installs Node.js 24 and native build prerequisites, creates the `openlearning` systemd service, and builds the latest commit on the repository's `main` branch. It stores application releases in `/opt/openlearning`, creates the protected deployment `.env` file at `/etc/openlearning/.env`, and stores application data in `/var/lib/openlearning`. It generates a production session secret and one-time setup token on first install; the token is printed once for the initial setup wizard. Keep the environment file private. After completing setup, remove `SETUP_TOKEN` from the environment file and restart the service. The installer configures `/var/backups/openlearning` as the default app backup destination and preserves existing custom backup paths during updates.
 
 Run the same command again to update. The installer preserves recognized `openlearning.service` configuration and resolves relative database and media paths against the existing service working directory. It stops the service, creates a verified database and media backup under `/var/backups/openlearning`, activates the new release, and checks service health. If an already-configured deployment fails its readiness check, it restores the previous release and the pre-update database and media snapshot. First-run installations are checked through `/healthz`; `/readyz` remains unavailable until the setup wizard has been completed.
 
@@ -77,6 +77,10 @@ npm run dev
 ```
 
 The development client is available at `http://127.0.0.1:5173` and proxies API and media requests to the Express server on port 6173.
+
+## App version
+
+OpenLearning uses an `x.y` app version, stored in `package.json` as `x.y.0`. The Git pre-commit hook increments `y` for commits that change app behavior or its tests; documentation, tooling, and dependency-only commits do not increment it. `npm install` configures the repository hook automatically while preserving any existing custom Git hook path. To request a new major version, run `npm run version:major`; this increments `x` and resets `y` to zero. The current version appears in administrator settings and is available from the public `GET /api/version` endpoint.
 
 ## Checks
 

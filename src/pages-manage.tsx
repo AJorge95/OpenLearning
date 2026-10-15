@@ -4,7 +4,7 @@ import { Activity, AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useBeforeUnload, useBlocker, useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { BlockerFunction } from 'react-router-dom';
-import { api, ApiError, fetchAccess, fetchCourse } from './api';
+import { api, ApiError, fetchAccess, fetchAppVersion, fetchCourse } from './api';
 import { requestPendingRegistrationCountRefresh } from './admin-navigation-events';
 import { AppSelect, Button, ConfirmationDialog, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PasswordField, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
 import type { AppSelectOption } from './components';
@@ -2920,6 +2920,15 @@ export function AdminSettingsPage() {
   const [resetSuccess, setResetSuccess] = useState('');
   const [resetBusy, setResetBusy] = useState(false);
   const [resetStatusLoaded, setResetStatusLoaded] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchAppVersion({ signal: controller.signal })
+      .then((result) => setAppVersion(result.version))
+      .catch((cause) => {
+        if (!controller.signal.aborted) setAppVersionError(cause instanceof ApiError ? cause.message : 'Application version could not be loaded.');
+      });
+    return () => controller.abort();
+  }, []);
   useEffect(() => { setName(platformName); setIcon(platformIcon); setIconEdited(false); setPalette(themePalette); setProtocol(connectionProtocol); setAllowRegistration(registrationEnabled); setRequireRegistrationApproval(registrationApprovalRequired); setUserLimitValue(String(userLimit)); }, [platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, userLimit]);
   function refreshRegisteredUserCount() {
     // Reuse the existing request effect so refreshes share its abort and stale-response guards.
@@ -3107,6 +3116,11 @@ export function AdminSettingsPage() {
       <div className="settings-card-footer"><span>Database and media paths remain managed through the server environment.</span><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</Button></div>
       </fieldset>
     </form>
+    <section className="settings-card app-version-card" aria-labelledby="app-version-heading">
+      <div className="settings-card-heading"><span className="settings-icon" aria-hidden="true"><BookOpen size={19} /></span><div><h2 id="app-version-heading">Application version</h2><p>The version currently served by this installation.</p></div></div>
+      {appVersionError ? <Notice>{appVersionError}</Notice> : <p className="app-version-value" role="status" aria-live="polite"><span>Current version</span><strong>{appVersion || 'Loading…'}</strong></p>}
+      <small>Public version endpoint: <code>/api/version</code></small>
+    </section>
     <section className="platform-reset-card" aria-labelledby="platform-reset-heading">
       <div className="platform-reset-heading"><span className="platform-reset-icon"><AlertTriangle size={19} aria-hidden="true" /></span><div><h2 id="platform-reset-heading">Reset platform</h2><p>Remove learning content and account data, then restore platform settings to their defaults.</p></div></div>
       <div className="platform-reset-content">

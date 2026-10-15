@@ -59,6 +59,22 @@ test('updater creates verified backups and restores data when readiness fails', 
   assert.match(installer, /ENDPOINT="healthz"/);
 });
 
+test('installer supports the new configurable backup feature under its systemd sandbox', () => {
+  assert.match(installer, /BACKUP_DIR=\$BACKUP_ROOT/);
+  assert.match(installer, /READ_WRITE_PATHS=.*\$BACKUP_ROOT/);
+  assert.match(installer, /ReadWritePaths=\$READ_WRITE_PATHS/);
+  assert.match(installer, /ProtectSystem=full/);
+  assert.match(installer, /node scripts\/migrate-install-config\.js/);
+  assert.match(readme, /per-job local destinations and retention/);
+});
+
+test('installer keeps the service on the package-required Node.js major', () => {
+  const packageJson = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+  assert.match(packageJson.engines.node, />=\s*24/);
+  assert.equal([...installer.matchAll(/setup_24\.x/g)].length, 2);
+  assert.match(installer, /NODE_MAJOR >= 24/);
+});
+
 test('installer opens the configured application port in active local firewalls', () => {
   assert.match(installer, /ufw status.*Status: active/s);
   assert.match(installer, /ufw allow "\$SERVICE_PORT\/tcp"/);

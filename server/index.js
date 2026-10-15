@@ -6,6 +6,8 @@ import session from 'express-session';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { config } from './config.js';
+import { appVersion } from './app-version.js';
+import { versionRouter } from './routes-version.js';
 import { db, setting } from './db.js';
 import { SQLiteSessionStore } from './session-store.js';
 import { createSessionCookieProtocolMiddleware } from './session-cookie.js';
@@ -45,6 +47,7 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 app.use(noStoreApiResponses);
+app.use('/api', versionRouter);
 app.get('/healthz', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({ status: 'ok' }));
 app.get('/readyz', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
