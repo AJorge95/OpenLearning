@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 113: enlarge shared management search targets
+
+- **Reviewed:** Staff course, user, learning-path, competency, course-access, audit-log, and system-log search structures; text-submit target sizing; keyboard focus treatment; narrow-layout overrides; and the existing search filtering and request-recovery paths.
+- **Improvement:** Give direct management-search submit controls a consistent 40px minimum target with a local palette-aware focus outline, and raise the learning-path assignment search override from 32px to 40px. Existing search labels, form submission, filtering, disabled states, 48px field height, and responsive layout remain unchanged.
+- **Why it helps:** Staff can activate the shared search actions more reliably with a pointer or touch device, including inside the dense learner-assignment panel, while keyboard users get an unambiguous focus boundary.
+- **Backend review:** Course, learner, user, learning-path, competency, audit-log, and system-log query validation, authorization, pagination, cancellation, and retry paths were reviewed read-only; no backend change was indicated.
+- **Checked:** Added `tests/client/management-search-target.test.js`; the focused target regression is intended to cover the shared CSS rule and all affected search surfaces. The fresh local browser smoke audit at `/login` rendered the signed-out shell with one heading, named username/password controls, no blank-page state, and no observed warning/error diagnostics. Authenticated management search interaction remains source- and regression-verified because this development browser session has no authenticated staff fixture.
+- **Commit title:** `fix(a11y): enlarge management search targets`.
+- **Commit description:** `Give shared staff search actions reliable touch targets and visible keyboard focus without changing query behavior.`
+
 ## 2026-10-16 — Cycle 112: normalize synchronous upload failures
 
 - **Reviewed:** The shared JSON and multipart API transport, CSRF refresh/retry behavior, upload progress and cancellation, synchronous `XMLHttpRequest.send()` failures, and the course-editor upload consumers' recovery messages.
