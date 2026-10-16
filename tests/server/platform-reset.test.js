@@ -195,6 +195,31 @@ test('reset preparation rejects same-size corruption in its copied media backup'
   assert.deepEqual(backupsAfter.sort(), backupsBefore.sort(), 'Failed reset verification must not leave a new backup behind.');
 });
 
+test('reset preparation rejects an empty SQLite quick_check result', async () => {
+  const backupRoot = path.join(fixtureDirectory, 'backups');
+  const backupsBefore = await fs.promises.readdir(backupRoot);
+  const originalPragma = Database.prototype.pragma;
+  let verificationAttempted = false;
+  Database.prototype.pragma = function pragma(statement, ...options) {
+    if (statement === 'quick_check') {
+      verificationAttempted = true;
+      return [];
+    }
+    return originalPragma.call(this, statement, ...options);
+  };
+
+  try {
+    await assert.rejects(reset.preparePlatformReset(actor), /SQLite backup verification failed\./);
+  } finally {
+    Database.prototype.pragma = originalPragma;
+  }
+
+  assert.equal(verificationAttempted, true);
+  assert.equal(reset.isPlatformResetActive(), false);
+  const backupsAfter = await fs.promises.readdir(backupRoot);
+  assert.deepEqual(backupsAfter.sort(), backupsBefore.sort(), 'Failed reset verification must not leave a new backup behind.');
+});
+
 test('reset preparation verifies a restorable backup and cancellation preserves platform data', async () => {
   const nestedMedia = Buffer.from('nested fixture media');
   await fs.promises.mkdir(path.join(process.env.MEDIA_ROOT, 'module'), { recursive: true });

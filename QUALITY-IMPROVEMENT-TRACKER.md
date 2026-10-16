@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 164: fail closed on empty reset integrity checks
+
+- **Reviewed:** Current branch/history and installer IPv4/RHEL regression coverage; local `/healthz`, `/readyz`, and `/login` routes; reset-backup SQLite verification and its parallel routine-backup contract; and auth shell semantics, responsive CSS, focus visibility, reduced motion, and forced-colors support. The Browser plugin is absent and Playwright is not installed, so this source/HTTP review did not include rendered visual or interaction QA.
+- **Problem:** Platform-reset preparation accepted an empty SQLite `quick_check` result because it only rejected returned rows that were not `ok`. An empty result is not proof of a valid reset backup, unlike the normal backup verifier which already rejects it.
+- **Change:** Reset preparation now requires a non-empty `quick_check` result and requires every row to be `ok`. Added a regression that injects an empty result and confirms preparation fails, clears its pending state, and leaves no new backup artifact.
+- **Why it helps:** A malformed or unexpected SQLite response can no longer make the destructive reset flow treat an unverified database snapshot as ready.
+- **Checked:** Focused installer and reset tests passed 25/25; full `npm test -- --test-reporter=dot`, `npm run build` (including typecheck), and `git diff --check` passed. Dynamic IPv4 selection remains covered by the installer test, which selects `10.123.89.19` without probing it. Local `/healthz`, `/readyz`, and Vite `/login` probes returned 200. No UI runtime change, production service, or Red Hat host was changed.
+- **Commit title:** `fix(reset): reject empty SQLite integrity checks`.
+- **Commit description:** `Require SQLite quick_check to return at least one successful row before reset preparation can mark a pre-reset database backup verified.`
+
 ## 2026-10-16 — Cycle 163: verify media in all backup workflows
 
 - **Reviewed:** Fresh local API/client routes; installer RHEL support and service-account storage checks; backup and reset media-copy paths, manifest consumers, retention identity checks, and focused regressions; plus auth and backup-page semantic landmarks, named controls, keyboard-focus styling, and mobile layout rules. The rendered login route returned 200, but the Browser plugin is absent and Playwright is not installed, so no visual/interaction inspection was performed and no dependency was added.
