@@ -12,7 +12,8 @@ CONFIG_DIR="/etc/openlearning"
 ENV_FILE="$CONFIG_DIR/.env"
 DATA_DIR="/var/lib/openlearning"
 BACKUP_ROOT="/var/backups/openlearning"
-PORT="6173"
+# Installed production builds serve both the browser UI and API on this port.
+PORT="5173"
 
 log() { printf '[openlearning] %s\n' "$*"; }
 fail() { printf '[openlearning] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -458,4 +459,5 @@ if [[ "$FIREWALL_CONFIGURED" == false ]]; then
 fi
 
 log "OpenLearning is ready at http://localhost:$SERVICE_PORT."
+log "From another computer, open http://<this-server-IP-or-hostname>:$SERVICE_PORT (localhost refers to the computer running the browser)."
 log "Service: systemctl status $SERVICE_NAME; configuration: $ENV_FILE; data: $DATA_DIR"

@@ -50,7 +50,17 @@ curl -fsSL https://raw.githubusercontent.com/AJorge95/OpenLearning/main/scripts/
 
 Run the same command again to update. The installer preserves recognized `openlearning.service` configuration and resolves relative database and media paths against the existing service working directory. It stops the service, creates a verified database and media backup under `/var/backups/openlearning`, activates the new release, and checks service health. If an already-configured deployment fails its readiness check, it restores the previous release and the pre-update database and media snapshot. First-run installations are checked through `/healthz`; `/readyz` remains unavailable until the setup wizard has been completed.
 
-The installer serves the application on port 6173 by default (or the existing `PORT` setting) and allows that TCP port through an already-active UFW or firewalld firewall. It does not enable a firewall, configure external cloud firewall rules, a reverse proxy, or a TLS certificate. If neither UFW nor firewalld is active, allow the port through your firewall manually. Restrict direct access or configure HTTPS termination separately. Set `TRUST_PROXY=true` in the environment file only when a trusted reverse proxy supplies forwarding headers, then restart the service with `sudo systemctl restart openlearning`.
+The installer serves both the built frontend and API on port 5173 by default (or the existing `PORT` setting) and allows that TCP port through an already-active UFW or firewalld firewall. Open `http://<server-IP-or-hostname>:5173` from another computer, using the configured port if different. There is no separate Vite process in production. Docker and direct Node startup retain their 6173 defaults. The installer does not enable a firewall, configure external cloud firewall rules, a reverse proxy, or a TLS certificate. If neither UFW nor firewalld is active, allow the port through your firewall manually. Restrict direct access or configure HTTPS termination separately. Set `TRUST_PROXY=true` in the environment file only when a trusted reverse proxy supplies forwarding headers, then restart the service with `sudo systemctl restart openlearning`.
+
+Updates preserve a saved `PORT`, so changing the installer default does not move an existing installation from 6173. To move it to 5173, back up and edit the deployment configuration, then rerun the installer to restart the service and configure its active local firewall:
+
+```sh
+sudo cp -p /etc/openlearning/.env /etc/openlearning/.env.before-port-change
+sudo sed -i 's/^[[:space:]]*PORT=.*/PORT=5173/' /etc/openlearning/.env
+curl -fsSL https://raw.githubusercontent.com/AJorge95/OpenLearning/main/scripts/install.sh | sudo bash
+```
+
+If external cloud firewall or reverse-proxy rules are configured, update them for the selected port separately. A successful local health check verifies the running app, not remote browser connectivity.
 
 The service runs as the dedicated `openlearning` account. For preserved storage inside a private home directory, the installer grants that account traversal through the parent directories using filesystem ACLs, then checks storage access as the service account. Home-directory ownership is preserved. Health checks use HTTP on `127.0.0.1:<configured PORT>` to check the app on the same server; this is not an ICMP ping or a test of public network access.
 

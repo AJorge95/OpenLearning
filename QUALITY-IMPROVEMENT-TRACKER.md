@@ -1,5 +1,12 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Installer follow-up: restore the expected browser port
+
+- **Problem:** The latest screenshot confirms successful installation and HTTP health on 6173, while the user expects browser access on 5173. The earlier installer default reversal disrupted that expectation.
+- **Change:** Restore 5173 for fresh native installs and explain remote browser access in completion output. Production serves the built frontend and API together; it does not launch Vite. Preserve existing saved ports and legacy migration behavior, including the underlying server's 6173 fallback. Document the explicit configuration override and installer rerun needed to move an existing deployment and its local firewall to 5173.
+- **Validation:** Installer/config-migration regression tests passed 14/14, including Bash syntax; git diff --check passed. Target-host network access cannot be verified from the screenshot; successful loopback HTTP does not establish external firewall, proxy, or browser connectivity.
+- **Commit:** fix(installer): restore the expected browser port.
+
 ## 2026-10-16 — Installer follow-up: repair preserved storage access
 
 - **Problem:** The supplied screenshot shows EACCES creating /home/a-antjore/OpenLearning/data. Private parent directories can block the service account even when root can access the preserved path.
