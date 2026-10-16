@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 106: enlarge learner catalog search targets
+
+- **Reviewed:** The learner course-catalog search landmark, clear-filter and submit actions, narrow-layout behavior, accessible names, focus treatment, filter-reset behavior, and the related catalog query, pagination, access, and request-recovery paths.
+- **Improvement:** Increase the catalog's icon-only clear and submit buttons from 30×32px to centered 40×40px targets while preserving their existing labels, search submission, filter reset, focus styling, and compact 48px search-field layout.
+- **Why it helps:** Learners can more reliably activate search and clear actions with a pointer or touch device, especially when the catalog controls are used on a narrow screen, without changing query semantics or consuming additional field height.
+- **Backend review:** Catalog filtering, access rules, stable pagination, request cancellation, and retry behavior already match the current client contract; no backend change was indicated.
+- **Checked:** Added `tests/client/course-catalog-action-target.test.js`; the focused regression passed 1/1, the full `npm test -- --test-reporter=spec` suite passed 974/974, `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live `/healthz`, `/readyz`, setup status, registration fields, CSRF, and the Vite root returned 200. The reloaded signed-out shell settled with one heading, named controls, no document overflow, and no browser warning/error diagnostics. No credentials, forms, searches, account/course actions, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): enlarge catalog search targets`.
+- **Commit description:** `Give learner catalog search actions reliable compact touch targets while preserving their existing query and reset behavior.`
+
 ## 2026-10-16 — Cycle 105: enlarge course row action targets
 
 - **Reviewed:** The course-management table structure, icon-only row-menu trigger, accessible menu naming and expansion state, keyboard focus restoration, viewport-bounded menu positioning, responsive table overflow, course-action feedback, and the related management authorization and mutation paths.

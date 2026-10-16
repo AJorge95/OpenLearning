@@ -159,7 +159,8 @@ h1, h2, h3, h4 { color: var(--ink); letter-spacing: -.035em; overflow-wrap: anyw
 .search-field input, .management-search input, .access-search input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 14px; }
 .search-field:focus-within, .management-search:focus-within, .access-search:focus-within { border-color: var(--purple); outline: 2px solid var(--purple); outline-offset: 2px; }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
-.search-field button { border: 0; background: transparent; color: var(--purple); width: 30px; height: 32px; display: grid; place-items: center; border-radius: 3px; }
+/* Keep the catalog's icon-only actions easy to activate without growing the search field. */
+.search-field button { border: 0; background: transparent; color: var(--purple); width: 40px; height: 40px; display: grid; place-items: center; border-radius: 5px; }
 .search-field .clear-catalog-filters { color: var(--muted); }
 .search-field button:hover { background: var(--purple-soft); }
 .search-field .clear-catalog-filters:hover { color: var(--purple); }
