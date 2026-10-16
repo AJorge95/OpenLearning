@@ -9,6 +9,10 @@ import test from 'node:test';
 const installer = fs.readFileSync(new URL('../../scripts/install.sh', import.meta.url), 'utf8');
 const readme = fs.readFileSync(new URL('../../README.md', import.meta.url), 'utf8');
 const server = fs.readFileSync(new URL('../../server/index.js', import.meta.url), 'utf8');
+const startScript = fs.readFileSync(new URL('../../scripts/start.js', import.meta.url), 'utf8');
+const dockerfile = fs.readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
+const compose = fs.readFileSync(new URL('../../compose.yaml', import.meta.url), 'utf8');
+const swarm = fs.readFileSync(new URL('../../docker-stack.yml', import.meta.url), 'utf8');
 const installerPath = fileURLToPath(new URL('../../scripts/install.sh', import.meta.url));
 const bashPath = process.platform === 'win32' && fs.existsSync('C:\\Program Files\\Git\\bin\\bash.exe')
   ? 'C:\\Program Files\\Git\\bin\\bash.exe'
@@ -68,7 +72,7 @@ test('installer reports the kernel-selected server IPv4 without network probing'
   assert.match(installer, /http:\/\/\$SERVER_IPV4:\$SERVICE_PORT/);
   assert.doesNotMatch(installer, /curl[^\n]*1\.1\.1\.1|ping[^\n]*1\.1\.1\.1/);
   assert.match(readme, /prints the IPv4 address selected by the host's default route/);
-  assert.match(readme, /selected address may be private/);
+  assert.match(readme, /that address may be private/);
 
   const run = (route, defaults, addresses) => spawnSync(bashPath, ['-c', `
     set -eu
@@ -234,7 +238,7 @@ test('installer supports the new configurable backup feature under its systemd s
   assert.match(installer, /ReadWritePaths=\$READ_WRITE_PATHS/);
   assert.match(installer, /ProtectSystem=full/);
   assert.match(installer, /node scripts\/migrate-install-config\.js/);
-  assert.match(readme, /per-job local destinations and retention/);
+  assert.match(readme, /per-job destinations and retention/);
 });
 
 test('installer keeps the service on the package-required Node.js major', () => {
@@ -242,6 +246,21 @@ test('installer keeps the service on the package-required Node.js major', () => 
   assert.match(packageJson.engines.node, />=\s*24/);
   assert.equal([...installer.matchAll(/setup_24\.x/g)].length, 2);
   assert.match(installer, /NODE_MAJOR >= 24/);
+});
+
+test('native releases discard build-only dependencies after the build succeeds', () => {
+  assert.match(installer, /npm run build\r?\nnpm prune --omit=dev\r?\n/);
+});
+
+test('container deployments use the shared startup command without duplicate mode flags', () => {
+  assert.match(startScript, /process\.env\.NODE_ENV = process\.argv\.includes\('--dev'\) \? 'development' : 'production'/);
+  assert.match(dockerfile, /ENV NODE_ENV=production/);
+  for (const deployment of [compose, swarm]) {
+    assert.doesNotMatch(deployment, /NODE_ENV/);
+  }
+  assert.match(dockerfile, /CMD \["node", "scripts\/start\.js"\]/);
+  assert.match(compose, /PORT: "5173"/);
+  assert.match(swarm, /PORT: "5173"/);
 });
 
 test('installer opens the configured application port in active local firewalls', () => {
@@ -377,7 +396,7 @@ test('README documents the GitHub one-line installer and repeated update command
   assert.match(readme, /curl -fsSL https:\/\/raw\.githubusercontent\.com\/AJorge95\/OpenLearning\/main\/scripts\/install\.sh \| sudo bash/);
   assert.match(readme, /Run the same command again to update/);
   assert.match(readme, /Ubuntu 22\.04 or newer, or RHEL 9/);
-  assert.match(readme, /creates the protected deployment `\.env` file at `\/etc\/openlearning\/\.env`/);
+  assert.match(readme, /private configuration at `\/etc\/openlearning\/\.env`/);
   assert.match(readme, /OPENLEARNING_COMMIT/);
 });
 

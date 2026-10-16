@@ -340,6 +340,7 @@ chown -R root:root "$NEW_RELEASE"
 cd "$NEW_RELEASE"
 npm ci
 npm run build
+npm prune --omit=dev
 normalize_release_permissions "$NEW_RELEASE"
 
 if [[ "$OLD_UNIT_PRESENT" == true ]]; then

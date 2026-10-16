@@ -7,3 +7,4 @@ data/
 *.sqlite-shm
 *.sqlite-wal
 coverage/
+*.mp4
