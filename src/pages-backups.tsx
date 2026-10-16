@@ -101,7 +101,10 @@ export function AdminBackupsPage() {
   useEffect(() => {
     let active = true;
     const controllers = new Set<AbortController>();
+    const isVisible = () => document.visibilityState === 'visible';
     const load = async () => {
+      // A hidden settings tab cannot show a fresh result; resume with one read when it returns.
+      if (!active || !isVisible()) return;
       if (requestActiveRef.current) return;
       requestActiveRef.current = true;
       const requestRevision = dashboardRevisionRef.current + 1;
@@ -123,7 +126,14 @@ export function AdminBackupsPage() {
     };
     void load();
     const timer = window.setInterval(() => void load(), 5000);
-    return () => { active = false; window.clearInterval(timer); controllers.forEach((controller) => controller.abort()); };
+    const refreshOnVisible = () => { if (isVisible()) void load(); };
+    document.addEventListener('visibilitychange', refreshOnVisible);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshOnVisible);
+      controllers.forEach((controller) => controller.abort());
+    };
   }, []);
 
   async function reload() {

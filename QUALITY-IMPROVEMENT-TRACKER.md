@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 137: pause hidden backup-dashboard polling
+
+- **Reviewed:** The administrator backup dashboard's five-second polling, manual action refreshes, stale-response revision guard, loading/error/empty states, visibility of running media/database backups, and the existing admin-only scheduler, queue, retention, and authorization paths.
+- **Improvement:** Skip dashboard reads while the settings tab is hidden, and perform one fresh read when the document becomes visible again. Preserve the existing five-second polling cadence while visible, action-triggered refreshes, abort cleanup, stale-response protection, and backup status presentation. Added `tests/client/backup-dashboard-visibility.test.js`.
+- **Why it helps:** A background administrator tab no longer creates unnecessary requests against the backup dashboard every five seconds, while returning administrators still see current job and run status immediately after the tab becomes visible.
+- **Backend review:** Backup authorization, schedule calculation, queue deduplication, destination validation, retention cleanup, media-write coordination, and dashboard response aggregation were reviewed read-only; the existing server contract already supports the client lifecycle change, so no backend change was indicated.
+- **Checked:** Focused backup polling regressions passed 2/2; the full `npm test -- --test-reporter=spec` suite passed 1005/1005; `npm run build` (including typecheck), and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration-fields, version, and Vite `/login` probes returned 200. The in-app browser fallback rendered a non-blank login shell with one heading and named username/password controls; the password action changed from `Show password` to `Hide password`. Playwright CLI was available but its Chromium executable was not installed, so screenshot/console validation used the Codex in-app browser; no credentials, forms, backup actions, or application data were submitted or changed.
+- **Commit title:** `fix(backup): pause hidden dashboard polling`.
+- **Commit description:** `Pause scheduled-backup dashboard polling while hidden and refresh once when administrators return to the page.`
+
 ## 2026-10-16 — Cycle 136: align lesson document-upload target
 
 - **Reviewed:** The staff lesson-editor document picker, native file-label/input semantics, format guidance, upload progress and cancellation states, narrow stacked layout, focus-within treatment, and the server-side document type/signature validation, authorization, size limit, transaction, audit, and cleanup paths.
