@@ -1012,7 +1012,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .modal-card { position: relative; width: min(100%, 470px); max-height: calc(100vh - 44px); max-height: calc(100dvh - 44px); overflow-y: auto; overscroll-behavior: contain; padding: 31px; background: #fff; border-radius: 5px; box-shadow: var(--shadow); }
 .modal-card h2 { font-size: 24px; margin: 0 0 8px; }
 .modal-card > p { color: var(--muted); font-size: 13px; line-height: 1.6; margin-bottom: 22px; }
-.modal-close { position: absolute; top: 12px; right: 15px; border: 0; background: transparent; color: #666b7a; font-size: 27px; line-height: 1; }
+/* Keep the password-reset dialog close action easy to hit and easy to find. */
+.modal-close { position: absolute; top: 12px; right: 15px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #666b7a; font-size: 27px; line-height: 1; }
+.modal-close:hover:not(:disabled) { color: var(--purple); border-color: var(--purple-border-strong); background: var(--purple-soft); }
+.modal-close:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; border-color: var(--purple); }
 .confirmation-dialog { box-sizing: border-box; width: min(470px, calc(100vw - 32px)); max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; margin: auto; padding: 26px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); background: #fff; box-shadow: var(--shadow); }
 .confirmation-dialog::backdrop { background: rgba(19, 21, 31, .48); }
 .confirmation-dialog h2 { margin: 0 0 8px; font-size: 21px; }
