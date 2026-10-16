@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 132: align learning-path empty-search recovery target
+
+- **Reviewed:** The staff learning-path assignment panel's learner search form, empty-result recovery message, `Clear search` action, narrow wrapping, loading/disabled states, accessible status announcement, and the assignment search and enrollment request boundaries.
+- **Improvement:** Raise the empty-search `Clear search` button from its 34px override to a 40px minimum target while preserving its quiet styling, disabled state, status message, responsive panel layout, and existing search-reset handler. Added `tests/client/path-assignment-empty-target.test.js`.
+- **Why it helps:** Course managers can recover from a no-match learner search more reliably with a pointer or touch device, without widening the assignment panel or changing search and assignment semantics.
+- **Backend review:** Learning-path learner search and assignment routes already validate the bounded query and page inputs, enforce staff access and active-learner scope, preserve assignment conflicts, and return recoverable error states; no backend change was indicated.
+- **Checked:** Focused empty-search target checks passed (1/1); the full `npm test -- --test-reporter=spec` suite passed (1000/1000), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, CSRF, and Vite login probes returned 200; anonymous CSRF returned no `Set-Cookie`, and anonymous admin backups returned 401. The reloaded local `/login` shell exposed one heading plus named username/password controls with no browser warning/error logs. Authenticated assignment interaction remains source- and regression-verified because the development browser session is signed out; no credentials, learner searches, assignments, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): enlarge learning-path clear action`.
+- **Commit description:** `Give the empty learning-path assignment search a reliable recovery target while preserving its responsive status and reset behavior.`
+
 ## 2026-10-16 — Cycle 131: align shared staff pagination targets
 
 - **Reviewed:** The shared `LogPagination` component and its course list, learner progress, course access, account, course activity, audit-log, and system-log consumers; learning-path assignment paging; narrow wrapping; result-range announcements; disabled/loading states; native button semantics; and the corresponding bounded, authorized server queries.
