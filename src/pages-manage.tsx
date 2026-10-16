@@ -2454,6 +2454,7 @@ export function CourseGroupsPage() {
         {groups.length > 0 && <section className="course-group-assign" aria-labelledby="course-group-assign-heading">
           <div className="course-groups-heading"><h2 id="course-group-assign-heading">Add a course</h2></div>
           <form className="course-group-search" role="search" aria-label="Find courses to add to a group" onSubmit={searchCourses}>
+            <Search size={18} aria-hidden="true" />
             <label>Group<select value={targetGroupId} onChange={(event) => setTargetGroupId(event.target.value)} aria-label="Group to add courses to">
               {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
             </select></label>

@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 176: align course-group search landmarks
+
+- **Finding:** The course-group assignment search was a named search landmark with a native search field, but it omitted the decorative search cue used by the other course and management search surfaces. The landmark regression also still expected the pre-course-groups form count and only detected top-level inputs, so the current feature made the suite report false failures.
+- **Change:** Added the shared `Search` icon with `aria-hidden="true"` to the course-group assignment search and updated the dedicated client landmark check to include the new form and recognize valid inputs nested inside labels.
+- **Why it helps:** The new course-group workflow now has the same visual search affordance as neighboring management screens, while the regression test covers the actual JSX structure without weakening the native search-input requirement.
+- **Checked:** Focused `node --test tests/client/search-landmarks.test.js` passed 3/3; `npm run typecheck`, `npm run build`, and `git diff --check` passed. The full suite remains at 1,046/1,056 with 10 pre-existing assertions failing in backup dashboard, course overview/catalog/pagination, quiz focus, and historical migrations.
+- **Boundary:** Interface and test maintenance only; no credentials, application data, deployment, external service, or user-owned deployment/document changes were altered.
+- **Commit title:** `fix(a11y): align course-group search landmark`.
+- **Commit description:** `Add the decorative search cue to course-group assignment search and update the landmark regression for the new form and nested native input structure.`
+
 ## 2026-10-16 — Cycle 175: review backup restore boundaries — no additional change indicated
 
 - **Reviewed:** The user's untracked restore CLI and server restore service, including the admin router, full-backup selection, media manifest/path checks, symlink rejection, database verification/migration, restore staging, rollback, and session clearing.
