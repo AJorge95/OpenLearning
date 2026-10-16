@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 116: enlarge competency administration targets
+
+- **Reviewed:** Competency administration row and pagination button structure, shared `Button` focus behavior, narrow-layout stacking, search and status-update semantics, and the competency API's authorization, validation, pagination, transactional update, and audit paths.
+- **Improvement:** Raise competency status-toggle and pagination buttons from 36px to 40px minimum targets while preserving their compact typography, responsive layout, accessible names, disabled/busy states, and existing handlers. Added a readable CSS comment and `tests/client/competency-admin-action-target.test.js`.
+- **Why it helps:** Administrators can activate frequent competency actions more reliably with a pointer or touch device in both dense rows and paged lists, without changing the competency data or interaction model.
+- **Backend review:** The existing competency routes already require administrator access, validate search and update payloads, compute bounded pages, update status transactionally, and persist audit entries; no backend change was indicated.
+- **Checked:** Focused competency checks passed 17/17; full `npm test -- --test-reporter=spec` passed 984/984; `npm run typecheck`, `npm run build`, and `git diff --check` passed. The reloaded local `/login` shell rendered one heading and named username/password controls with no blank-page or framework-overlay state, and browser error/warning logs were empty. Authenticated competency interaction remains source- and regression-verified because this development browser session has no authenticated staff fixture.
+- **Commit title:** `fix(a11y): enlarge competency admin targets`.
+- **Commit description:** `Give competency administration actions reliable touch targets while preserving the compact responsive layout and existing behavior.`
+
 ## 2026-10-16 — Cycle 115: enlarge course-editor add-action targets
 
 - **Reviewed:** Course-editor module-add action structure, `Add lesson` and `Add module quiz` semantics, desktop and narrow responsive spacing, keyboard focus treatment, in-flight disabled states, and the related curriculum creation and authorization paths.
