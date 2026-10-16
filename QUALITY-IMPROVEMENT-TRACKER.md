@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 133: align narrow course-access search target
+
+- **Reviewed:** The staff course-access search form, named search input and submit control, narrow two-column access-row layout, filter submission state, empty-result announcement, retry handling, and the course-access authorization and bounded query paths.
+- **Improvement:** Raise the narrow-layout course-access `Search` button from a 36px override to a 40px minimum target while preserving its secondary styling, compact horizontal padding, named search semantics, submit handler, and responsive access list layout. Added `tests/client/course-access-search-target.test.js`.
+- **Why it helps:** Course managers can submit learner-access searches more reliably on phone-sized layouts, without changing query behavior or making the access table wider.
+- **Backend review:** Course-access search and grant routes already validate the bounded query and page inputs, enforce staff access and active-learner scope, distinguish direct/path/public access, and preserve recoverable loading and error states; no backend change was indicated.
+- **Checked:** Focused course-access search-target checks passed (1/1); the full `npm test -- --test-reporter=spec` suite passed (1001/1001), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, CSRF, and Vite login probes returned 200; anonymous CSRF returned no `Set-Cookie`, and anonymous admin backups returned 401. The reloaded local `/login` shell exposed one heading plus named username/password controls with no browser warning/error logs. Authenticated course-access interaction remains source- and regression-verified because the development browser session is signed out; no credentials, learner searches, grants, revocations, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): align course-access search target`.
+- **Commit description:** `Keep the narrow course-access search submit reliable to activate while preserving its responsive layout and query behavior.`
+
 ## 2026-10-16 — Cycle 132: align learning-path empty-search recovery target
 
 - **Reviewed:** The staff learning-path assignment panel's learner search form, empty-result recovery message, `Clear search` action, narrow wrapping, loading/disabled states, accessible status announcement, and the assignment search and enrollment request boundaries.
