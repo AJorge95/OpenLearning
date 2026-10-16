@@ -14,9 +14,17 @@ DATA_DIR="/var/lib/openlearning"
 BACKUP_ROOT="/var/backups/openlearning"
 # Installed production builds serve both the browser UI and API on this port.
 PORT="5173"
+REQUESTED_PORT="${OPENLEARNING_PORT:-}"
 
 log() { printf '[openlearning] %s\n' "$*"; }
 fail() { printf '[openlearning] ERROR: %s\n' "$*" >&2; exit 1; }
+
+normalize_port() {
+  local requested_port="$1"
+  [[ "$requested_port" =~ ^[0-9]{1,5}$ ]] || return 1
+  (( 10#$requested_port >= 1 && 10#$requested_port <= 65535 )) || return 1
+  printf '%s\n' "$((10#$requested_port))"
+}
 
 detect_server_ipv4() {
   local route_output=""
@@ -85,16 +93,24 @@ configure_firewalld_port() {
   local zone="$1"
   local add_output=""
   local add_status=0
+  local config_mode=""
 
-  add_output="$(firewall-cmd --zone="$zone" --permanent --add-port="$SERVICE_PORT/tcp" 2>&1)" || add_status=$?
-  if [[ "$add_status" -ne 0 && "$add_status" -ne 11 ]]; then
-    [[ -z "$add_output" ]] || printf '%s\n' "$add_output" >&2
-    return "$add_status"
-  fi
+  # Change only this rule in both configurations; a global reload would drop
+  # unrelated runtime-only firewall rules on the host.
+  for config_mode in permanent runtime; do
+    add_status=0
+    if [[ "$config_mode" == permanent ]]; then
+      add_output="$(firewall-cmd --zone="$zone" --permanent --add-port="$SERVICE_PORT/tcp" 2>&1)" || add_status=$?
+    else
+      add_output="$(firewall-cmd --zone="$zone" --add-port="$SERVICE_PORT/tcp" 2>&1)" || add_status=$?
+    fi
 
-  # firewalld uses ALREADY_ENABLED (11) for an existing rule; reload either
-  # successful outcome so permanent configuration is reflected at runtime.
-  firewall-cmd --reload >/dev/null
+    # firewalld uses ALREADY_ENABLED (11) when the rule already exists.
+    if [[ "$add_status" -ne 0 && "$add_status" -ne 11 ]]; then
+      [[ -z "$add_output" ]] || printf '%s\n' "$add_output" >&2
+      return "$add_status"
+    fi
+  done
 }
 
 package_manager_for() {
@@ -124,7 +140,8 @@ has_required_node_runtime() {
 
 configured_port() {
   local environment_file="$1"
-  ENV_FILE="$environment_file" DEFAULT_PORT="$PORT" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || process.env.DEFAULT_PORT)'
+  # Match server/config.js when reading a legacy environment file without PORT.
+  ENV_FILE="$environment_file" DEFAULT_PORT="6173" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || process.env.DEFAULT_PORT)'
 }
 
 normalize_release_permissions() {
@@ -136,6 +153,16 @@ normalize_release_permissions() {
   find "$release_path" -type d -exec chmod 0755 {} +
   find "$release_path" -type f ! -perm /111 -exec chmod 0644 {} +
   find "$release_path" -type f -perm /111 -exec chmod 0755 {} +
+}
+
+restore_environment_config() {
+  [[ "$RESTORE_CONFIG_ON_FAILURE" == true ]] || return 0
+  if [[ "$CONFIG_SNAPSHOT_EXISTS" == true ]]; then
+    cp -a -- "$CONFIG_SNAPSHOT" "$ENV_FILE" || return 1
+  else
+    rm -f -- "$ENV_FILE" || return 1
+  fi
+  RESTORE_CONFIG_ON_FAILURE=false
 }
 
 prepare_storage_access() {
@@ -183,6 +210,13 @@ SOURCE_COMMIT="${OPENLEARNING_COMMIT:-}"
 if [[ -n "$SOURCE_COMMIT" && ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
   fail "OPENLEARNING_COMMIT must be a full 40-character lowercase commit SHA."
 fi
+if [[ -n "$REQUESTED_PORT" ]]; then
+  if ! PORT="$(normalize_port "$REQUESTED_PORT")"; then
+    fail "OPENLEARNING_PORT must be a whole-number TCP port between 1 and 65535."
+  fi
+  # Normalize leading zeroes before writing the value to the service config.
+  REQUESTED_PORT="$PORT"
+fi
 [[ "$(id -u)" -eq 0 ]] || fail "Run this installer as root, for example: curl -fsSL https://raw.githubusercontent.com/$REPOSITORY/$BRANCH/scripts/install.sh | sudo bash"
 
 command -v systemctl >/dev/null 2>&1 || fail "systemd is required."
@@ -205,6 +239,9 @@ OLD_WORKING_DIRECTORY=""
 OLD_ENV_FILE=""
 OLD_UNIT_FRAGMENT=""
 UNIT_SNAPSHOT=""
+CONFIG_SNAPSHOT=""
+CONFIG_SNAPSHOT_EXISTS=false
+RESTORE_CONFIG_ON_FAILURE=false
 NEW_RELEASE=""
 RELEASE_FINALIZED=false
 if systemctl cat "$SERVICE_NAME.service" >/dev/null 2>&1; then
@@ -280,7 +317,11 @@ if [[ "$OLD_UNIT_PRESENT" == true ]]; then
   cp -a "$OLD_UNIT_FRAGMENT" "$UNIT_SNAPSHOT/original-unit"
 fi
 cleanup() {
+  if [[ "$RESTORE_CONFIG_ON_FAILURE" == true ]] && ! restore_environment_config; then
+    log "WARNING: Could not restore the previous service configuration from $CONFIG_SNAPSHOT."
+  fi
   rm -f "$ARCHIVE" "${NODE_SETUP_FILE:-}"
+  rm -f "${CONFIG_SNAPSHOT:-}"
   rm -rf "$STAGING" "${UNIT_SNAPSHOT:-}"
   # Failed downloads, builds, or readiness checks must not accumulate unusable releases.
   if [[ "$RELEASE_FINALIZED" != true && -n "$NEW_RELEASE" && -d "$NEW_RELEASE" ]]; then
@@ -301,10 +342,18 @@ normalize_release_permissions "$NEW_RELEASE"
 
 if [[ "$OLD_UNIT_PRESENT" == true ]]; then
   log "Reading the current service configuration and resolving its data paths."
-  OLD_WORKING_DIRECTORY="$OLD_WORKING_DIRECTORY" OLD_ENV_FILE="$OLD_ENV_FILE" NEW_ENV_FILE="$ENV_FILE" node scripts/migrate-install-config.js
   EXPECT_READY=false
-  EXISTING_PORT="$(configured_port "$ENV_FILE")"
+  # Probe the currently running port before an explicit override changes the
+  # migrated configuration; this preserves the stronger readiness check.
+  EXISTING_PORT="$(configured_port "$OLD_ENV_FILE")"
   if curl -fsS "http://127.0.0.1:$EXISTING_PORT/readyz" >/dev/null 2>&1; then EXPECT_READY=true; fi
+  if [[ -e "$ENV_FILE" ]]; then
+    CONFIG_SNAPSHOT="$(mktemp /tmp/openlearning-env.XXXXXX)"
+    cp -a -- "$ENV_FILE" "$CONFIG_SNAPSHOT"
+    CONFIG_SNAPSHOT_EXISTS=true
+  fi
+  RESTORE_CONFIG_ON_FAILURE=true
+  OLD_WORKING_DIRECTORY="$OLD_WORKING_DIRECTORY" OLD_ENV_FILE="$OLD_ENV_FILE" NEW_ENV_FILE="$ENV_FILE" INSTALL_PORT_OVERRIDE="$REQUESTED_PORT" node scripts/migrate-install-config.js
 else
   EXPECT_READY=false
   if [[ ! -e "$ENV_FILE" ]]; then
@@ -355,6 +404,9 @@ if (match) fs.writeFileSync(process.env.BACKUP_PATH_FILE, match[1].trim());
 NODE
   if [[ "$BACKUP_EXIT" -ne 0 || ! -s "$BACKUP_PATH_FILE" ]]; then
     rm -f "$BACKUP_PATH_FILE"
+    if ! restore_environment_config; then
+      log "WARNING: Could not restore the previous service configuration from $CONFIG_SNAPSHOT."
+    fi
     if [[ "$WAS_ACTIVE" == true ]]; then systemctl start "$SERVICE_NAME.service" || true; fi
     fail "Existing database was not found or a verified backup could not be created; refusing to update."
   fi
@@ -484,6 +536,9 @@ if [[ "$READY" != true ]]; then
     rm -f "/etc/systemd/system/$SERVICE_NAME.service"
     systemctl disable "$SERVICE_NAME.service" >/dev/null 2>&1 || true
   fi
+  if ! restore_environment_config; then
+    log "WARNING: Could not restore the previous service configuration from $CONFIG_SNAPSHOT."
+  fi
   systemctl daemon-reload
   if [[ -n "${BACKUP_PATH:-}" && -d "$BACKUP_PATH" ]]; then
     ENV_FILE="$ENV_FILE" BACKUP_PATH="$BACKUP_PATH" node --input-type=module <<'NODE'
@@ -506,6 +561,7 @@ NODE
   journalctl -u "$SERVICE_NAME.service" -n 30 --no-pager >&2 || true
   fail "OpenLearning did not become ready. The prior code release has been restored; inspect the service logs."
 fi
+RESTORE_CONFIG_ON_FAILURE=false
 RELEASE_FINALIZED=true
 
 FIREWALL_CONFIGURED=false

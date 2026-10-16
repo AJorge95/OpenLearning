@@ -1,5 +1,25 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 167: avoid global firewalld reloads
+
+- **Reviewed:** Cycle 166's already-enabled handling, firewalld's runtime/permanent configuration contract, the current sign-in shell and responsive/accessibility styles, and fresh local API/UI HTTP probes. The sign-in route rendered in the available in-app browser; no interaction flow was exercised.
+- **Problem:** Cycle 166 correctly handled an existing permanent port but used `firewall-cmd --reload` to activate it. Firewalld documents that reload replaces runtime rules with permanent configuration and discards unrelated runtime-only changes.
+- **Change:** Apply the selected app-port rule directly to the route zone in both permanent and runtime configurations. Treat only success and `ALREADY_ENABLED` (11) as success in each mode, stop and surface real errors, and remove the global reload. Regressions cover new/existing rules and permanent/runtime failures.
+- **Why it helps:** Repeated installs can make the app port effective immediately and persistently without wiping temporary firewall rules unrelated to OpenLearning.
+- **Checked:** Focused Linux-installer tests passed 16/16, including dynamic address selection, route-zone fallback, both already-enabled states, and real failures. Full `npm test -- --test-reporter=dot`, `npm run build` (including typecheck), and `git diff --check` passed. Local `/healthz`, `/readyz`, and `/login` probes returned 200; the in-app browser rendered the sign-in form at `127.0.0.1:6173/login`. No Red Hat host or firewall was changed.
+- **Commit title:** `fix(installer): configure production port safely`.
+- **Commit description:** `Support validated OPENLEARNING_PORT overrides for fresh installs and existing-service updates, probe the prior listener and restore the saved environment on rollback, and apply the selected firewalld port in runtime and permanent configs without a global reload.`
+
+## 2026-10-16 — Cycle 168: make the service port configurable on update
+
+- **Reviewed:** The RHEL screenshots and previous install behavior; the installer’s saved-PORT migration, production Express static-file routes, Vite development proxy, existing README port-change instructions, route-selected IPv4 output, and the current local sign-in page.
+- **Problem:** An update deliberately preserved the deployment’s saved `PORT`, so a host still configured for 6173 remained there even when the operator expected the installed UI on 5173. The local Vite process is development-only; production serves the built UI and API from the single systemd service port.
+- **Change:** Added validated `OPENLEARNING_PORT` support for fresh installs and existing-service migrations. Existing readiness is checked on the old port before migrating the config; the configured port then drives the service listener, route-zone firewall rule, and dynamically detected browser URL. The prior private environment file is snapshotted and restored if migration/update readiness fails. Updated the one-command README example and documented that an old firewall allowance may need separate removal.
+- **Why it helps:** Operators can change the deployed port in the same install/update command without editing `/etc/openlearning/.env` by hand, while default-route IP detection remains automatic and saved settings remain unchanged when no override is supplied.
+- **Checked:** Linux installer and config migration tests passed 23/23, including valid/invalid ports, leading-zero normalization, preserving unrelated settings, explicit migration from 6173 to 5173, and restoring the prior private environment file on rollback. Full `npm test -- --test-reporter=dot`, `npm run build` (typecheck and Vite), and `git diff --check` passed. HTTP smoke checks for `/healthz`, `/readyz`, and `/login` returned 200 on 6173; the in-app browser rendered the sign-in form at `127.0.0.1:6173/login`. On this workstation 5173 is occupied by Vite development, so remote installed-service reachability was not claimed or tested. No Red Hat host or firewall was changed.
+- **Commit title:** `fix(installer): configure production port safely`.
+- **Commit description:** `Support validated OPENLEARNING_PORT overrides for fresh installs and existing-service updates, probe the prior listener and restore the saved environment on rollback, and apply the selected firewalld port in runtime and permanent configs without a global reload.`
+
 ## 2026-10-16 — Cycle 166: make repeated firewalld setup idempotent
 
 - **Reviewed:** The current pushed installer and its route-selected IPv4/firewalld-zone logic; the previous RHEL output containing `ALREADY_ENABLED`; the sign-in shell's semantic landmarks, field labels, navigation, focus rules, reduced-motion/forced-colors styles, and responsive breakpoints; and current local health/readiness/login routes. The Browser plugin is unavailable and Playwright is not installed, so UI review was source/HTTP based with no visual or interaction claims.
