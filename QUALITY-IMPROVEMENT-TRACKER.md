@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 115: enlarge course-editor add-action targets
+
+- **Reviewed:** Course-editor module-add action structure, `Add lesson` and `Add module quiz` semantics, desktop and narrow responsive spacing, keyboard focus treatment, in-flight disabled states, and the related curriculum creation and authorization paths.
+- **Improvement:** Give the recurring course-editor add-action buttons consistent 40px minimum targets at base and narrow breakpoints, compact horizontal padding, a palette-aware hover surface, and an explicit keyboard focus outline while preserving their labels, disabled states, and existing creation handlers.
+- **Why it helps:** Course authors can activate the frequent lesson and quiz creation controls more reliably with a pointer or touch device, and keyboard users can see which compact action is focused without changing curriculum behavior.
+- **Backend review:** Module and quiz creation routes, staff authorization, bounded title/selection validation, transactional updates, and audit persistence were reviewed read-only; no backend change was indicated.
+- **Checked:** Added `tests/client/course-editor-add-action-target.test.js`; the focused add-action and existing course-editor target checks passed 3/3, the full `npm test -- --test-reporter=spec` suite passed 983/983, `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, version, and Vite-root probes returned 200 with no CSRF `Set-Cookie`; anonymous admin backups returned structured 401 JSON. The reloaded local `/login` and `/register` shells rendered named controls without a blank-page or framework-overlay state; password visibility changed from `Show password` to `Hide password`. Authenticated course-editor interaction remains source- and regression-verified because no credentials, forms, or application data were submitted.
+- **Commit title:** `fix(a11y): enlarge course-editor add actions`.
+- **Commit description:** `Give course-editor lesson and quiz creation actions reliable touch targets and visible keyboard focus across responsive layouts.`
+
 ## 2026-10-16 — Cycle 114: enlarge learning-path card actions
 
 - **Reviewed:** Learner and staff learning-path card structure, course action links, assigned-learner removal actions, narrow-layout grid placement, keyboard focus treatment, and the existing path enrollment, assignment, authorization, and refresh-feedback boundaries.
