@@ -83,6 +83,39 @@ if ! PACKAGE_MANAGER="$(package_manager_for "$OS_ID" "$OS_VERSION")"; then
   fail "Unsupported distribution or version '$OS_ID $OS_VERSION'. Supported: Ubuntu 22.04+ and RHEL 9+ compatible systems."
 fi
 
+for managed_path in "$INSTALL_ROOT" "$RELEASES_DIR" "$CONFIG_DIR" "$DATA_DIR" "$BACKUP_ROOT"; do
+  [[ ! -L "$managed_path" ]] || fail "Refusing to use a symlink for a managed path: $managed_path"
+done
+[[ ! -L "$ENV_FILE" ]] || fail "Refusing to write through a symlinked environment file: $ENV_FILE"
+
+OLD_UNIT_PRESENT=false
+OLD_WORKING_DIRECTORY=""
+OLD_ENV_FILE=""
+OLD_UNIT_FRAGMENT=""
+UNIT_SNAPSHOT=""
+if systemctl cat "$SERVICE_NAME.service" >/dev/null 2>&1; then
+  OLD_UNIT_PRESENT=true
+  OLD_UNIT_FRAGMENT="$(systemctl show --property=FragmentPath --value "$SERVICE_NAME.service" 2>/dev/null || true)"
+  [[ -n "$OLD_UNIT_FRAGMENT" && -f "$OLD_UNIT_FRAGMENT" ]] || fail "Found $SERVICE_NAME.service but its unit file cannot be backed up safely."
+  [[ ! -L "/etc/systemd/system/$SERVICE_NAME.service" ]] || fail "The existing service unit is a symlink; convert it to a regular unit file before adoption."
+  if [[ -n "$(systemctl show --property=DropInPaths --value "$SERVICE_NAME.service" 2>/dev/null || true)" ]]; then
+    fail "The existing service has systemd drop-in overrides. Consolidate them into its main unit or remove them before adoption."
+  fi
+  OLD_WORKING_DIRECTORY="$(systemctl show --property=WorkingDirectory --value "$SERVICE_NAME.service" 2>/dev/null || true)"
+  [[ -n "$OLD_WORKING_DIRECTORY" ]] || fail "Found $SERVICE_NAME.service but could not determine its working directory; refusing to replace it."
+  [[ -d "$OLD_WORKING_DIRECTORY" ]] || fail "Existing service working directory does not exist: $OLD_WORKING_DIRECTORY"
+  if systemctl cat "$SERVICE_NAME.service" | grep -Eq '^[[:space:]]*Environment='; then
+    fail "Preflight stopped before package installation: the existing service defines inline Environment values. Move them into one EnvironmentFile before adopting it, so configuration can be preserved safely."
+  fi
+  # Prefer the environment file explicitly referenced by the unit.
+  mapfile -t EXISTING_ENV_FILES < <(systemctl cat "$SERVICE_NAME.service" | sed -nE 's/^[[:space:]]*EnvironmentFile=-?([^[:space:]]+).*$/\1/p')
+  [[ "${#EXISTING_ENV_FILES[@]}" -le 1 ]] || fail "The existing service references multiple EnvironmentFile entries; combine them into one file before adoption."
+  OLD_ENV_FILE="${EXISTING_ENV_FILES[0]:-}"
+  if [[ -z "$OLD_ENV_FILE" && -f "$ENV_FILE" ]]; then OLD_ENV_FILE="$ENV_FILE"; fi
+  if [[ -z "$OLD_ENV_FILE" && -f "$OLD_WORKING_DIRECTORY/.env" ]]; then OLD_ENV_FILE="$OLD_WORKING_DIRECTORY/.env"; fi
+  [[ -n "$OLD_ENV_FILE" && -r "$OLD_ENV_FILE" ]] || fail "The existing service has no readable environment file. Add one or migrate its configuration manually before rerunning this installer."
+fi
+
 if [[ "$PACKAGE_MANAGER" == apt-get ]]; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
@@ -110,41 +143,9 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 (( NODE_MAJOR >= 24 )) || fail "Node.js 24 or newer is required; found $(node --version)."
 command -v npm >/dev/null 2>&1 || fail "Node.js installation did not provide npm."
 
-for managed_path in "$INSTALL_ROOT" "$RELEASES_DIR" "$CONFIG_DIR" "$DATA_DIR" "$BACKUP_ROOT"; do
-  [[ ! -L "$managed_path" ]] || fail "Refusing to use a symlink for a managed path: $managed_path"
-done
-[[ ! -L "$ENV_FILE" ]] || fail "Refusing to write through a symlinked environment file: $ENV_FILE"
 install -d -m 0755 "$RELEASES_DIR" "$CONFIG_DIR" "$DATA_DIR" "$BACKUP_ROOT"
 chmod 0700 "$CONFIG_DIR"
 chmod 0750 "$DATA_DIR" "$BACKUP_ROOT"
-
-OLD_UNIT_PRESENT=false
-OLD_WORKING_DIRECTORY=""
-OLD_ENV_FILE=""
-OLD_UNIT_FRAGMENT=""
-UNIT_SNAPSHOT=""
-if systemctl cat "$SERVICE_NAME.service" >/dev/null 2>&1; then
-  OLD_UNIT_PRESENT=true
-  OLD_UNIT_FRAGMENT="$(systemctl show --property=FragmentPath --value "$SERVICE_NAME.service" 2>/dev/null || true)"
-  [[ -n "$OLD_UNIT_FRAGMENT" && -f "$OLD_UNIT_FRAGMENT" ]] || fail "Found $SERVICE_NAME.service but its unit file cannot be backed up safely."
-  [[ ! -L "/etc/systemd/system/$SERVICE_NAME.service" ]] || fail "The existing service unit is a symlink; convert it to a regular unit file before adoption."
-  if [[ -n "$(systemctl show --property=DropInPaths --value "$SERVICE_NAME.service" 2>/dev/null || true)" ]]; then
-    fail "The existing service has systemd drop-in overrides. Consolidate them into its main unit or remove them before adoption."
-  fi
-  OLD_WORKING_DIRECTORY="$(systemctl show --property=WorkingDirectory --value "$SERVICE_NAME.service" 2>/dev/null || true)"
-  [[ -n "$OLD_WORKING_DIRECTORY" ]] || fail "Found $SERVICE_NAME.service but could not determine its working directory; refusing to replace it."
-  [[ -d "$OLD_WORKING_DIRECTORY" ]] || fail "Existing service working directory does not exist: $OLD_WORKING_DIRECTORY"
-  if systemctl cat "$SERVICE_NAME.service" | grep -Eq '^[[:space:]]*Environment='; then
-    fail "The existing service defines inline Environment values. Move them into one EnvironmentFile before adopting it, so configuration can be preserved safely."
-  fi
-  # Prefer the environment file explicitly referenced by the unit.
-  mapfile -t EXISTING_ENV_FILES < <(systemctl cat "$SERVICE_NAME.service" | sed -nE 's/^[[:space:]]*EnvironmentFile=-?([^[:space:]]+).*$/\1/p')
-  [[ "${#EXISTING_ENV_FILES[@]}" -le 1 ]] || fail "The existing service references multiple EnvironmentFile entries; combine them into one file before adoption."
-  OLD_ENV_FILE="${EXISTING_ENV_FILES[0]:-}"
-  if [[ -z "$OLD_ENV_FILE" && -f "$ENV_FILE" ]]; then OLD_ENV_FILE="$ENV_FILE"; fi
-  if [[ -z "$OLD_ENV_FILE" && -f "$OLD_WORKING_DIRECTORY/.env" ]]; then OLD_ENV_FILE="$OLD_WORKING_DIRECTORY/.env"; fi
-  [[ -n "$OLD_ENV_FILE" && -r "$OLD_ENV_FILE" ]] || fail "The existing service has no readable environment file. Add one or migrate its configuration manually before rerunning this installer."
-fi
 
 RELEASE_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 NEW_RELEASE="$RELEASES_DIR/$RELEASE_ID"
