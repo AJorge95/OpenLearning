@@ -943,7 +943,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .lesson-feedback-heading > span { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; color: #676d7d; font-size: 12px; }
 .feedback-loading { padding: 18px; border: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 .lesson-reactions { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 23px; }
-.lesson-reactions .button { min-height: 39px; padding: 0 13px; font-size: 13px; }
+/* Keep every learner feedback action easy to hit without changing the compact copy. */
+.lesson-reactions .button { min-height: 40px; padding: 0 13px; font-size: 13px; }
 .reaction-count { min-width: 17px; padding-left: 4px; opacity: .8; text-align: center; }
 .lesson-comment-form { display: grid; gap: 9px; padding: 17px; border: 1px solid var(--line); background: #fbfbfd; }
 .lesson-comment-form label { color: #303443; font-size: 13px; font-weight: 650; }
@@ -951,7 +952,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .lesson-comment-form textarea:focus { outline: 2px solid var(--purple); border-color: var(--purple); }
 .lesson-comment-form > div { display: flex; justify-content: space-between; align-items: center; gap: 15px; }
 .lesson-comment-form small { color: var(--muted); font-size: 12px; line-height: 1.45; }
-.lesson-comment-form .button { min-height: 38px; padding: 0 12px; font-size: 12px; }
+.lesson-comment-form .button { min-height: 40px; padding: 0 12px; font-size: 12px; }
 .lesson-comments { display: grid; margin-top: 7px; }
 .lesson-comment { display: flex; align-items: flex-start; gap: 12px; padding: 17px 2px; border-bottom: 1px solid var(--line); }
 .comment-avatar { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%; color: var(--purple); background: var(--purple-soft); font-size: 13px; font-weight: 700; }
@@ -962,7 +963,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .lesson-comment-remove { min-height: 28px; flex: 0 0 auto; gap: 5px; margin-left: auto; padding: 0 7px; font-size: 11px; }
 .lesson-comment p { margin: 7px 0 0; color: #4c5261; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .comments-empty { margin: 0; padding: 22px 0; color: var(--muted); font-size: 13px; }
-.load-comments-button { min-height: 38px; margin-top: 16px; font-size: 12px; }
+.load-comments-button { min-height: 40px; margin-top: 16px; font-size: 12px; }
 .module-add-actions { display: flex; align-items: center; gap: 15px; padding: 5px 0 3px 38px; }
 /* Keep the recurring curriculum-add actions easy to activate and clear at keyboard focus. */
 .module-add-actions > .text-action { display: inline-flex; align-items: center; min-height: 40px; padding: 0 9px; border-radius: 4px; font-size: 11px; }

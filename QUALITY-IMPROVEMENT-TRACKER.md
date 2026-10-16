@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 126: align learner lesson feedback targets
+
+- **Reviewed:** The learner lesson-feedback structure, reaction group, comment composer, load-more control, narrow stacked layout, accessible labels and pressed states, busy/disabled feedback, and the related comment/reaction authorization, rate-limit, validation, and pagination paths.
+- **Improvement:** Raise the learner reaction, Post comment, and Load more comments controls to a consistent 40px minimum height while preserving their labels, counts, pressed states, busy/disabled behavior, compact typography, responsive stacking, and existing handlers. Added `tests/client/lesson-feedback-target.test.js`.
+- **Why it helps:** Learners can activate the most common lesson-feedback actions more reliably with a pointer or touch device, and the three related controls now match the surrounding touch-target standard without changing feedback behavior or layout.
+- **Backend review:** Lesson feedback reads, reactions, comment creation, pagination, rate limits, access checks, validation, and moderation boundaries remain covered by the existing server contract; no backend change was indicated.
+- **Checked:** Focused lesson-feedback target, comment, and icon checks passed (13/13); the full `npm test -- --test-reporter=spec` suite passed (993/993), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, and Vite-root probes returned 200; anonymous CSRF returned 200 without `Set-Cookie`, and anonymous admin backups returned 401. The local `/login` shell exposed one heading plus named username/password controls with no browser warning/error logs. Authenticated lesson-feedback interaction remains source- and regression-verified because this development browser session has no authenticated fixture; no credentials, comments, reactions, or other application data were submitted or changed.
+- **Commit title:** `fix(a11y): align lesson feedback targets`.
+- **Commit description:** `Give learner lesson-feedback actions consistent touch targets while preserving their existing labels, state, and responsive behavior.`
+
 ## 2026-10-16 — Cycle 125: enlarge course row-menu options
 
 - **Reviewed:** The staff course-table overflow menu, its 40px trigger, menu-item roles and labels, focus restoration and arrow-key navigation, viewport-bounded positioning, compact popover spacing, and the staff course status/deletion authorization and feedback paths.
