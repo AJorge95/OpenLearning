@@ -51,6 +51,36 @@ detect_server_ipv4() {
   return 1
 }
 
+detect_server_route_interface() {
+  local route_output=""
+  local interface=""
+
+  command -v ip >/dev/null 2>&1 || return 1
+
+  if route_output="$(ip -4 route get 1.1.1.1 2>/dev/null)"; then
+    interface="$(awk '{ for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit } }' <<< "$route_output")"
+  fi
+  if [[ -z "$interface" ]] && route_output="$(ip -4 route show default 2>/dev/null)"; then
+    interface="$(awk 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit } }' <<< "$route_output")"
+  fi
+
+  [[ "$interface" =~ ^[[:alnum:]_.:-]+$ ]] || return 1
+  printf '%s\n' "$interface"
+}
+
+detect_firewalld_zone() {
+  local interface=""
+  local zone=""
+
+  interface="$(detect_server_route_interface)" || return 1
+  zone="$(firewall-cmd --get-zone-of-interface="$interface" 2>/dev/null)" || zone=""
+  if [[ -z "$zone" || "$zone" == "no zone" ]]; then
+    zone="$(firewall-cmd --get-default-zone 2>/dev/null)" || return 1
+  fi
+  [[ -n "$zone" ]] || return 1
+  printf '%s\n' "$zone"
+}
+
 package_manager_for() {
   local os_id="$1"
   local os_version="$2"
@@ -472,19 +502,16 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: 
   fi
 fi
 if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
-  mapfile -t FIREWALL_ZONES < <(firewall-cmd --get-active-zones | awk '/^[^[:space:]]/ { print $1 }')
-  if [[ "${#FIREWALL_ZONES[@]}" -eq 0 ]]; then
-    FIREWALL_ZONES=("$(firewall-cmd --get-default-zone)")
-  fi
-  FIREWALL_OK=true
-  for zone in "${FIREWALL_ZONES[@]}"; do
-    firewall-cmd --zone="$zone" --permanent --add-port="$SERVICE_PORT/tcp" >/dev/null || FIREWALL_OK=false
-  done
-  if [[ "$FIREWALL_OK" == true ]] && firewall-cmd --reload >/dev/null; then
-    log "Allowed TCP port $SERVICE_PORT through the active firewalld zone(s): ${FIREWALL_ZONES[*]}."
-    FIREWALL_CONFIGURED=true
+  if FIREWALL_ZONE="$(detect_firewalld_zone)"; then
+    if firewall-cmd --zone="$FIREWALL_ZONE" --permanent --add-port="$SERVICE_PORT/tcp" >/dev/null \
+      && firewall-cmd --reload >/dev/null; then
+      log "Allowed TCP port $SERVICE_PORT through the firewalld zone for the server route: $FIREWALL_ZONE."
+      FIREWALL_CONFIGURED=true
+    else
+      log "WARNING: Could not add TCP port $SERVICE_PORT to firewalld zone $FIREWALL_ZONE; configure it manually."
+    fi
   else
-    log "WARNING: Could not add TCP port $SERVICE_PORT to firewalld; configure it manually."
+    log "WARNING: Could not determine the firewalld zone for the server route; configure TCP port $SERVICE_PORT manually."
   fi
 fi
 if [[ "$FIREWALL_CONFIGURED" == false ]]; then

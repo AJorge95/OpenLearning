@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 165: scope firewalld port opening to the server route
+
+- **Reviewed:** Current installer and previous dynamic IPv4/RHEL fixes; the displayed `docker public` firewalld output; firewalld zone/interface behavior; local health/readiness/login routes; and current auth shell semantics, focus styles, reduced-motion/forced-colors rules, and mobile layout. Browser plugin is absent and Playwright is not installed, so no visual/interaction test or UI edit was made.
+- **Problem:** The installer added the application TCP port to every active firewalld zone. On the reported host this included both `docker` and `public`, unnecessarily exposing the listener through unrelated zones.
+- **Change:** Resolve the interface selected by the same kernel route used for the suggested server address, query that interface's firewalld zone, and add the port only there. If the interface is unbound, use firewalld's default zone; if the route cannot be identified, do not guess or open all active zones and instead print a manual-configuration warning. Documented this behavior and added mocked shell regressions for zone selection and fallback cases.
+- **Why it helps:** The suggested client route and firewall opening now align, while avoiding an unnecessary opening on Docker or other unrelated active zones.
+- **Checked:** Linux-installer tests passed 15/15, including route-selected IPv4 `10.123.89.19`, route-interface zone selection, default-zone fallback, and fail-closed unknown-route behavior. The full `npm test -- --test-reporter=dot`, `npm run build` (including typecheck), and `git diff --check` passed. Local `/healthz`, `/readyz`, and Vite `/login` probes returned 200. No Red Hat host or production firewall was changed.
+- **Commit title:** `fix(installer): scope firewalld port to route zone`.
+- **Commit description:** `Open the configured application port only in the firewalld zone for the kernel-selected server route interface, use the default zone only when the interface is unbound, and fail closed when route selection is unavailable.`
+
 ## 2026-10-16 — Cycle 164: fail closed on empty reset integrity checks
 
 - **Reviewed:** Current branch/history and installer IPv4/RHEL regression coverage; local `/healthz`, `/readyz`, and `/login` routes; reset-backup SQLite verification and its parallel routine-backup contract; and auth shell semantics, responsive CSS, focus visibility, reduced motion, and forced-colors support. The Browser plugin is absent and Playwright is not installed, so this source/HTTP review did not include rendered visual or interaction QA.

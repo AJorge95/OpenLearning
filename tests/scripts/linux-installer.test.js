@@ -174,9 +174,63 @@ test('installer opens the configured application port in active local firewalls'
   assert.match(installer, /ufw status.*Status: active/s);
   assert.match(installer, /ufw allow "\$SERVICE_PORT\/tcp"/);
   assert.match(installer, /firewall-cmd --state/);
-  assert.match(installer, /--permanent --add-port="\$SERVICE_PORT\/tcp"/);
+  assert.match(installer, /firewall-cmd --get-zone-of-interface="\$interface"/);
+  assert.match(installer, /--zone="\$FIREWALL_ZONE" --permanent --add-port="\$SERVICE_PORT\/tcp"/);
+  assert.doesNotMatch(installer, /firewall-cmd --get-active-zones/);
   assert.match(installer, /firewall-cmd --reload/);
   assert.match(readme, /does not enable a firewall/i);
+});
+
+test('firewalld port selection follows the server route interface and falls back only to the default zone', () => {
+  const interfaceHelper = installer.match(/detect_server_route_interface\(\) \{[\s\S]*?\n\}/)?.[0];
+  const zoneHelper = installer.match(/detect_firewalld_zone\(\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(interfaceHelper, 'expected the server route-interface helper');
+  assert.ok(zoneHelper, 'expected the route-specific firewalld zone helper');
+
+  const run = (route, defaults, interfaceZone, defaultZone) => spawnSync(bashPath, ['-c', `
+    set -eu
+    ${interfaceHelper}
+    ${zoneHelper}
+    ip() {
+      case "$*" in
+        "-4 route get 1.1.1.1") printf '%s\\n' "$MOCK_ROUTE" ;;
+        "-4 route show default") printf '%s\\n' "$MOCK_DEFAULTS" ;;
+        *) return 1 ;;
+      esac
+    }
+    firewall-cmd() {
+      case "$*" in
+        "--get-zone-of-interface=ens192") printf '%s\\n' "$MOCK_INTERFACE_ZONE" ;;
+        "--get-default-zone") printf '%s\\n' "$MOCK_DEFAULT_ZONE" ;;
+        *) return 1 ;;
+      esac
+    }
+    detect_firewalld_zone
+  `], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      MOCK_ROUTE: route,
+      MOCK_DEFAULTS: defaults,
+      MOCK_INTERFACE_ZONE: interfaceZone,
+      MOCK_DEFAULT_ZONE: defaultZone,
+    },
+  });
+
+  const routedZone = run('1.1.1.1 via 10.123.89.1 dev ens192 src 10.123.89.19 uid 0', '', 'public', 'docker');
+  assert.equal(routedZone.status, 0, routedZone.stderr);
+  assert.equal(routedZone.stdout.trim(), 'public');
+
+  const defaultZoneFallback = run('1.1.1.1 via 10.123.89.1 dev ens192 src 10.123.89.19 uid 0', '', 'no zone', 'public');
+  assert.equal(defaultZoneFallback.status, 0, defaultZoneFallback.stderr);
+  assert.equal(defaultZoneFallback.stdout.trim(), 'public');
+
+  const defaultRouteFallback = run('', 'default via 10.123.89.1 dev ens192 proto dhcp', 'public', 'docker');
+  assert.equal(defaultRouteFallback.status, 0, defaultRouteFallback.stderr);
+  assert.equal(defaultRouteFallback.stdout.trim(), 'public');
+
+  const unknownInterface = run('', '', 'public', 'docker');
+  assert.notEqual(unknownInterface.status, 0, 'do not open every active zone when the server route is unknown');
 });
 
 test('README documents the GitHub one-line installer and repeated update command', () => {
