@@ -97,6 +97,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .app-select-option { color: CanvasText; background: Canvas; }
   .app-select-option:hover, .app-select-option.active, .app-select-option.selected { color: HighlightText; background: Highlight; }
   .app-select-option[aria-disabled="true"] { color: GrayText; opacity: 1; }
+  .staff-account button { color: ButtonText; border-color: ButtonText; }
+  .staff-account button:hover:not(:disabled), .staff-account button:focus-visible { color: HighlightText; border-color: Highlight; background: Highlight; outline-color: Highlight; }
   .app-select-option.selected .app-select-option-indicator { color: HighlightText; border: 1px solid HighlightText; background: Highlight; }
 }
 a { color: inherit; text-decoration: none; }
@@ -549,8 +551,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .staff-account strong { max-width: 145px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .staff-account small { color: var(--muted); font-size: 11px; text-transform: capitalize; }
 .staff-account .staff-signout-error { color: var(--danger); text-transform: none; line-height: 1.35; }
-.staff-account button { border: 0; background: transparent; color: #646a7a; padding: 7px; }
-.staff-account button:hover { color: var(--purple); }
+/* Keep the icon-only sign-out action easy to hit and easy to locate with a keyboard. */
+.staff-account button { display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #646a7a; padding: 0; transition: border-color .15s ease, background .15s ease, color .15s ease; }
+.staff-account button:hover:not(:disabled) { color: var(--purple); border-color: var(--purple-border-strong); background: var(--purple-soft); }
+.staff-account button:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; border-color: var(--purple); }
 .staff-content { min-width: 0; padding: 53px clamp(28px, 4.1vw, 66px) 70px; }
 .management-page { width: min(100%, 1320px); margin: 0 auto; }
 .management-page .page-heading { align-items: center; margin-bottom: 33px; }

@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 103: enlarge the staff sign-out target
+
+- **Reviewed:** The staff sidebar account block, icon-only sign-out semantics, responsive sidebar layout, keyboard focus treatment, sign-out request handling, session destruction, and the related staff-route authorization boundaries.
+- **Improvement:** Give the staff sidebar sign-out button a centered 40px square target with palette-aware hover, visible-focus, and forced-colors styling. Its existing accessible name, progress state, disabled behavior, and sign-out handler remain unchanged.
+- **Why it helps:** Staff users can reliably activate sign-out with a pointer or touch device, and keyboard users can identify the focused icon-only control without changing the compact account row.
+- **Backend review:** Sign-out still uses the shared session-destruction path and existing best-effort audit handling; staff authorization and session behavior did not indicate a server change.
+- **Checked:** The dedicated staff sign-out target regression passed (1/1); the full `npm test -- --test-reporter=spec` suite passed 971/971, `npm run typecheck`, `npm run build`, and `git diff --check` passed. The relaunched signed-out shell rendered normally at `/register`; the password visibility control changed the password input to text and produced no browser warning/error diagnostics. No credentials, forms, or application data were submitted; authenticated staff-sidebar interaction remains unverified because this development browser session has no authenticated fixture.
+- **Commit title:** `fix(a11y): enlarge staff sign-out target`.
+- **Commit description:** `Give the staff sidebar sign-out action a reliable hit area and visible focus state.`
+
 ## 2026-10-16 — Cycle 102: enlarge the password-reset dialog close target
 
 - **Reviewed:** The administrator password-reset dialog structure, accessible name and description, Escape handling, focus trapping and restoration, close-button styling, responsive modal sizing, and the related account-management validation and authorization paths.
