@@ -131,9 +131,11 @@ async function createBackup() {
     const mediaStats = await copyMediaTree(config.mediaRoot, mediaPath);
     const backupDb = new Database(databasePath, { readonly: true, fileMustExist: true });
     try {
-      backupDb.pragma('quick_check').forEach((row) => {
-        if (row.quick_check !== 'ok') throw new Error('SQLite backup verification failed.');
-      });
+      // Empty quick_check output is not evidence that SQLite verified the backup.
+      const checkResults = backupDb.pragma('quick_check');
+      if (checkResults.length === 0 || checkResults.some((row) => row.quick_check !== 'ok')) {
+        throw new Error('SQLite backup verification failed.');
+      }
     } finally {
       backupDb.close();
     }
