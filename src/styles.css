@@ -1055,7 +1055,12 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .account-disabled > span { background: #9ea3ae; }
 .account-pending { color: #8b5700; font-weight: 650; }
 .account-pending > span { background: #d28a12; }
+/* Keep frequent administrator account actions easy to activate without widening the table. */
 .user-row-actions { display: flex; align-items: center; gap: 13px; }
+.user-row-actions .text-action { min-height: 40px; padding: 0 7px; border-radius: 4px; }
+.user-row-actions .text-action:hover:not(:disabled) { background: var(--purple-soft); text-decoration: none; }
+.user-row-actions .text-action.danger-text:hover:not(:disabled) { color: var(--danger); background: var(--danger-soft); }
+.user-row-actions .text-action:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 22px; background: rgba(19, 21, 31, .48); }
 .modal-card { position: relative; width: min(100%, 470px); max-height: calc(100vh - 44px); max-height: calc(100dvh - 44px); overflow-y: auto; overscroll-behavior: contain; padding: 31px; background: #fff; border-radius: 5px; box-shadow: var(--shadow); }
 .modal-card h2 { font-size: 24px; margin: 0 0 8px; }

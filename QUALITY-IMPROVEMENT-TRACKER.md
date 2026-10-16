@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 134: align administrator account action targets
+
+- **Reviewed:** The administrator Users table structure, account identity links, role selector, registration/status feedback, Approve/Details/Reset password/Enable/Disable actions, disabled and busy states, narrow horizontal table behavior, and the server-side account authorization, validation, last-administrator protection, session invalidation, audit, and refresh paths.
+- **Improvement:** Give the administrator account row actions a consistent 40px minimum target with compact horizontal padding, a quiet hover surface, a danger-specific disable hover state, and a local visible focus outline. Preserve the existing action labels, links, `aria-busy`/disabled behavior, password-reset flow, approval flow, and account mutation handlers. Added `tests/client/admin-user-action-target.test.js`.
+- **Why it helps:** Administrators can activate common account-management actions more reliably with a pointer, touch device, or keyboard in the dense Users table, without widening the action column or changing account behavior.
+- **Backend review:** The existing account routes continue to validate roles and account fields, require administrator access, protect the last active administrator, invalidate affected sessions, audit changes transactionally, and return recoverable errors; no backend change was indicated.
+- **Checked:** Focused administrator account-action target and feedback checks passed (10/10); the full `npm test -- --test-reporter=spec` suite passed (1002/1002), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The signed-out local `/login` shell remains the available live surface, so authenticated Users-table interaction is source- and regression-verified only; no credentials, account actions, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): align administrator account action targets`.
+- **Commit description:** `Give dense administrator account actions reliable touch targets and visible states while preserving account-management behavior.`
+
 ## 2026-10-16 — Cycle 133: align narrow course-access search target
 
 - **Reviewed:** The staff course-access search form, named search input and submit control, narrow two-column access-row layout, filter submission state, empty-result announcement, retry handling, and the course-access authorization and bounded query paths.
