@@ -1,16 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** Restrict files created by the documented source-run production command. */
-export function secureProductionRuntimePermissions({
-  nodeEnv = process.env.NODE_ENV,
+/** Restrict files created by commands that store private application data. */
+export function securePrivateFileCreation({
   cwd = process.cwd(),
   platform = process.platform,
   dotenvConfigPath = process.env.DOTENV_CONFIG_PATH,
   fileSystem = fs,
   setUmask = (mask) => process.umask(mask),
 } = {}) {
-  if (nodeEnv !== 'production' || platform === 'win32') return;
+  if (platform === 'win32') return;
 
   // Keep database, media, backup, and secret files private when the app creates them.
   setUmask(0o077);
@@ -31,4 +30,13 @@ export function secureProductionRuntimePermissions({
   if (dotenvStats.isFile() && (dotenvStats.mode & 0o077) !== 0) {
     fileSystem.chmodSync(dotenvPath, 0o600);
   }
+}
+
+/** Production startup applies private creation modes before importing the app. */
+export function secureProductionRuntimePermissions(options = {}) {
+  const nodeEnv = options.nodeEnv ?? process.env.NODE_ENV;
+  const platform = options.platform ?? process.platform;
+  if (nodeEnv !== 'production' || platform === 'win32') return;
+
+  securePrivateFileCreation({ ...options, platform });
 }
