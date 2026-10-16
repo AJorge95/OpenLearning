@@ -102,6 +102,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .icon-button:hover:not(:disabled), .icon-button:focus-visible { color: HighlightText; border-color: Highlight; background: Highlight; outline-color: Highlight; }
   .path-reorder-buttons button { color: ButtonText; border-color: ButtonText; background: ButtonFace; }
   .path-reorder-buttons button:hover:not(:disabled), .path-reorder-buttons button:focus-visible { color: HighlightText; border-color: Highlight; background: Highlight; outline-color: Highlight; }
+  .module-disclosure { color: ButtonText; background: ButtonFace; }
+  .module-disclosure:hover:not(:disabled), .module-disclosure:focus-visible { color: HighlightText; background: Highlight; outline-color: Highlight; }
   .staff-account button { color: ButtonText; border-color: ButtonText; }
   .staff-account button:hover:not(:disabled), .staff-account button:focus-visible { color: HighlightText; border-color: Highlight; background: Highlight; outline-color: Highlight; }
   .app-select-option.selected .app-select-option-indicator { color: HighlightText; border: 1px solid HighlightText; background: Highlight; }
@@ -842,7 +844,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .module-editor-list { display: grid; gap: 10px; }
 .module-editor { border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
 .module-editor-heading { display: flex; align-items: center; gap: 11px; min-height: 58px; padding: 0 12px; background: #fbfbfd; color: #3b4050; }
-.module-disclosure { display: grid; flex: 0 0 36px; place-items: center; width: 36px; height: 36px; border: 0; background: transparent; color: #6b7080; padding: 0; }
+/* Keep the module disclosure as easy to activate as the adjacent curriculum actions. */
+.module-disclosure { display: grid; flex: 0 0 40px; place-items: center; width: 40px; height: 40px; border: 0; background: transparent; color: #6b7080; padding: 0; border-radius: 4px; }
+.module-disclosure:hover:not(:disabled) { color: var(--purple); background: var(--purple-soft); }
+.module-disclosure:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; }
 .module-disclosure svg { transition: transform .16s ease; }
 .module-disclosure .chevron-collapsed { transform: rotate(-90deg); }
 .module-name-heading { min-width: 0; flex: 1; margin: 0; color: #262a38; font-size: 14px; font-weight: 680; line-height: normal; letter-spacing: normal; }

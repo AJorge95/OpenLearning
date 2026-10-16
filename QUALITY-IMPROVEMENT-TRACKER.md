@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 123: enlarge course-editor module disclosures
+
+- **Reviewed:** The course-editor module disclosure and title controls, module reorder/delete actions, narrow stacked heading layout, accessible expand/collapse state, keyboard focus treatment, and the related curriculum access and mutation paths.
+- **Improvement:** Increase the module expand/collapse control from 36×36px to a consistent 40×40px target, add a palette-aware hover and focus surface, and retain its existing accessible name, `aria-expanded` state, disabled behavior, and native course-editor handler. Added `tests/client/module-disclosure-target.test.js`.
+- **Why it helps:** Course authors can open or hide a module more reliably with a pointer or touch device, while keyboard and forced-colors users can identify the active disclosure without changing curriculum structure or expansion semantics.
+- **Backend review:** Module loading, curriculum access, reorder, rename, and removal routes continue to validate course ownership, authorization, bounded input, transactional updates, and audit behavior; no backend change was indicated.
+- **Checked:** The dedicated module-disclosure regression passed (1/1); the full `npm test -- --test-reporter=spec` suite passed (990/990), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, version, and Vite-root probes returned 200; anonymous CSRF returned no `Set-Cookie`, and anonymous admin backups returned 401. The reloaded `/login` shell exposed one heading plus named username/password controls. Authenticated course-editor interaction remains source- and regression-verified because this development browser session has no authenticated staff fixture.
+- **Commit title:** `fix(a11y): enlarge module disclosure target`.
+- **Commit description:** `Give course-editor module disclosures a reliable touch target and visible state while preserving their existing semantics.`
+
 ## 2026-10-16 — Cycle 122: keep the course-rail disclosure target on narrow screens
 
 - **Reviewed:** The learner lesson-player course-content disclosure and close controls, their named disclosure state, focus restoration, narrow stacked layout, and the related course navigation, protected media, watch-progress, and access paths.
