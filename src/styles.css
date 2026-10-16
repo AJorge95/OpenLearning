@@ -99,6 +99,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .app-select-option[aria-disabled="true"] { color: GrayText; opacity: 1; }
   .icon-button { color: ButtonText; border-color: ButtonText; }
   .icon-button:hover:not(:disabled), .icon-button:focus-visible { color: HighlightText; border-color: Highlight; background: Highlight; outline-color: Highlight; }
+  .path-reorder-buttons button { color: ButtonText; border-color: ButtonText; background: ButtonFace; }
+  .path-reorder-buttons button:hover:not(:disabled), .path-reorder-buttons button:focus-visible { color: HighlightText; border-color: Highlight; background: Highlight; outline-color: Highlight; }
   .staff-account button { color: ButtonText; border-color: ButtonText; }
   .staff-account button:hover:not(:disabled), .staff-account button:focus-visible { color: HighlightText; border-color: Highlight; background: Highlight; outline-color: Highlight; }
   .app-select-option.selected .app-select-option-indicator { color: HighlightText; border: 1px solid HighlightText; background: Highlight; }
@@ -683,8 +685,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .path-prerequisite { display: inline-flex; align-items: flex-start; min-height: 24px; gap: 7px; color: var(--muted); font-size: 11px; line-height: 1.4; cursor: pointer; }
 .path-prerequisite input { width: 15px; height: 15px; margin-top: 0; }
 .path-reorder-buttons { display: flex; gap: 5px; }
-.path-reorder-buttons button { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 5px; color: #53596a; background: #fff; }
+/* Keep learning-path reorder controls reliable on touch screens and clear at keyboard focus. */
+.path-reorder-buttons button { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 5px; color: #53596a; background: #fff; }
 .path-reorder-buttons button:hover:not(:disabled) { color: var(--purple-dark); border-color: var(--purple-border-strong); background: var(--purple-hover-bg); }
+.path-reorder-buttons button:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; }
 .program-form-actions { display: flex; justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--line); }
 .program-list { display: grid; gap: 16px; }
 .program-card { display: grid; gap: 16px; }
