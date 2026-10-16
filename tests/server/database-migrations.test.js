@@ -6,7 +6,7 @@ import test, { after, before } from 'node:test';
 import Database from 'better-sqlite3';
 
 const fixturePrefix = 'openlearning-database-migrations-';
-const expectedLatestMigrationVersion = 41;
+const expectedLatestMigrationVersion = 42;
 const configEnvironment = {
   NODE_ENV: 'test',
   DATA_DIR: '',
