@@ -381,7 +381,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .breadcrumbs a:hover { text-decoration: underline; }
 .narrow-content { max-width: 860px; margin: 0 auto; padding: 44px 32px; }
 .lead-copy { color: var(--muted); font-size: 16px; line-height: 1.65; margin-bottom: 28px; }
-.back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--purple); font-size: 14px; font-weight: 650; margin-top: 22px; }
+/* Keep recovery and return links easy to activate without changing their compact visual role. */
+.back-link { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; margin-top: 22px; padding: 0 4px; border-radius: 4px; color: var(--purple); font-size: 14px; font-weight: 650; }
+.back-link:hover { color: var(--purple-dark); background: var(--purple-soft); }
+.back-link:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 
 .course-overview { width: min(100%, 1440px); margin: 0 auto; padding: 30px 42px 64px; }
 .course-hero { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .75fr); gap: 52px; align-items: center; padding: 30px 0 53px; border-bottom: 1px solid var(--line); }
