@@ -69,9 +69,9 @@ export function issueCompletedCertificatesForUser(userId) {
       WHERE p.user_id = ?
       UNION
       SELECT COALESCE(storage.logical_course_id, storage.id)
-      FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-      JOIN course_modules m ON m.id = q.module_id JOIN courses storage ON storage.id = m.course_id
-      WHERE a.user_id = ? AND a.passed = 1
+       FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
+       LEFT JOIN course_modules m ON m.id = q.module_id JOIN courses storage ON storage.id = COALESCE(m.course_id, q.course_id)
+       WHERE a.user_id = ? AND a.passed = 1 AND q.required_for_completion = 1
     )`;
   const firstCourseBatch = db.prepare(`${courseCandidates} ORDER BY c.id LIMIT ?`);
   let nextCourseBatch;

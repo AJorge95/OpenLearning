@@ -519,6 +519,7 @@ test('analytics count each eligible learner once and report course-wide completi
     title: 'Analytics quiz',
     moduleTitle: 'Analytics module',
     passMark: 70,
+    requiredForCompletion: true,
     attempts: 3,
     learnersAttempted: 2,
     learnersPassed: 1,
@@ -1260,7 +1261,7 @@ test('path edits batch shared course metadata and learner progress for enrolled 
     ['versions', 'SELECT v.course_id, v.id'],
     ['counts', 'AS module_count,'],
     ['lessons', 'SELECT m.course_id, l.id'],
-    ['quizzes', 'SELECT m.course_id, q.id'],
+    ['quizzes', 'SELECT COALESCE(m.course_id, q.course_id) AS course_id'],
   ].map(([name, fragment]) => [name, { fragment, count: 0 }]));
   const learnerProgressReadCounts = new Map([
     ['states', 'FROM course_learning_state\n    WHERE user_id IN'],
@@ -5698,9 +5699,9 @@ test('course access reuses prerequisite-completion statements across courses', (
     'SELECT v.id, v.storage_course_id FROM course_versions v WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT 1',
     'SELECT target_version_id FROM course_learning_state WHERE user_id = ? AND course_id = ?',
     'SELECT l.id, l.stable_id FROM lessons l JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?',
-    'SELECT q.id, q.stable_id FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?',
+    'SELECT q.id, q.stable_id FROM quizzes q LEFT JOIN course_modules m ON m.id = q.module_id WHERE COALESCE(m.course_id, q.course_id) = ? AND q.required_for_completion = 1',
     'SELECT l.id, l.stable_id FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE p.user_id = ? AND (c.id = ? OR c.logical_course_id = ?)',
-    'SELECT DISTINCT q.id, q.stable_id FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = m.course_id WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)',
+    'SELECT DISTINCT q.id, q.stable_id FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id LEFT JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = COALESCE(m.course_id, q.course_id) WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)',
   ].map((query) => [query, 0]));
   database.exec(`
     INSERT INTO courses (id, title, status, visibility, created_by, updated_by) VALUES

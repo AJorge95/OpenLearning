@@ -20,7 +20,7 @@ import { selectVideoCaptionTrack } from './video-captions';
 import { canRetryVideoWatchProgressLoad, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
 import type { PendingVideoResume } from './video-recovery';
 import { useAuth } from './auth-context';
-import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt, QuizAttemptPreview } from './types';
+import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt, QuizAttemptPreview, QuizQuestion } from './types';
 
 type CourseListResponse = { courses: Course[]; categories?: string[]; certificates?: CourseCertificate[]; certificatesTotal?: number; certificatesPage?: number; certificatesPageSize?: number; certificatesHasMore?: boolean; total?: number; page?: number; pageSize?: number; hasMore?: boolean };
 type CertificateListResponse = { certificates: CourseCertificate[]; total: number; page: number; pageSize: number; hasMore: boolean };
@@ -547,9 +547,10 @@ export function CourseOverviewPage() {
     try {
       if (shouldEnrollBeforeCourseActivity(user?.role)) await api.post(`/api/courses/${requestedCourseId}/enroll`);
       if (!isCurrentRequest()) return;
-      const activity = nextCourseActivity(requestedCourse.modules);
+      const activity = nextCourseActivity(requestedCourse.modules, requestedCourse.finalExam);
       if (activity?.type === 'lesson') navigate(`/courses/${requestedCourseId}/learn/${activity.id}`);
       else if (activity?.type === 'quiz') navigate(`/courses/${requestedCourseId}/quiz/${activity.id}`);
+      else if (activity?.type === 'exam') navigate(`/courses/${requestedCourseId}/quiz/${activity.id}`);
       else setError('This course does not have any lessons yet.');
     } catch (cause) {
       if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'Course access could not be started.');
@@ -576,10 +577,10 @@ export function CourseOverviewPage() {
 
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading course…</div>;
   if (!course) return <div className="narrow-content">{error && <ErrorNotice message={error} onRetry={() => setLoadRetryVersion((version) => version + 1)} />}<Link className="back-link" to="/courses"><ArrowLeft size={17} aria-hidden="true" />Back to courses</Link></div>;
-  const courseActivitiesComplete = summarizeCourseProgress(course.modules ?? []).completed;
-  const nextActivity = nextCourseActivity(course.modules);
+  const courseActivitiesComplete = summarizeCourseProgress(course.modules ?? [], course.finalExam).completed;
+  const nextActivity = nextCourseActivity(course.modules, course.finalExam);
   // Older published records can reach learners without activities; explain that state instead of disabling the CTA silently.
-  const hasLearningActivities = (course.modules ?? []).some((module) => module.lessons.length > 0 || Boolean(module.quiz));
+  const hasLearningActivities = Boolean(course.finalExam) || (course.modules ?? []).some((module) => module.lessons.length > 0 || Boolean(module.quiz));
   const startButtonLabel = courseActivityActionLabel({
     starting,
     completed: courseActivitiesComplete,
@@ -610,7 +611,10 @@ export function CourseOverviewPage() {
       <div className="course-description-block"><h2>About this course</h2><p>{course.description || 'Explore the lessons and practical knowledge in this course.'}</p></div>
       <div className="course-curriculum-block">
         <div className="section-heading-row"><div><h2>Course content</h2><p>{formatCountLabel(course.moduleCount, 'module', 'modules')} <span>·</span> {formatCountLabel(course.lessonCount, 'lesson', 'lessons')}</p></div>{course.progress > 0 && <div className="course-progress-summary"><span>{course.completedLessons} of {formatCountLabel(course.lessonCount, 'lesson', 'lessons')} complete</span><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /></div>}</div>
-        {hasLearningActivities ? course.modules?.map((module) => <CurriculumModule key={module.id} module={module} courseId={course.id} onOpenActivity={openCurriculumActivity} />)
+        {hasLearningActivities ? <>{course.modules?.map((module) => <CurriculumModule key={module.id} module={module} courseId={course.id} onOpenActivity={openCurriculumActivity} />)}
+          {course.finalExam && <button type="button" className="curriculum-activity curriculum-exam-activity" onClick={() => void openCurriculumActivity(`/courses/${course.id}/quiz/${course.finalExam!.id}`)}>
+            <span className="curriculum-activity-icon"><CircleHelp size={17} aria-hidden="true" /></span><span><strong>{course.finalExam.title}</strong><small>Final exam · {formatCountLabel(course.finalExam.questionCount ?? course.finalExam.questionsPerAttempt ?? 0, 'question', 'questions')}{course.finalExam.requiredForCompletion ? ' · Required to complete' : ' · Practice'}</small></span><ArrowRight size={16} aria-hidden="true" />
+          </button>}</>
           : <EmptyState title="No learning activities yet" detail="This course does not have any lessons or quizzes available yet." headingLevel={3} />}
       </div>
     </section>
@@ -857,7 +861,7 @@ export function CoursePlayerPage() {
   const currentIndex = lessons.findIndex((lesson) => lesson.id === lessonId);
   const current = lessons[currentIndex];
   const previous = currentIndex > 0 ? lessons[currentIndex - 1] : null;
-  const nextActivityAfterCurrent = current ? nextCourseActivityAfterLesson(modules, current.id) : null;
+  const nextActivityAfterCurrent = current ? nextCourseActivityAfterLesson(modules, current.id, course?.finalExam) : null;
   // Every authenticated viewer of the learning player must use verified
   // playback. Staff can still edit course media in the management interface.
   const watchRequired = Boolean(current?.hasVideo);
@@ -1603,12 +1607,12 @@ export function CoursePlayerPage() {
         {saving && <span className="sr-only" role="status" aria-live="polite">Saving lesson progress…</span>}
         <button className="button button-secondary" type="button" disabled={!nextActivityAfterCurrent || Boolean(watchRequired && !current.completed)} title={watchRequired && !current.completed ? 'Watch and complete this lesson before continuing' : undefined} onClick={() => {
           if (!nextActivityAfterCurrent) return;
-          navigate(nextActivityAfterCurrent.type === 'quiz'
+          navigate(nextActivityAfterCurrent.type === 'quiz' || nextActivityAfterCurrent.type === 'exam'
             ? `/courses/${course.id}/quiz/${nextActivityAfterCurrent.id}`
             : `/courses/${course.id}/learn/${nextActivityAfterCurrent.id}`);
-        }}>{nextActivityAfterCurrent?.type === 'quiz' ? 'Continue to quiz' : nextActivityAfterCurrent ? 'Next lesson' : 'No next activity'}<ArrowRight size={17} aria-hidden="true" /></button>
+        }}>{nextActivityAfterCurrent?.type === 'quiz' ? 'Continue to quiz' : nextActivityAfterCurrent?.type === 'exam' ? 'Continue to final exam' : nextActivityAfterCurrent ? 'Next lesson' : 'No next activity'}<ArrowRight size={17} aria-hidden="true" /></button>
       </div>
-      {user?.role === 'learner' && (course.completed || availableCertificate?.courseId === course.id) && <div className="course-completion-certificate"><div role="status" aria-live="polite"><strong>Course complete</strong><p>You have completed all lessons and required quizzes.</p></div>{user.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} aria-hidden="true" />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} aria-hidden="true" />Add name for certificate</Link>}</div>}
+      {user?.role === 'learner' && (course.completed || availableCertificate?.courseId === course.id) && <div className="course-completion-certificate"><div role="status" aria-live="polite"><strong>Course complete</strong><p>You have completed all lessons and required quizzes and exams.</p></div>{user.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} aria-hidden="true" />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} aria-hidden="true" />Add name for certificate</Link>}</div>}
       <section className="lesson-notes"><h2>About this lesson</h2><p>{current.description || 'Work through this lesson at your own pace. Mark it complete when you are ready to continue.'}</p></section>
       {current.transcript && <section className="lesson-transcript" aria-labelledby={`lesson-transcript-heading-${current.id}`}><h2 id={`lesson-transcript-heading-${current.id}`}>Lesson transcript</h2><details><summary>Read transcript</summary><div className="lesson-transcript-text">{current.transcript}</div></details></section>}
       {current.resources.length > 0 && <section className="learner-lesson-resources" aria-label="Lesson links and documents">
@@ -1689,6 +1693,7 @@ export function QuizPage() {
   const focusResultRef = useRef(false);
   const [choiceShuffleGeneration, setChoiceShuffleGeneration] = useState(0);
   const [course, setCourse] = useState<Course | null>(null);
+  const [activeExamAttempt, setActiveExamAttempt] = useState<{ attemptSessionId: string; questions: QuizQuestion[] } | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<QuizAttempt | QuizAttemptPreview | null>(null);
   const [availableCertificate, setAvailableCertificate] = useState<CourseCertificate | null>(null);
@@ -1706,13 +1711,27 @@ export function QuizPage() {
     const isCurrentRequest = () => requestSequence === loadSequenceRef.current
       && routeCourseIdRef.current === courseId
       && routeKeyRef.current === requestedRouteKey;
-    setCourse(null); setLoading(true); setError(''); setAttemptDetailsFailure(null);
+    setCourse(null); setActiveExamAttempt(null); setLoading(true); setError(''); setAttemptDetailsFailure(null);
     void (async () => {
       try {
         const { course: data } = await fetchCourse(courseId, false, { signal: requestController.signal, quizId, includeLessonDetails: false });
         if (!isCurrentRequest()) return;
         setCourse(data);
-        const latestAttempt = data.modules?.find((module) => module.quiz?.id === quizId)?.quiz?.latestAttempt;
+        const exam = data.finalExam?.id === quizId ? data.finalExam : null;
+        const latestAttempt = (exam ?? data.modules?.find((module) => module.quiz?.id === quizId)?.quiz)?.latestAttempt;
+        if (exam) {
+          const resume = await api.post<{ attemptSessionId: string | null; questions: QuizQuestion[] }>(`/api/quizzes/${quizId}/attempts/start`, { resumeOnly: true });
+          if (!isCurrentRequest()) return;
+          if (resume.attemptSessionId) {
+            setActiveExamAttempt({ attemptSessionId: resume.attemptSessionId, questions: resume.questions });
+            return;
+          }
+          if (!latestAttempt) {
+            const started = await api.post<{ attemptSessionId: string; questions: QuizQuestion[] }>(`/api/quizzes/${quizId}/attempts/start`, {});
+            if (isCurrentRequest()) setActiveExamAttempt({ attemptSessionId: started.attemptSessionId, questions: started.questions });
+            return;
+          }
+        }
         if (latestAttempt) {
           try {
             const response = await api.get<{ attempt: QuizAttempt }>(`/api/quizzes/${quizId}/attempts/${latestAttempt.id}`, { signal: requestController.signal });
@@ -1751,9 +1770,11 @@ export function QuizPage() {
   }, [courseId, quizId, courseLoadRetryVersion]);
   useEffect(() => {
     focusFirstAnswerRef.current = false; focusResultRef.current = false;
-    setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setAttemptDetailsFailure(null);
+    setAnswers({}); setActiveExamAttempt(null); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setAttemptDetailsFailure(null);
   }, [courseId, quizId]);
-  const quiz = course?.modules?.find((module) => module.quiz?.id === quizId)?.quiz;
+  const moduleQuiz = course?.modules?.find((module) => module.quiz?.id === quizId)?.quiz;
+  const examQuiz = course?.finalExam?.id === quizId ? course.finalExam : null;
+  const quiz = examQuiz ? { ...examQuiz, questions: activeExamAttempt?.questions ?? [] } : moduleQuiz;
   const saving = pendingQuizRouteKeys.has(routeKey);
   const currentResult = resultRouteKey === routeKey ? result : null;
   const choiceOrders = useMemo(() => new Map((quiz?.questions ?? []).map((question, index) => [
@@ -1787,25 +1808,34 @@ export function QuizPage() {
     const isCurrentSubmission = () => routeKeyRef.current === requestedRouteKey;
     setError('');
     try {
-      const response = await api.post<{ attempt: QuizAttempt; certificate: CourseCertificate | null }>(`/api/quizzes/${quiz.id}/attempts`, { answers });
+      const response = await api.post<{ attempt: QuizAttempt; certificate: CourseCertificate | null }>(`/api/quizzes/${quiz.id}/attempts`, {
+        answers,
+        ...(examQuiz && activeExamAttempt ? { attemptSessionId: activeExamAttempt.attemptSessionId } : {}),
+      });
       if (isCurrentSubmission()) {
         focusResultRef.current = true;
         setResult(response.attempt); setAvailableCertificate(response.certificate); setResultRouteKey(requestedRouteKey);
+        setActiveExamAttempt(null);
         setAttemptDetailsFailure(null);
         setCourse((currentCourse) => {
-          if (!currentCourse?.modules || routeKeyRef.current !== requestedRouteKey) return currentCourse;
+          if (!currentCourse || routeKeyRef.current !== requestedRouteKey) return currentCourse;
           let updatedQuiz = false;
-          const modules = currentCourse.modules.map((module) => {
+          const modules = (currentCourse.modules ?? []).map((module) => {
             if (module.quiz?.id !== quiz.id) return module;
             updatedQuiz = true;
             const passed = module.quiz.passed || response.attempt.passed;
             return passed === module.quiz.passed ? module : { ...module, quiz: { ...module.quiz, passed } };
           });
+          const finalExam = currentCourse.finalExam?.id === quiz.id
+            ? { ...currentCourse.finalExam, passed: currentCourse.finalExam.passed || response.attempt.passed, latestAttempt: response.attempt }
+            : currentCourse.finalExam;
+          updatedQuiz ||= finalExam !== currentCourse.finalExam;
           if (!updatedQuiz) return currentCourse;
-          const progress = summarizeCourseProgress(modules);
+          const progress = summarizeCourseProgress(modules, finalExam);
           return {
             ...currentCourse,
             modules,
+            finalExam,
             ...progress,
             completed: response.certificate?.courseId === currentCourse.id || progress.completed,
           };
@@ -1824,9 +1854,20 @@ export function QuizPage() {
   const allAnswered = quiz.questions.length > 0 && answeredCount === quiz.questions.length;
   const courseFinished = course.completed || availableCertificate?.courseId === course.id;
   const priorPassNotice = quizPriorPassNotice(quiz.passed, currentResult?.passed ?? null);
-  const nextResultActivity = currentResult?.passed && !courseFinished ? nextCourseActivity(course.modules) : null;
+  const nextResultActivity = currentResult?.passed && !courseFinished ? nextCourseActivity(course.modules, course.finalExam) : null;
 
-  function retryQuiz() {
+  async function retryQuiz() {
+    if (examQuiz) {
+      try {
+        setError('');
+        const started = await api.post<{ attemptSessionId: string; questions: QuizQuestion[] }>(`/api/quizzes/${quizId}/attempts/start`, {});
+        if (routeKeyRef.current !== routeKey) return;
+        setActiveExamAttempt({ attemptSessionId: started.attemptSessionId, questions: started.questions });
+      } catch (cause) {
+        setError(cause instanceof ApiError ? cause.message : 'A new exam attempt could not be started.');
+        return;
+      }
+    }
     focusFirstAnswerRef.current = true;
     setChoiceShuffleGeneration((generation) => generation + 1);
     setAnswers({}); setResult(null); setAvailableCertificate(null); setResultRouteKey(''); setError(''); setAttemptDetailsFailure(null);
@@ -1839,34 +1880,34 @@ export function QuizPage() {
         {!currentResult && <div className="quiz-topline"><span>{formatCountLabel(quiz.questions.length, 'question', 'questions')}</span><span>Pass mark {quiz.passMark}%</span></div>}
         <h1>{quiz.title}</h1>
         {priorPassNotice && <div className="inline-notice inline-notice-success" role="status">{priorPassNotice}</div>}
-        {!currentResult ? <><p className="lead-copy">Choose one answer for each question. You can retry this quiz if you need another attempt.</p>
+        {!currentResult ? <><p className="lead-copy">Choose one answer for each question. You can retry this {examQuiz ? 'exam' : 'quiz'} if you need another attempt.</p>
           {error && <ErrorNotice message={error} />}
           <form onSubmit={submit} className="quiz-form" aria-busy={saving}>
             {quiz.questions.map((question, index) => <fieldset className="question-block" key={question.id || index} disabled={saving}>
               <legend><span className="question-number">{String(index + 1).padStart(2, '0')}</span>{question.prompt}</legend>
               <div className="quiz-choices">{(choiceOrders.get(question.id || String(index)) ?? question.choices).map((choice, choiceIndex) => <label className={`quiz-choice ${answers[question.id || ''] === choice.id ? 'choice-selected' : ''}`} key={choice.id || choiceIndex}><input ref={index === 0 && choiceIndex === 0 ? firstAnswerRef : undefined} type="radio" name={question.id} value={choice.id} required checked={answers[question.id || ''] === choice.id} onChange={() => setAnswers({ ...answers, [question.id || '']: choice.id || '' })} /><span className="choice-letter">{String.fromCharCode(65 + choiceIndex)}</span><span>{choice.text}</span></label>)}</div>
             </fieldset>)}
-            {!quiz.questions.length && <EmptyState icon={<CircleHelp size={24} />} title="This quiz is being prepared" detail="Check back when your course moderator has added questions." />}
+            {!quiz.questions.length && <EmptyState icon={<CircleHelp size={24} />} title={examQuiz ? 'This exam is being prepared' : 'This quiz is being prepared'} detail="Check back when your course moderator has added questions." />}
             {quiz.questions.length > 0 && <p id="quiz-submit-hint" className="quiz-submit-hint" role="status" aria-live="polite" aria-atomic="true">{allAnswered ? `All ${formatCountLabel(quiz.questions.length, 'question', 'questions')} answered.` : `${answeredCount} of ${formatCountLabel(quiz.questions.length, 'question', 'questions')} answered. Answer the rest to enable submission.`}</p>}
             <Button type="submit" aria-describedby={quiz.questions.length > 0 ? 'quiz-submit-hint' : undefined} disabled={!allAnswered || saving}>{saving ? 'Checking answers…' : 'Submit answers'}<ArrowRight size={17} aria-hidden="true" /></Button>
           </form>
         </> : <div className="quiz-results">
           {attemptDetailsFailure && <ErrorNotice message={error} onRetry={attemptDetailsFailure === 'retryable' ? () => setCourseLoadRetryVersion((version) => version + 1) : undefined} />}
-          <div className={`score-panel ${currentResult.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{currentResult.passed ? <Check size={22} aria-hidden="true" /> : <Clock3 size={22} aria-hidden="true" />}</span><div><span className="score-label">{currentResult.passed ? 'Quiz passed' : 'Quiz not passed'}</span><strong>{hasQuizAttemptBreakdown(currentResult) ? `${currentResult.correctCount} of ${currentResult.questionCount} correct` : 'Question breakdown unavailable'}</strong><small>Score {currentResult.score}% · {currentResult.passed ? `Pass mark: ${quiz.passMark}%.` : `You need ${quiz.passMark}% to pass.`}</small></div></div>
-          <h2 ref={resultHeadingRef} tabIndex={-1}>Quiz result</h2>
+          <div className={`score-panel ${currentResult.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{currentResult.passed ? <Check size={22} aria-hidden="true" /> : <Clock3 size={22} aria-hidden="true" />}</span><div><span className="score-label">{examQuiz ? currentResult.passed ? 'Exam passed' : 'Exam not passed' : currentResult.passed ? 'Quiz passed' : 'Quiz not passed'}</span><strong>{hasQuizAttemptBreakdown(currentResult) ? `${currentResult.correctCount} of ${currentResult.questionCount} correct` : 'Question breakdown unavailable'}</strong><small>Score {currentResult.score}% · {currentResult.passed ? `Pass mark: ${quiz.passMark}%.` : `You need ${quiz.passMark}% to pass.`}</small></div></div>
+          <h2 ref={resultHeadingRef} tabIndex={-1}>{examQuiz ? 'Exam result' : 'Quiz result'}</h2>
           <div className="quiz-result-actions">
             {courseFinished && (user?.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} aria-hidden="true" />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} aria-hidden="true" />Add name for certificate</Link>)}
-            {nextResultActivity && <Link className="button button-primary" to={nextResultActivity.type === 'quiz'
+            {nextResultActivity && <Link className="button button-primary" to={nextResultActivity.type === 'quiz' || nextResultActivity.type === 'exam'
               ? `/courses/${course.id}/quiz/${nextResultActivity.id}`
               : `/courses/${course.id}/learn/${nextResultActivity.id}`}>
-              {nextResultActivity.type === 'quiz' ? 'Continue to quiz' : 'Continue learning'}<ArrowRight size={17} aria-hidden="true" />
+              {nextResultActivity.type === 'exam' ? 'Continue to final exam' : nextResultActivity.type === 'quiz' ? 'Continue to quiz' : 'Continue learning'}<ArrowRight size={17} aria-hidden="true" />
             </Link>}
             {!currentResult.passed && <Button variant="secondary" onClick={retryQuiz}>Try again</Button>}
             <Link className={`button ${nextResultActivity ? 'button-secondary' : 'button-primary'}`} to={`/courses/${course.id}`}>Back to course</Link>
           </div>
         </div>}
       </div>
-      <aside className="quiz-aside"><span className="quiz-aside-label">Course progress</span><strong>{course.progress}%</strong><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /><p>Complete lessons and pass module quizzes to finish this course.</p><Link to={`/courses/${course.id}`}>View course content<ArrowRight size={16} aria-hidden="true" /></Link></aside>
+      <aside className="quiz-aside"><span className="quiz-aside-label">Course progress</span><strong>{course.progress}%</strong><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /><p>{examQuiz ? examQuiz.requiredForCompletion ? 'Pass this final exam to complete the course.' : 'This is a practice exam and does not affect course completion.' : 'Complete lessons and pass module quizzes to finish this course.'}</p><Link to={`/courses/${course.id}`}>View course content<ArrowRight size={16} aria-hidden="true" /></Link></aside>
     </div>
   </div>;
 }

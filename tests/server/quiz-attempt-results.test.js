@@ -70,8 +70,8 @@ before(async () => {
       VALUES ('module-1', 'course-1', 'Module one', 0);
     INSERT INTO quizzes (id, module_id, title, pass_mark)
       VALUES ('quiz-1', 'module-1', 'Quiz one', 70);
-    INSERT INTO quiz_questions (id, quiz_id, prompt, position)
-      VALUES ('question-1', 'quiz-1', 'Question one?', 0);
+    INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position)
+      VALUES ('question-1', 'quiz-1', 'Question one?', 'The correct answer is Correct answer.', 0);
     INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES
       ('choice-1', 'question-1', 'Correct answer', 1, 0),
       ('choice-2', 'question-1', 'Another answer', 0, 1);
@@ -228,6 +228,7 @@ test('course payload can omit quiz questions without losing quiz status', async 
   const fullText = await fullResponse.text();
   const fullCourse = JSON.parse(fullText).course;
   assert.equal(fullCourse.modules[0].quiz.questions[0].prompt, 'Question one?');
+  assert.equal(Object.hasOwn(fullCourse.modules[0].quiz.questions[0], 'explanation'), false);
   assert.deepEqual(fullCourse.modules[0].quiz.questions[0].choices.map((choice) => choice.text), ['Correct answer', 'Another answer']);
 
   const compactResponse = await fetch(`${baseUrl}/courses/course-1?includeQuizQuestions=0`, { headers });
@@ -363,6 +364,7 @@ test('staff editor payload keeps answer keys without querying user attempts', as
   assert.equal(latestAttemptQueryCount, 0);
   assert.equal(payload.course.modules[0].quiz.latestAttempt, null);
   assert.equal(payload.course.modules[0].quiz.passed, false);
+  assert.equal(payload.course.modules[0].quiz.questions[0].explanation, 'The correct answer is Correct answer.');
   assert.equal(payload.course.modules[0].quiz.questions[0].choices[0].isCorrect, true);
 });
 

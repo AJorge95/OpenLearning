@@ -662,6 +662,38 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .row-menu-popover button:disabled { cursor: not-allowed; opacity: .55; }
 .row-menu-popover .danger-menu-item { color: var(--danger); }
 .management-page > .empty-state { border: 1px solid var(--line); border-radius: 4px; padding: 68px 26px; }
+.course-groups-page > .breadcrumbs { margin-bottom: 13px; }
+.course-groups-page > .page-heading { align-items: center; }
+.course-group-create { margin-top: 20px; }
+.course-groups-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 29px 0 13px; }
+.course-groups-heading h2 { margin: 0; font-size: 20px; }
+.course-groups-heading > span { color: var(--muted); font-size: 12px; }
+.course-groups-list { display: grid; gap: 12px; }
+.course-groups-list .program-card { gap: 13px; }
+.course-groups-list .program-card h3 { overflow-wrap: anywhere; margin: 1px 0 5px; font-size: 16px; line-height: 1.3; }
+.course-groups-list .program-card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.course-group-created { padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.course-group-search { display: grid; grid-template-columns: minmax(180px, .6fr) minmax(220px, 1fr) auto; align-items: end; gap: 12px; margin-bottom: 13px; }
+.course-group-search label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.course-group-search input, .course-group-search select { width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; background: var(--surface); color: var(--text); font: inherit; }
+.course-group-candidates { display: grid; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.course-group-candidate { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 13px; background: var(--surface); }
+.course-group-candidate + .course-group-candidate { border-top: 1px solid var(--line); }
+.course-group-candidate > div, .course-group-members li > div { display: grid; min-width: 0; gap: 4px; }
+.course-group-candidate a, .course-group-members li a { overflow-wrap: anywhere; color: var(--text); font-size: 13px; font-weight: 600; text-decoration: none; }
+.course-group-candidate a:hover, .course-group-members li a:hover { text-decoration: underline; }
+.course-group-candidate small, .course-group-members li small { color: var(--muted); font-size: 11px; }
+.course-group-members { padding-top: 12px; border-top: 1px solid var(--line); }
+.course-group-members h4 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font-size: 13px; }
+.course-group-members h4 span { color: var(--muted); font-size: 11px; font-weight: 400; }
+.course-group-members ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.course-group-members li { display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; }
+.course-group-empty { margin: 0; color: var(--muted); font-size: 12px; }
+@media (max-width: 640px) {
+  .course-group-search { grid-template-columns: 1fr; }
+  .course-group-search > button { justify-self: start; }
+  .course-group-candidate, .course-group-members li { align-items: flex-start; }
+}
 
 .programs-page { width: min(100%, 1240px); max-width: 1240px; }
 .app-main > .programs-page { padding: 58px 42px 84px; margin-inline: auto; }
@@ -1716,6 +1748,38 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .completion-window-field small, .version-change-note small { color: var(--muted); font-size: 11px; font-weight: 450; line-height: 1.45; }
 .course-governance-section { display: grid; gap: 16px; }
 .course-governance-section .curriculum-editor-title { margin-bottom: 0; }
+
+.course-final-exam-editor { margin-top: 24px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.course-final-exam-heading, .final-exam-question-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.course-final-exam-heading h3, .final-exam-question-heading h4 { margin: 5px 0; }
+.course-final-exam-heading p, .final-exam-question-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+.course-final-exam-editor > .button { margin-top: 16px; }
+.final-exam-settings { display: grid; grid-template-columns: minmax(180px, 2fr) minmax(130px, 1fr) minmax(180px, 1fr); gap: 14px; align-items: end; margin-top: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.final-exam-settings > label { display: grid; gap: 6px; color: var(--ink); font-size: 13px; font-weight: 600; }
+.final-exam-settings > label input:not([type="checkbox"]) { min-height: 40px; width: 100%; border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; color: var(--ink); background: #fff; }
+.final-exam-settings > label small { color: var(--muted); font-size: 11px; font-weight: 400; }
+.final-exam-settings .app-select-field { min-width: 0; }
+.final-exam-required-toggle { grid-column: 1 / -1; display: flex !important; grid-template-columns: auto 1fr; align-items: center; gap: 9px !important; }
+.final-exam-required-toggle input { accent-color: var(--purple); }
+.final-exam-settings > .button { justify-self: start; }
+.final-exam-practice-note, .final-exam-count-warning { grid-column: 1 / -1; margin: 0; }
+.final-exam-count-warning { color: #8b4e00; }
+.final-exam-question-heading { align-items: center; margin: 18px 0 12px; }
+.final-exam-question-editor { margin-top: 12px; }
+.final-exam-question-editor textarea { display: block; width: 100%; min-height: 58px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px; resize: vertical; }
+.final-exam-question-editor > .button { margin-top: 12px; }
+.final-exam-pagination { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 18px; color: var(--muted); font-size: 13px; }
+.curriculum-exam-activity { display: flex; width: 100%; min-height: 58px; align-items: center; gap: 12px; padding: 8px 17px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff; text-align: left; cursor: pointer; }
+.curriculum-exam-activity:hover { color: var(--purple); background: var(--purple-hover-bg); }
+.curriculum-exam-activity > span:nth-child(2) { display: grid; flex: 1; gap: 3px; }
+.curriculum-exam-activity small { color: var(--muted); font-size: 12px; }
+.curriculum-exam-activity > svg:last-child { color: var(--muted); }
+@media (max-width: 760px) {
+  .final-exam-settings { grid-template-columns: 1fr; }
+  .final-exam-required-toggle, .final-exam-practice-note, .final-exam-count-warning { grid-column: auto; }
+  .final-exam-pagination { gap: 8px; }
+  .final-exam-pagination .button { padding-inline: 9px; }
+}
 .course-governance-load-status { margin: 0; color: var(--muted); font-size: 12px; }
 .course-governance-load-error { display: flex; flex-wrap: wrap; gap: 10px; }
 .version-reset-option { margin: 0; }

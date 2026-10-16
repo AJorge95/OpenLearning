@@ -7,7 +7,7 @@ function progressForStorage(logicalId, contentId, user, version) {
   const lessonRows = db.prepare(`SELECT l.id, COALESCE(l.stable_id, l.id) AS stable_id FROM lessons l
     JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?`).all(contentId);
   const quizRows = db.prepare(`SELECT q.id, COALESCE(q.stable_id, q.id) AS stable_id FROM quizzes q
-    JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?`).all(contentId);
+    LEFT JOIN course_modules m ON m.id = q.module_id WHERE COALESCE(m.course_id, q.course_id) = ?`).all(contentId);
   if (!user) return { completedLessonIds: new Set(), passedQuizIds: new Set() };
   // Share the exact-ID and stable-ID history rules used by normal course summaries.
   const learnerSummary = loadCourseLearnerSummaryData([logicalId], [user.id]).get(user.id);
@@ -69,9 +69,10 @@ export function prepareCourseSummaryData(courses, preloadedVersionsByCourse, pre
     lessonsByCourse.set(row.course_id, lessons);
   }
   const quizzesByCourse = new Map();
-  for (const row of db.prepare(`SELECT m.course_id, q.id, COALESCE(q.stable_id, q.id) AS stable_id
-    FROM quizzes q JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id IN (${contentPlaceholders})`).all(...contentIds)) {
+  for (const row of db.prepare(`SELECT COALESCE(m.course_id, q.course_id) AS course_id,
+      q.id, COALESCE(q.stable_id, q.id) AS stable_id, q.required_for_completion
+    FROM quizzes q LEFT JOIN course_modules m ON m.id = q.module_id
+    WHERE COALESCE(m.course_id, q.course_id) IN (${contentPlaceholders})`).all(...contentIds)) {
     const quizzes = quizzesByCourse.get(row.course_id) ?? [];
     quizzes.push(row);
     quizzesByCourse.set(row.course_id, quizzes);
@@ -123,18 +124,20 @@ function courseSummaryDetails(
       ? lessonHistory?.ids.has(row.id)
       : lessonHistory?.stableIds.has(row.stable_id)).map((row) => row.id));
     const quizCount = activeQuizzes.length;
+    const requiredQuizzes = activeQuizzes.filter((quiz) => quiz.required_for_completion);
     const passedQuizIds = new Set(activeQuizzes.filter((row) => resetRequired
       ? quizHistory?.ids.has(row.id)
       : quizHistory?.stableIds.has(row.stable_id)).map((row) => row.id));
     const completedLessons = completedLessonIds.size;
     const passedQuizzes = passedQuizIds.size;
-    const requiredItems = counts.lesson_count + quizCount;
-    const completedItems = completedLessons + passedQuizzes;
+    const requiredItems = counts.lesson_count + requiredQuizzes.length;
+    const completedRequiredQuizzes = requiredQuizzes.filter((row) => passedQuizIds.has(row.id)).length;
+    const completedItems = completedLessons + completedRequiredQuizzes;
     const progress = requiredItems > 0 ? Math.round((completedItems / requiredItems) * 100) : 0;
     const completed = requiredItems > 0 && completedItems === requiredItems;
     const completedWithVersionReset = includeVersionResetCompletion && requiredItems > 0
       && (activeLessons.filter((row) => lessonHistory?.ids.has(row.id)).length
-        + activeQuizzes.filter((row) => quizHistory?.ids.has(row.id)).length) === requiredItems;
+        + requiredQuizzes.filter((row) => quizHistory?.ids.has(row.id)).length) === requiredItems;
     return {
       summary: {
         id: course.id,
@@ -204,7 +207,7 @@ function loadCourseLearnerSummaryData(logicalIds, userIds) {
   for (const row of db.prepare(`SELECT DISTINCT a.user_id, COALESCE(c.logical_course_id, c.id) AS course_id, q.id,
       COALESCE(q.stable_id, q.id) AS stable_id
     FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-    JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = m.course_id
+    LEFT JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = COALESCE(m.course_id, q.course_id)
     WHERE a.user_id IN (${userPlaceholders}) AND a.passed = 1
       AND (c.id IN (${logicalPlaceholders}) OR c.logical_course_id IN (${logicalPlaceholders}))`)
     .all(...userIds, ...logicalIds, ...logicalIds)) {
@@ -286,8 +289,8 @@ export function getCoursePayload(course, user, {
   const versionProgress = contentId === summaryDetails.contentId ? summaryDetails : progressForStorage(logicalId, contentId, user, version);
   if (quizId !== null && !includeQuizQuestions) fail(400, 'Quiz question selection requires quiz questions.', 'validation_error');
   if (quizId !== null && !db.prepare(`SELECT 1 FROM quizzes q
-    JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id = ? AND q.id = ?`).get(contentId, quizId)) {
+    LEFT JOIN course_modules m ON m.id = q.module_id
+    WHERE COALESCE(m.course_id, q.course_id) = ? AND q.id = ?`).get(contentId, quizId)) {
     fail(404, 'Quiz not found.', 'not_found');
   }
   const quizQuestionFilter = quizId === null ? '' : 'AND q.id = ?';
@@ -410,7 +413,8 @@ export function getCoursePayload(course, user, {
       questions.push({
         id: question.id,
         prompt: question.prompt,
-        explanation: question.explanation,
+        // Explanations can disclose the answer, so only course managers receive them.
+        ...(includeAnswers ? { explanation: question.explanation } : {}),
         choices: (quizChoicesByQuestion.get(question.id) ?? []).map((choice) => ({
           id: choice.id,
           text: choice.choice_text,
@@ -427,14 +431,14 @@ export function getCoursePayload(course, user, {
     const latestAttemptQuizFilter = quizId === null ? '' : 'AND q.id = ?';
     for (const attempt of db.prepare(`
       SELECT q.id AS quiz_id, a.id, a.score, a.passed, a.submitted_at
-      FROM course_modules m
-      JOIN quizzes q ON q.module_id = m.id
+      FROM quizzes q
+      LEFT JOIN course_modules m ON m.id = q.module_id
       LEFT JOIN quiz_attempts a ON a.rowid = (
         SELECT newest.rowid FROM quiz_attempts newest
         WHERE newest.user_id = ? AND newest.quiz_id = q.id
         ORDER BY newest.submitted_at DESC, newest.rowid DESC LIMIT 1
       )
-      WHERE m.course_id = ? ${latestAttemptQuizFilter}
+      WHERE COALESCE(m.course_id, q.course_id) = ? ${latestAttemptQuizFilter}
     `).all(user.id, contentId, ...(quizId === null ? [] : [quizId]))) {
       if (attempt.id !== null) latestAttemptsByQuiz.set(attempt.quiz_id, attempt);
     }
@@ -466,6 +470,9 @@ export function getCoursePayload(course, user, {
         id: quiz.id,
         title: quiz.title,
         passMark: quiz.pass_mark,
+        questionsPerAttempt: quiz.questions_per_attempt,
+        requiredForCompletion: Boolean(quiz.required_for_completion),
+        isCourseFinalExam: false,
         questions: includeQuizQuestions ? questionsByQuiz.get(quiz.id) ?? [] : [],
         latestAttempt: latestAttempt ? { id: latestAttempt.id, score: latestAttempt.score, passed: Boolean(latestAttempt.passed), submittedAt: latestAttempt.submitted_at } : null,
         passed: versionProgress.passedQuizIds.has(quiz.id),
@@ -473,7 +480,25 @@ export function getCoursePayload(course, user, {
     }
     return { id: module.id, title: module.title, position: module.position, lessons, quiz: quizData };
   });
-  return { ...resultSummary, modules };
+  const finalExam = db.prepare('SELECT * FROM quizzes WHERE course_id = ?').get(contentId);
+  let finalExamData = null;
+  if (finalExam) {
+    const latestAttempt = latestAttemptsByQuiz.get(finalExam.id);
+    const questionCount = db.prepare('SELECT COUNT(*) AS count FROM quiz_questions WHERE quiz_id = ?').get(finalExam.id).count;
+    finalExamData = {
+      id: finalExam.id,
+      title: finalExam.title,
+      passMark: finalExam.pass_mark,
+      questionsPerAttempt: finalExam.questions_per_attempt,
+      requiredForCompletion: Boolean(finalExam.required_for_completion),
+      isCourseFinalExam: true,
+      questionCount,
+      questions: [],
+      latestAttempt: latestAttempt ? { id: latestAttempt.id, score: latestAttempt.score, passed: Boolean(latestAttempt.passed), submittedAt: latestAttempt.submitted_at } : null,
+      passed: versionProgress.passedQuizIds.has(finalExam.id),
+    };
+  }
+  return { ...resultSummary, finalExam: finalExamData, modules };
 }
 
 export function canLearnerAccess(course, user) {
@@ -555,13 +580,32 @@ export function assertPublishable(courseId) {
     LEFT JOIN quiz_stats ON quiz_stats.id = quiz.id
     ORDER BY m.position
   `).all(courseId);
-  if (!modules.length) fail(400, 'Add at least one module before publishing.', 'course_incomplete');
+  const finalExam = db.prepare('SELECT id, required_for_completion, questions_per_attempt FROM quizzes WHERE course_id = ?').get(courseId);
+  if (!modules.length && !finalExam) fail(400, 'Add at least one module or a final exam before publishing.', 'course_incomplete');
+  if (!modules.length && finalExam && !finalExam.required_for_completion) {
+    fail(400, 'A course with only a final exam must require a passing score to complete the course.', 'course_incomplete');
+  }
   for (const module of modules) {
     if (!module.lesson_count) fail(400, `Add a lesson to “${module.title}” before publishing.`, 'course_incomplete');
     if (module.missing_media_count) fail(400, `Upload a video for every lesson in “${module.title}” before publishing.`, 'course_incomplete');
     if (module.quiz_id && !module.question_count) fail(400, `Add at least one question to the quiz in “${module.title}” before publishing.`, 'course_incomplete');
     if (module.invalid_question_count) {
       fail(400, 'Each quiz question needs at least two choices and exactly one correct answer.', 'quiz_incomplete');
+    }
+  }
+  if (finalExam) {
+    const stats = db.prepare(`SELECT COUNT(*) AS question_count,
+        SUM(CASE WHEN choices.choice_count < 2 OR choices.correct_count != 1 THEN 1 ELSE 0 END) AS invalid_question_count
+      FROM quiz_questions question
+      LEFT JOIN (
+        SELECT question_id, COUNT(*) AS choice_count, SUM(is_correct) AS correct_count
+        FROM quiz_choices GROUP BY question_id
+      ) choices ON choices.question_id = question.id
+      WHERE question.quiz_id = ?`).get(finalExam.id);
+    if (!stats.question_count) fail(400, 'Add at least one question to the final exam before publishing.', 'course_incomplete');
+    if (stats.invalid_question_count) fail(400, 'Each final exam question needs at least two choices and exactly one correct answer.', 'quiz_incomplete');
+    if (finalExam.questions_per_attempt > stats.question_count) {
+      fail(400, 'Add enough final exam questions to match the selected number of questions per attempt.', 'quiz_incomplete');
     }
   }
 }
@@ -606,5 +650,8 @@ export function moduleCourse(moduleId) {
 }
 
 export function quizCourse(quizId) {
-  return db.prepare(`SELECT c.*, q.id AS quiz_id, q.module_id FROM quizzes q JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = m.course_id WHERE q.id = ?`).get(quizId);
+  return db.prepare(`SELECT c.*, q.id AS quiz_id, q.module_id, q.course_id AS quiz_course_id,
+      q.pass_mark, q.questions_per_attempt, q.required_for_completion
+    FROM quizzes q LEFT JOIN course_modules m ON m.id = q.module_id
+    JOIN courses c ON c.id = COALESCE(m.course_id, q.course_id) WHERE q.id = ?`).get(quizId);
 }

@@ -63,6 +63,22 @@ export interface QuizAttemptPreview {
   submittedAt?: string;
 }
 
+export interface CourseGroup {
+  id: string;
+  name: string;
+  description: string;
+  createdBy: string | null;
+  createdAt: string;
+  courses: CourseGroupCourse[];
+}
+
+export interface CourseGroupCourse {
+  id: string;
+  title: string;
+  category: string;
+  status: Course['status'];
+}
+
 export interface Quiz {
   id: string;
   title: string;
@@ -70,6 +86,10 @@ export interface Quiz {
   questions: QuizQuestion[];
   latestAttempt: QuizAttemptPreview | null;
   passed: boolean;
+  questionsPerAttempt?: number;
+  requiredForCompletion?: boolean;
+  isCourseFinalExam?: boolean;
+  questionCount?: number;
 }
 
 export interface LessonResource {
@@ -154,6 +174,7 @@ export interface Course {
   hasUnpublishedChanges?: boolean;
   reviewStatus?: 'draft' | 'in_review' | 'changes_requested' | null;
   modules?: CourseModule[];
+  finalExam?: Quiz | null;
 }
 
 export interface LearningPathCourse extends Course {
@@ -243,6 +264,7 @@ export interface CourseAnalytics {
     title: string;
     moduleTitle: string;
     passMark: number;
+    requiredForCompletion: boolean;
     attempts: number;
     learnersAttempted: number;
     learnersPassed: number;
@@ -276,6 +298,7 @@ export interface CourseAnalyticsLearnerDetails {
     title: string;
     moduleTitle: string;
     passMark: number;
+    requiredForCompletion: boolean;
     attempts: number;
     highestScore: number | null;
     latestScore: number | null;

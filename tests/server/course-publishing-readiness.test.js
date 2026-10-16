@@ -72,6 +72,22 @@ function addQuiz(moduleId, quizId, { choices = [], correctChoices = 1 } = {}) {
   });
 }
 
+function addFinalExam(courseId, { requiredForCompletion = true, questionsPerAttempt = 0, questionCount = 1 } = {}) {
+  const quizId = `${courseId}-final-exam`;
+  database.prepare(`INSERT INTO quizzes
+    (id, course_id, title, questions_per_attempt, required_for_completion) VALUES (?, ?, 'Final exam', ?, ?)`)
+    .run(quizId, courseId, questionsPerAttempt, requiredForCompletion ? 1 : 0);
+  const insertQuestion = database.prepare('INSERT INTO quiz_questions (id, quiz_id, prompt, position) VALUES (?, ?, ?, ?)');
+  const insertChoice = database.prepare(`INSERT INTO quiz_choices
+    (id, question_id, choice_text, is_correct, position) VALUES (?, ?, ?, ?, ?)`);
+  for (let index = 0; index < questionCount; index += 1) {
+    const questionId = `${quizId}-question-${index}`;
+    insertQuestion.run(questionId, quizId, `Question ${index + 1}`, index);
+    insertChoice.run(`${questionId}-choice-1`, questionId, 'Correct', 1, 0);
+    insertChoice.run(`${questionId}-choice-2`, questionId, 'Incorrect', 0, 1);
+  }
+}
+
 function expectPublishError(courseId, code, message) {
   assert.throws(() => assertPublishable(courseId), (error) => {
     assert.ok(error instanceof ApiError);
@@ -113,6 +129,12 @@ before(async () => {
   addCourse('publish-valid', 'publish-valid-module');
   addLessonWithVideo('publish-valid', 'publish-valid-module');
   addQuiz('publish-valid-module', 'publish-valid-quiz', { choices: ['Correct', 'Incorrect'] });
+  addCourse('publish-exam-only');
+  addFinalExam('publish-exam-only', { questionsPerAttempt: 1 });
+  addCourse('publish-practice-only');
+  addFinalExam('publish-practice-only', { requiredForCompletion: false });
+  addCourse('publish-too-small-bank');
+  addFinalExam('publish-too-small-bank', { questionsPerAttempt: 2, questionCount: 1 });
 });
 
 after(() => {
@@ -124,8 +146,8 @@ after(() => {
   }
 });
 
-test('publishing requires a module and at least one lesson in each module', () => {
-  expectPublishError('publish-no-module', 'course_incomplete', 'Add at least one module before publishing.');
+test('publishing requires learning content and at least one lesson in each module', () => {
+  expectPublishError('publish-no-module', 'course_incomplete', 'Add at least one module or a final exam before publishing.');
   expectPublishError('publish-no-lesson', 'course_incomplete', 'Add a lesson to “publish-no-lesson module” before publishing.');
 });
 
@@ -141,4 +163,10 @@ test('publishing requires quiz questions with at least two choices and exactly o
 
 test('publishing accepts a course with complete lesson and quiz content', () => {
   assert.doesNotThrow(() => assertPublishable('publish-valid'));
+});
+
+test('publishing accepts a required exam-only course and rejects practice-only or undersized exams', () => {
+  assert.doesNotThrow(() => assertPublishable('publish-exam-only'));
+  expectPublishError('publish-practice-only', 'course_incomplete', 'A course with only a final exam must require a passing score to complete the course.');
+  expectPublishError('publish-too-small-bank', 'quiz_incomplete', 'Add enough final exam questions to match the selected number of questions per attempt.');
 });

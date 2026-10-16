@@ -1,4 +1,4 @@
-import type { Course, CourseAccessUser, User } from './types';
+import type { Course, CourseAccessUser, CourseGroup, User } from './types';
 import type { PlatformConfiguration } from './branding';
 
 let csrfToken: string | null = null;
@@ -293,4 +293,20 @@ export async function fetchAccess(courseId: string, query = '', page = 1, option
   const params = new URLSearchParams({ page: String(page) });
   if (query) params.set('q', query);
   return api.get<{ users: CourseAccessUser[]; total: number; page: number; pageSize: number }>(`/api/manage/courses/${courseId}/access?${params}`, options);
+}
+
+export function fetchCourseGroups(options: Pick<RequestInit, 'signal'> = {}) {
+  return api.get<{ groups: CourseGroup[] }>('/api/manage/course-groups', options);
+}
+
+export function createCourseGroup(payload: { name: string; description: string }) {
+  return api.post<{ group: CourseGroup }>('/api/manage/course-groups', payload);
+}
+
+export function assignCourseToGroup(groupId: string, courseId: string) {
+  return api.put<{ course: CourseGroup['courses'][number] }>(`/api/manage/course-groups/${encodeURIComponent(groupId)}/courses/${encodeURIComponent(courseId)}`);
+}
+
+export function removeCourseFromGroup(groupId: string, courseId: string) {
+  return api.delete(`/api/manage/course-groups/${encodeURIComponent(groupId)}/courses/${encodeURIComponent(courseId)}`);
 }
