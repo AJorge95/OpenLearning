@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 108: enlarge course-editor removal targets
+
+- **Reviewed:** Course-editor quiz-choice, lesson-resource, and caption removal controls; their accessible names, confirmation flow, disabled state, row sizing, narrow responsive layout, forced-colors behavior, and related mutation validation and authorization.
+- **Improvement:** Increase the shared icon-only removal controls from 31×31px to a consistent 40×40px target, add a palette-aware focus boundary, and retain forced-colors visibility while preserving the existing labels, confirmation dialogs, disabled behavior, and row layout.
+- **Why it helps:** Course authors can reliably remove answer choices, lesson resources, and caption tracks with a pointer or touch device, and keyboard users can identify the focused destructive action without changing what any control does.
+- **Backend review:** Quiz-choice, lesson-resource, and caption removal routes already re-check course ownership, validate the target relationship, clean up media, and preserve audit/transaction behavior; no backend change was indicated.
+- **Checked:** Added `tests/client/course-editor-icon-button-target.test.js`; the focused regression passed 1/1 and the full `npm test -- --test-reporter=spec` suite passed 976/976. `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, version, and Vite-root probes returned 200; unauthenticated admin backups returned structured 401 JSON. The signed-out local browser shell remained non-blank with one heading and named credential controls; authenticated editor mutation interaction remains source- and regression-verified because this development browser session has no authenticated staff fixture.
+- **Commit title:** `fix(a11y): enlarge course editor removal targets`.
+- **Commit description:** `Give course-editor icon-only removal actions reliable touch targets and visible focus while preserving their existing mutation semantics.`
+
 ## 2026-10-16 — Cycle 107: enlarge course-editor curriculum action targets
 
 - **Reviewed:** The course-editor module and lesson action structure, reorder/delete/edit control names, keyboard focus treatment, desktop and narrow responsive layouts, in-flight disabled states, and the related curriculum mutation routes and regression coverage.
