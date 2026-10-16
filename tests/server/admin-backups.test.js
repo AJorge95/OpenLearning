@@ -21,6 +21,8 @@ let database;
 let server;
 let waitForBackupSchedulerIdle;
 let nextBackupAt;
+let refreshBackupSchedulesNow;
+let runBackupSchedulerTick;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -74,7 +76,7 @@ before(async () => {
   ({ db: database } = await import('../../server/db.js'));
   database.prepare(`INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)`)
     .run('backup-test-admin', 'backup-test-admin', 'test-only-hash', 'admin');
-  ({ waitForBackupSchedulerIdle, nextBackupAt } = await import('../../server/backup-scheduler.js'));
+  ({ waitForBackupSchedulerIdle, nextBackupAt, refreshBackupSchedulesNow, runBackupSchedulerTick } = await import('../../server/backup-scheduler.js'));
   const [{ adminRouter }, { errorHandler }] = await Promise.all([
     import('../../server/routes-admin.js'), import('../../server/http.js'),
   ]);
@@ -125,6 +127,64 @@ test('daily and weekly schedules calculate their next UTC occurrence', () => {
   assert.equal(nextBackupAt({ frequency: 'daily', runTimeUtc: '02:00' }, new Date('2026-10-15T03:00:00.000Z')).toISOString(), '2026-10-16T02:00:00.000Z');
   assert.equal(nextBackupAt({ frequency: 'weekly', weekday: 5, runTimeUtc: '03:30' }, new Date('2026-10-15T03:00:00.000Z')).toISOString(), '2026-10-16T03:30:00.000Z');
   assert.equal(nextBackupAt({ frequency: 'weekly', weekday: 5, runTimeUtc: '03:30' }, new Date('2026-10-16T04:00:00.000Z')).toISOString(), '2026-10-23T03:30:00.000Z');
+});
+
+test('scheduled backup queue failures are logged and retried without losing the due run', async () => {
+  const payload = {
+    name: 'Retry scheduled database', scope: 'database', frequency: 'daily', weekday: null,
+    runTimeUtc: '00:05', destinationPath: destinationRoot, retentionCount: 14, enabled: true,
+  };
+  const createResponse = await fetch(apiUrl('/backups/jobs'), {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-test-role': 'admin' }, body: JSON.stringify(payload),
+  });
+  assert.equal(createResponse.status, 201, createResponse.status === 201 ? '' : await createResponse.text());
+  const { job } = await createResponse.json();
+  const scheduledFor = new Date('2026-06-01T00:05:00.000Z');
+  refreshBackupSchedulesNow(new Date('2026-06-01T00:00:00.000Z'));
+
+  const originalPrepare = database.prepare;
+  database.prepare = function (sql, ...parameters) {
+    if (String(sql).startsWith('INSERT INTO backup_runs')) {
+      throw Object.assign(new Error('Temporary SQLite lock during queue insert.'), { code: 'SQLITE_BUSY' });
+    }
+    return originalPrepare.call(this, sql, ...parameters);
+  };
+  try {
+    await assert.doesNotReject(runBackupSchedulerTick(new Date('2026-06-01T00:06:00.000Z')));
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM backup_runs WHERE job_id = ?').get(job.id).count, 0);
+  assert.ok(database.prepare(`SELECT 1 FROM system_logs WHERE source = 'backup'
+    AND message = 'Scheduled backup could not be queued; it will be retried on the next scheduler tick.'`).get());
+
+  await runBackupSchedulerTick(new Date('2026-06-01T00:06:00.000Z'));
+  await waitForBackupSchedulerIdle();
+  const completed = database.prepare('SELECT status, scheduled_for FROM backup_runs WHERE job_id = ?').get(job.id);
+  assert.equal(completed.status, 'success');
+  assert.equal(completed.scheduled_for, scheduledFor.toISOString());
+
+  const removeResponse = await fetch(apiUrl(`/backups/jobs/${job.id}`), { method: 'DELETE', headers: { 'x-test-role': 'admin' } });
+  assert.equal(removeResponse.status, 200);
+});
+
+test('scheduler contains schedule-read failures and logs them for the next tick', async () => {
+  const originalPrepare = database.prepare;
+  database.prepare = function (sql, ...parameters) {
+    if (sql === 'SELECT * FROM backup_jobs WHERE enabled = 1') {
+      throw Object.assign(new Error('Temporary SQLite read lock.'), { code: 'SQLITE_BUSY' });
+    }
+    return originalPrepare.call(this, sql, ...parameters);
+  };
+  try {
+    await assert.doesNotReject(runBackupSchedulerTick());
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.ok(database.prepare(`SELECT 1 FROM system_logs WHERE source = 'backup'
+    AND message = 'Scheduled backup check failed; it will retry on the next scheduler tick.'`).get());
 });
 
 test('admins can create, run, inspect, update, and remove a backup job without deleting its artifact', async () => {

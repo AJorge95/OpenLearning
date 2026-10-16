@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 160: retry transient backup scheduler failures
+
+- **Reviewed:** The fresh local API and Vite startup, the signed-out login response, the backup scheduler's 15-second timer and due-job persistence order, and the isolated admin-backup integration fixture. The rendered-browser plugin is unavailable and Playwright is not installed in this workspace, so this backend-only change received HTTP smoke checks rather than visual interaction QA.
+- **Problem:** A due job's next run was advanced before its queue record was written. A transient SQLite failure could skip that backup until its next daily/weekly time, while a failed scheduler read could escape a discarded timer promise as an unhandled rejection.
+- **Change:** Keep a due timestamp until the queue operation succeeds, log per-job enqueue failures and retry them on the next tick, and contain/log read-level tick failures so the scheduler timer remains alive. Added deterministic tick-time support for the isolated scheduler tests.
+- **Checked:** The admin-backup suite passed 6/6, including simulated SQLite busy errors for both queue insertion and schedule reads; the queue-insert case successfully retried the same due run. The full `npm test -- --test-reporter=dot`, `npm run build` (including typecheck), `git diff --check`, and local `/healthz` and `/login` probes passed. Browser plugin/Playwright visual interaction checks were unavailable. No production data or remote host was changed.
+- **Commit title:** `fix(backups): retry transient scheduler failures`.
+- **Commit description:** `Keep scheduled runs due until they are queued, log transient per-job failures for retry, and prevent schedule-read errors from escaping the scheduler timer.`
+
 ## 2026-10-16 — Cycle 159: recheck current interface and query boundaries
 
 - **Reviewed:** The fresh signed-out `/login` shell at Vite `5174` (the unrelated `5173` listener was preserved), its heading, named required fields, password action, visual focus state, and first-viewport layout; the current JSX button/input/image naming contracts, responsive control sizes, table-scroll guidance, and focus rules; authentication, CSRF/session, pagination, filtered logs, course-summary batching, and latest-quiz-attempt queries; the current migration/index set; and the preserved native-installer configuration boundaries.
