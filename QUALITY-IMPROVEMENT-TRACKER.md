@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 145: align quiz editor text targets
+
+- **Reviewed:** The staff quiz editor's question, answer-choice, correct-answer, explanation, add/remove, save, disabled, validation, and narrow-layout behavior, plus the server-side quiz normalization, choice-count/correctness validation, authorization, transactional replacement, and audit boundaries.
+- **Improvement:** Raise answer-choice and optional explanation text inputs from 36px to the shared 40px editor target. Preserve the compact typography, radio and removal controls, responsive row layout, native input semantics, disabled state, validation feedback, and existing quiz save behavior. Added `tests/client/quiz-editor-text-target.test.js` and a readable CSS comment.
+- **Why it helps:** Course authors can edit quiz answers and explanations more reliably with a pointer, touch device, or keyboard while the surrounding editor keeps a consistent control rhythm.
+- **Backend review:** Quiz saves still require bounded question and choice counts, non-empty question and choice text, exactly one correct answer per question, staff course access, transactional replacement, and audit persistence; no backend change was indicated.
+- **Checked:** Focused quiz-editor target, radio, and action checks passed (3/3); the full `npm test -- --test-reporter=spec` suite passed (1011/1011), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, CSRF, and Vite `/login` probes returned 200 without response cookies. The reloaded signed-out local browser shell exposed one heading plus named username/password controls; no credentials, quiz edits, or application data were submitted.
+- **Commit title:** `fix(a11y): align quiz editor text targets`.
+- **Commit description:** `Give quiz authors reliable answer and explanation input targets while preserving the compact editor layout and save validation.`
+
 ## 2026-10-16 — Cycle 144: align learning-path footer targets
 
 - **Reviewed:** Learner and staff learning-path card footer actions, their compact desktop and stacked mobile layout, contextual accessible names, disabled/busy states, keyboard focus treatment, and the status, enrollment, assignment, and archive request boundaries.
