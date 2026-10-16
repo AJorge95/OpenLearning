@@ -209,6 +209,29 @@ test('the exam migration preserves existing module quizzes, questions, choices, 
   }
 });
 
+test('the exam migration tolerates historical fixtures without a complete quiz schema', () => {
+  const sparseDatabase = new Database(':memory:');
+  sparseDatabase.pragma('foreign_keys = ON');
+  try {
+    sparseDatabase.exec(`
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      INSERT INTO schema_migrations (version) VALUES (40);
+      CREATE TABLE users (id TEXT PRIMARY KEY);
+      CREATE TABLE courses (id TEXT PRIMARY KEY);
+      CREATE TABLE quizzes (id TEXT PRIMARY KEY);
+    `);
+
+    migrateDatabase(sparseDatabase);
+
+    assert.equal(sparseDatabase.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, expectedLatestMigrationVersion);
+    assert.deepEqual(sparseDatabase.prepare('PRAGMA table_info(quizzes)').all().map(({ name }) => name), ['id']);
+    assert.equal(sparseDatabase.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'quiz_attempt_sessions'").get(), undefined);
+    assert.deepEqual(sparseDatabase.pragma('foreign_key_check'), []);
+  } finally {
+    sparseDatabase.close();
+  }
+});
+
 test('the course-group migration coalesces legacy rows and recreates association indexes', () => {
   const legacyDatabase = new Database(':memory:');
   legacyDatabase.pragma('foreign_keys = ON');

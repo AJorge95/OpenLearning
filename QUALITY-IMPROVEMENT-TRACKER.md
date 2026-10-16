@@ -1,5 +1,16 @@
 # Quality Improvement Tracker
 
+## 2026-10-17 — Cycle 178: preserve sparse historical database upgrades
+
+- **Finding:** Migration 41 rewrote `quizzes` unconditionally. Historical upgrade fixtures that intentionally omit quiz data, or retain only an `id` placeholder, failed with `no such table: quizzes` or `no such column: module_id` before later migrations could complete.
+- **Improvement:** Detect the complete pre-41 quiz schema before applying the ownership rewrite. Real version-40 databases still receive the existing `course_id`, question-count, completion, indexes, and quiz-attempt-session migration; sparse historical fixtures advance safely without inventing unrelated quiz structure. Added a dedicated database-migration regression for the sparse schema and updated the historical preservation test to track the current latest schema version.
+- **Why it helps:** Upgrades preserve the existing database migration contract for real installations while narrow historical fixtures remain useful for testing account, course-version, certificate, caption, and watch-history preservation. The migration no longer fails merely because an unrelated quiz table is absent from a deliberately minimal fixture.
+- **Interface review:** Rechecked the current management/course-group JSX landmarks, shared controls, responsive rules, and the signed-out application shell. No separate interface defect was evidenced in this backend-focused cycle; no credentials or live forms were submitted. Browser-plugin and Playwright visual QA remain unavailable in this checkout.
+- **Checked:** Focused migration and historical-login suites passed (24/24), including complete exam preservation, sparse quiz-schema tolerance, course-group migration, account history, and watch telemetry. `npm run typecheck`, `npm run build`, and `git diff --check` passed. Full `npm test -- --test-reporter=spec` completed at 1,052/1,059; seven existing UI source-contract assertions remain in backup dashboard, course overview/catalog/pagination, and quiz result/focus tests. Read-only database inspection found schema version 42, both course-group tables, and no foreign-key violations. Fresh `/healthz`, `/readyz`, `/api/version`, and `/login` probes returned 200 on the newly launched local tree.
+- **Boundary:** Migration behavior and isolated test fixtures only. No production deployment, remote service, external publication, credentials, or application-data mutation was performed. The pre-existing listener exited during this cycle; only the final dev tree launched for verification remains to be stopped.
+- **Commit title:** `fix(migrations): tolerate sparse historical quiz schemas`.
+- **Commit description:** `Guard the quiz ownership rewrite with pre-41 schema detection, preserve complete real-database migrations, and cover sparse historical fixtures without inventing unrelated quiz tables.`
+
 ## 2026-10-16 — Cycle 177: cover course-group migration and management contracts
 
 - **Finding:** The new course-group feature had no dedicated server regression suite. The migration from legacy per-course course_groups(course_id) rows and the staff CRUD boundary were therefore protected only indirectly by the general suite.

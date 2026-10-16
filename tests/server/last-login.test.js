@@ -25,6 +25,7 @@ const isolatedConfig = {
 };
 const lastLoginAdminUsername = 'admin_last_login';
 const lastLoginAdminPassword = 'LastLoginPassphrase-2026';
+const expectedLatestMigrationVersion = 42;
 const previousConfig = new Map(Object.keys(isolatedConfig).map((key) => [key, process.env[key]]));
 let fixtureDirectory;
 let database;
@@ -245,7 +246,7 @@ test('unhandled API errors still return a response when system logging fails', a
   }
 });
 
-test('migrations 15 to 39 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
+test('historical migrations preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
   const migrationDb = new Database(':memory:');
   try {
     migrationDb.pragma('foreign_keys = ON');
@@ -336,7 +337,7 @@ test('migrations 15 to 39 preserve account history, course versions, captions, c
     `);
 
     migrateDatabase(migrationDb);
-    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 39);
+    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, expectedLatestMigrationVersion);
     assert.ok(migrationDb.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'competencies_admin_order'`).get());
     assert.ok(migrationDb.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'users_registration_status_created'`).get());
     const pendingUserListPlan = migrationDb.prepare(`EXPLAIN QUERY PLAN
