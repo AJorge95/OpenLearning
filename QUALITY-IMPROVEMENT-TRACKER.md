@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Use catalog guidance for anonymous root redirects
+
+- **Reviewed:** The freshly launched signed-out root redirect, login copy, protected deep-link preservation, post-login destination sanitizer, and the current clean worktree. The root route is a canonical alias for the learner catalog, while protected routes retain their requested path through sign-in.
+- **Improvement:** Treat `/` and root-only query variants as the default catalog destination when normalizing post-login paths. Anonymous visitors entering the app root now see “Sign in to continue learning” instead of copy implying that a distinct page was requested; real protected destinations still retain their route, query, and hash.
+- **Why it helps:** The first public screen now matches the user's actual intent when they open the app home URL, while preserving useful return guidance for a bookmarked course, management page, or other protected route.
+- **Backend review:** No server change was indicated. Authentication, route protection, session handling, and the API contracts remain unchanged; the fix is limited to client-side destination normalization.
+- **Checked:** Added the root and root-query regressions to `tests/client/post-login-path.test.js`; the focused post-login suite passed 7/7 and the full `npm test -- --test-reporter=spec` suite passed 962/962. `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live `/` redirected to `/login` with named Username, Password, Show password, and Sign in controls; the corrected root copy rendered at the default 1280×720 viewport, while `/my-learning` retained the requested-page copy. `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and `/` returned 200. No credentials, forms, uploads, account/course actions, or application data were submitted.
+- **Commit title:** `fix(auth): normalize anonymous root destination`.
+- **Commit description:** `Treat the app root as the default catalog after sign-in so public login guidance matches the requested destination.`
+
 ## 2026-10-16 — Centralize course-access status labels and align regression coverage
 
 - **Reviewed:** The latest private-course access UI and API contract, including direct assignments, path-unlocked access, public-course availability, disabled learners, assignment actions, accessibility labels, and the current clean working tree.
