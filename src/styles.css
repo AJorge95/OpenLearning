@@ -477,7 +477,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .lesson-locked-page .back-link { margin-top: 8px; }
 .player-video-error { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; margin-top: 12px; border: 1px solid #f0c8ce; border-radius: 4px; color: #7d3540; background: #fffafb; font-size: 13px; line-height: 1.45; }
 .player-video-error p { margin: 0; }
-.player-video-error .button { min-height: 36px; flex: 0 0 auto; font-size: 12px; }
+/* Keep playback recovery actions easy to activate when a learner is already blocked. */
+.player-video-error .button { min-height: 40px; flex: 0 0 auto; font-size: 12px; }
 .player-controls-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 0 22px; border-bottom: 1px solid var(--line); }
 .player-controls-row .button { min-height: 44px; }
 .course-completion-certificate { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; margin-top: 16px; border: 1px solid var(--line); border-radius: 5px; background: #fff; }

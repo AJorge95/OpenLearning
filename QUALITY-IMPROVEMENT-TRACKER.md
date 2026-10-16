@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 138: align learner video recovery targets
+
+- **Reviewed:** The learner lesson-player video error and stalled-playback recovery states, retry button labels and handlers, narrow stacked layout, keyboard focus treatment, protected video range delivery, learner access checks, verified watch-duration/progress contract, and retryable media failure paths.
+- **Improvement:** Raise the learner `Retry playback`, `Retry video`, and `Retry video check` actions from a 36px minimum to a consistent 40px target while preserving their alert messaging, disabled/busy state, retry handlers, narrow layout, and existing secondary styling. Added `tests/client/player-video-error-target.test.js` and a readable CSS comment.
+- **Why it helps:** Learners who encounter a stalled, unavailable, or temporarily unverifiable video can activate the recovery action more reliably with a pointer, touch device, or keyboard while already blocked in the lesson player.
+- **Backend review:** Protected video access, byte-range delivery, course/lesson authorization, verified duration checks, watch-progress validation, retryable media failures, and completion gating were reviewed read-only; the existing server contract already supports the client-only target improvement, so no backend change was indicated.
+- **Checked:** Focused player recovery, video-control, watch-guidance, watch-progress, and completion checks passed 17/17; the full `npm test -- --test-reporter=spec` suite passed 1006/1006; `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration-fields, version, and Vite `/login` probes returned 200. The signed-out in-app browser rendered a non-blank login shell with one heading and named username/password controls. Authenticated lesson-player interaction remains source- and regression-verified because this development browser session has no learner fixture; no credentials, playback actions, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): align learner video recovery targets`.
+- **Commit description:** `Give learner playback recovery actions reliable touch targets while preserving their existing error states and retry behavior.`
+
 ## 2026-10-16 — Cycle 137: pause hidden backup-dashboard polling
 
 - **Reviewed:** The administrator backup dashboard's five-second polling, manual action refreshes, stale-response revision guard, loading/error/empty states, visibility of running media/database backups, and the existing admin-only scheduler, queue, retention, and authorization paths.
