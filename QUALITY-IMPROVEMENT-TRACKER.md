@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 112: normalize synchronous upload failures
+
+- **Reviewed:** The shared JSON and multipart API transport, CSRF refresh/retry behavior, upload progress and cancellation, synchronous `XMLHttpRequest.send()` failures, and the course-editor upload consumers' recovery messages.
+- **Improvement:** Convert a non-abort exception thrown synchronously by `XMLHttpRequest.send()` into the same status-0 `network_error` contract used for asynchronous upload connection failures. Existing abort errors, server responses, CSRF retry behavior, progress cleanup, and uncertain-completion guidance remain unchanged.
+- **Why it helps:** Course authors now receive a stable, actionable retry message instead of a browser-specific raw exception when an upload cannot start.
+- **Backend review:** The server already returns structured upload validation, CSRF, timeout, and media-storage errors; no backend change was indicated. The client-side transport boundary now handles both synchronous and asynchronous browser failures consistently.
+- **Checked:** Added the focused synchronous-send regression to `tests/client/api.test.js`; the focused check passed 1/1, the full `npm test -- --test-reporter=spec` suite passed 980/980, `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration-fields, CSRF, version, and Vite-root probes returned 200; anonymous admin backups returned 401 and anonymous CSRF returned no `Set-Cookie`. The reloaded signed-out browser shell retained one heading and named username/password controls without a blank-page state. No credentials, uploads, account/course actions, or application data were submitted or changed; authenticated upload interaction remains source- and regression-verified because this development browser session has no authenticated course-editor fixture.
+- **Commit title:** `fix(api): normalize synchronous upload failures`.
+- **Commit description:** `Map synchronous XMLHttpRequest send failures to the shared retryable upload error contract.`
+
 ## 2026-10-16 — Cycle 111: enlarge backup job action targets
 
 - **Reviewed:** Administrator backup-card action structure, visible labels, keyboard focus treatment, narrow-card wrapping, run/edit/pause/remove mutation feedback, and the existing backup authorization, validation, queue, retention, and recovery boundaries.

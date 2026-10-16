@@ -252,7 +252,13 @@ export const api = {
         resolve(data as T);
       };
       try { xhr.send(body); }
-      catch (error) { removeAbortListener(); reject(error); }
+      catch (error) {
+        removeAbortListener();
+        // Keep synchronous browser failures on the same actionable transport contract as onerror.
+        reject(error instanceof ApiError || isAbortError(error)
+          ? error
+          : transportError('The upload could not be started. Check your connection and try again.'));
+      }
     });
     return send(token, false);
   },
