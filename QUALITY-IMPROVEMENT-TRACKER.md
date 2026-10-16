@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 118: enlarge the learner account-menu trigger
+
+- **Reviewed:** The shared learner header account disclosure, mobile avatar-only layout, accessible name and expanded state, outside-dismiss and Escape handling, route-change cleanup, keyboard focus behavior, and the session sign-out boundary.
+- **Improvement:** Give the account-menu summary a 40px minimum width and height at desktop and narrow breakpoints, center the avatar-only mobile trigger, and add a local palette-aware focus outline while preserving the native `<details>` interaction, accessible name, menu links, and sign-out handler. Added `tests/client/account-menu-target.test.js`.
+- **Why it helps:** Learners can open the account menu more reliably on touch devices at narrow widths, and keyboard users can identify the focused trigger without changing account navigation or sign-out behavior.
+- **Backend review:** The existing account-menu links and sign-out route retain their session, authorization, CSRF, audit, and failure-handling contracts; no backend change was indicated.
+- **Checked:** Focused account-menu target, accessibility, dismissal, and responsive checks passed (12/12); the full `npm test -- --test-reporter=spec` suite passed (986/986), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, version, and Vite-root probes returned 200; anonymous CSRF returned no `Set-Cookie`. The reloaded local `/login` shell exposed one heading and named username/password controls with no browser warning/error logs. Authenticated account-menu interaction remains source- and regression-verified because this development browser session has no authenticated learner fixture.
+- **Commit title:** `fix(a11y): enlarge learner account menu target`.
+- **Commit description:** `Give the learner account-menu trigger a reliable responsive touch target and visible keyboard focus while preserving its disclosure behavior.`
+
 ## 2026-10-16 — Cycle 117: enlarge course-analytics activity disclosures
 
 - **Reviewed:** Course-analytics learner rows, native activity-detail disclosure semantics, on-demand detail loading and retry states, narrow learner-table layout, keyboard focus behavior, and the staff-only analytics API boundary.
