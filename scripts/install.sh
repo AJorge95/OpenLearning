@@ -12,7 +12,7 @@ CONFIG_DIR="/etc/openlearning"
 ENV_FILE="$CONFIG_DIR/.env"
 DATA_DIR="/var/lib/openlearning"
 BACKUP_ROOT="/var/backups/openlearning"
-PORT="6173"
+PORT="5173"
 
 log() { printf '[openlearning] %s\n' "$*"; }
 fail() { printf '[openlearning] ERROR: %s\n' "$*" >&2; exit 1; }
