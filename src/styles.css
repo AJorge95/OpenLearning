@@ -1721,7 +1721,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .course-version-history h3 { margin: 0; font-size: 15px; }
 .course-version-history ol { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .course-version-history-disclosure { overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: #fbfbfd; }
-.course-version-history-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; color: var(--text); font-size: 12px; font-weight: 650; cursor: pointer; list-style: none; }
+/* Keep version-history disclosure and paging controls easy to activate in the dense governance panel. */
+.course-version-history-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; padding: 12px; color: var(--text); font-size: 12px; font-weight: 650; cursor: pointer; list-style: none; }
+.course-version-history-disclosure > summary:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; border-radius: 4px; }
 .course-version-history-disclosure > summary::-webkit-details-marker { display: none; }
 .course-version-history-disclosure > summary::after { content: '+'; color: var(--muted); font-size: 16px; }
 .course-version-history-disclosure[open] > summary::after { content: '−'; }
@@ -1733,7 +1735,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .course-version-history li small, .course-version-history li p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
 .course-version-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 3px; color: var(--muted); font-size: 12px; }
 .course-version-pagination > div { display: flex; align-items: center; gap: 10px; }
-.course-version-pagination .button { min-height: 36px; padding-inline: 12px; font-size: 11px; }
+.course-version-pagination .button { min-height: 40px; padding-inline: 12px; font-size: 11px; }
 .current-version-label { padding: 3px 6px; border-radius: 99px; color: #176b40; background: var(--green-soft); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
 
 .account-name-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; min-width: 0; }
