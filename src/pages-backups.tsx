@@ -4,6 +4,7 @@ import { NavLink } from 'react-router-dom';
 import { Check, Database, HardDrive, Pencil, Play, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { api, ApiError } from './api';
 import { Button, ConfirmationDialog, PageHeading } from './components';
+import { formatApiTimestamp } from './format-api-timestamp';
 import type { BackupFrequency, BackupJob, BackupRun, BackupScope } from './types';
 
 type Dashboard = { jobs: BackupJob[]; runs: BackupRun[]; backupInProgress: boolean; mediaWritesPaused: boolean; defaultDestinationPath: string };
@@ -23,9 +24,9 @@ function defaultJob(destinationPath: string): JobInput {
 
 function formatTimestamp(value: string | null | undefined, utc = false) {
   if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return `${utc ? scheduleDateFormatter.format(date) : timestampFormatter.format(date)}${utc ? ' UTC' : ''}`;
+  // Backup run rows can contain SQLite UTC values without an explicit timezone marker.
+  const formatted = formatApiTimestamp(value, utc ? scheduleDateFormatter : timestampFormatter);
+  return `${formatted}${formatted === '—' || !utc ? '' : ' UTC'}`;
 }
 
 function BackupNotice({ children, kind = 'error' }: { children: ReactNode; kind?: 'error' | 'success' }) {

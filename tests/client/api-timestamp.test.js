@@ -25,6 +25,7 @@ test('preserves explicit UTC and offset timestamps', () => {
 test('all database timestamp renderers use the shared parser', () => {
   const repositoryRoot = new URL('../..', import.meta.url);
   const manageSource = fs.readFileSync(new URL('src/pages-manage.tsx', repositoryRoot), 'utf8');
+  const backupSource = fs.readFileSync(new URL('src/pages-backups.tsx', repositoryRoot), 'utf8');
   const learnerSource = fs.readFileSync(new URL('src/pages-learner.tsx', repositoryRoot), 'utf8');
 
   for (const expression of [
@@ -33,6 +34,9 @@ test('all database timestamp renderers use the shared parser', () => {
     'formatApiTimestamp(currentVersion.published_at, logTimestampFormatter)',
     'formatApiTimestamp(version.published_at, logTimestampFormatter)',
   ]) assert.ok(manageSource.includes(expression), `${expression} should be used by management timestamp renderers`);
+  assert.match(backupSource, /import \{ formatApiTimestamp \} from '\.\/format-api-timestamp';/);
+  assert.match(backupSource, /formatApiTimestamp\(value, utc \? scheduleDateFormatter : timestampFormatter\)/);
+  assert.doesNotMatch(backupSource, /new Date\(value\)/, 'backup timestamps should use the shared UTC-aware parser');
   assert.ok(learnerSource.includes('parseApiTimestamp(value)'), 'certificate and comment timestamps should use the shared parser');
   assert.doesNotMatch(manageSource, /new Date\((?:review\.submittedAt|currentVersion\.published_at|version\.published_at)\)/);
 });

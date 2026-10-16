@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 100: keep backup history timestamps UTC-aware
+
+- **Reviewed:** Backup settings form semantics, responsive job/history layout, polling and refresh ordering, schedule/run status feedback, admin backup routes, backup retention, and platform-reset recovery boundaries.
+- **Improvement:** Backup history and next-run display now use the shared UTC-aware API timestamp parser instead of relying on the browser's default parsing for SQLite timestamps without timezone markers.
+- **Why it helps:** Operators in non-UTC time zones now see backup run times at the correct instant, while explicit offsets and malformed timestamp fallback behavior remain consistent with the rest of the management UI.
+- **Backend review:** Scheduler values already expose ISO next-run timestamps and SQLite run timestamps; route authorization, destination validation, retention, backup verification, and reset rollback coverage showed no separate backend change indicated.
+- **Checked:** Focused timestamp and backup settings checks passed 7/7; the full `npm test -- --test-reporter=spec` suite passed 968/968; `npm run typecheck`, `npm run build`, and `git diff --check` passed. No backup job, reset, account, course, or application data was changed.
+- **Commit title:** `fix(backups): use UTC-aware timestamp display`.
+- **Commit description:** `Render backup history and schedule timestamps with the shared SQLite-UTC parser across operator time zones.`
+
 ## 2026-10-16 — Cycle 99: preserve truthful lesson-resource feedback after refresh failures
 
 - **Reviewed:** Lesson-details resource links, document uploads, caption uploads, resource and caption removal, the course refresh callback used after each mutation, related validation and media request boundaries, and the editor's accessible progress, cancellation, and error states.
