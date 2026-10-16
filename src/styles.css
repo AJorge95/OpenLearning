@@ -97,6 +97,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .app-select-option { color: CanvasText; background: Canvas; }
   .app-select-option:hover, .app-select-option.active, .app-select-option.selected { color: HighlightText; background: Highlight; }
   .app-select-option[aria-disabled="true"] { color: GrayText; opacity: 1; }
+  .icon-button { color: ButtonText; border-color: ButtonText; }
+  .icon-button:hover:not(:disabled), .icon-button:focus-visible { color: HighlightText; border-color: Highlight; background: Highlight; outline-color: Highlight; }
   .staff-account button { color: ButtonText; border-color: ButtonText; }
   .staff-account button:hover:not(:disabled), .staff-account button:focus-visible { color: HighlightText; border-color: Highlight; background: Highlight; outline-color: Highlight; }
   .app-select-option.selected .app-select-option-indicator { color: HighlightText; border: 1px solid HighlightText; background: Highlight; }
@@ -968,9 +970,11 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .delete-course-row div { display: grid; gap: 5px; }
 .delete-course-row strong { color: #8b2937; font-size: 14px; }
 .delete-course-row span { color: #77555b; font-size: 12px; }
-.icon-button { border: 0; background: transparent; display: grid; place-items: center; color: #626878; width: 31px; height: 31px; border-radius: 3px; }
+/* Keep editor's icon-only removal actions easy to hit without widening their rows. */
+.icon-button { border: 1px solid transparent; background: transparent; display: grid; place-items: center; color: #626878; width: 40px; height: 40px; border-radius: 4px; }
 .danger-icon { color: #9c5961; }
 .danger-icon:hover { color: var(--danger); background: var(--danger-soft); }
+.icon-button:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; border-color: var(--purple); }
 
 .access-page { width: min(100%, 1180px); margin: 0 auto; }
 .access-page .page-heading { align-items: center; margin-bottom: 28px; }
