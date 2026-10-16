@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 151: index approved account ordering
+
+- **Reviewed:** The fresh signed-out login shell, current responsive and form semantics, the administrator Users page filters and pagination, the `/api/admin/users` validation and authorization boundary, existing user-order indexes, and the live SQLite query plan for approved-account results.
+- **Improvement:** Added schema migration 39 with `users_registration_management_order (registration_status, role-order expression, username COLLATE NOCASE)`. The index matches the approved-registration filter and administrator/moderator/learner display order without changing the endpoint response, permissions, pagination, or pending-registration ordering. Added fresh-migration and historical-fixture query-plan assertions.
+- **Why it helps:** Filtering the administrator account list to approved registrations no longer requires SQLite to build a temporary sort before returning each 50-row page as the account table grows.
+- **Interface review:** The signed-out `/login` shell remained non-blank with one heading, named required username/password fields, and the existing password-visibility action; no distinct current interface or responsive defect justified another client change.
+- **Checked:** The live pre-change plan used `users_registration_status_created` plus `TEMP B-TREE FOR ORDER BY`; after the migration, it uses `users_registration_management_order` without a temporary sort. Focused migration/history checks passed 21/21, the full `npm test -- --test-reporter=spec` suite passed 1012/1012, `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, and Vite probes returned 200; the live database reported schema 39. The signed-out browser shell exposed one heading and named username/password controls, and `Show password` toggled to `Hide password` and back. No credentials, account actions, or application data were submitted or changed.
+- **Commit title:** `perf(db): index approved account ordering`.
+- **Commit description:** `Add a composite account-list index so approved-registration pages preserve their role and username order without a temporary sort.`
+
 ## 2026-10-16 — Cycle 150: review post-index boundaries
 
 - **Reviewed:** The fresh signed-out login shell and password-visibility interaction; current responsive and form semantics; post-Cycle-149 course-state indexing; certificate issuance lookups; grant and enrollment membership access; learner progress, quiz-attempt, comment, and reaction reads; course-version ordering; and the remaining server query plans for course-first and user-first access patterns.
