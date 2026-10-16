@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Show required cues in the backup job editor
+
+- **Reviewed:** The administrator backup-job form, its native required constraints, server-side job normalization, destination validation, and the existing required-field presentation used across settings and management forms.
+- **Improvement:** Added the shared visible “Required” cue to job name, UTC run time, retention count, and server destination fields while keeping their existing native validation and server contract unchanged.
+- **Why it helps:** Administrators can identify the fields they must complete before saving a schedule, including the destination path and retention policy that are easy to overlook in the compact editor.
+- **Backend review:** Backup job scope, schedule, destination, retention, authorization, and persistence validation remain unchanged; no server behavior or data contract needed modification.
+- **Checked:** Added `tests/client/backup-job-required-indicators.test.js`; the focused regression passed 1/1 and the full `npm test -- --test-reporter=spec` suite passed 964/964. `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and the Vite root returned 200; the public login accessibility tree retained one heading and named Username, Password, Show password, and Sign in controls with no browser warnings or errors. No credentials, forms, uploads, account/course actions, or application data were submitted.
+- **Commit title:** `fix(a11y): show backup job required cues`.
+- **Commit description:** `Expose the existing backup-job required constraints through the shared visible field cues without changing validation behavior.`
+
 ## 2026-10-16 — Cycle 81 bounded registration-flow review: no distinct change indicated
 
 - **Reviewed:** The freshly launched public registration route and its heading, labels, native required semantics, password actions, custom-field loading/retry and stale-schema recovery; registration availability and account-cap responses; server-side field normalization, duplicate handling, answer validation, audit rollback, and concurrent account-limit enforcement.
