@@ -175,10 +175,50 @@ test('installer opens the configured application port in active local firewalls'
   assert.match(installer, /ufw allow "\$SERVICE_PORT\/tcp"/);
   assert.match(installer, /firewall-cmd --state/);
   assert.match(installer, /firewall-cmd --get-zone-of-interface="\$interface"/);
-  assert.match(installer, /--zone="\$FIREWALL_ZONE" --permanent --add-port="\$SERVICE_PORT\/tcp"/);
+  assert.match(installer, /configure_firewalld_port "\$FIREWALL_ZONE"/);
   assert.doesNotMatch(installer, /firewall-cmd --get-active-zones/);
   assert.match(installer, /firewall-cmd --reload/);
   assert.match(readme, /does not enable a firewall/i);
+});
+
+test('firewalld port setup is idempotent for existing rules and rejects real command errors', () => {
+  const helper = installer.match(/configure_firewalld_port\(\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(helper, 'expected the firewalld port setup helper');
+  const run = (addStatus) => spawnSync(bashPath, ['-c', `
+    set -eu
+    SERVICE_PORT=6173
+    MOCK_RELOAD_CALLED=false
+    ${helper}
+    firewall-cmd() {
+      case "$*" in
+        "--zone=public --permanent --add-port=6173/tcp")
+          printf 'mock add result\n'
+          return "$MOCK_ADD_STATUS"
+          ;;
+        "--reload") MOCK_RELOAD_CALLED=true ;;
+        *) return 2 ;;
+      esac
+    }
+    configure_firewalld_port public
+    printf 'reload-called=%s\n' "$MOCK_RELOAD_CALLED"
+  `], {
+    encoding: 'utf8',
+    env: { ...process.env, MOCK_ADD_STATUS: String(addStatus) },
+  });
+
+  const added = run(0);
+  assert.equal(added.status, 0, added.stderr);
+  assert.equal(added.stdout.trim(), 'reload-called=true');
+
+  const alreadyEnabled = run(11);
+  assert.equal(alreadyEnabled.status, 0, alreadyEnabled.stderr);
+  assert.equal(alreadyEnabled.stdout.trim(), 'reload-called=true');
+  assert.equal(alreadyEnabled.stderr, '', 'the documented already-enabled warning is handled quietly');
+
+  const commandFailure = run(13);
+  assert.equal(commandFailure.status, 13, 'real firewalld errors must remain failures');
+  assert.match(commandFailure.stderr, /mock add result/);
+  assert.equal(commandFailure.stdout, '', 'do not reload after a real port-add failure');
 });
 
 test('firewalld port selection follows the server route interface and falls back only to the default zone', () => {

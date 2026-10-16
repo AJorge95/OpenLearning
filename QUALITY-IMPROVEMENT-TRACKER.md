@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 166: make repeated firewalld setup idempotent
+
+- **Reviewed:** The current pushed installer and its route-selected IPv4/firewalld-zone logic; the previous RHEL output containing `ALREADY_ENABLED`; the sign-in shell's semantic landmarks, field labels, navigation, focus rules, reduced-motion/forced-colors styles, and responsive breakpoints; and current local health/readiness/login routes. The Browser plugin is unavailable and Playwright is not installed, so UI review was source/HTTP based with no visual or interaction claims.
+- **Problem:** A repeated install can encounter an already configured permanent port. `firewall-cmd` reports `ALREADY_ENABLED` as exit code 11 for a single operation, which the installer treated as a failure and consequently skipped `--reload`. Firewalld documents exit code 11 and that reload applies permanent configuration ([manual](https://firewalld.org/documentation/man-pages/firewall-cmd.html)).
+- **Change:** Added a focused helper that treats only exit codes 0 and 11 as success, reloads permanent rules for either outcome, and preserves nonzero errors and their output. Added mocked regressions for new rules, already-enabled rules, and real command failures.
+- **Why it helps:** Re-running the one-command installer no longer emits a false firewall-configuration failure for an existing rule, while genuine firewalld failures remain visible and do not trigger reload.
+- **Checked:** Focused Linux-installer tests passed 16/16, including the dynamic route address `10.123.89.19`, route-zone fallbacks, and all three add-port outcomes. Full `npm test -- --test-reporter=dot`, `npm run build` (including typecheck), and `git diff --check` passed. Local `/healthz`, `/readyz`, and Vite `/login` probes returned 200. No Red Hat host or firewall was changed.
+- **Commit title:** `fix(installer): handle existing firewalld port`.
+- **Commit description:** `Treat firewalld's ALREADY_ENABLED result as an idempotent port setup, reload permanent rules for successful and already-present ports, and retain failures for real configuration errors.`
+
 ## 2026-10-16 — Cycle 165: scope firewalld port opening to the server route
 
 - **Reviewed:** Current installer and previous dynamic IPv4/RHEL fixes; the displayed `docker public` firewalld output; firewalld zone/interface behavior; local health/readiness/login routes; and current auth shell semantics, focus styles, reduced-motion/forced-colors rules, and mobile layout. Browser plugin is absent and Playwright is not installed, so no visual/interaction test or UI edit was made.
