@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 102: enlarge the password-reset dialog close target
+
+- **Reviewed:** The administrator password-reset dialog structure, accessible name and description, Escape handling, focus trapping and restoration, close-button styling, responsive modal sizing, and the related account-management validation and authorization paths.
+- **Improvement:** Give the dialog’s `Close` button a centered 44px square hit area with palette-aware hover and visible-focus styling. Its existing accessible name, disabled state, and focus behavior remain unchanged.
+- **Why it helps:** Administrators can reliably dismiss the password-reset dialog with a pointer or touch device, and keyboard users receive a clear focus boundary while the control remains visually compact.
+- **Backend review:** The account-management reset route, administrator authorization, password validation, session invalidation, and audit rollback paths already match the current UI contract; no backend change was indicated.
+- **Checked:** The dedicated close-target regression plus password-reset dialog and row-menu focus checks passed 6/6; the full `npm test -- --test-reporter=spec` suite passed 970/970; `npm run typecheck`, `npm run build`, and `git diff --check` passed. After reload, the live signed-out shell remained non-blank at `/login` with one heading, named username/password controls, and no submitted credentials or application-data changes. Authenticated administrator dialog interaction remains unverified because this development browser session has no authenticated fixture.
+- **Commit title:** `fix(a11y): enlarge password reset close target`.
+- **Commit description:** `Give the administrator password-reset dialog close action a reliable touch target and visible focus state.`
+
 ## 2026-10-16 — Cycle 101: enlarge the course-rail close target
 
 - **Reviewed:** The learner lesson-player rail toggle and close control, responsive rail stacking, keyboard focus restoration, named disclosure semantics, and the related course navigation, media, watch-progress, and access boundaries.
