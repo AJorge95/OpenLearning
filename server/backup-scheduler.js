@@ -392,23 +392,47 @@ function refreshBackupSchedules(now = new Date()) {
   return jobs;
 }
 
-async function tickBackupScheduler() {
+export async function tickBackupScheduler(now = new Date()) {
   if (shouldDeferScheduledRun()) return;
-  const now = new Date();
   const jobs = refreshBackupSchedules(now);
   for (const job of jobs) {
     const nextRunAt = nextRunByJob.get(job.id);
     if (nextRunAt && nextRunAt <= now) {
-      nextRunByJob.set(job.id, nextBackupAt(job, now));
-      const run = enqueueRun(job, { triggerType: 'scheduled', scheduledFor: nextRunAt.toISOString() });
-      if (run) writeSystemLog('info', 'backup', 'Scheduled backup queued', { jobId: job.id, runId: run.id, scope: job.scope, scheduledFor: nextRunAt.toISOString() });
+      try {
+        const run = enqueueRun(job, { triggerType: 'scheduled', scheduledFor: nextRunAt.toISOString() });
+        // Advance only after the queue check succeeds so a transient database
+        // failure leaves this run due for the next scheduler tick.
+        nextRunByJob.set(job.id, nextBackupAt(job, now));
+        if (run) writeSystemLog('info', 'backup', 'Scheduled backup queued', { jobId: job.id, runId: run.id, scope: job.scope, scheduledFor: nextRunAt.toISOString() });
+      } catch (error) {
+        writeSystemLog('error', 'backup', 'Scheduled backup could not be queued; it will be retried on the next scheduler tick.', {
+          jobId: job.id,
+          scheduledFor: nextRunAt.toISOString(),
+          errorName: String(error?.name || 'Error').slice(0, 100),
+          errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+          message: readErrorMessage(error),
+        });
+      }
     }
   }
 }
 
-export function refreshBackupSchedulesNow() {
+export async function runBackupSchedulerTick(now = new Date()) {
+  try {
+    await tickBackupScheduler(now);
+  } catch (error) {
+    // A failed scheduler read must not become an unhandled timer rejection.
+    writeSystemLog('error', 'backup', 'Scheduled backup check failed; it will retry on the next scheduler tick.', {
+      errorName: String(error?.name || 'Error').slice(0, 100),
+      errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+      message: readErrorMessage(error),
+    });
+  }
+}
+
+export function refreshBackupSchedulesNow(now = new Date()) {
   nextRunByJob = new Map();
-  refreshBackupSchedules();
+  refreshBackupSchedules(now);
 }
 
 export function startBackupScheduler({ shouldDefer = () => false } = {}) {
@@ -422,7 +446,7 @@ export function startBackupScheduler({ shouldDefer = () => false } = {}) {
   }
   nextRunByJob = new Map();
   refreshBackupSchedules();
-  scheduleTimer = setInterval(() => { void tickBackupScheduler(); }, scheduleTickMs);
+  scheduleTimer = setInterval(() => { void runBackupSchedulerTick(); }, scheduleTickMs);
   scheduleTimer.unref?.();
 }
 
