@@ -190,7 +190,7 @@ if [[ "$OLD_UNIT_PRESENT" == true ]]; then
   log "Reading the current service configuration and resolving its data paths."
   OLD_WORKING_DIRECTORY="$OLD_WORKING_DIRECTORY" OLD_ENV_FILE="$OLD_ENV_FILE" NEW_ENV_FILE="$ENV_FILE" node scripts/migrate-install-config.js
   EXPECT_READY=false
-  EXISTING_PORT="$(ENV_FILE="$ENV_FILE" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || "6173")')"
+  EXISTING_PORT="$(ENV_FILE="$ENV_FILE" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || "5173")')"
   if curl -fsS "http://127.0.0.1:$EXISTING_PORT/readyz" >/dev/null 2>&1; then EXPECT_READY=true; fi
 else
   EXPECT_READY=false
@@ -322,7 +322,7 @@ STARTED=false
 if systemctl daemon-reload && systemctl enable "$SERVICE_NAME.service" && systemctl restart "$SERVICE_NAME.service"; then STARTED=true; fi
 
 READY=false
-SERVICE_PORT="$(ENV_FILE="$ENV_FILE" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || "6173")')"
+SERVICE_PORT="$(ENV_FILE="$ENV_FILE" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || "5173")')"
 if [[ ! "$SERVICE_PORT" =~ ^[0-9]{1,5}$ ]] || (( 10#$SERVICE_PORT < 1 || 10#$SERVICE_PORT > 65535 )); then
   fail "The configured service port is invalid: $SERVICE_PORT"
 fi
