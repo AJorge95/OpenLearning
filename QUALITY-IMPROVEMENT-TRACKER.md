@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 161: recheck service lifecycle and cleanup boundaries
+
+- **Reviewed:** Fresh local `/healthz`, `/readyz`, and Vite `/login` responses; the server's SIGINT/SIGTERM shutdown sequence and readiness short-circuit; backup queue draining; startup orphaned-media cleanup age/name/reference rules; the generated systemd unit; and the focused lifecycle tests.
+- **Result:** No runtime change. Readiness fails during shutdown, and startup cleanup only removes old generated files not referenced by the database; existing tests cover expired/stale files, missing roots, races, filesystem errors, and bounded diagnostics.
+- **Why no change:** The generated unit leaves `TimeoutStopSec` to the host systemd default while the server waits for an active backup. Choosing a longer timeout or cancelling backups changes operational behavior: the former can delay upgrades, and the latter can interrupt a large backup. This Windows checkout cannot establish the effective Red Hat systemd timeout or a representative backup duration. A read-only target-host `systemctl show` and a controlled maintenance-window shutdown during a representative long backup are needed before changing that policy.
+- **Checked:** Focused readiness/media-cleanup tests passed 9/9; the full `npm test -- --test-reporter=dot`, `npm run build` (including typecheck), and `git diff --check` passed. Local `/healthz`, `/readyz`, and `/login` probes returned 200. Browser plugin/Playwright visual interaction checks remain unavailable; no production service or data was changed.
+- **Commit title:** `docs(quality): record lifecycle boundary review`.
+- **Commit description:** `Record the current service shutdown, readiness, and media-cleanup contracts; defer timeout policy changes pending representative Linux systemd and active-backup evidence.`
+
 ## 2026-10-16 — Cycle 160: retry transient backup scheduler failures
 
 - **Reviewed:** The fresh local API and Vite startup, the signed-out login response, the backup scheduler's 15-second timer and due-job persistence order, and the isolated admin-backup integration fixture. The rendered-browser plugin is unavailable and Playwright is not installed in this workspace, so this backend-only change received HTTP smoke checks rather than visual interaction QA.
