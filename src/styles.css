@@ -474,7 +474,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .course-rail-head div { display: flex; flex-direction: column; gap: 4px; }
 .course-rail-head h2 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.02em; }
 .course-rail-head small { color: var(--muted); font-size: 12px; }
-.course-rail-head button { border: 0; background: #fff; color: #5e6373; transform: rotate(-90deg); }
+/* Keep the rail's icon-only close action easy to hit without changing its compact header. */
+.course-rail-head button { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: #5e6373; transform: rotate(-90deg); }
+.course-rail-head button:hover:not(:disabled) { color: var(--purple); border-color: var(--purple-border-strong); }
 .course-rail > .progress-line { width: calc(100% - 36px); margin: 0 18px 19px; }
 .curriculum-module-compact { border-left: 0; border-right: 0; border-radius: 0; margin: 0; }
 .curriculum-module-compact > summary { padding: 0 18px; min-height: 54px; }
