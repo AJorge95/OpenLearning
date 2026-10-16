@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { secureProductionRuntimePermissions } from '../../server/production-permissions.js';
+import { securePrivateFileCreation, secureProductionRuntimePermissions } from '../../server/production-permissions.js';
 
 test('source startup applies production permissions before importing the server', () => {
   const startScript = fs.readFileSync(new URL('../../scripts/start.js', import.meta.url), 'utf8');
@@ -11,6 +11,15 @@ test('source startup applies production permissions before importing the server'
 
   assert.notEqual(permissionCall, -1);
   assert.ok(serverImport > permissionCall);
+});
+
+test('standalone backup applies private permissions before creating output', () => {
+  const backupScript = fs.readFileSync(new URL('../../scripts/backup.js', import.meta.url), 'utf8');
+  const permissionCall = backupScript.indexOf('securePrivateFileCreation();');
+  const backupCall = backupScript.indexOf('createBackup()\n');
+
+  assert.notEqual(permissionCall, -1);
+  assert.ok(backupCall > permissionCall);
 });
 
 test('production startup sets a private umask and tightens a regular dotenv file', () => {
@@ -60,8 +69,8 @@ test('production startup ignores a missing dotenv file but keeps the private uma
     chmodSync: () => assert.fail('a missing dotenv file cannot be chmodded'),
   };
 
-  secureProductionRuntimePermissions({
-    nodeEnv: 'production', platform: 'linux', fileSystem,
+  securePrivateFileCreation({
+    platform: 'linux', fileSystem,
     setUmask: (mask) => calls.push(mask),
   });
 

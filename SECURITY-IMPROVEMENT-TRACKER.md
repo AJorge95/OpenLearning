@@ -1,5 +1,16 @@
 # Security Improvement Tracker
 
+## 2026-10-16 — Cycle 174: protect standalone backup output
+
+- **Finding:** README documents `npm run backup` as a way to create a verified full database/media backup under `./backup` or `BACKUP_DIR`. `scripts/backup.js` runs in a separate Node process and creates a timestamped directory, SQLite copy, media copy, and manifest without first restricting the inherited POSIX umask. With a typical `022` umask, the directory and files may allow local group/world reads, exposing backup contents outside the app's authorization checks.
+- **Root cause:** The Cycle 173 server startup guard only runs in `scripts/start.js`; the documented backup CLI bypassed that process and relied on its own inherited umask.
+- **Patch:** Extracted `securePrivateFileCreation` for private-data writers and called it in the direct backup CLI path immediately before `createBackup`. POSIX output now uses umask `077`; a regular default `.env` is tightened to `0600`. Windows, symlinks, missing `.env`, and externally managed dotenv paths retain safe handling.
+- **Why it helps:** A separate manual backup process now creates owner-only backup trees and files, so local readers cannot use a permissive default umask to bypass HTTP access controls on backup contents.
+- **Validation:** The security suite now covers the backup entrypoint ordering. No actual production backup was run. Existing backup files/directories are not retroactively chmodded; no POSIX production host was available for mode verification.
+- **Scope:** Conditional on standalone source backup CLI execution on POSIX with a permissive host umask and another account able to traverse the backup root. Server-run scheduled backups already inherit the guarded server process umask. Installer and Docker deployments also have separate controls.
+- **Commit title:** `fix(security): protect standalone backup files`.
+- **Commit description:** `Apply owner-only POSIX creation modes and default dotenv permissions before the standalone backup CLI writes database and media copies; cover the direct entrypoint with a focused security regression check.`
+
 ## 2026-10-16 — Cycle 173: restrict source-run production file permissions
 
 - **Finding:** The source-run production instructions use `npm start`, which imports the server without first restricting POSIX file creation. With a common umask such as `022`, a fresh data directory and files created beneath it can be traversed/read by unrelated local accounts. The documented copied `.env` can also retain group/world-read permissions. Such local reads can bypass HTTP authorization and expose course media, learner data, backups, and configured secrets.

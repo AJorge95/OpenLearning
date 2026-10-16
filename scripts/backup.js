@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { config } from '../server/config.js';
 import { copyMediaTree } from '../server/media-backup.js';
+import { securePrivateFileCreation } from '../server/production-permissions.js';
 
 function isWithin(parentPath, childPath) {
   const relativePath = path.relative(parentPath, childPath);
@@ -157,6 +158,8 @@ if (path.resolve(process.argv[1] || '') === fileURLToPath(import.meta.url)) {
     console.error(`Unrecognized backup argument: ${args[0]}`);
     process.exitCode = 1;
   } else {
+    // Backups contain private application data, including when run outside the server process.
+    securePrivateFileCreation();
     createBackup()
       .then((backupDirectory) => console.log(`Backup created at ${backupDirectory}`))
       .catch((error) => {

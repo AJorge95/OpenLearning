@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 174: protect standalone backup output
+
+- **Finding:** The documented `npm run backup` command runs in its own process, so it did not inherit the production server's private umask. On POSIX hosts with a permissive default, its timestamped database/media backup directory could be accessible to other local accounts.
+- **Change:** Reused `securePrivateFileCreation` in the standalone backup CLI before it creates output. The command now sets umask `077` on POSIX and tightens a regular default `.env` to `0600`; Windows and externally managed dotenv paths retain their prior handling. Added a dedicated startup-order check under `tests/security`.
+- **Why it helps:** Backup database and media copies stay private even when operators run the CLI separately from the server.
+- **Checked:** `node --test tests/security/production-permissions.test.js` passed 7/7; `npm run typecheck` passed. The full suite still has 12 existing failures in course/quiz UI assertions, search landmarks, and legacy migration fixtures.
+- **Boundary:** Protects new backup runs; it does not chmod existing backup directories or files. No production backup or deployment was changed.
+- **Commit title:** `fix(security): protect standalone backup files`.
+- **Commit description:** `Apply owner-only POSIX creation modes and default dotenv permissions before the standalone backup CLI writes database and media copies; cover the direct entrypoint with a focused security regression check.`
+
 ## 2026-10-16 — Cycle 173: restrict source-run production file permissions
 
 - **Finding:** The documented source-run production command inherited the host umask. On POSIX hosts, a fresh `data` directory, SQLite/media/backup files, and a copied `.env` could be readable by unrelated local accounts when the host used a permissive default such as `022`.
