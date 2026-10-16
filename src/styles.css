@@ -862,8 +862,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .module-name-heading { min-width: 0; flex: 1; margin: 0; color: #262a38; font-size: 14px; font-weight: 680; line-height: normal; letter-spacing: normal; }
 .module-name-button { display: block; width: 100%; min-width: 0; overflow-wrap: anywhere; border: 0; padding: 8px 0; background: transparent; color: inherit; text-align: left; font-family: inherit; font-weight: inherit; font-size: inherit; line-height: inherit; }
 .module-title-edit-form { display: flex; flex: 1; min-width: 0; align-items: center; gap: 7px; }
-.module-title-edit-form input { flex: 1; width: 100%; min-width: 0; height: 36px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--ink); font: inherit; }
-.module-title-edit-form .button { flex: 0 0 auto; min-height: 36px; padding: 0 10px; font-size: 12px; white-space: nowrap; }
+/* Keep inline module renaming controls easy to use without widening the curriculum header. */
+.module-title-edit-form input { flex: 1; width: 100%; min-width: 0; min-height: 40px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--ink); font: inherit; }
+.module-title-edit-form .button { flex: 0 0 auto; min-height: 40px; padding: 0 10px; font-size: 12px; white-space: nowrap; }
 .module-item-count { color: var(--muted); font-size: 11px; margin-left: 5px; }
 .module-tools, .lesson-tools { display: flex; gap: 2px; align-items: center; margin-left: auto; }
 /* Keep curriculum reorder and delete actions easy to hit without changing their compact icon-only layout. */
