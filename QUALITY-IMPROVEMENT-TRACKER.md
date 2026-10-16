@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Expose the platform reset confirmation requirement
+
+- **Reviewed:** The administrator platform-reset confirmation UI, its destructive-action gate, verified-backup preparation flow, expiry and cancellation states, and the server-side exact-phrase confirmation contract.
+- **Improvement:** Added the shared visible “Required” cue and native `required` constraint to the reset confirmation phrase while preserving the existing `RESET` comparison and disabled action behavior.
+- **Why it helps:** Administrators can identify the required confirmation input from the interface and assistive technology before attempting an irreversible reset, with the field semantics matching the existing action gate.
+- **Backend review:** Backup verification, confirmation ownership, expiry, cancellation, exact-phrase validation, authorization, and reset transaction behavior remain unchanged; no server or data-contract change was needed.
+- **Checked:** Added `tests/client/platform-reset-phrase-required.test.js`; the focused regression passed 1/1 and the full `npm test -- --test-reporter=spec` suite passed 965/965. `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and the Vite root were checked while the app was running. The reset flow was not submitted and no credentials, forms, uploads, account/course actions, or application data were changed.
+- **Commit title:** `fix(a11y): mark reset confirmation required`.
+- **Commit description:** `Expose the platform reset confirmation phrase's existing action gate through native and visible required-field semantics.`
+
 ## 2026-10-16 — Show required cues in the backup job editor
 
 - **Reviewed:** The administrator backup-job form, its native required constraints, server-side job normalization, destination validation, and the existing required-field presentation used across settings and management forms.
