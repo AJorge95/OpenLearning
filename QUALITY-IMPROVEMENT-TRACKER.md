@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 104: enlarge learner video action targets
+
+- **Reviewed:** The learner video toolbar structure, play/rewind/mute/fullscreen and caption controls, narrow-screen grid layout, keyboard focus treatment, watch-progress semantics, protected media behavior, and the related learner player and course-service boundaries.
+- **Improvement:** Increase the primary video action buttons to consistent 40px square targets, enlarge the rewind control to match the compact toolbar, and keep the caption picker at a 40px target across desktop and responsive layouts. The existing labels, pressed state, disabled state, focus ring, watch-progress behavior, and fullscreen/caption placement remain unchanged.
+- **Why it helps:** Learners using touch devices can more reliably activate video actions, especially at narrow widths, while the existing compact toolbar grid remains intact and the native volume slider keeps its intentional 24px pointer target.
+- **Backend review:** Protected video access, watch-progress validation, rewind bounds, caption authorization, and fullscreen/client recovery paths already match the current player contract; no backend change was indicated.
+- **Checked:** The focused player suite passed 28/28; the full `npm test -- --test-reporter=spec` suite passed 972/972; `npm run typecheck`, `npm run build`, and `git diff --check` passed. At a temporary 390px viewport, the public shell stayed within a 375px document width with one heading, named controls, and no browser warning/error diagnostics. Authenticated learner-player interaction remains source- and regression-verified because this development browser session has no authenticated fixture; no credentials, forms, media, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): enlarge learner video targets`.
+- **Commit description:** `Give learner video controls consistent touch targets across responsive player layouts.`
+
 ## 2026-10-16 — Cycle 103: enlarge the staff sign-out target
 
 - **Reviewed:** The staff sidebar account block, icon-only sign-out semantics, responsive sidebar layout, keyboard focus treatment, sign-out request handling, session destruction, and the related staff-route authorization boundaries.
