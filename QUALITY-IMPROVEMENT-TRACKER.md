@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 121: enlarge custom-select option targets
+
+- **Reviewed:** The shared `AppSelect` trigger and portaled listbox structure, pointer and keyboard selection, active/selected/disabled states, compact and filter variants, responsive positioning, and the server-backed course, account, path, competency, and settings filters that consume the control.
+- **Improvement:** Raise the shared custom-select option target from a 38px minimum height to 40px, while preserving the existing option labels, `aria-selected`/`aria-disabled` semantics, active and selected palette states, keyboard navigation, and compact menu spacing. Added a readable CSS comment and `tests/client/app-select-option-target.test.js`.
+- **Why it helps:** Learners, staff, and administrators can select dense filter and form options more reliably with a pointer or touch device across every shared dropdown, without changing values, validation, or menu behavior.
+- **Backend review:** The consuming course, account, learning-path, competency, and settings endpoints already validate selector values, enforce role access, bound pagination, and preserve mutation feedback; no backend change was indicated.
+- **Checked:** `node --test tests/client/app-select-option-target.test.js` passed (1/1); the full `npm test -- --test-reporter=spec` suite passed (988/988), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, current-user, CSRF, version, and Vite-root probes returned 200; anonymous admin backups returned 401 and anonymous CSRF returned no `Set-Cookie`. The live `/login` shell exposed one heading plus named username/password controls, and browser warning/error diagnostics were empty. Authenticated dropdown interaction remains source- and regression-verified because this development browser session has no authenticated fixture; no credentials, forms, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): enlarge custom-select option targets`.
+- **Commit description:** `Give shared custom-select options a reliable touch target while preserving their listbox semantics and compact styling.`
+
 ## 2026-10-16 — Cycle 120: enlarge password visibility targets
 
 - **Reviewed:** The shared password field used by sign-in, registration, setup, account settings, account creation, and administrator reset forms; its Show/Hide action semantics, input spacing, keyboard focus, responsive field layout, and the related authentication/session and validation boundaries.
