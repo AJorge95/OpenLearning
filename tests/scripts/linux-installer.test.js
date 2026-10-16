@@ -6,6 +6,7 @@ import test from 'node:test';
 
 const installer = fs.readFileSync(new URL('../../scripts/install.sh', import.meta.url), 'utf8');
 const readme = fs.readFileSync(new URL('../../README.md', import.meta.url), 'utf8');
+const server = fs.readFileSync(new URL('../../server/index.js', import.meta.url), 'utf8');
 const installerPath = fileURLToPath(new URL('../../scripts/install.sh', import.meta.url));
 const bashPath = process.platform === 'win32' && fs.existsSync('C:\\Program Files\\Git\\bin\\bash.exe')
   ? 'C:\\Program Files\\Git\\bin\\bash.exe'
@@ -23,6 +24,55 @@ test('Linux installer targets supported systems and repository main', () => {
   assert.match(installer, /systemd is required/);
   assert.match(installer, /PORT="5173"/);
   assert.match(installer, /DEFAULT_PORT="\$PORT"/);
+  assert.match(installer, /apt-get install .*iproute2/);
+  assert.match(installer, /dnf install .*iproute/);
+});
+
+test('installer reports the kernel-selected server IPv4 without network probing', (context) => {
+  const detector = installer.match(/detect_server_ipv4\(\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(detector, 'expected the server IPv4 discovery helper');
+  assert.match(detector, /ip -4 route get 1\.1\.1\.1/);
+  assert.match(installer, /http:\/\/\$SERVER_IPV4:\$SERVICE_PORT/);
+  assert.doesNotMatch(installer, /curl[^\n]*1\.1\.1\.1|ping[^\n]*1\.1\.1\.1/);
+  assert.match(readme, /prints the IPv4 address selected by the host's default route/);
+  assert.match(readme, /selected address may be private/);
+
+  const run = (route, defaults, addresses) => spawnSync(bashPath, ['-c', `
+    set -eu
+    ${detector}
+    ip() {
+      case "$*" in
+        "-4 route get 1.1.1.1") printf '%s\\n' "$MOCK_ROUTE" ;;
+        "-4 route show default") printf '%s\\n' "$MOCK_DEFAULTS" ;;
+        "-o -4 addr show dev ens192 scope global") printf '%s\\n' "$MOCK_ADDRESSES" ;;
+        *) return 1 ;;
+      esac
+    }
+    detect_server_ipv4
+  `], {
+    encoding: 'utf8',
+    env: { ...process.env, MOCK_ROUTE: route, MOCK_DEFAULTS: defaults, MOCK_ADDRESSES: addresses },
+  });
+
+  const routeSelected = run('1.1.1.1 via 10.123.89.1 dev ens192 src 10.123.89.19 uid 0', '', '');
+  if (routeSelected.error?.code === 'ENOENT' || routeSelected.stderr?.includes('NtCreateDirectoryObject')) {
+    context.skip('Bash startup is unavailable on this test host.');
+    return;
+  }
+  assert.equal(routeSelected.status, 0, routeSelected.stderr);
+  assert.equal(routeSelected.stdout.trim(), '10.123.89.19');
+
+  const interfaceFallback = run('', 'default via 10.123.89.1 dev ens192 proto dhcp', '2: ens192 inet 10.123.89.19/24 brd 10.123.89.255 scope global dynamic ens192');
+  assert.equal(interfaceFallback.status, 0, interfaceFallback.stderr);
+  assert.equal(interfaceFallback.stdout.trim(), '10.123.89.19');
+
+  const noRoute = run('', '', '');
+  assert.notEqual(noRoute.status, 0, 'return no guess when there is no route-selected address');
+});
+
+test('production startup guidance no longer advertises a placeholder server address', () => {
+  assert.doesNotMatch(server, /<server-external-ip>/);
+  assert.match(server, /reachable IPv4 address or DNS name/);
 });
 
 test('platform support check accepts supported releases and rejects unsupported ones', (context) => {

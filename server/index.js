@@ -144,7 +144,7 @@ function cleanupOrphanedMedia() {
 const server = app.listen(config.port, config.host, () => {
   console.log(`OpenLearning listening on ${config.host}:${config.port}`);
   if (config.nodeEnv === 'production') {
-    console.log(`Open the app at http://<server-external-ip>:${config.port} from a browser on another computer.`);
+    console.log(`Use the server's reachable IPv4 address or DNS name on port ${config.port} from a browser on another computer.`);
   } else {
     console.log(`Open the local development API at http://${config.host}:${config.port}`);
   }
