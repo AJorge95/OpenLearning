@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 107: enlarge course-editor curriculum action targets
+
+- **Reviewed:** The course-editor module and lesson action structure, reorder/delete/edit control names, keyboard focus treatment, desktop and narrow responsive layouts, in-flight disabled states, and the related curriculum mutation routes and regression coverage.
+- **Improvement:** Increase the shared module and lesson action buttons from 30×30px on the base layout and 36×36px at the narrow breakpoint to consistent 40×40px targets, while retaining the existing labels, handlers, hover states, disabled behavior, and compact icon-only presentation. Add an explicit palette-aware focus outline for the action group.
+- **Why it helps:** Course authors can more reliably rename, reorder, open details for, and remove curriculum items with a pointer or touch device, including in the dense editor header and narrow layout, without changing the underlying course structure or mutation semantics.
+- **Backend review:** Curriculum creation, rename, deletion, and reorder routes already re-check staff course ownership, validate direction and bounded titles, update positions transactionally, and require audit persistence; no backend change was indicated.
+- **Checked:** Added `tests/client/course-editor-action-target.test.js`; the focused regression passed 1/1, the full `npm test -- --test-reporter=spec` suite passed 975/975, `npm run typecheck`, `npm run build`, and `git diff --check` passed. The reloaded signed-out shell exposed one heading and named credential controls without a blank page; no credentials, forms, uploads, account/course actions, or application data were submitted or changed. Authenticated course-editor interaction remains source- and regression-verified because this development browser session has no authenticated staff fixture.
+- **Commit title:** `fix(a11y): enlarge course editor action targets`.
+- **Commit description:** `Give course-editor curriculum actions reliable touch targets across desktop and narrow layouts while preserving their existing semantics.`
+
 ## 2026-10-16 — Cycle 106: enlarge learner catalog search targets
 
 - **Reviewed:** The learner course-catalog search landmark, clear-filter and submit actions, narrow-layout behavior, accessible names, focus treatment, filter-reset behavior, and the related catalog query, pagination, access, and request-recovery paths.
