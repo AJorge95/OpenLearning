@@ -20,7 +20,8 @@ const preserve = {
   MEDIA_ROOT: mediaRoot,
   BACKUP_DIR: backupDir,
 };
-preserve.NODE_ENV = 'production';
+// The startup command selects its runtime mode; all settings live in this file.
+delete preserve.NODE_ENV;
 const portOverride = process.env.INSTALL_PORT_OVERRIDE || '';
 if (portOverride) {
   if (!/^\d+$/.test(portOverride) || !Number.isSafeInteger(Number(portOverride)) || Number(portOverride) < 1 || Number(portOverride) > 65_535) {
@@ -28,7 +29,8 @@ if (portOverride) {
   }
   preserve.PORT = String(Number(portOverride));
 } else {
-  preserve.PORT ||= '6173';
+  // 6173 was the old API-only default. Standard installs now use one port.
+  if (!preserve.PORT || preserve.PORT === '6173') preserve.PORT = '5173';
 }
 preserve.SESSION_SECRET ||= '';
 preserve.SETUP_TOKEN ||= '';

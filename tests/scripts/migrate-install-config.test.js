@@ -68,6 +68,20 @@ test('an explicit installer port override replaces a saved port while preserving
   });
 });
 
+test('updates consolidate the legacy API port and runtime mode without changing custom ports', () => {
+  for (const oldPort of ['', 'PORT=6173\n']) {
+    withFixture((root) => {
+      const migrated = migrate(root, `${oldPort}NODE_ENV=development\nSESSION_SECRET=existing-secret\n`);
+      assert.match(migrated, /PORT="5173"/);
+      assert.doesNotMatch(migrated, /NODE_ENV=/);
+    });
+  }
+  withFixture((root) => {
+    const migrated = migrate(root, 'PORT=6173\nSESSION_SECRET=existing-secret\n', '6173');
+    assert.match(migrated, /PORT="6173"/);
+  });
+});
+
 test('installer port migration rejects invalid overrides', () => {
   withFixture((root) => {
     const sourcePath = path.join(root, 'legacy.env');

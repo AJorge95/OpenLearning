@@ -140,8 +140,8 @@ has_required_node_runtime() {
 
 configured_port() {
   local environment_file="$1"
-  # Match server/config.js when reading a legacy environment file without PORT.
-  ENV_FILE="$environment_file" DEFAULT_PORT="6173" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || process.env.DEFAULT_PORT)'
+  local default_port="${2:-5173}"
+  ENV_FILE="$environment_file" DEFAULT_PORT="$default_port" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || process.env.DEFAULT_PORT)'
 }
 
 normalize_release_permissions() {
@@ -189,6 +189,8 @@ Usage: install.sh [--help]
 
 Installs or updates the OpenLearning systemd service from the latest main
 branch on Ubuntu 22.04+ and RHEL 9+ (including compatible derivatives).
+The web client and API share port 5173 and /etc/openlearning/.env.
+Set OPENLEARNING_PORT to explicitly select another port.
 Set OPENLEARNING_COMMIT to a full 40-character commit SHA to install that exact source revision.
 Use --check-support <distribution> <version> to check distro support without installing.
 Run as root, for example:
@@ -345,7 +347,7 @@ if [[ "$OLD_UNIT_PRESENT" == true ]]; then
   EXPECT_READY=false
   # Probe the currently running port before an explicit override changes the
   # migrated configuration; this preserves the stronger readiness check.
-  EXISTING_PORT="$(configured_port "$OLD_ENV_FILE")"
+  EXISTING_PORT="$(configured_port "$OLD_ENV_FILE" 6173)"
   if curl -fsS "http://127.0.0.1:$EXISTING_PORT/readyz" >/dev/null 2>&1; then EXPECT_READY=true; fi
   if [[ -e "$ENV_FILE" ]]; then
     CONFIG_SNAPSHOT="$(mktemp /tmp/openlearning-env.XXXXXX)"
@@ -361,7 +363,6 @@ else
     SETUP_TOKEN="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')"
     umask 077
     cat > "$ENV_FILE" <<EOF
-NODE_ENV=production
 PORT=$PORT
 DATA_DIR=$DATA_DIR
 BACKUP_DIR=$BACKUP_ROOT
@@ -462,7 +463,7 @@ User=openlearning
 Group=openlearning
 WorkingDirectory=$CURRENT_LINK
 EnvironmentFile=$ENV_FILE
-ExecStart=/usr/bin/node server/index.js
+ExecStart=/usr/bin/node scripts/start.js
 Restart=on-failure
 RestartSec=5
 UMask=0027
@@ -518,6 +519,10 @@ if [[ "$STARTED" == true ]]; then
     sleep 2
   done
 fi
+if [[ "$READY" == true ]]; then
+  log "Checking the browser page and its JavaScript/CSS assets on the application port."
+  if ! node scripts/check-web-client.js "http://127.0.0.1:$SERVICE_PORT"; then READY=false; fi
+fi
 if [[ "$READY" != true ]]; then
   log "Readiness check failed; restoring the previous release."
   systemctl stop "$SERVICE_NAME.service" || true
@@ -535,9 +540,6 @@ if [[ "$READY" != true ]]; then
   else
     rm -f "/etc/systemd/system/$SERVICE_NAME.service"
     systemctl disable "$SERVICE_NAME.service" >/dev/null 2>&1 || true
-  fi
-  if ! restore_environment_config; then
-    log "WARNING: Could not restore the previous service configuration from $CONFIG_SNAPSHOT."
   fi
   systemctl daemon-reload
   if [[ -n "${BACKUP_PATH:-}" && -d "$BACKUP_PATH" ]]; then
@@ -557,6 +559,11 @@ NODE
     chown -R openlearning:openlearning "${STORAGE_PATHS[2]}"
     chown openlearning:openlearning "${STORAGE_PATHS[3]}"
   fi
+  # Restore data using the migrated absolute paths before restoring the old
+  # environment, which can contain paths relative to the previous release.
+  if ! restore_environment_config; then
+    log "WARNING: Could not restore the previous service configuration from $CONFIG_SNAPSHOT."
+  fi
   if [[ "$OLD_UNIT_PRESENT" == true && "$WAS_ACTIVE" == true ]]; then systemctl start "$SERVICE_NAME.service" || true; fi
   journalctl -u "$SERVICE_NAME.service" -n 30 --no-pager >&2 || true
   fail "OpenLearning did not become ready. The prior code release has been restored; inspect the service logs."
@@ -565,12 +572,14 @@ RESTORE_CONFIG_ON_FAILURE=false
 RELEASE_FINALIZED=true
 
 FIREWALL_CONFIGURED=false
+FIREWALL_FAILED=false
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
   if ufw allow "$SERVICE_PORT/tcp"; then
     log "Allowed TCP port $SERVICE_PORT through the active UFW firewall."
     FIREWALL_CONFIGURED=true
   else
     log "WARNING: Could not add TCP port $SERVICE_PORT to UFW; configure it manually."
+    FIREWALL_FAILED=true
   fi
 fi
 if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
@@ -580,15 +589,20 @@ if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>
       FIREWALL_CONFIGURED=true
     else
       log "WARNING: Could not add TCP port $SERVICE_PORT to firewalld zone $FIREWALL_ZONE; configure it manually."
+      FIREWALL_FAILED=true
     fi
   else
     log "WARNING: Could not determine the firewalld zone for the server route; configure TCP port $SERVICE_PORT manually."
+    FIREWALL_FAILED=true
   fi
 fi
 if [[ "$FIREWALL_CONFIGURED" == false ]]; then
   log "No active UFW or firewalld firewall was configured. If another firewall is in use, allow inbound TCP port $SERVICE_PORT there."
 fi
 
+if [[ "$FIREWALL_FAILED" == true ]]; then
+  fail "The app passes local web checks, but firewall configuration failed. Allow TCP port $SERVICE_PORT before connecting from another computer."
+fi
 log "OpenLearning is ready on all IPv4 interfaces on port $SERVICE_PORT."
 if SERVER_IPV4="$(detect_server_ipv4)"; then
   log "From a browser that can reach this server's network, open http://$SERVER_IPV4:$SERVICE_PORT."

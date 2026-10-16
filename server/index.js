@@ -1,9 +1,7 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import { createServer } from 'node:http';
 import { performance } from 'node:perf_hooks';
 import express from 'express';
 import session from 'express-session';
-import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { config } from './config.js';
 import { appVersion } from './app-version.js';
@@ -23,29 +21,16 @@ import { programsRouter } from './routes-programs.js';
 import { isReadyToServe } from './readiness.js';
 import { isPlatformResetActive, platformResetGate } from './platform-reset.js';
 import { backupWriteGate, startBackupScheduler, stopBackupScheduler } from './backup-scheduler.js';
+import { createSecurityHeaders } from './security-headers.js';
+import { mountWebClient } from './web-client.js';
 
 const app = express();
+const server = createServer(app);
 let isShuttingDown = false;
 if (config.trustProxy) app.set('trust proxy', 1);
 
 app.disable('x-powered-by');
-app.use(helmet({
-  contentSecurityPolicy: config.nodeEnv === 'production' ? {
-    directives: {
-      defaultSrc: ["'self'"],
-      baseUri: ["'self'"],
-      fontSrc: ["'self'", 'data:'],
-      imgSrc: ["'self'", 'data:'],
-      mediaSrc: ["'self'", 'blob:'],
-      objectSrc: ["'none'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      connectSrc: ["'self'"],
-      frameAncestors: ["'none'"],
-    },
-  } : false,
-  crossOriginEmbedderPolicy: false,
-}));
+app.use(createSecurityHeaders(config.nodeEnv));
 app.use(noStoreApiResponses);
 app.use('/api', versionRouter);
 app.get('/healthz', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({ status: 'ok' }));
@@ -55,12 +40,6 @@ app.get('/readyz', (_req, res) => {
     ? res.json({ status: 'ok' })
     : res.status(503).json({ status: 'unavailable' });
 });
-app.use('/assets', express.static(path.join(config.clientDir, 'assets'), {
-  index: false,
-  maxAge: config.nodeEnv === 'production' ? '1y' : 0,
-  immutable: config.nodeEnv === 'production',
-}));
-app.use('/assets', (_req, res) => res.status(404).type('text/plain').send('Asset not found.'));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 const sessionStore = new SQLiteSessionStore(db, {
@@ -115,12 +94,7 @@ app.use('/media', (_req, res) => res.status(404).json({ error: 'Media route not 
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found.', code: 'not_found' }));
 
-if (fs.existsSync(path.join(config.clientDir, 'index.html'))) {
-  app.get('/', (_req, res) => res.sendFile(path.join(config.clientDir, 'index.html')));
-  app.get('*splat', (_req, res) => res.sendFile(path.join(config.clientDir, 'index.html')));
-} else {
-  app.get('/', (_req, res) => res.status(200).send('OpenLearning API is running. Start the Vite client with npm run dev, or build the client with npm run build.'));
-}
+const webClient = await mountWebClient(app, server, config);
 
 app.use(errorHandler);
 
@@ -141,12 +115,12 @@ function cleanupOrphanedMedia() {
   });
 }
 
-const server = app.listen(config.port, config.host, () => {
+server.listen(config.port, config.host, () => {
   console.log(`OpenLearning listening on ${config.host}:${config.port}`);
   if (config.nodeEnv === 'production') {
     console.log(`Use the server's reachable IPv4 address or DNS name on port ${config.port} from a browser on another computer.`);
   } else {
-    console.log(`Open the local development API at http://${config.host}:${config.port}`);
+    console.log(`Open OpenLearning at http://${config.host}:${config.port}`);
   }
   console.log(`Database: ${config.dbPath}`);
   console.log(`Course media: ${config.mediaRoot}`);
@@ -161,6 +135,7 @@ function shutdown() {
   isShuttingDown = true;
   writeSystemLog('info', 'server', 'OpenLearning server is shutting down');
   const backupShutdown = stopBackupScheduler();
+  const clientShutdown = webClient?.close();
   const shutdownDeadline = setTimeout(() => {
     writeSystemLog('warn', 'server', 'Graceful shutdown exceeded 30 seconds; closing active connections');
     server.closeAllConnections();
@@ -168,7 +143,7 @@ function shutdown() {
   shutdownDeadline.unref?.();
   server.close(() => {
     clearTimeout(shutdownDeadline);
-    void backupShutdown.finally(() => {
+    void Promise.all([backupShutdown, clientShutdown]).finally(() => {
       sessionStore.close();
       db.close();
       process.exit(0);

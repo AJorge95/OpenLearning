@@ -56,7 +56,9 @@ The installer serves both the built frontend and API on port 5173 by default, bo
 curl -fsSL https://raw.githubusercontent.com/AJorge95/OpenLearning/main/scripts/install.sh | sudo env OPENLEARNING_PORT=5173 bash
 ```
 
-Without this override, updates preserve the saved `PORT`. The installer prints the IPv4 address selected by the host's default route as the suggested browser URL, or asks you to inspect `ip -4 addr` if it cannot determine one. The selected address may be private; browsers must have a route to it, or use the public IP/DNS name with the required NAT and firewall rules. There is no separate Vite process in production: the installed service serves the UI and API together on the selected port. Docker and direct Node startup retain their 6173 defaults. The installer does not enable a firewall, configure external cloud firewall rules, a reverse proxy, or a TLS certificate. If neither UFW nor firewalld is active, allow the port through your firewall manually. When changing a port, remove the previous local firewall allowance separately if it is no longer needed; external cloud firewall rules, reverse-proxy settings, and TLS configuration must also be adjusted separately. Restrict direct access or configure HTTPS termination separately. Set `TRUST_PROXY=true` in the environment file only when a trusted reverse proxy supplies forwarding headers, then restart the service with `sudo systemctl restart openlearning`.
+OpenLearning uses one HTTP port, `5173`, for the page, API, media, and development hot reload. The standard installer command automatically moves the former default API port `6173` to `5173`; custom saved ports are preserved, and `OPENLEARNING_PORT` explicitly selects a different port when needed. The installer prints the IPv4 address selected by the host's default route as the browser URL, or asks you to inspect `ip -4 addr` if it cannot determine one. The selected address may be private; the browser must have a route to it. The installer configures an active local UFW/firewalld firewall, checks the page and its JavaScript/CSS as well as application health, and reports an error if those checks or firewall changes fail. It does not enable a firewall or configure external cloud firewalls, NAT, a reverse proxy, or TLS. Previous firewall allowances are retained; remove an old allowance separately when no longer needed. Set `TRUST_PROXY=true` only behind a trusted reverse proxy and restart with `sudo systemctl restart openlearning`.
+
+There is one active settings file: `/etc/openlearning/.env` for an installed service, or `.env` when running a checkout. The installer copies legacy settings into the installed file and preserves data paths and secrets. Both startup commands use the same settings; there are no `.env.development` or `.env.production` files to maintain.
 
 When firewalld is active, the installer opens the application port only in the zone bound to the interface selected by the default route, or in the default zone when that interface has no explicit zone. It does not open the port in unrelated active zones such as a Docker bridge zone. If the route interface or zone cannot be determined, configure the port manually.
 
@@ -111,7 +113,7 @@ docker compose -f compose.yaml -f compose.initial-setup.yaml up -d --pull always
 cat /srv/openlearning/setup_token
 ```
 
-Open the server on port 6173, complete the setup wizard with the displayed token, then redeploy without the setup override and remove its host file:
+Open the server on port 5173, complete the setup wizard with the displayed token, then redeploy without the setup override and remove its host file:
 
 ```sh
 docker compose -f compose.yaml up -d --pull always --no-build
@@ -175,7 +177,7 @@ docker secret create openlearning_setup_token ./openlearning_setup_token
 cat ./openlearning_setup_token
 ```
 
-Deploy the stack with the initial-setup override, complete the wizard at `http://<storage-node>:6173`, then redeploy without that override and remove the one-time secret:
+Deploy the stack with the initial-setup override, complete the wizard at `http://<storage-node>:5173`, then redeploy without that override and remove the one-time secret:
 
 ```sh
 docker stack deploy --with-registry-auth -c docker-stack.yml -c docker-stack.initial-setup.yml openlearning
@@ -185,7 +187,7 @@ rm ./openlearning_setup_token
 rm ./openlearning_session_secret
 ```
 
-The stack publishes port 6173 in host mode and sets `TRUST_PROXY=false` by default. Export `TRUST_PROXY=true` before `docker stack deploy` only when traffic arrives through a trusted reverse proxy. Restrict the port with the host firewall to the proxy and intended clients. In the backup settings, use `/var/backups/openlearning` or another path mounted into the service.
+The stack publishes port 5173 in host mode and sets `TRUST_PROXY=false` by default. Export `TRUST_PROXY=true` before `docker stack deploy` only when traffic arrives through a trusted reverse proxy. Restrict the port with the host firewall to the proxy and intended clients. In the backup settings, use `/var/backups/openlearning` or another path mounted into the service.
 
 Before upgrading, create and verify a backup. Build and push a new immutable image tag, set `OPENLEARNING_IMAGE` to it, and redeploy `docker-stack.yml`. Swarm's rollback restores the prior image if an update fails its health check; it does not roll back SQLite migrations or restore the bind-mounted data. Keep an independent copy of backups off the storage node. To recover on a replacement node, restore the data and backup directories there before moving the `openlearning-data` label.
 
@@ -200,7 +202,7 @@ npm install
 cp .env.example .env
 ```
 
-For deployment, set `NODE_ENV=production` and replace `SESSION_SECRET` in `.env` with a random value. You can generate one with Node:
+Use the same `.env` for both startup commands. Replace `SESSION_SECRET` with a random value before deployment. You can generate one with Node:
 
 ```sh
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
@@ -215,17 +217,17 @@ npm run build
 npm start
 ```
 
-Open `http://localhost:6173`. On the first launch, the two-step setup wizard asks for the bootstrap token, platform name, optional icon and color palette, initial administrator credentials, public connection protocol, and registration policy. Setup can only be completed once. When registration is enabled, new accounts receive the learner role. Administrators can update branding, protocol, registration access, and the account cap from **Settings**. A limit of `0` means unlimited accounts; a positive limit counts all accounts, including administrators and moderators.
+Open `http://localhost:5173`. On the first launch, the two-step setup wizard asks for the bootstrap token, platform name, optional icon and color palette, initial administrator credentials, public connection protocol, and registration policy. Setup can only be completed once. When registration is enabled, new accounts receive the learner role. Administrators can update branding, protocol, registration access, and the account cap from **Settings**. A limit of `0` means unlimited accounts; a positive limit counts all accounts, including administrators and moderators.
 
 Service monitors can use `/healthz` to check that the HTTP process is responding. `/readyz` reports ready only when SQLite has a schema-migration version, setup is complete (`setup_complete = '1'`), and at least one enabled administrator account exists. It returns HTTP 503 when any readiness check fails or while the server is draining during shutdown.
 
-For local development, run the Vite client and API together:
+For local development with hot reload, run:
 
 ```sh
 npm run dev
 ```
 
-The development client is available at `http://127.0.0.1:5173` and proxies API and media requests to the Express server on port 6173.
+Both commands use the same `PORT` and `.env`. `npm run dev` serves live source with Vite embedded in Express, including hot reload on the same listener. `npm start` serves the built client with production security settings. The commands select their runtime mode automatically; no environment-file changes or second port are needed.
 
 ## App version
 
@@ -240,7 +242,7 @@ npm test
 npm run typecheck
 ```
 
-The suite uses Node's built-in test runner, in-memory and isolated temporary SQLite databases, and temporary filesystem fixtures. It does not start the application server or use the configured application data directory. `npm run build` runs the strict TypeScript check before creating the production client bundle.
+The suite uses Node's built-in test runner, in-memory and isolated temporary SQLite databases, temporary filesystem fixtures, and isolated HTTP listeners. It does not use the configured application data directory. `npm run build` runs the strict TypeScript check before creating the production client bundle.
 
 ## Roles and permissions
 
@@ -264,8 +266,8 @@ Environment variables can be set in `.env` or in the process environment:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `NODE_ENV` | `development` | Accepted values are `development`, `test`, and `production`. Set to `production` for deployment cookies and production security headers. |
-| `PORT` | `6173` | HTTP TCP port from 1 to 65535. Invalid values stop startup. |
+| `NODE_ENV` | Selected by startup command | `npm start` selects production; `npm run dev` selects development, using the same settings file. Tests can use `test`. |
+| `PORT` | `5173` | Single HTTP TCP port for the web client, API and media, from 1 to 65535. Invalid values stop startup. |
 | `DATA_DIR` | `./data` | Parent directory used to derive database and media paths when their overrides are unset. |
 | `DB_PATH` | `./data/openlearning.sqlite` | SQLite database file path. If unset, defaults to `openlearning.sqlite` inside `DATA_DIR`. |
 | `MEDIA_ROOT` | `./data/course-media` | Root directory for course media; if unset, defaults to `course-media` inside `DATA_DIR`. Each course gets its own subdirectory. |
