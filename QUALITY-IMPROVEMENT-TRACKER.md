@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 162: verify pre-reset media backup contents
+
+- **Reviewed:** Current project guidance and working-tree state; the signed-out login route and API health/readiness endpoints; the reset preparation/confirmation sequence; media-copy validation; manifest consumers; and the existing platform-reset regression coverage. The recent installer, backup-scheduler, and lifecycle cycles were checked to avoid repeating those changes.
+- **Problem:** Before the destructive reset, media backup verification compared only file sizes. A same-size corrupted copy could therefore be treated as a complete restore point.
+- **Change:** Stream media files into the reset backup while computing SHA-256, re-read each persisted copy to verify its content, and record deterministic per-file relative paths, byte counts, and hashes in the reset manifest. The copy remains streaming and does not load large media into memory. Added a nested-file manifest assertion and a same-size corruption regression in `tests/server/platform-reset.test.js`.
+- **Why it helps:** Reset confirmation is enabled only after the backup's media bytes match the source stream; operators also retain per-file digests for later integrity checks. This extra verification is scoped to the safety-critical reset backup.
+- **Checked:** Platform-reset tests passed 10/10, including injected same-size corruption; full `npm test -- --test-reporter=dot`, `npm run build` (including typecheck), and `git diff --check` passed. Local `/healthz`, `/readyz`, and Vite `/login` probes returned 200. No UI runtime change, production service, host, or data was changed.
+- **Commit title:** `fix(reset): verify pre-reset media backup contents`.
+- **Commit description:** `Hash media while streaming reset backups, verify the persisted copies, and record per-file integrity metadata so same-size corruption cannot produce a falsely complete reset restore point.`
+
 ## 2026-10-16 — Cycle 161: recheck service lifecycle and cleanup boundaries
 
 - **Reviewed:** Fresh local `/healthz`, `/readyz`, and Vite `/login` responses; the server's SIGINT/SIGTERM shutdown sequence and readiness short-circuit; backup queue draining; startup orphaned-media cleanup age/name/reference rules; the generated systemd unit; and the focused lifecycle tests.
