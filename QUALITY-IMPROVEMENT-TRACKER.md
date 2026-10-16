@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 171: bound review around uncommitted final-exam and restore work — no separate change indicated
+
+- **Reviewed:** Started the local applications first; preserved the existing OpenLearning listener on `127.0.0.1:5173`; inspected the current tracker, live management UI, API probes, and the entire dirty scope spanning final-exam question selection and attempts, course groups, restore tooling, schema migrations, installer/docs, learner/manage UI, and related tests.
+- **Result:** No independent interface, accessibility, responsive, reliability, validation, authorization, maintainability, or performance change was selected. The current worktree is a single broad in-progress feature scope, so a separate implementation would overlap it and risk committing partial user work.
+- **Current evidence:** The live `/manage/courses` surface rendered one `Courses` heading, named filters/search, a structured course table, and labeled row actions; `/healthz`, `/readyz`, `/api/version`, `/login`, and `/manage/courses` returned HTTP 200. `git diff --check` passed. The full `npm test -- --test-reporter=dot` run currently fails in existing course-overview, quiz-save, publishing, and historical-migration regressions introduced by the dirty scope, while `npm run typecheck` fails in the in-progress final-exam learner/editor state. The new final-exam and restore paths do not yet have matching dedicated regression coverage in the current tree.
+- **Why no code change:** Complete and test the current final-exam, course-group, restore, and migration work first; then rerun the full suite, typecheck, build, and focused UI/API checks before selecting another improvement. No user code, data, credentials, deployment, or remote service was changed by this cycle.
+- **Checked:** Read-only live probes and browser accessibility inspection passed as described above; `git diff --check` passed; the worktree's pre-existing changes and untracked files remain unstaged and untouched.
+- **Commit title:** `docs(quality): record in-progress feature boundary review`.
+- **Commit description:** `Record the bounded Cycle 171 review and preserve the unfinished final-exam and restore scope for focused completion and regression coverage.`
+
 ## 2026-10-16 — Cycle 170: bounded post-startup consolidation review — no distinct change indicated
 
 - **Reviewed:** The newly pushed single-port startup and embedded-Vite implementation from Cycle 169; its CSP, production asset, installer rollback, migration, and shared-settings boundaries; the current signed-out login shell; remaining responsive and focus rules; authentication/session-cookie selection; graceful shutdown; backup/media cleanup; structured API errors; and the current clean branch state.
