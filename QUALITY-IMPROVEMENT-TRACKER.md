@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 101: enlarge the course-rail close target
+
+- **Reviewed:** The learner lesson-player rail toggle and close control, responsive rail stacking, keyboard focus restoration, named disclosure semantics, and the related course navigation, media, watch-progress, and access boundaries.
+- **Improvement:** Give the course-content rail’s icon-only close button a consistent 40px square hit area and the same palette-aware hover boundary as the opening rail toggle. Its `Hide course content` name, controlled disclosure state, and focus restoration remain unchanged.
+- **Why it helps:** Learners can more reliably activate the close action with a pointer or touch device, especially when the rail is stacked below the player, while the compact rail header keeps its existing layout.
+- **Backend review:** Course navigation, protected media, watch-progress, and lesson-access routes already validate the current learner and course boundary; no backend change was indicated.
+- **Checked:** Focused course-rail target and learner-player checks passed 10/10; the full `npm test -- --test-reporter=spec` suite passed 969/969; `npm run typecheck`, `npm run build`, and `git diff --check` passed. The signed-out live shell still rendered cleanly; authenticated player interaction was source- and regression-checked because this session has no authenticated browser fixture.
+- **Commit title:** `fix(a11y): enlarge course rail close target`.
+- **Commit description:** `Give the learner course-content rail close action a reliable hit area while preserving its keyboard semantics.`
+
 ## 2026-10-16 — Cycle 100: keep backup history timestamps UTC-aware
 
 - **Reviewed:** Backup settings form semantics, responsive job/history layout, polling and refresh ordering, schedule/run status feedback, admin backup routes, backup retention, and platform-reset recovery boundaries.
