@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 import { sessionUserIdFromJson } from './session-data.js';
 
-const latestSchemaVersion = 38;
+const latestSchemaVersion = 39;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -904,6 +904,25 @@ export function migrateDatabase(database = db) {
       const hasCourseLearningState = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'course_learning_state'").get();
       if (hasCourseLearningState) database.exec('CREATE INDEX IF NOT EXISTS course_learning_state_course_user ON course_learning_state(course_id, user_id)');
       database.prepare('INSERT INTO schema_migrations (version) VALUES (38)').run();
+    });
+    migration();
+  }
+
+  if (current < 39) {
+    const migration = database.transaction(() => {
+      // Approved-account views filter by registration status before grouping roles.
+      // Keep narrow historical fixtures migratable when account fields are absent.
+      const usersColumns = new Set(database.prepare('PRAGMA table_info(users)').all().map(({ name }) => name));
+      if (usersColumns.has('registration_status') && usersColumns.has('role') && usersColumns.has('username')) {
+        database.exec(`
+          CREATE INDEX users_registration_management_order ON users(
+            registration_status,
+            CASE role WHEN 'admin' THEN 1 WHEN 'moderator' THEN 2 ELSE 3 END,
+            username COLLATE NOCASE
+          );
+        `);
+      }
+      database.prepare('INSERT INTO schema_migrations (version) VALUES (39)').run();
     });
     migration();
   }

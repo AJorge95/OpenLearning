@@ -6,7 +6,7 @@ import test, { after, before } from 'node:test';
 import Database from 'better-sqlite3';
 
 const fixturePrefix = 'openlearning-database-migrations-';
-const expectedLatestMigrationVersion = 38;
+const expectedLatestMigrationVersion = 39;
 const configEnvironment = {
   NODE_ENV: 'test',
   DATA_DIR: '',
@@ -100,6 +100,15 @@ test('fresh startup applies every migration and can be rerun without changing th
   const courseStatePlan = database.prepare(`EXPLAIN QUERY PLAN
     SELECT user_id FROM course_learning_state WHERE course_id = ?`).all('course-id').map(({ detail }) => detail).join('\n');
   assert.match(courseStatePlan, /USING COVERING INDEX course_learning_state_course_user/);
+  const accountManagementIndexes = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'users'").all().map(({ name }) => name));
+  assert.ok(accountManagementIndexes.has('users_registration_management_order'));
+  const approvedAccountListPlan = database.prepare(`EXPLAIN QUERY PLAN
+    SELECT id, username, email, role, disabled, registration_status, created_at FROM users
+    WHERE registration_status = ?
+    ORDER BY CASE role WHEN 'admin' THEN 1 WHEN 'moderator' THEN 2 ELSE 3 END, username COLLATE NOCASE
+    LIMIT ? OFFSET ?`).all('approved', 50, 0).map(({ detail }) => detail).join('\n');
+  assert.match(approvedAccountListPlan, /USING INDEX users_registration_management_order/);
+  assert.doesNotMatch(approvedAccountListPlan, /TEMP B-TREE/);
   assert.deepEqual(database.prepare('SELECT key, value FROM app_settings ORDER BY key').all(), [
     { key: 'platform_name', value: '' },
     { key: 'registration_approval_required', value: '0' },
