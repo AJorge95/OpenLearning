@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const editorSource = fs.readFileSync(path.join(repositoryRoot, 'src/pages-manage.tsx'), 'utf8');
+const styles = fs.readFileSync(path.join(repositoryRoot, 'src/styles.css'), 'utf8');
 const editorStart = editorSource.indexOf('export function CourseEditorPage()');
 const editorEnd = editorSource.indexOf('\nexport function CourseAccessPage()', editorStart);
 const courseEditor = editorSource.slice(editorStart, editorEnd);
@@ -30,4 +31,14 @@ test('module rename saves only the matching module in the current course', () =>
   assert.ok(saveSource.includes('await api.patch(`/api/manage/modules/${module.id}`, { title: normalizedTitle });'));
   assert.match(saveSource, /moduleTitleSaveRequestRef\.current = true/);
   assert.match(courseEditor, /setEditingModuleTitle\(null\); setSavingModuleTitleId\(''\); pendingModuleTitleFocusRef\.current = ''[\s\S]*?\}, \[route\.courseId\]\);/);
+});
+
+test('module title editor keeps its field and actions at reliable touch targets', () => {
+  const inputRule = styles.match(/\.module-title-edit-form input\s*\{([^}]*)\}/)?.[1];
+  const actionRule = styles.match(/\.module-title-edit-form \.button\s*\{([^}]*)\}/)?.[1];
+
+  assert.ok(inputRule, 'expected inline module title input styles');
+  assert.ok(actionRule, 'expected inline module title action styles');
+  assert.match(inputRule, /min-height:\s*40px/);
+  assert.match(actionRule, /min-height:\s*40px/);
 });

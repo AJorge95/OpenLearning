@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 140: align inline module rename controls
+
+- **Reviewed:** The staff course-editor module heading, inline rename field, Save title and Cancel actions, narrow wrapped layout, Escape/focus restoration, rename validation, course/module transaction, authorization, and audit behavior.
+- **Improvement:** Raise the inline module rename field and its Save/Cancel actions from a 36px override to a consistent 40px minimum target, preserving the compact curriculum header, disabled/saving states, accessible labels, Escape handling, and existing rename handler.
+- **Why it helps:** Course authors can edit and finish module renames more reliably with a pointer, touch device, or keyboard, including on narrow screens, without widening the curriculum editor or changing rename semantics.
+- **Backend review:** Module-title normalization, length validation, course ownership checks, transactional course/module updates, audit handling, and stale-route guards were reviewed read-only; the existing server contract already supports this client-only target improvement, so no backend change was indicated.
+- **Checked:** Focused module-title and curriculum accessibility checks passed (6/6); the full `npm test -- --test-reporter=spec` suite passed (1007/1007); `npm run build` including strict typecheck, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, CSRF, and Vite `/login` probes returned 200 without response cookies. The signed-out in-app browser rendered a non-blank login shell with one heading and named username/password controls; authenticated course-editor interaction remains source- and regression-verified, and no credentials, course edits, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): align module rename targets`.
+- **Commit description:** `Give inline module renaming reliable touch targets while preserving the compact course-editor layout and existing save behavior.`
+
 ## 2026-10-16 — Cycle 139: align account-count refresh target
 
 - **Reviewed:** The administrator Settings account-cap section, registered-account count refresh action, text-only live status region, narrow form layout, loading/disabled feedback, stale-response cancellation, and the account-limit validation and persistence boundaries.
