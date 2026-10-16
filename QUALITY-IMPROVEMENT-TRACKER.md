@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 122: keep the course-rail disclosure target on narrow screens
+
+- **Reviewed:** The learner lesson-player course-content disclosure and close controls, their named disclosure state, focus restoration, narrow stacked layout, and the related course navigation, protected media, watch-progress, and access paths.
+- **Improvement:** Keep the opening course-content disclosure at a 40×40px target at the narrow breakpoint and add an explicit palette-aware focus outline. Its `Show/Hide course content` name, `aria-expanded`/`aria-controls` contract, rail layout, and focus-restoration behavior remain unchanged. Added `tests/client/course-rail-toggle-target.test.js`.
+- **Why it helps:** Learners can reliably open or hide course content on a phone-sized layout, where the previous 34×34px target was smaller than the shared touch-target standard, without widening the lesson heading or changing navigation behavior.
+- **Backend review:** Course navigation, lesson access, protected media, watch-progress, and completion routes already validate the current learner and course boundary; no backend change was indicated.
+- **Checked:** The focused course-rail target checks passed (2/2); the full `npm test -- --test-reporter=spec` suite passed (989/989), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, version, and Vite-root probes returned 200; anonymous CSRF returned no `Set-Cookie`, and anonymous admin backups returned 401. The live `/login` shell exposed one heading and named username/password controls with no browser warning/error diagnostics. Authenticated lesson-player interaction remains source- and regression-verified because this development browser session has no authenticated fixture.
+- **Commit title:** `fix(a11y): keep course rail toggle target`.
+- **Commit description:** `Keep the learner course-content disclosure easy to hit on narrow screens while preserving its existing state and focus semantics.`
+
 ## 2026-10-16 — Cycle 121: enlarge custom-select option targets
 
 - **Reviewed:** The shared `AppSelect` trigger and portaled listbox structure, pointer and keyboard selection, active/selected/disabled states, compact and filter variants, responsive positioning, and the server-backed course, account, path, competency, and settings filters that consume the control.

@@ -429,8 +429,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .player-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 19px; }
 .player-heading p { margin: 0 0 5px; color: var(--muted); font-size: 12px; }
 .player-heading h1 { margin: 0; font-size: 27px; line-height: 1.2; }
+/* Keep the course-content disclosure easy to hit on narrow screens without widening the heading. */
 .rail-toggle { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--line); color: #555b6c; background: #fff; border-radius: 4px; }
 .rail-toggle:hover { color: var(--purple); border-color: var(--purple-border-strong); }
+.rail-toggle:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; border-color: var(--purple); }
 .video-player-frame { width: 100%; min-width: 0; }
 .video-player-frame:fullscreen { display: flex; flex-direction: column; width: 100vw; height: 100vh; height: 100dvh; background: #101117; }
 .video-player-frame:fullscreen .video-stage { flex: 1 1 0; min-height: 0; max-height: none; aspect-ratio: auto; }
@@ -1421,7 +1423,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .player-main-column { padding: 18px 16px 33px; }
   .player-heading h1 { font-size: 22px; }
   .player-heading p { font-size: 11px; }
-  .rail-toggle { width: 34px; height: 34px; }
+  .rail-toggle { width: 40px; height: 40px; }
   .video-stage { min-height: 210px; max-height: none; }
   .video-missing { min-height: 210px; }
   .lesson-video-controls { gap: 8px; min-height: 54px; padding: 8px; }
