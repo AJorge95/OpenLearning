@@ -1524,7 +1524,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .access-user { grid-column: 1 / -1; }
   .access-row > div:last-child { justify-self: end; }
   .access-search { max-width: none; }
-  .access-search .button { min-height: 36px; padding: 0 10px; font-size: 11px; }
+  /* Keep the narrow access search submit aligned with the surrounding touch targets. */
+  .access-search .button { min-height: 40px; padding: 0 10px; font-size: 11px; }
   .users-page .user-filter-row { flex-direction: column; align-items: stretch; }
   .role-filter, .role-filter .app-select { width: 100%; }
   .settings-card { padding: 17px; }
