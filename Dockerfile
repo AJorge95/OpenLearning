@@ -19,7 +19,7 @@ FROM node:24-bookworm-slim AS runtime
 LABEL org.opencontainers.image.source="https://github.com/AJorge95/OpenLearning"
 
 ENV NODE_ENV=production \
-    PORT=6173 \
+    PORT=5173 \
     DATA_DIR=/var/lib/openlearning \
     BACKUP_DIR=/var/backups/openlearning
 
@@ -34,9 +34,10 @@ RUN apt-get update \
 
 COPY --from=build --chown=node:node /app/server ./server
 COPY --from=build --chown=node:node /app/scripts/backup.js ./scripts/backup.js
+COPY --from=build --chown=node:node /app/scripts/start.js ./scripts/start.js
 COPY --from=build --chown=node:node /app/dist/client ./dist/client
 
 USER node
-EXPOSE 6173
+EXPOSE 5173
 STOPSIGNAL SIGTERM
-CMD ["node", "server/index.js"]
+CMD ["node", "scripts/start.js"]

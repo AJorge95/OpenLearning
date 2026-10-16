@@ -16,7 +16,7 @@ if (rawTrustProxy && !['true', 'false'].includes(rawTrustProxy)) {
   throw new Error('TRUST_PROXY must be true or false.');
 }
 const rawPort = process.env.PORT?.trim() || '';
-const port = rawPort ? Number(rawPort) : 6173;
+const port = rawPort ? Number(rawPort) : 5173;
 if (rawPort && (!/^\d+$/.test(rawPort) || !Number.isSafeInteger(port) || port < 1 || port > 65_535)) {
   throw new Error('PORT must be a whole-number TCP port between 1 and 65535.');
 }
@@ -58,6 +58,7 @@ if (setupToken && (setupToken.length < 32 || setupToken.length > 256)) {
 
 export const config = {
   nodeEnv,
+  projectDir,
   // Production must accept connections addressed to the server's network IP.
   // Local development and tests remain bound to loopback.
   host: nodeEnv === 'production' ? '0.0.0.0' : '127.0.0.1',

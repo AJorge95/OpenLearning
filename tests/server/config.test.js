@@ -56,7 +56,7 @@ test('config defaults are stable and derived paths follow DATA_DIR', () => {
   }, {
     nodeEnv: 'development',
     host: '127.0.0.1',
-    port: 6173,
+    port: 5173,
     dataDir: path.join(workingDirectory, 'custom-data'),
     dbPath: path.join(workingDirectory, 'custom-data', 'openlearning.sqlite'),
     mediaRoot: path.join(workingDirectory, 'custom-data', 'course-media'),

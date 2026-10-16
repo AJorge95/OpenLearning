@@ -13,13 +13,13 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
     ports:
-      - target: 6173
-        published: 6173
+      - target: 5173
+        published: 5173
         protocol: tcp
         mode: host
     environment:
       NODE_ENV: production
-      PORT: "6173"
+      PORT: "5173"
       DATA_DIR: /var/lib/openlearning
       BACKUP_DIR: /var/backups/openlearning
       TRUST_PROXY: ${TRUST_PROXY:-false}
@@ -38,7 +38,7 @@ services:
         - CMD
         - node
         - -e
-        - "fetch('http://127.0.0.1:6173/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+        - "fetch('http://127.0.0.1:5173/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
       interval: 30s
       timeout: 5s
       retries: 3

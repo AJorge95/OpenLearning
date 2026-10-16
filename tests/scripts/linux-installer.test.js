@@ -27,7 +27,7 @@ test('Linux installer targets supported systems and repository main', () => {
   assert.match(installer, /PORT="5173"/);
   assert.match(installer, /REQUESTED_PORT="\$\{OPENLEARNING_PORT:-\}"/);
   assert.match(installer, /OPENLEARNING_PORT must be a whole-number TCP port between 1 and 65535/);
-  assert.match(installer, /DEFAULT_PORT="6173"/);
+  assert.match(installer, /default_port="\$\{2:-5173\}"/);
   assert.match(installer, /apt-get install .*iproute2/);
   assert.match(installer, /dnf install .*iproute/);
 });
@@ -54,7 +54,7 @@ test('installer accepts only valid TCP ports and normalizes leading zeroes', (co
 test('installer port override reaches both fresh installs and existing service migrations', () => {
   assert.match(installer, /PORT=\$PORT/);
   assert.match(installer, /INSTALL_PORT_OVERRIDE="\$REQUESTED_PORT" node scripts\/migrate-install-config\.js/);
-  assert.match(installer, /configured_port "\$OLD_ENV_FILE"/);
+  assert.match(installer, /configured_port "\$OLD_ENV_FILE" 6173/);
   assert.match(installer, /curl -fsS "http:\/\/127\.0\.0\.1:\$EXISTING_PORT\/readyz"/);
   assert.match(installer, /http:\/\/\$SERVER_IPV4:\$SERVICE_PORT/);
   assert.match(readme, /OPENLEARNING_PORT/);
