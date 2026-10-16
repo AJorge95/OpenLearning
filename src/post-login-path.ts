@@ -1,6 +1,6 @@
 const defaultPostLoginPath = '/courses';
-// The app root is only a canonical alias for the catalog, not a distinct learner destination.
-const blockedPostLoginPaths = new Set(['/', '/login', '/register', '/setup']);
+// Root and the slash-suffixed catalog route are canonical aliases, not distinct destinations.
+const blockedPostLoginPaths = new Set(['/', '/courses/', '/login', '/register', '/setup']);
 const internalOrigin = 'http://openlearning.local';
 
 export function getPostLoginPath(value: unknown): string {

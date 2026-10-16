@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Normalize slash-suffixed catalog login redirects
+
+- **Reviewed:** The post-login destination sanitizer after the root-alias fix, direct `/courses/` navigation while signed out, protected deep-link preservation, and the current clean application baseline.
+- **Improvement:** Treat `/courses/` and its slash-suffixed query variants as the canonical catalog destination. Anonymous visitors opening that route now receive the normal “Sign in to continue learning” guidance, while non-catalog routes continue to retain their requested destination.
+- **Why it helps:** A common bookmarked or manually entered catalog URL no longer implies that sign-in will return to a distinct page when it only resolves to the default course catalog.
+- **Backend review:** No server change was indicated. Authentication, route protection, session behavior, and API contracts remain unchanged; this is a client-side canonical-route normalization.
+- **Checked:** Extended `tests/client/post-login-path.test.js`; the focused post-login suite passed 7/7 and the full `npm test -- --test-reporter=spec` suite passed 962/962. `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live `/courses/` redirected to `/login` with named login controls and the corrected catalog guidance; protected deep-link coverage remained in the same regression suite. No credentials, forms, uploads, account/course actions, or application data were submitted.
+- **Commit title:** `fix(auth): normalize catalog slash redirect`.
+- **Commit description:** `Treat the slash-suffixed catalog alias as the default post-login destination and keep public guidance precise.`
+
 ## 2026-10-16 — Use catalog guidance for anonymous root redirects
 
 - **Reviewed:** The freshly launched signed-out root redirect, login copy, protected deep-link preservation, post-login destination sanitizer, and the current clean worktree. The root route is a canonical alias for the learner catalog, while protected routes retain their requested path through sign-in.

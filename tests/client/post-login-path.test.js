@@ -18,7 +18,7 @@ test('post-login navigation falls back for missing or external destinations', ()
 });
 
 test('post-login navigation avoids returning to authentication routes', () => {
-  for (const value of ['/', '/?from=bookmark', '/login', '/login?next=/admin', '/register', '/setup']) {
+  for (const value of ['/', '/?from=bookmark', '/courses/', '/courses/?from=bookmark', '/login', '/login?next=/admin', '/register', '/setup']) {
     assert.equal(getPostLoginPath(value), '/courses');
   }
 });
