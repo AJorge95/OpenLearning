@@ -833,8 +833,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .module-title-edit-form .button { flex: 0 0 auto; min-height: 36px; padding: 0 10px; font-size: 12px; white-space: nowrap; }
 .module-item-count { color: var(--muted); font-size: 11px; margin-left: 5px; }
 .module-tools, .lesson-tools { display: flex; gap: 2px; align-items: center; margin-left: auto; }
-.module-tools button, .lesson-tools button { width: 30px; height: 30px; display: grid; place-items: center; border: 0; background: transparent; color: #696f7f; border-radius: 3px; }
+/* Keep curriculum reorder and delete actions easy to hit without changing their compact icon-only layout. */
+.module-tools button, .lesson-tools button { width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: transparent; color: #696f7f; border-radius: 3px; }
 .module-tools button:hover:not(:disabled), .lesson-tools button:hover:not(:disabled) { color: var(--purple); background: var(--purple-soft); }
+.module-tools button:focus-visible, .lesson-tools button:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; }
 .module-tools .danger-icon:hover, .lesson-tools .danger-icon:hover { color: var(--danger); background: var(--danger-soft); }
 .module-editor-content { padding: 0 12px 13px; }
 .lesson-editor-row { min-height: 61px; display: flex; align-items: center; gap: 11px; padding: 8px 10px; margin: 0 0 7px 26px; border: 1px solid #e7e9ef; border-radius: 4px; }
@@ -1448,7 +1450,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .module-editor-heading-editing .module-tools { order: 3; margin-left: auto; }
   .module-name-heading { font-size: 12px; }
   .module-item-count { display: none; }
-  .module-tools button, .lesson-tools button { width: 36px; height: 36px; }
+  .module-tools button, .lesson-tools button { width: 40px; height: 40px; }
   .module-editor-content { padding: 0 7px 9px; }
   .lesson-editor-row { flex-wrap: wrap; gap: 7px; margin-left: 8px; padding: 8px; }
   .lesson-name-button { min-width: 130px; font-size: 11px; }
