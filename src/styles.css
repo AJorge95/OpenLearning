@@ -1207,8 +1207,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .backup-job-path { grid-column: 1 / -1; }
 .backup-job-details code, .backup-history-table code { color: #3d4352; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; overflow-wrap: anywhere; white-space: normal; }
 .backup-job-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 13px; padding-top: 12px; border-top: 1px solid var(--line); }
-.backup-job-actions > .button { min-height: 34px; padding: 0 10px; font-size: 11px; }
-.backup-job-actions > .text-action { display: inline-flex; align-items: center; gap: 4px; min-height: 34px; font-size: 11px; }
+/* Keep backup actions easy to activate and clearly focused without widening the cards. */
+.backup-job-actions > .button { min-height: 40px; padding: 0 10px; font-size: 11px; }
+.backup-job-actions > .text-action { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; padding: 0 9px; border-radius: 4px; font-size: 11px; }
+.backup-job-actions > .text-action:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 .backup-empty-state { display: grid; justify-items: center; gap: 7px; padding: 30px 18px; border: 1px dashed var(--line-strong); border-radius: 5px; color: var(--muted); background: #fff; font-size: 12px; text-align: center; }
 .backup-empty-state strong { color: var(--ink); font-size: 14px; }
 .backup-history-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; }

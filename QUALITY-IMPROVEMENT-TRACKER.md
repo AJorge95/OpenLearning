@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 111: enlarge backup job action targets
+
+- **Reviewed:** Administrator backup-card action structure, visible labels, keyboard focus treatment, narrow-card wrapping, run/edit/pause/remove mutation feedback, and the existing backup authorization, validation, queue, retention, and recovery boundaries.
+- **Improvement:** Increase the backup card’s `Run now`, `Edit`, `Pause`/`Enable`, and `Remove` controls from 34px to consistent 40px targets, add compact horizontal padding for the text actions, and give their keyboard focus a palette-aware outline. Existing labels, disabled states, card wrapping, confirmation dialog, and mutation handlers remain unchanged.
+- **Why it helps:** Administrators can activate backup actions more reliably with a pointer or touch device, and keyboard users can identify the focused text action without changing backup scheduling or deletion semantics.
+- **Backend review:** Backup job authorization, destination validation, queue deduplication, media-write gating, retention verification, audit behavior, and restart/shutdown recovery already match the current UI contract; no backend change was indicated.
+- **Checked:** Added `tests/client/backup-action-target.test.js`; the focused target regression passed 1/1, the full `npm test -- --test-reporter=spec` suite passed 979/979, `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, version, and Vite-root probes returned 200; anonymous admin backups returned structured 401 JSON and anonymous CSRF returned no `Set-Cookie`. The reloaded signed-out browser shell retained one heading and named username/password controls with no warning/error diagnostics. No credentials, backup jobs, account/course actions, or application data were submitted or changed; authenticated backup-card interaction remains source- and regression-verified because this development browser session has no authenticated staff fixture.
+- **Commit title:** `fix(a11y): enlarge backup action targets`.
+- **Commit description:** `Give administrator backup-card actions consistent touch targets and visible keyboard focus while preserving their existing scheduling semantics.`
+
 ## 2026-10-16 — Cycle 110: recover transient startup failures
 
 - **Reviewed:** Authentication bootstrap requests, the signed-out startup error state, Vite/API startup timing, request cancellation, and the existing API error classification.
