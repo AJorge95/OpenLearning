@@ -1,5 +1,24 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 173: restrict source-run production file permissions
+
+- **Finding:** The documented source-run production command inherited the host umask. On POSIX hosts, a fresh `data` directory, SQLite/media/backup files, and a copied `.env` could be readable by unrelated local accounts when the host used a permissive default such as `022`.
+- **Change:** Added a production-only POSIX startup guard before importing the server. It applies umask `077` before storage is created and changes a regular default `.env` file to mode `0600`; it skips symlinks and externally managed dotenv paths, and leaves development and Windows startup unchanged. Added focused tests in `tests/security/production-permissions.test.js`.
+- **Why it helps:** Fresh source-run production storage and environment secrets are private to the service account, closing the local filesystem path around HTTP course authorization.
+- **Checked:** `node --test tests/security/production-permissions.test.js` passed 6/6; `npm run typecheck` passed. The tests verify startup ordering, umask, `.env` mode, symlink and externally managed secret handling, missing files, and fail-closed chmod errors. `npm test` still has 12 existing failures in course/quiz UI assertions, search landmarks, and legacy migration fixtures. Existing files and directories are not retroactively changed. Production host behavior remains unverified.
+- **Boundary:** Applies to POSIX production startup through `scripts/start.js`; development and Windows behavior is unchanged. Existing installer and container permissions remain in place. No production host, external service, or deployment was changed.
+- **Commit title:** `fix(security): restrict source-run file permissions`.
+- **Commit description:** `Set a private umask before production server startup and tighten a regular dotenv file so source-run storage and local secrets are not exposed to unrelated POSIX accounts; cover startup ordering and permission handling with focused security tests.`
+
+## 2026-10-16 — Cycle 172: keep quiz explanations out of learner payloads
+
+- **Finding:** An authenticated learner with ordinary course-view access could request `GET /api/courses/:courseId` (or a specific quiz payload) before submitting and receive each author-written explanation. The route correctly omitted `isCorrect`, but `getCoursePayload` serialized `explanation` unconditionally; an explanation can state the correct answer.
+- **Change:** Include explanations only in answer-bearing course payloads used by course managers. Added an explanatory code comment and an HTTP regression fixture that verifies learners receive no explanation while the staff editor retains it.
+- **Why it helps:** The API now enforces the same answer-key confidentiality boundary for explanations as for correct-choice flags. Course access remains unchanged.
+- **Checked:** `node --test tests/server/quiz-attempt-results.test.js` passed 8/8; `git diff --check` and `npm run typecheck` passed on the updated branch. `npm test` still has 12 existing failures in course/quiz UI assertions, search landmarks, and legacy migration fixtures; the focused API suite for this patch passes.
+- **Boundary:** Local development and isolated test fixtures only. No production system, deployment, remote service, or application data was changed. The broader worktree remains dirty and was preserved.
+- **Commit:** The quiz fix is already included in the existing branch commit `1f6565a` (`feat(courses): add groups and randomized final exams`), which is now at `origin/main`. This run did not create a separate security commit for it.
+
 ## 2026-10-16 — Cycle 171: bound review around uncommitted final-exam and restore work — no separate change indicated
 
 - **Reviewed:** Started the local applications first; preserved the existing OpenLearning listener on `127.0.0.1:5173`; inspected the current tracker, live management UI, API probes, and the entire dirty scope spanning final-exam question selection and attempts, course groups, restore tooling, schema migrations, installer/docs, learner/manage UI, and related tests.
