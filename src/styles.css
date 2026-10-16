@@ -960,7 +960,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .lesson-comment header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 9px; }
 .lesson-comment header h3 { margin: 0; color: var(--ink); font-size: 13px; font-weight: 650; }
 .lesson-comment header time { color: var(--muted); font-size: 11px; }
-.lesson-comment-remove { min-height: 28px; flex: 0 0 auto; gap: 5px; margin-left: auto; padding: 0 7px; font-size: 11px; }
+/* Keep the course-manager comment removal action easy to hit without losing its compact copy. */
+.lesson-comment-remove { min-height: 40px; flex: 0 0 auto; gap: 5px; margin-left: auto; padding: 0 9px; font-size: 11px; }
+.lesson-comment-remove:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; }
 .lesson-comment p { margin: 7px 0 0; color: #4c5261; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .comments-empty { margin: 0; padding: 22px 0; color: var(--muted); font-size: 13px; }
 .load-comments-button { min-height: 40px; margin-top: 16px; font-size: 12px; }
