@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
@@ -23,9 +25,40 @@ test('Linux installer targets supported systems and repository main', () => {
   assert.match(installer, /Node\.js 24 or newer/);
   assert.match(installer, /systemd is required/);
   assert.match(installer, /PORT="5173"/);
-  assert.match(installer, /DEFAULT_PORT="\$PORT"/);
+  assert.match(installer, /REQUESTED_PORT="\$\{OPENLEARNING_PORT:-\}"/);
+  assert.match(installer, /OPENLEARNING_PORT must be a whole-number TCP port between 1 and 65535/);
+  assert.match(installer, /DEFAULT_PORT="6173"/);
   assert.match(installer, /apt-get install .*iproute2/);
   assert.match(installer, /dnf install .*iproute/);
+});
+
+test('installer accepts only valid TCP ports and normalizes leading zeroes', (context) => {
+  const normalize = installer.match(/normalize_port\(\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(normalize, 'expected a port validation helper');
+  const run = (value) => spawnSync(bashPath, ['-c', `${normalize}; normalize_port "$PORT_VALUE"`], {
+    encoding: 'utf8',
+    env: { ...process.env, PORT_VALUE: value },
+  });
+  const valid = run('05173');
+  if (valid.error?.code === 'ENOENT' || valid.stderr?.includes('NtCreateDirectoryObject')) {
+    context.skip('Bash startup is unavailable on this test host.');
+    return;
+  }
+  assert.equal(valid.status, 0, valid.stderr);
+  assert.equal(valid.stdout.trim(), '5173');
+  for (const invalidPort of ['0', '65536', '123456', 'abc']) {
+    assert.notEqual(run(invalidPort).status, 0, `expected ${invalidPort} to be rejected`);
+  }
+});
+
+test('installer port override reaches both fresh installs and existing service migrations', () => {
+  assert.match(installer, /PORT=\$PORT/);
+  assert.match(installer, /INSTALL_PORT_OVERRIDE="\$REQUESTED_PORT" node scripts\/migrate-install-config\.js/);
+  assert.match(installer, /configured_port "\$OLD_ENV_FILE"/);
+  assert.match(installer, /curl -fsS "http:\/\/127\.0\.0\.1:\$EXISTING_PORT\/readyz"/);
+  assert.match(installer, /http:\/\/\$SERVER_IPV4:\$SERVICE_PORT/);
+  assert.match(readme, /OPENLEARNING_PORT/);
+  assert.match(readme, /sudo env OPENLEARNING_PORT=5173 bash/);
 });
 
 test('installer reports the kernel-selected server IPv4 without network probing', (context) => {
@@ -120,6 +153,47 @@ test('updater creates verified backups and restores data when readiness fails', 
   assert.match(installer, /Readiness check failed; restoring the previous release/);
   assert.match(installer, /\/readyz/);
   assert.match(installer, /ENDPOINT="healthz"/);
+  assert.match(installer, /CONFIG_SNAPSHOT="\$\(mktemp \/tmp\/openlearning-env\.XXXXXX\)"/);
+  assert.match(installer, /if ! restore_environment_config; then/);
+  assert.match(installer, /cp -a -- "\$CONFIG_SNAPSHOT" "\$ENV_FILE"/);
+});
+
+test('port migration rollback restores the prior private environment file', (context) => {
+  const helper = installer.match(/restore_environment_config\(\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(helper, 'expected a service configuration rollback helper');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'openlearning-port-rollback-'));
+  const root = path.resolve(directory);
+  if (path.dirname(root) !== path.resolve(os.tmpdir()) || !path.basename(root).startsWith('openlearning-port-rollback-')) {
+    throw new Error('Refusing to use an unexpected temporary directory.');
+  }
+  const environmentFile = path.join(root, '.env');
+  const snapshotFile = path.join(root, 'previous.env');
+  fs.writeFileSync(environmentFile, 'PORT=5173\n');
+  fs.writeFileSync(snapshotFile, 'PORT=6173\nSESSION_SECRET=private-value\n', { mode: 0o600 });
+  try {
+    const result = spawnSync(bashPath, ['-c', `
+      set -eu
+      ENV_FILE="$MOCK_ENV_FILE"
+      CONFIG_SNAPSHOT="$MOCK_CONFIG_SNAPSHOT"
+      CONFIG_SNAPSHOT_EXISTS=true
+      RESTORE_CONFIG_ON_FAILURE=true
+      ${helper}
+      restore_environment_config
+      printf 'restore=%s\\n' "$RESTORE_CONFIG_ON_FAILURE"
+    `], {
+      encoding: 'utf8',
+      env: { ...process.env, MOCK_ENV_FILE: environmentFile, MOCK_CONFIG_SNAPSHOT: snapshotFile },
+    });
+    if (result.error?.code === 'ENOENT' || result.stderr?.includes('NtCreateDirectoryObject')) {
+      context.skip('Bash startup is unavailable on this test host.');
+      return;
+    }
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'restore=false\n');
+    assert.equal(fs.readFileSync(environmentFile, 'utf8'), 'PORT=6173\nSESSION_SECRET=private-value\n');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('legacy storage repair grants account-specific traversal and propagates ACL failure', () => {
@@ -176,49 +250,75 @@ test('installer opens the configured application port in active local firewalls'
   assert.match(installer, /firewall-cmd --state/);
   assert.match(installer, /firewall-cmd --get-zone-of-interface="\$interface"/);
   assert.match(installer, /configure_firewalld_port "\$FIREWALL_ZONE"/);
+  assert.match(installer, /firewall-cmd --zone="\$zone" --permanent --add-port="\$SERVICE_PORT\/tcp"/);
+  assert.match(installer, /firewall-cmd --zone="\$zone" --add-port="\$SERVICE_PORT\/tcp"/);
   assert.doesNotMatch(installer, /firewall-cmd --get-active-zones/);
-  assert.match(installer, /firewall-cmd --reload/);
+  assert.doesNotMatch(installer, /firewall-cmd --reload/);
   assert.match(readme, /does not enable a firewall/i);
 });
 
-test('firewalld port setup is idempotent for existing rules and rejects real command errors', () => {
+test('firewalld port setup is idempotent without reloading unrelated runtime rules', () => {
   const helper = installer.match(/configure_firewalld_port\(\) \{[\s\S]*?\n\}/)?.[0];
   assert.ok(helper, 'expected the firewalld port setup helper');
-  const run = (addStatus) => spawnSync(bashPath, ['-c', `
+  const run = (permanentStatus, runtimeStatus) => spawnSync(bashPath, ['-c', `
     set -eu
     SERVICE_PORT=6173
-    MOCK_RELOAD_CALLED=false
+    exec 3>&1
     ${helper}
     firewall-cmd() {
       case "$*" in
         "--zone=public --permanent --add-port=6173/tcp")
-          printf 'mock add result\n'
-          return "$MOCK_ADD_STATUS"
+          printf 'permanent\n' >&3
+          [[ "$MOCK_PERMANENT_STATUS" -ne 13 ]] || printf 'mock permanent failure\n'
+          return "$MOCK_PERMANENT_STATUS"
           ;;
-        "--reload") MOCK_RELOAD_CALLED=true ;;
+        "--zone=public --add-port=6173/tcp")
+          printf 'runtime\n' >&3
+          [[ "$MOCK_RUNTIME_STATUS" -ne 13 ]] || printf 'mock runtime failure\n'
+          return "$MOCK_RUNTIME_STATUS"
+          ;;
+        "--reload") printf 'reload\n' >&3; return 99 ;;
         *) return 2 ;;
       esac
     }
     configure_firewalld_port public
-    printf 'reload-called=%s\n' "$MOCK_RELOAD_CALLED"
   `], {
     encoding: 'utf8',
-    env: { ...process.env, MOCK_ADD_STATUS: String(addStatus) },
+    env: {
+      ...process.env,
+      MOCK_PERMANENT_STATUS: String(permanentStatus),
+      MOCK_RUNTIME_STATUS: String(runtimeStatus),
+    },
   });
 
-  const added = run(0);
+  const added = run(0, 0);
   assert.equal(added.status, 0, added.stderr);
-  assert.equal(added.stdout.trim(), 'reload-called=true');
+  assert.equal(added.stdout, 'permanent\nruntime\n');
 
-  const alreadyEnabled = run(11);
-  assert.equal(alreadyEnabled.status, 0, alreadyEnabled.stderr);
-  assert.equal(alreadyEnabled.stdout.trim(), 'reload-called=true');
-  assert.equal(alreadyEnabled.stderr, '', 'the documented already-enabled warning is handled quietly');
+  const permanentAlreadyEnabled = run(11, 0);
+  assert.equal(permanentAlreadyEnabled.status, 0, permanentAlreadyEnabled.stderr);
+  assert.equal(permanentAlreadyEnabled.stdout, 'permanent\nruntime\n');
+  assert.equal(permanentAlreadyEnabled.stderr, '', 'the permanent already-enabled warning is handled quietly');
 
-  const commandFailure = run(13);
-  assert.equal(commandFailure.status, 13, 'real firewalld errors must remain failures');
-  assert.match(commandFailure.stderr, /mock add result/);
-  assert.equal(commandFailure.stdout, '', 'do not reload after a real port-add failure');
+  const runtimeAlreadyEnabled = run(0, 11);
+  assert.equal(runtimeAlreadyEnabled.status, 0, runtimeAlreadyEnabled.stderr);
+  assert.equal(runtimeAlreadyEnabled.stdout, 'permanent\nruntime\n');
+  assert.equal(runtimeAlreadyEnabled.stderr, '', 'the runtime already-enabled warning is handled quietly');
+
+  const bothAlreadyEnabled = run(11, 11);
+  assert.equal(bothAlreadyEnabled.status, 0, bothAlreadyEnabled.stderr);
+  assert.equal(bothAlreadyEnabled.stdout, 'permanent\nruntime\n');
+  assert.equal(bothAlreadyEnabled.stderr, '');
+
+  const permanentFailure = run(13, 0);
+  assert.equal(permanentFailure.status, 13, 'real permanent configuration errors must remain failures');
+  assert.equal(permanentFailure.stdout, 'permanent\n', 'do not open a temporary runtime port if persistence fails');
+  assert.match(permanentFailure.stderr, /mock permanent failure/);
+
+  const runtimeFailure = run(0, 13);
+  assert.equal(runtimeFailure.status, 13, 'real runtime configuration errors must remain failures');
+  assert.equal(runtimeFailure.stdout, 'permanent\nruntime\n');
+  assert.match(runtimeFailure.stderr, /mock runtime failure/);
 });
 
 test('firewalld port selection follows the server route interface and falls back only to the default zone', () => {

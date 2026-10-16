@@ -21,7 +21,15 @@ const preserve = {
   BACKUP_DIR: backupDir,
 };
 preserve.NODE_ENV = 'production';
-preserve.PORT ||= '6173';
+const portOverride = process.env.INSTALL_PORT_OVERRIDE || '';
+if (portOverride) {
+  if (!/^\d+$/.test(portOverride) || !Number.isSafeInteger(Number(portOverride)) || Number(portOverride) < 1 || Number(portOverride) > 65_535) {
+    throw new Error('INSTALL_PORT_OVERRIDE must be a whole-number TCP port between 1 and 65535.');
+  }
+  preserve.PORT = String(Number(portOverride));
+} else {
+  preserve.PORT ||= '6173';
+}
 preserve.SESSION_SECRET ||= '';
 preserve.SETUP_TOKEN ||= '';
 preserve.TRUST_PROXY ||= 'false';
