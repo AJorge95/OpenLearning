@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 124: enlarge course-table action links
+
+- **Reviewed:** The staff course-table structure, `Edit` and `Analytics` link semantics, adjacent row-menu target, dense-row spacing, keyboard focus behavior, responsive table overflow, course-action feedback, and the staff-only course mutation and authorization paths.
+- **Improvement:** Give the primary course-row `Edit` and `Analytics` links a consistent 40px minimum target with compact horizontal padding, while preserving their existing destinations, labels, table layout, and native link behavior. Added `tests/client/course-table-action-target.test.js`.
+- **Why it helps:** Course managers can activate the most common row actions more reliably with a pointer or touch device, and the links now match the adjacent 40px menu trigger without making the table columns materially wider.
+- **Backend review:** Course loading, status changes, deletion, authorization, confirmation, audit, and refresh-feedback paths remain covered by the existing staff course-management contract; no backend change was indicated.
+- **Checked:** The focused course-table and row-menu checks passed (6/6); the full `npm test -- --test-reporter=spec` suite passed (991/991), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, version, and Vite-root probes returned 200; anonymous CSRF returned no `Set-Cookie`, and anonymous admin backups returned 401. The reloaded `/login` shell exposed one heading plus named username/password controls with no browser warning/error diagnostics. Authenticated course-table interaction remains source- and regression-verified because this development browser session has no authenticated staff fixture.
+- **Commit title:** `fix(a11y): enlarge course table action links`.
+- **Commit description:** `Give staff course-table Edit and Analytics links reliable row-action targets while preserving their existing navigation and layout.`
+
 ## 2026-10-16 — Cycle 123: enlarge course-editor module disclosures
 
 - **Reviewed:** The course-editor module disclosure and title controls, module reorder/delete actions, narrow stacked heading layout, accessible expand/collapse state, keyboard focus treatment, and the related curriculum access and mutation paths.
