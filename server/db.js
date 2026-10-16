@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 import { sessionUserIdFromJson } from './session-data.js';
 
-const latestSchemaVersion = 37;
+const latestSchemaVersion = 38;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -893,6 +893,17 @@ export function migrateDatabase(database = db) {
         CREATE INDEX backup_runs_job_created ON backup_runs(job_id, created_at DESC, id DESC);
         INSERT INTO schema_migrations (version) VALUES (37);
       `);
+    });
+    migration();
+  }
+
+  if (current < 38) {
+    const migration = database.transaction(() => {
+      // Course publication and restoration resolve learner state by course first.
+      // Keep narrow historical fixtures migratable when they omit unrelated tables.
+      const hasCourseLearningState = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'course_learning_state'").get();
+      if (hasCourseLearningState) database.exec('CREATE INDEX IF NOT EXISTS course_learning_state_course_user ON course_learning_state(course_id, user_id)');
+      database.prepare('INSERT INTO schema_migrations (version) VALUES (38)').run();
     });
     migration();
   }
