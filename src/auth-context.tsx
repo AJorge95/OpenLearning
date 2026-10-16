@@ -33,6 +33,11 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const STARTUP_REQUEST_TIMEOUT_MS = 20_000;
+const STARTUP_RETRY_DELAYS_MS = [250, 750] as const;
+
+function isTransientStartupError(cause: unknown) {
+  return cause instanceof ApiError && (cause.status === 0 || cause.status >= 500);
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -94,7 +99,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setStartupError(null);
     try {
-      await refresh({ signal: controller.signal });
+      let retryAttempt = 0;
+      while (true) {
+        try {
+          await refresh({ signal: controller.signal });
+          break;
+        } catch (cause) {
+          // A client can load before the API has finished starting, so give transient
+          // transport and server failures a short, bounded recovery window.
+          if (!isTransientStartupError(cause) || retryAttempt >= STARTUP_RETRY_DELAYS_MS.length) throw cause;
+          await new Promise<void>((resolve) => { window.setTimeout(resolve, STARTUP_RETRY_DELAYS_MS[retryAttempt]); });
+          retryAttempt += 1;
+        }
+      }
       if (requestId === startupRequestId.current) setStartupError(null);
     } catch (cause) {
       if (requestId === startupRequestId.current) {

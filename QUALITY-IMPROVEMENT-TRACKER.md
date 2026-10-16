@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 110: recover transient startup failures
+
+- **Reviewed:** Authentication bootstrap requests, the signed-out startup error state, Vite/API startup timing, request cancellation, and the existing API error classification.
+- **Improvement:** The authentication provider now retries status-0 transport failures and HTTP 5xx startup failures twice with short bounded delays before showing the existing retry screen. Client errors remain non-retriable, and the existing 20-second abort and manual retry behavior remain in place.
+- **Why it helps:** A browser opened while the API is still starting or briefly unavailable can recover without a manual reload, while persistent or client-caused failures still reach the existing actionable error state instead of being hidden.
+- **Backend review:** The API already returns structured health/readiness and authentication responses; no server change was indicated. The retry is limited to the client bootstrap boundary and does not replay mutations.
+- **Checked:** Added `tests/client/auth-startup-retry.test.js`; focused startup checks passed, followed by the full test suite, typecheck, build, and `git diff --check`. The relaunched signed-out browser initially exposed the observed transient 500 during API restart, then settled to the normal login shell after reload with one heading, named username/password controls, and no warning/error diagnostics. No credentials or application data were submitted.
+- **Commit title:** `fix(startup): retry transient bootstrap failures`.
+- **Commit description:** `Recover briefly unavailable API bootstrap requests before exposing the existing startup retry screen, without replaying mutations or masking client errors.`
+
 ## 2026-10-16 — Cycle 109: enlarge learning-path reorder targets
 
 - **Reviewed:** Learning-path course ordering controls, their accessible names and decorative arrows, desktop and narrow responsive grid placement, keyboard focus treatment, forced-colors behavior, and the path-save validation and authorization boundary.
