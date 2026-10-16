@@ -1,8 +1,10 @@
 import fs from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import Database from 'better-sqlite3';
 import path from 'node:path';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { db, setSetting } from './db.js';
 import { config } from './config.js';
 import { fail } from './http.js';
@@ -116,31 +118,54 @@ export async function assertResetBackupPathsSafe({ mediaRoot, databasePath, back
   }
 }
 
-async function copyMediaTree(source, destination) {
+async function hashFile(filePath) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest('hex');
+}
+
+async function copyMediaTree(source, destination, relativePath = '') {
   await fs.mkdir(destination, { recursive: true });
   let fileCount = 0;
   let byteCount = 0;
-  const entries = await fs.readdir(source, { withFileTypes: true });
+  const files = [];
+  const entries = (await fs.readdir(source, { withFileTypes: true }))
+    .sort((first, second) => (first.name < second.name ? -1 : first.name > second.name ? 1 : 0));
   for (const entry of entries) {
     const from = path.join(source, entry.name);
     const to = path.join(destination, entry.name);
+    const relativeFilePath = path.join(relativePath, entry.name).split(path.sep).join('/');
     if (entry.isSymbolicLink()) throw new Error('The course media directory contains a symbolic link; the backup cannot safely include it.');
     if (entry.isDirectory()) {
-      const nested = await copyMediaTree(from, to);
+      const nested = await copyMediaTree(from, to, relativeFilePath);
       fileCount += nested.fileCount;
       byteCount += nested.byteCount;
+      for (const file of nested.files) files.push(file);
     } else if (entry.isFile()) {
-      const stats = await fs.stat(from);
-      await fs.copyFile(from, to, constants.COPYFILE_EXCL);
+      const sourceHash = createHash('sha256');
+      let copiedBytes = 0;
+      // Hash the source as it streams to disk, then re-read the destination to verify persisted bytes.
+      const hashWhileCopying = new Transform({
+        transform(chunk, _encoding, callback) {
+          copiedBytes += chunk.length;
+          sourceHash.update(chunk);
+          callback(null, chunk);
+        },
+      });
+      await pipeline(createReadStream(from), hashWhileCopying, createWriteStream(to, { flags: 'wx' }));
       const copied = await fs.stat(to);
-      if (copied.size !== stats.size) throw new Error(`Media file verification failed for ${entry.name}.`);
+      const sha256 = sourceHash.digest('hex');
+      if (copied.size !== copiedBytes || await hashFile(to) !== sha256) {
+        throw new Error(`Media file verification failed for ${relativeFilePath}.`);
+      }
       fileCount += 1;
-      byteCount += stats.size;
+      byteCount += copiedBytes;
+      files.push({ path: relativeFilePath, bytes: copiedBytes, sha256 });
     } else {
       throw new Error('The course media directory contains an unsupported file type.');
     }
   }
-  return { fileCount, byteCount };
+  return { fileCount, byteCount, files };
 }
 
 async function createBackup() {
@@ -170,6 +195,7 @@ async function createBackup() {
       mediaDirectory: 'course-media',
       mediaFileCount: mediaStats.fileCount,
       mediaBytes: mediaStats.byteCount,
+      mediaFiles: mediaStats.files,
     };
     await fs.writeFile(path.join(backupDirectory, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' });
     return { backupDirectory, backupLocation: path.relative(config.dataDir, backupDirectory).split(path.sep).join('/') };

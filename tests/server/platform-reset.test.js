@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -157,7 +158,48 @@ test('reset preparation drains active requests and blocks new API and media requ
   }
 });
 
+test('reset preparation rejects same-size corruption in its copied media backup', async () => {
+  const originalStat = fs.promises.stat;
+  const backupRoot = path.join(fixtureDirectory, 'backups');
+  const backupsBefore = fs.existsSync(backupRoot) ? await fs.promises.readdir(backupRoot) : [];
+  let corruptionInjected = false;
+  fs.promises.stat = async (filePath, ...options) => {
+    const result = await originalStat.call(fs.promises, filePath, ...options);
+    const backupRelativePath = path.relative(
+      path.join(fixtureDirectory, 'backups'),
+      path.resolve(String(filePath)),
+    );
+    const backupParts = backupRelativePath.split(path.sep);
+    if (!corruptionInjected
+      && backupParts.length === 3
+      && backupParts[0].startsWith('platform-reset-')
+      && backupParts[1] === 'course-media'
+      && backupParts[2] === 'lesson-video.mp4') {
+      // Keep the byte count unchanged so the content digest must catch the damage.
+      await fs.promises.writeFile(filePath, 'corrupt-media');
+      corruptionInjected = true;
+      fs.promises.stat = originalStat;
+    }
+    return result;
+  };
+
+  try {
+    await assert.rejects(reset.preparePlatformReset(actor), /Media file verification failed for lesson-video\.mp4\./);
+  } finally {
+    fs.promises.stat = originalStat;
+  }
+
+  assert.equal(corruptionInjected, true);
+  assert.equal(reset.isPlatformResetActive(), false);
+  const backupsAfter = await fs.promises.readdir(backupRoot);
+  assert.deepEqual(backupsAfter.sort(), backupsBefore.sort(), 'Failed reset verification must not leave a new backup behind.');
+});
+
 test('reset preparation verifies a restorable backup and cancellation preserves platform data', async () => {
+  const nestedMedia = Buffer.from('nested fixture media');
+  await fs.promises.mkdir(path.join(process.env.MEDIA_ROOT, 'module'), { recursive: true });
+  await fs.promises.writeFile(path.join(process.env.MEDIA_ROOT, 'module', 'notes.txt'), nestedMedia);
+
   const prepared = await reset.preparePlatformReset(actor);
   assert.equal(prepared.pending, true);
   assert.equal(prepared.phase, 'ready');
@@ -166,9 +208,23 @@ test('reset preparation verifies a restorable backup and cancellation preserves 
 
   const backupDirectory = path.join(fixtureDirectory, prepared.backupLocation);
   const manifest = JSON.parse(await fs.promises.readFile(path.join(backupDirectory, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.mediaFileCount, 1);
-  assert.equal(manifest.mediaBytes, Buffer.byteLength('fixture-media'));
+  const fixtureMedia = Buffer.from('fixture-media');
+  assert.equal(manifest.mediaFileCount, 2);
+  assert.equal(manifest.mediaBytes, fixtureMedia.length + nestedMedia.length);
+  assert.deepEqual(manifest.mediaFiles, [
+    {
+      path: 'lesson-video.mp4',
+      bytes: fixtureMedia.length,
+      sha256: createHash('sha256').update(fixtureMedia).digest('hex'),
+    },
+    {
+      path: 'module/notes.txt',
+      bytes: nestedMedia.length,
+      sha256: createHash('sha256').update(nestedMedia).digest('hex'),
+    },
+  ]);
   assert.equal(await fs.promises.readFile(path.join(backupDirectory, 'course-media', 'lesson-video.mp4'), 'utf8'), 'fixture-media');
+  assert.deepEqual(await fs.promises.readFile(path.join(backupDirectory, 'course-media', 'module', 'notes.txt')), nestedMedia);
   const backupDatabase = new Database(path.join(backupDirectory, 'openlearning.sqlite'), { readonly: true, fileMustExist: true });
   try {
     assert.ok(backupDatabase.pragma('quick_check').every((row) => row.quick_check === 'ok'));
