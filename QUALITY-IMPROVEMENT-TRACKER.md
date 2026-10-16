@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 152: clean failed installer releases
+
+- **Reviewed:** The fresh signed-out login shell and password-visibility interaction; the current Linux installer preflight, release staging, backup, readiness rollback, and systemd service generation; and the existing installer/config-migration regression coverage.
+- **Improvement:** Track the staged release separately from the finalized service state. The installer cleanup now removes an unfinalized candidate after a failed download, dependency install, build, configuration migration, or readiness check, while preserving the active release and keeping a successfully started release in place.
+- **Why it helps:** Repeated failed updates no longer leave unusable release directories consuming disk space or being mistaken for a completed deployment. The cleanup remains scoped to the release created by this invocation and runs before the success finalization marker.
+- **Interface review:** The signed-out `/login` shell remained non-blank with one heading, named required username/password fields, and the existing password-visibility action. The action changed to `Hide password` and back to `Show password` without submitting credentials or application data; no separate current interface defect justified a UI change.
+- **Checked:** Focused Linux-installer and config-migration checks passed 12/12, including Bash syntax; the full `npm test -- --test-reporter=spec` suite passed 1013/1013; `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup-status, registration-fields, version, and Vite `/login` probes returned 200. The in-app browser showed the expected login shell with no warning/error diagnostics. No credentials, forms, uploads, account/course actions, or application data were submitted or changed.
+- **Commit title:** `fix(installer): remove failed release candidates`.
+- **Commit description:** `Remove unfinalized staged releases after failed installer runs while preserving the active release and successful updates.`
+
 ## 2026-10-16 — Cycle 151: index approved account ordering
 
 - **Reviewed:** The fresh signed-out login shell, current responsive and form semantics, the administrator Users page filters and pagination, the `/api/admin/users` validation and authorization boundary, existing user-order indexes, and the live SQLite query plan for approved-account results.

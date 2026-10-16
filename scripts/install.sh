@@ -93,6 +93,8 @@ OLD_WORKING_DIRECTORY=""
 OLD_ENV_FILE=""
 OLD_UNIT_FRAGMENT=""
 UNIT_SNAPSHOT=""
+NEW_RELEASE=""
+RELEASE_FINALIZED=false
 if systemctl cat "$SERVICE_NAME.service" >/dev/null 2>&1; then
   OLD_UNIT_PRESENT=true
   OLD_UNIT_FRAGMENT="$(systemctl show --property=FragmentPath --value "$SERVICE_NAME.service" 2>/dev/null || true)"
@@ -161,7 +163,14 @@ if [[ "$OLD_UNIT_PRESENT" == true ]]; then
   UNIT_SNAPSHOT="$(mktemp -d /tmp/openlearning-unit.XXXXXX)"
   cp -a "$OLD_UNIT_FRAGMENT" "$UNIT_SNAPSHOT/original-unit"
 fi
-cleanup() { rm -f "$ARCHIVE" "${NODE_SETUP_FILE:-}"; rm -rf "$STAGING" "${UNIT_SNAPSHOT:-}"; }
+cleanup() {
+  rm -f "$ARCHIVE" "${NODE_SETUP_FILE:-}"
+  rm -rf "$STAGING" "${UNIT_SNAPSHOT:-}"
+  # Failed downloads, builds, or readiness checks must not accumulate unusable releases.
+  if [[ "$RELEASE_FINALIZED" != true && -n "$NEW_RELEASE" && -d "$NEW_RELEASE" ]]; then
+    rm -rf -- "$NEW_RELEASE"
+  fi
+}
 trap cleanup EXIT
 log "Downloading $SOURCE_LABEL from GitHub."
 curl -fL --retry 3 "$SOURCE_ARCHIVE_URL" -o "$ARCHIVE"
@@ -361,6 +370,7 @@ NODE
   journalctl -u "$SERVICE_NAME.service" -n 30 --no-pager >&2 || true
   fail "OpenLearning did not become ready. The prior code release has been restored; inspect the service logs."
 fi
+RELEASE_FINALIZED=true
 
 FIREWALL_CONFIGURED=false
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then

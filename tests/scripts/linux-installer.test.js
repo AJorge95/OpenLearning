@@ -61,6 +61,14 @@ test('updater creates verified backups and restores data when readiness fails', 
   assert.match(installer, /ENDPOINT="healthz"/);
 });
 
+test('updater removes an unfinalized release without deleting the active release', () => {
+  assert.match(installer, /NEW_RELEASE=""/);
+  assert.match(installer, /RELEASE_FINALIZED=false/);
+  assert.match(installer, /if \[\[ "\$RELEASE_FINALIZED" != true && -n "\$NEW_RELEASE" && -d "\$NEW_RELEASE" \]\]; then/);
+  assert.match(installer, /rm -rf -- "\$NEW_RELEASE"/);
+  assert.match(installer, /RELEASE_FINALIZED=true/);
+});
+
 test('installer supports the new configurable backup feature under its systemd sandbox', () => {
   assert.match(installer, /BACKUP_DIR=\$BACKUP_ROOT/);
   assert.match(installer, /READ_WRITE_PATHS=.*\$BACKUP_ROOT/);
