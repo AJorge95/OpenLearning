@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 120: enlarge password visibility targets
+
+- **Reviewed:** The shared password field used by sign-in, registration, setup, account settings, account creation, and administrator reset forms; its Show/Hide action semantics, input spacing, keyboard focus, responsive field layout, and the related authentication/session and validation boundaries.
+- **Improvement:** Raise the shared password visibility action from a 36px minimum height to 40px while preserving its 44px width, compact field height, accessible Show/Hide name, input relationship, concealed-by-default behavior, and remasking when a value is cleared. Added a readability comment and extended `tests/client/password-field.test.js`.
+- **Why it helps:** Learners, staff, and administrators can reveal or conceal passwords more reliably with a pointer or touch device across every password form, without changing credential handling or consuming additional input height.
+- **Backend review:** Password hashing, validation, CSRF protection, session handling, login/register/reset authorization, and failure feedback already match the shared field contract; no backend change was indicated.
+- **Checked:** Focused password/auth checks passed (6/6); the full `npm test -- --test-reporter=spec` suite passed (987/987), `npm run typecheck`, `npm run build`, and `git diff --check` passed. The live `/login` shell exposed a 44×40px Show password control; activating it changed the input type to `text` and the accessible action to `Hide password`. Fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, version, and Vite-root probes returned 200; anonymous CSRF returned no `Set-Cookie`, anonymous admin backups returned 401, and browser warning/error diagnostics were empty. No credentials or application data were submitted or changed.
+- **Commit title:** `fix(a11y): enlarge password visibility targets`.
+- **Commit description:** `Give shared password visibility actions a reliable touch target while preserving their accessible toggle and compact field layout.`
+
 ## 2026-10-16 — Cycle 119: enlarge audit and system-log detail disclosures
 
 - **Reviewed:** Shared audit and system-log detail toggles, their accessible expanded state and controlled detail rows, dense table layout, keyboard focus treatment, log filtering and pagination, and the staff-only log query and authorization paths.
