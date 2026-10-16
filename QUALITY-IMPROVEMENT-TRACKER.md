@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 90 bounded media-delivery and startup-cleanup review: no distinct change indicated
+
+- **Reviewed:** Orphaned course-media cleanup's path and age bounds, generated-file allowlist, referenced-file preservation, race/error handling, bounded diagnostics, protected media authorization, byte-range and disappearing-file recovery, private download headers, upload signature/size cleanup, public version and asset fallback responses, and the freshly relaunched public client.
+- **Result:** No distinct current-build reliability, security, validation, data-integrity, performance, or interaction defect was evidenced. Startup cleanup only considers UUID-named course directories and generated upload extensions, preserves referenced or recent files, continues safely through bounded failures, and protected media remains fail-closed with range-aware recovery and private caching policy.
+- **Why no code change:** The reviewed media and startup paths already have focused coverage for stale-file safety, missing roots, inaccessible directories, races, upload cleanup, signature failures, byte ranges, authorization, and audit rollback. A further edit would be speculative without a reproducible current-build failure, changed media requirement, or representative storage workload.
+- **Checked:** Targeted media, cleanup, version, and pagination tests passed 35/35; `GET /api/version` returned 200 with `Cache-Control: no-store`; protected media remained unauthorized without a session; a missing asset returned a structured plain-text 404; the fresh client reloaded successfully; and no credentials, forms, uploads, account/course actions, or application data were submitted or changed.
+- **Needed to continue:** A reproducible media-delivery or cleanup failure outside the covered contracts, a changed storage/security requirement, or representative media-volume evidence identifying a specific bottleneck.
+- **Commit title:** `docs(quality): record cycle 90 media review`.
+- **Commit description:** `Record the bounded media-delivery and startup-cleanup review with focused passing evidence and the next evidence gate.`
+
 ## 2026-10-16 — Cycle 89 bounded registration, responsive, and backend review: no distinct change indicated
 
 - **Reviewed:** The freshly launched public registration route at the default and 375px viewports, heading and form-control structure, native required and autofill semantics, password actions, registration-field loading/retry behavior, document-width metrics, browser diagnostics, source-level button and image alternatives, responsive overflow/focus/reduced-motion rules, shared auth startup and CSRF recovery, structured request errors, authorization and pagination bounds, readiness checks, upload guards, and course-version transaction boundaries.
