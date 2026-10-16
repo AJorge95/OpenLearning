@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 87 bounded public, responsive, and backend review: no distinct change indicated
+
+- **Reviewed:** The freshly launched signed-out login and registration surfaces, their HTML control names and native required semantics, the default-viewport registration screenshot and document overflow metrics, responsive and reduced-motion CSS, shared auth startup and request-recovery behavior, structured HTTP errors, route validation, authorization and pagination limits, stateless anonymous CSRF bootstrap, session-store cleanup, authentication rate-limit boundaries, and transactional account/settings writes.
+- **Result:** No distinct current-build interface, responsive, accessibility, validation, authorization, recovery, data-integrity, or measured-performance defect was evidenced. The public registration page exposes one meaningful heading, named controls, password actions, and no unlabeled images or blank buttons; its document width remains within the viewport. The reviewed backend keeps bounded inputs, structured failures, fail-closed access checks, stateless anonymous CSRF tokens, and transactional writes.
+- **Why no code change:** The earlier anonymous CSRF session-growth risk is already addressed in the current tree, and the remaining plausible edits would duplicate covered shared-control, route-recovery, or session contracts. A safe new implementation still needs a reproducible current-build mismatch outside these contracts, a changed product or security requirement, an authenticated fixture exposing a concrete failure, or representative workload evidence.
+- **Checked:** The full `npm test -- --test-reporter=spec` suite passed 965/965; `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and the Vite root returned 200; anonymous CSRF returned no `Set-Cookie`; and the browser DOM exposed named registration controls with no blank buttons or unlabeled images. No credentials, forms, uploads, account/course actions, or application data were submitted or changed.
+- **Needed to continue:** A reproducible current-build interaction or accessibility mismatch outside the covered public contracts, a changed product/security requirement, an authenticated fixture exposing a concrete failure, or representative latency/workload evidence.
+- **Commit title:** `docs(quality): record cycle 87 bounded review`.
+- **Commit description:** `Record the bounded public, responsive, and backend review with passing validation evidence and the next evidence gate.`
+
 ## 2026-10-16 — Cycle 86 bounded public, responsive, and backend-boundary review: no distinct change indicated
 
 - **Reviewed:** The freshly launched signed-out login and registration surfaces at the default and 375px viewport, public control names and required semantics, document-level overflow, browser diagnostics, the shared API/auth startup and request-recovery paths, session and CSRF boundaries, route validation, pagination limits, authorization checks, and the remaining interface candidates found by source scanning.
