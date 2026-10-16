@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 147: review remaining compact controls
+
+- **Reviewed:** The post-Cycle-146 shared recovery-link styles, remaining sub-40px dimensions, quiz settings and narrow player/editor overrides, responsive overflow rules, course and learning-path pagination, course analytics batching, protected course access, structured request validation, and current error/retry boundaries.
+- **Result:** No runtime change. The remaining 39px rules are scoped to compact narrow layouts whose surrounding controls already preserve the project’s target rhythm; other smaller dimensions are decorative badges, avatars, icons, progress text, or inner file-picker affordances rather than independent interaction targets. No distinct current-build interface, accessibility, responsive, validation, authorization, recovery, performance, or maintainability defect was evidenced.
+- **Why no change:** Another isolated size tweak would be lower value than the completed shared recovery-link improvement without a reproducible mismatch or authenticated fixture showing a user-facing problem. The current backend contracts already clamp pages, batch course/path summaries, enforce viewer/manager boundaries, and return structured errors for the reviewed flows.
+- **Checked:** Focused responsive, quiz-target, learner-recovery, course-navigation, course-analytics, pagination, authorization, and request-validation checks passed (138/138); `git diff --check` passed. The fresh signed-out local browser shell remained non-blank at `/login` with one heading and named username/password controls; authenticated management and learner workflows remain source- and regression-verified because no authenticated fixture was available, and no credentials or application data were submitted or changed.
+- **Commit title:** `docs(quality): record compact-control review`.
+- **Commit description:** `Record the bounded compact-control and backend-contract review with no additional safe change identified.`
+
 ## 2026-10-16 — Cycle 146: strengthen shared recovery links
 
 - **Reviewed:** Learner course, lesson, quiz, certificate, and account-management recovery states; shared `Back to ...` destinations; narrow layouts; keyboard focus treatment; and the protected course/account authorization and error-response boundaries.
