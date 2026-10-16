@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 136: align lesson document-upload target
+
+- **Reviewed:** The staff lesson-editor document picker, native file-label/input semantics, format guidance, upload progress and cancellation states, narrow stacked layout, focus-within treatment, and the server-side document type/signature validation, authorization, size limit, transaction, audit, and cleanup paths.
+- **Improvement:** Raise the lesson “Choose document” control from a 38px override to a consistent 40px minimum target, preserving its hidden native file input, focus outline, supported-format guidance, busy/progress states, responsive layout, and existing upload handler. Added `tests/client/document-upload-target.test.js` and a readable CSS comment.
+- **Why it helps:** Course authors can activate the lesson document picker more reliably with a pointer or touch device, matching the adjacent video-upload affordance without widening the editor or changing upload behavior.
+- **Backend review:** Document uploads still require staff course access, an allow-listed extension and MIME type, matching file signatures where applicable, bounded size, a current lesson in the course, transactional resource/audit writes, and cleanup after rejection or persistence failure. No backend change was indicated.
+- **Checked:** Focused document-upload, video-upload, upload-size, course-editor, and document media-route checks passed (18/18 and 24/24); the full `npm test -- --test-reporter=spec` suite passed (1004/1004), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, CSRF, and Vite `/` and `/login` probes returned 200; anonymous CSRF returned no `Set-Cookie`. The live `/login` shell exposed one heading plus named username/password controls; authenticated lesson-editor rendering remains source- and regression-verified because this development browser session is signed out. No credentials, files, course edits, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): align lesson document-upload target`.
+- **Commit description:** `Give the lesson document picker a reliable touch target while preserving its native file-input semantics and upload behavior.`
+
 ## 2026-10-16 — Cycle 135: align quiz-editor text action targets
 
 - **Reviewed:** The staff quiz editor's repeated Remove question, Add answer choice, and Add question actions; contextual accessible names; disabled save/busy state; narrow quiz layout; forced-colors treatment; question/choice limits; and the matching quiz validation and persistence boundaries.

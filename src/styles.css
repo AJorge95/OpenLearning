@@ -914,7 +914,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .lesson-link-help { margin: -6px 0 0; }
 .lesson-document-upload { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .lesson-document-upload > div { flex: 1; min-width: 210px; }
-.lesson-document-upload .button { min-height: 38px; font-size: 11px; }
+/* Keep the lesson document picker aligned with the other file-upload targets. */
+.lesson-document-upload .button { min-height: 40px; font-size: 11px; }
 .lesson-document-progress { flex-basis: 180px; }
 .lesson-caption-editor { display: grid; gap: 11px; padding-top: 14px; border-top: 1px solid var(--line); }
 .lesson-caption-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: end; gap: 10px; min-width: 0; }
