@@ -730,7 +730,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .path-course-list > li > .text-action { min-height: 40px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--purple-dark); font-size: 11px; font-weight: 650; white-space: nowrap; }
 .path-course-list > li > .text-action:hover { background: var(--purple-soft); }
 .program-card-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding-top: 14px; border-top: 1px solid var(--line); }
-.program-card-footer .button { min-height: 38px; font-size: 12px; }
+/* Keep learning-path lifecycle actions reliable on touch screens without widening the card. */
+.program-card-footer .button { min-height: 40px; font-size: 12px; }
 .program-enrolled { display: inline-flex; align-items: center; gap: 7px; color: #176b40; font-size: 12px; font-weight: 650; }
 .path-assignment-panel { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--subtle); }
 .path-assignment-panel h3 { margin: 0; font-size: 13px; }

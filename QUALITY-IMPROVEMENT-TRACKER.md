@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 144: align learning-path footer targets
+
+- **Reviewed:** Learner and staff learning-path card footer actions, their compact desktop and stacked mobile layout, contextual accessible names, disabled/busy states, keyboard focus treatment, and the status, enrollment, assignment, and archive request boundaries.
+- **Improvement:** Raise the footer `Edit path`, `Assign learners`, `Archive`, `Restore as draft`, and learner `Join path` buttons from the explicit 38px override to a consistent 40px minimum target. Preserve the compact typography, responsive full-width mobile layout, existing labels, disabled/busy feedback, confirmation flow, and navigation/mutation handlers. Added `tests/client/learning-path-footer-target.test.js`.
+- **Why it helps:** Learners and staff can activate the primary action on each learning-path card more reliably with a pointer, touch device, or keyboard without widening the card or changing path semantics.
+- **Backend review:** Learning-path listing, status transitions, enrollment and assignment authorization, conflict handling, pagination, audit persistence, and recoverable refresh feedback were reviewed read-only; the existing server contract already supports this client-only target improvement, so no backend change was indicated.
+- **Checked:** Focused learning-path footer, action, icon, and assignment checks passed (15/15); the full `npm test -- --test-reporter=spec` suite passed (1010/1010); `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration-fields, version, and CSRF probes returned 200 without response cookies, and the Vite `/login` shell returned 200. The temporary in-app browser rendered one heading plus named username/password controls with no blank-page state; no credentials, path actions, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): align learning-path footer targets`.
+- **Commit description:** `Give learning-path card lifecycle actions reliable touch targets while preserving responsive layout and path behavior.`
+
 ## 2026-10-16 — Cycle 143: index backup-dashboard history lookups
 
 - **Reviewed:** The administrator backup dashboard polling and latest-run aggregation, backup-history table shape and indexes, visible loading/error/empty states, responsive settings layout, and the scheduler's queue, retention, destination-validation, authorization, and write-coordination boundaries.
