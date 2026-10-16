@@ -20,7 +20,7 @@
 
 - **Problem:** Production startup logs advertised `localhost`, obscuring the address needed by remote browsers and leaving the listener host implicit.
 - **Change:** Configure production to bind explicitly to `0.0.0.0` on IPv4 while keeping development and tests on `127.0.0.1`. Report the actual bind address and tell remote users to open the server's external IP with the configured port.
-- **Validation:** Production host configuration, installer/config regression checks, and build checks are run. Public browser reachability still depends on the server's external address and network firewall; the loopback health probe remains a local app check.
+- **Validation:** Production host configuration and development loopback defaults are covered by config regressions; focused installer/config tests passed 23/23, `npm run build`, Bash syntax, and `git diff --check` passed. Public browser reachability still depends on the server's external address and network firewall; the loopback health probe remains a local app check. The existing local 5173 listener belonged to Eurybia and was preserved.
 - **Commit:** fix(server): bind production on external interfaces.
 
 ## 2026-10-16 — Installer follow-up: repair preserved storage access
