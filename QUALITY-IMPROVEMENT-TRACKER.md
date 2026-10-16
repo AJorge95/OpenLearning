@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 148: review startup and boundary contracts
+
+- **Reviewed:** The fresh signed-out login shell at desktop and 390px widths; semantic form structure, required-field naming, password visibility, responsive document sizing, and browser diagnostics; shared route, form, select, dialog, and error boundaries; authentication startup concurrency, timeout, bounded retry, and CSRF refresh; caption/file-editor controls and media upload recovery; administrator approval count refresh; and the server's session-store, CSRF, rate-limit, pagination, authorization, and current index contracts.
+- **Result:** No runtime change. The current build exposed one heading, named required username/password fields, a labeled password action, and no narrow document overflow or browser warnings/errors. The reviewed client paths already preserve focus, retry, cancellation, and structured feedback, while the server provides anonymous non-persistent CSRF tokens, expired-session pruning, endpoint-scoped authentication limits, bounded page inputs, and protected access boundaries.
+- **Why no change:** The remaining sub-40px dimensions are decorative or inner file-picker affordances, or are already enclosed by a larger interactive target. Another isolated control-size or session/index edit would duplicate recent work without a reproducible current-build mismatch, authenticated fixture, or representative workload evidence.
+- **Checked:** Focused startup, login/password, responsive, caption/editor, rate-limit, CSRF, current-user, pagination, and session-store checks passed (35/35). Fresh `/healthz`, `/readyz`, setup status, registration-fields, version, CSRF, and Vite `/login` probes returned 200 without response cookies. The in-app browser rendered the login shell at the default and 390px viewports; the DOM retained one heading and two required fields, document width matched the viewport, and warning/error diagnostics were empty. `git diff --check` was run; no credentials, forms, uploads, account/course actions, or application data were submitted or changed.
+- **Needed to continue:** A reproducible authenticated staff or learner interaction mismatch, a changed product requirement, or representative production-size workload/latency evidence identifying a concrete backend bottleneck.
+- **Commit title:** `docs(quality): record startup boundary review`.
+- **Commit description:** `Record the bounded startup, editor, authentication, and backend-boundary review with no additional safe change identified.`
+
 ## 2026-10-16 — Cycle 147: review remaining compact controls
 
 - **Reviewed:** The post-Cycle-146 shared recovery-link styles, remaining sub-40px dimensions, quiz settings and narrow player/editor overrides, responsive overflow rules, course and learning-path pagination, course analytics batching, protected course access, structured request validation, and current error/retry boundaries.
