@@ -21,7 +21,7 @@ test('Linux installer targets supported systems and repository main', () => {
   assert.match(installer, /RHEL 9\+/);
   assert.match(installer, /Node\.js 24 or newer/);
   assert.match(installer, /systemd is required/);
-  assert.match(installer, /PORT="6173"/);
+  assert.match(installer, /PORT="5173"/);
   assert.match(installer, /DEFAULT_PORT="\$PORT"/);
 });
 
