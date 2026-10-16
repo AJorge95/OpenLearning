@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 99: preserve truthful lesson-resource feedback after refresh failures
+
+- **Reviewed:** Lesson-details resource links, document uploads, caption uploads, resource and caption removal, the course refresh callback used after each mutation, related validation and media request boundaries, and the editor's accessible progress, cancellation, and error states.
+- **Improvement:** Course refresh now reports whether the committed course read completed. Lesson-detail mutations use that result to distinguish a successful write from a failed follow-up refresh, and clear link/caption form values immediately after their writes so a stale editor does not invite an accidental duplicate retry.
+- **Why it helps:** Editors now receive truthful feedback when a link, document, caption, or removal is committed but the refreshed course cannot be read. The existing local mutation remains visible while the warning directs the editor to reload before making another change.
+- **Backend review:** The lesson mutation and upload endpoints already validate ownership, media constraints, and audit/transaction rollback; no server change was indicated.
+- **Checked:** Focused course-editor refresh and lesson-details checks passed 15/15; the full `npm test -- --test-reporter=spec` suite passed 968/968; `npm run typecheck`, `npm run build`, and `git diff --check` passed. No credentials, forms, uploads, account/course actions, or application data were submitted or changed during the browser review.
+- **Commit title:** `fix(manage): preserve lesson mutation feedback`.
+- **Commit description:** `Report committed lesson changes separately from failed course refreshes and clear consumed resource inputs before the refresh.`
+
 ## 2026-10-16 — Cycle 98 bounded management and course-editor review: no distinct change indicated
 
 - **Reviewed:** Course-management and course-editor structure, row-menu keyboard/focus behavior, version-review submission and decision states, course-access and account-management filters, admin dialogs and log landmarks, responsive management layouts, and the related course-version, publication-review, access, account, audit, validation, authorization, transaction, and response-read paths.
