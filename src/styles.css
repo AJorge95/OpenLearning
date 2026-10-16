@@ -708,7 +708,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .path-course-list > li > div { display: grid; gap: 4px; min-width: 0; }
 .path-course-list > li > div > strong { font-size: 12px; overflow-wrap: anywhere; }
 .path-course-list > li small, .path-course-list > li > .muted { color: var(--muted); font-size: 11px; line-height: 1.4; }
-.path-course-list > li > .text-action { min-height: 36px; display: inline-flex; align-items: center; padding: 0 9px; border-radius: 4px; color: var(--purple-dark); font-size: 11px; font-weight: 650; white-space: nowrap; }
+/* Keep learning-path card actions reliable on touch screens and clear at keyboard focus. */
+.path-course-list > li > .text-action { min-height: 40px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--purple-dark); font-size: 11px; font-weight: 650; white-space: nowrap; }
 .path-course-list > li > .text-action:hover { background: var(--purple-soft); }
 .program-card-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding-top: 14px; border-top: 1px solid var(--line); }
 .program-card-footer .button { min-height: 38px; font-size: 12px; }
@@ -727,7 +728,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .path-assigned-learners > li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 8px; border-top: 1px solid var(--line); }
 .path-assigned-learners > li > span { display: grid; gap: 2px; min-width: 0; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 .path-assigned-learners small { color: var(--muted); font-size: 10px; font-weight: 450; }
-.path-assigned-learners .text-action { min-height: 34px; padding: 0 8px; color: var(--danger); font-size: 11px; }
+.path-assigned-learners .text-action { min-height: 40px; padding: 0 9px; color: var(--danger); font-size: 11px; }
+.path-course-list > li > .text-action:focus-visible, .path-assigned-learners .text-action:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 .calendar-month-controls { display: flex; align-items: center; gap: 9px; }
 .calendar-month-controls .button { width: 40px; min-height: 40px; padding: 0; border-radius: 6px; }
 .calendar-month-controls > .calendar-current-month { width: auto; padding: 0 10px; white-space: nowrap; }

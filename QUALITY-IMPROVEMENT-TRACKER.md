@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 114: enlarge learning-path card actions
+
+- **Reviewed:** Learner and staff learning-path card structure, course action links, assigned-learner removal actions, narrow-layout grid placement, keyboard focus treatment, and the existing path enrollment, assignment, authorization, and refresh-feedback boundaries.
+- **Improvement:** Increase the learning-path card's `Start course`, `Review course`, and `Edit course` links from 36px to 40px, and the assigned-learner `Remove assignment` action from 34px to 40px. Add a local palette-aware focus outline while preserving accessible names, responsive placement, disabled states, and all navigation and mutation handlers.
+- **Why it helps:** Learners and staff can activate the most common path-card actions more reliably with a pointer or touch device, while keyboard users can identify the focused action without changing course navigation or assignment semantics.
+- **Backend review:** Learning-path listing, course-access checks, enrollment and assignment authorization, pagination, transactional removal, audit handling, and refresh feedback were reviewed read-only; no backend change was indicated.
+- **Checked:** Added `tests/client/learning-path-action-target.test.js`; the focused target and existing learning-path accessibility checks passed 13/13, the full `npm test -- --test-reporter=spec` suite passed 982/982, `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, version, and Vite-root probes returned 200 with no CSRF `Set-Cookie`; anonymous admin backups returned structured 401 JSON. The reloaded local `/register` browser shell rendered one heading, named registration controls, and no blank-page or framework-overlay state. No credentials, forms, assignments, or application data were submitted.
+- **Commit title:** `fix(a11y): enlarge learning-path card actions`.
+- **Commit description:** `Give learning-path course and assignment actions reliable touch targets and visible keyboard focus while preserving their existing navigation and mutation semantics.`
+
 ## 2026-10-16 — Cycle 113: enlarge shared management search targets
 
 - **Reviewed:** Staff course, user, learning-path, competency, course-access, audit-log, and system-log search structures; text-submit target sizing; keyboard focus treatment; narrow-layout overrides; and the existing search filtering and request-recovery paths.
