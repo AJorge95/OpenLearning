@@ -2900,7 +2900,9 @@ export function AdminSettingsPage() {
   const [appVersionError, setAppVersionError] = useState('');
   const { platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, userLimit, setBranding, setPlatformAccessSettings } = useAuth();
   const platformNameErrorId = useId();
+  const userLimitErrorId = useId();
   const platformNameInputRef = useRef<HTMLInputElement>(null);
+  const userLimitInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(platformName);
   const [platformNameError, setPlatformNameError] = useState('');
   const [icon, setIcon] = useState<string | null>(platformIcon);
@@ -2910,6 +2912,7 @@ export function AdminSettingsPage() {
   const [allowRegistration, setAllowRegistration] = useState(registrationEnabled);
   const [requireRegistrationApproval, setRequireRegistrationApproval] = useState(registrationApprovalRequired);
   const [userLimitValue, setUserLimitValue] = useState(String(userLimit));
+  const [userLimitError, setUserLimitError] = useState('');
   const [registeredUserCount, setRegisteredUserCount] = useState<number | null>(null);
   const [registeredUserCountLoading, setRegisteredUserCountLoading] = useState(true);
   const [registeredUserCountError, setRegisteredUserCountError] = useState('');
@@ -2935,7 +2938,7 @@ export function AdminSettingsPage() {
       });
     return () => controller.abort();
   }, []);
-  useEffect(() => { setName(platformName); setIcon(platformIcon); setIconEdited(false); setPalette(themePalette); setProtocol(connectionProtocol); setAllowRegistration(registrationEnabled); setRequireRegistrationApproval(registrationApprovalRequired); setUserLimitValue(String(userLimit)); }, [platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, userLimit]);
+  useEffect(() => { setName(platformName); setIcon(platformIcon); setIconEdited(false); setPalette(themePalette); setProtocol(connectionProtocol); setAllowRegistration(registrationEnabled); setRequireRegistrationApproval(registrationApprovalRequired); setUserLimitValue(String(userLimit)); setUserLimitError(''); }, [platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, userLimit]);
   function refreshRegisteredUserCount() {
     // Reuse the existing request effect so refreshes share its abort and stale-response guards.
     setRegisteredUserCountRetryVersion((version) => version + 1);
@@ -3012,7 +3015,7 @@ export function AdminSettingsPage() {
   }
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setError(''); setSuccess(''); setPlatformNameError('');
+    setError(''); setSuccess(''); setPlatformNameError(''); setUserLimitError('');
     const currentPlatformNameError = platformNameValidationError(name);
     if (currentPlatformNameError) {
       setPlatformNameError(currentPlatformNameError);
@@ -3039,6 +3042,9 @@ export function AdminSettingsPage() {
       if (cause instanceof ApiError && cause.code === 'invalid_platform_name') {
         setPlatformNameError(cause.message);
         window.requestAnimationFrame(() => platformNameInputRef.current?.focus());
+      } else if (cause instanceof ApiError && cause.code === 'invalid_user_limit') {
+        setUserLimitError(cause.message);
+        window.requestAnimationFrame(() => userLimitInputRef.current?.focus());
       } else setError(cause instanceof ApiError ? cause.message : 'Settings could not be saved.');
     }
     finally { setSaving(false); }
@@ -3104,7 +3110,8 @@ export function AdminSettingsPage() {
       <p id="protocol-help" className="protocol-help">This controls secure session cookies. HTTPS requires a TLS certificate on this server or a reverse proxy. For TLS behind a proxy, set <code>TRUST_PROXY=true</code>.{connectionProtocol === 'https' && protocol === 'http' && <span className="protocol-session-warning">If you then open the site over HTTP, browsers will not send the existing secure session cookie, so you will need to sign in again.</span>}</p>
       <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={allowRegistration} onChange={(event) => setAllowRegistration(event.target.checked)} /></label>
       <label className="setup-toggle"><span><strong>Require admin approval for new registrations</strong><small>New learners must be approved by an administrator before they can sign in or use the platform.</small></span><input type="checkbox" checked={requireRegistrationApproval} onChange={(event) => setRequireRegistrationApproval(event.target.checked)} /></label>
-      <label><span className="form-label-row"><span>Maximum registered accounts</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input className="user-limit-input" type="number" min={0} max={1000000} step={1} required value={userLimitValue} onChange={(event) => setUserLimitValue(event.target.value)} /><small>0 means no limit. The cap includes administrators, moderators, and learners.</small></label>
+      <label><span className="form-label-row"><span>Maximum registered accounts</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={userLimitInputRef} className="user-limit-input" type="number" min={0} max={1000000} step={1} required aria-invalid={userLimitError ? true : undefined} aria-describedby={userLimitError ? userLimitErrorId : undefined} value={userLimitValue} onChange={(event) => { setUserLimitValue(event.target.value); setUserLimitError(''); }} /><small>0 means no limit. The cap includes administrators, moderators, and learners.</small></label>
+      {userLimitError && <p id={userLimitErrorId} className="form-error" role="alert">{userLimitError}</p>}
       {registeredUserCountError
         ? <div className="registered-count-recovery"><Notice>{registeredUserCountError}</Notice><Button type="button" variant="secondary" onClick={() => setRegisteredUserCountRetryVersion((version) => version + 1)}>Retry account count</Button></div>
         : <div className="registered-account-usage">

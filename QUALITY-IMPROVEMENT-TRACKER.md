@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Associate admin account-limit errors with their field
+
+- **Reviewed:** The administrator Settings account-cap form, its `invalid_user_limit` server response, native number constraints, registered-account usage recovery, and the equivalent field-level recovery in the setup wizard.
+- **Improvement:** Give the maximum registered accounts input a stable ref and error id, map server-side `invalid_user_limit` responses to `aria-invalid`/`aria-describedby` state, return focus to the field, and clear stale feedback when the value changes or settings reload.
+- **Why it helps:** Administrators now know exactly which setting needs correction when the server rejects an account limit, including after a concurrent or otherwise server-side validation mismatch, instead of receiving only an unassociated form notice.
+- **Backend review:** The existing bounded `parseUserLimit` validation and `invalid_user_limit` response contract remain authoritative and unchanged; no server or permission change was needed.
+- **Checked:** Added `tests/client/admin-settings-user-limit-errors.test.js`; the focused settings/account-cap suite passed 5/5, the full `npm test -- --test-reporter=spec` suite passed 963/963, `npm run typecheck`, `npm run build`, and `git diff --check` passed. Local `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and the Vite root returned 200. The launched browser remained read-only on public routes with no warning/error logs; no credentials, forms, uploads, account/course actions, or application data were submitted.
+- **Commit title:** `fix(a11y): associate admin account-limit errors`.
+- **Commit description:** `Associate invalid administrator account-limit responses with the settings field and restore focus for correction.
+
 ## 2026-10-16 — Normalize slash-suffixed catalog login redirects
 
 - **Reviewed:** The post-login destination sanitizer after the root-alias fix, direct `/courses/` navigation while signed out, protected deep-link preservation, and the current clean application baseline.
