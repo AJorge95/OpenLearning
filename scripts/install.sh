@@ -81,6 +81,22 @@ detect_firewalld_zone() {
   printf '%s\n' "$zone"
 }
 
+configure_firewalld_port() {
+  local zone="$1"
+  local add_output=""
+  local add_status=0
+
+  add_output="$(firewall-cmd --zone="$zone" --permanent --add-port="$SERVICE_PORT/tcp" 2>&1)" || add_status=$?
+  if [[ "$add_status" -ne 0 && "$add_status" -ne 11 ]]; then
+    [[ -z "$add_output" ]] || printf '%s\n' "$add_output" >&2
+    return "$add_status"
+  fi
+
+  # firewalld uses ALREADY_ENABLED (11) for an existing rule; reload either
+  # successful outcome so permanent configuration is reflected at runtime.
+  firewall-cmd --reload >/dev/null
+}
+
 package_manager_for() {
   local os_id="$1"
   local os_version="$2"
@@ -503,8 +519,7 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: 
 fi
 if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
   if FIREWALL_ZONE="$(detect_firewalld_zone)"; then
-    if firewall-cmd --zone="$FIREWALL_ZONE" --permanent --add-port="$SERVICE_PORT/tcp" >/dev/null \
-      && firewall-cmd --reload >/dev/null; then
+    if configure_firewalld_port "$FIREWALL_ZONE"; then
       log "Allowed TCP port $SERVICE_PORT through the firewalld zone for the server route: $FIREWALL_ZONE."
       FIREWALL_CONFIGURED=true
     else
