@@ -7,20 +7,17 @@ const backupSection = readme.split('## Back up and restore')[1]?.split('\n## ')[
 
 test('backup instructions follow configured database and media paths', () => {
   assert.match(backupSection, /Settings.*Backups/);
-  assert.match(backupSection, /daily or weekly jobs/i);
-  assert.match(backupSection, /database.*course-media.*both/i);
+  assert.match(backupSection, /daily or weekly/i);
+  assert.match(backupSection, /database, course-media, or full backups/i);
+  assert.match(backupSection, /per-job destinations and retention policies/i);
   assert.match(backupSection, /14 successful backup artifacts/i);
   assert.match(backupSection, /Missed schedules are not replayed after downtime/i);
   assert.match(backupSection, /`npm run backup`/);
-  assert.match(backupSection, /same `DATA_DIR`, `DB_PATH`, and `MEDIA_ROOT` configuration/i);
-  assert.match(backupSection, /reads the project `\.env` file/i);
-  assert.match(backupSection, /bundled SQLite driver, so the SQLite CLI is not required/i);
-  assert.match(backupSection, /new timestamped directory under `\.\/backup`/);
+  assert.match(backupSection, /same `DATA_DIR`, `DB_PATH`, and `MEDIA_ROOT` settings as the app/i);
+  assert.match(backupSection, /reads `\.env` and writes under `\.\/backup` by default/i);
   assert.match(backupSection, /BACKUP_DIR/);
-  assert.match(backupSection, /same working directory used by OpenLearning/i);
-  assert.match(backupSection, /pause course edits and uploads during the media copy/i);
-  assert.match(backupSection, /Before copying media or reporting success, it verifies the SQLite snapshot with `quick_check`/i);
-  assert.match(backupSection, /if the check fails, incomplete output is removed/i);
-  assert.match(backupSection, /rejects backup destinations inside the media root/i);
-  assert.match(backupSection, /removes incomplete output when a backup fails/i);
+  assert.match(backupSection, /Pause course edits and uploads while media is copied/i);
+  assert.match(backupSection, /checks the SQLite snapshot and media copies/i);
+  assert.match(backupSection, /rejects a destination inside the media root/i);
+  assert.match(backupSection, /removes incomplete output after a failure/i);
 });

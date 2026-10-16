@@ -18,7 +18,6 @@ services:
         protocol: tcp
         mode: host
     environment:
-      NODE_ENV: production
       PORT: "5173"
       DATA_DIR: /var/lib/openlearning
       BACKUP_DIR: /var/backups/openlearning
