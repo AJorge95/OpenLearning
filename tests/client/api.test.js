@@ -264,6 +264,29 @@ test('reports upload connection loss consistently and warns that completion is u
   assert.ok(sentBody instanceof FormData);
 });
 
+test('normalizes synchronous upload-send failures into a retryable API error', async (t) => {
+  restoreFetch(t);
+  const originalXhr = globalThis.XMLHttpRequest;
+  globalThis.fetch = async () => jsonResponse({ token: 'upload-token' });
+  globalThis.XMLHttpRequest = class {
+    upload = {};
+    open() {}
+    setRequestHeader() {}
+    send() { throw new TypeError('Invalid XHR state'); }
+  };
+  t.after(() => {
+    if (originalXhr === undefined) delete globalThis.XMLHttpRequest;
+    else globalThis.XMLHttpRequest = originalXhr;
+  });
+
+  await assert.rejects(api.upload('/api/upload', {}, new Blob(['lesson handout']), () => {}), (error) => (
+    error instanceof ApiError
+    && error.status === 0
+    && error.code === 'network_error'
+    && error.message === 'The upload could not be started. Check your connection and try again.'
+  ));
+});
+
 test('explains how to recover when the server request timeout stops an upload', async (t) => {
   restoreFetch(t);
   globalThis.fetch = async () => jsonResponse({ token: 'upload-token' });
