@@ -273,7 +273,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .analytics-learner-state.is-complete { color: #17623a; background: #eaf7ef; }
 .analytics-disabled-label { color: #9b3a47 !important; }
 .analytics-learner-details { margin-top: 8px; }
-.analytics-learner-details summary { width: fit-content; min-height: 32px; padding: 6px 2px; color: var(--purple); cursor: pointer; font-size: 12px; font-weight: 650; line-height: 1.5; }
+/* Keep each learner's on-demand activity disclosure easy to activate and identify. */
+.analytics-learner-details summary { width: fit-content; min-height: 40px; padding: 6px 2px; color: var(--purple); cursor: pointer; font-size: 12px; font-weight: 650; line-height: 1.5; }
+.analytics-learner-details summary:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; border-radius: 3px; }
 .analytics-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 15px; width: min(680px, calc(100cqi - 12px)); margin-top: 12px; padding: 13px; border: 1px solid var(--line); border-radius: 4px; background: #fbfbfd; white-space: normal; }
 .analytics-detail-grid h3 { margin: 0 0 8px; color: #4b4f5d; font-size: 13px; }
 .analytics-detail-grid ul { display: grid; gap: 7px; max-height: 260px; padding: 0; margin: 0; overflow: auto; list-style: none; }

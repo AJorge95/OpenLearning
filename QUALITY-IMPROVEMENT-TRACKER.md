@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 117: enlarge course-analytics activity disclosures
+
+- **Reviewed:** Course-analytics learner rows, native activity-detail disclosure semantics, on-demand detail loading and retry states, narrow learner-table layout, keyboard focus behavior, and the staff-only analytics API boundary.
+- **Improvement:** Raise the learner activity disclosure from a 32px minimum target to 40px and add a local palette-aware focus outline while preserving its native `<details>` behavior, accessible learner-specific name, on-demand request lifecycle, and compact table layout. Added `tests/client/course-analytics-activity-target.test.js`.
+- **Why it helps:** Staff can open learner activity details more reliably with a pointer or touch device, and keyboard users can see the focused disclosure without changing the analytics data or request behavior.
+- **Backend review:** The existing analytics summary and on-demand learner-details routes already enforce staff access, learner membership, published-version scoping, bounded pagination, and request-level cancellation; no backend change was indicated.
+- **Checked:** The dedicated disclosure-target regression and related analytics checks passed (4/4); the full `npm test -- --test-reporter=spec` suite passed (985/985), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, version, and Vite-root probes returned 200; anonymous CSRF returned no `Set-Cookie`. The reloaded local `/login` shell exposed one heading and named username/password controls with no browser warning/error logs. Authenticated analytics interaction remains source- and regression-verified because this development browser session has no authenticated staff fixture.
+- **Commit title:** `fix(a11y): enlarge analytics activity disclosure`.
+- **Commit description:** `Give course analytics activity disclosures a reliable touch target and visible keyboard focus while preserving their on-demand loading behavior.`
+
 ## 2026-10-16 — Cycle 116: enlarge competency administration targets
 
 - **Reviewed:** Competency administration row and pagination button structure, shared `Button` focus behavior, narrow-layout stacking, search and status-update semantics, and the competency API's authorization, validation, pagination, transactional update, and audit paths.
