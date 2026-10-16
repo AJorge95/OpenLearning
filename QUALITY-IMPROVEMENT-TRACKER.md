@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 139: align account-count refresh target
+
+- **Reviewed:** The administrator Settings account-cap section, registered-account count refresh action, text-only live status region, narrow form layout, loading/disabled feedback, stale-response cancellation, and the account-limit validation and persistence boundaries.
+- **Improvement:** Raise the `Refresh account count` action from a 34px override to a 40px minimum target while preserving its quiet styling, compact width, disabled/busy state, count-only refresh behavior, and existing account-cap form layout. Updated `tests/client/admin-account-capacity.test.js` and added a readable CSS comment.
+- **Why it helps:** Administrators can refresh the count used to judge registration-cap availability more reliably with a pointer or touch device, without widening the settings form or changing account-limit semantics.
+- **Backend review:** Account-count retrieval, stale-response cancellation, registration-cap validation, transactional settings persistence, authorization, and audit behavior were reviewed read-only; the existing server contract already supports this client-only target improvement, so no backend change was indicated.
+- **Checked:** The focused account-capacity checks passed (3/3); the full `npm test -- --test-reporter=spec` suite passed (1006/1006); `npm run build` including strict typecheck, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration-fields, version, CSRF, and Vite `/login` probes returned 200. The signed-out in-app browser rendered a non-blank login shell with one heading and named username/password controls; no credentials, settings changes, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): align account-count refresh target`.
+- **Commit description:** `Give administrators a reliable account-count refresh target while preserving the existing live status and settings behavior.`
+
 ## 2026-10-16 — Cycle 138: align learner video recovery targets
 
 - **Reviewed:** The learner lesson-player video error and stalled-playback recovery states, retry button labels and handlers, narrow stacked layout, keyboard focus treatment, protected video range delivery, learner access checks, verified watch-duration/progress contract, and retryable media failure paths.
