@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 163: verify media in all backup workflows
+
+- **Reviewed:** Fresh local API/client routes; installer RHEL support and service-account storage checks; backup and reset media-copy paths, manifest consumers, retention identity checks, and focused regressions; plus auth and backup-page semantic landmarks, named controls, keyboard-focus styling, and mobile layout rules. The rendered login route returned 200, but the Browser plugin is absent and Playwright is not installed, so no visual/interaction inspection was performed and no dependency was added.
+- **Problem:** The previous cycle strengthened only platform-reset backups. Routine CLI and scheduled/manual backups still checked media file sizes alone, even though successful scheduler runs are described as verified.
+- **Change:** Extracted a shared streaming media copier and use it for both reset and regular backups. It computes SHA-256 while copying, verifies persisted bytes before success, and emits stable per-file paths, lengths, and hashes in media/full manifests. Documented the manifest fields and added dedicated shared-copier corruption coverage plus regular-backup manifest assertions.
+- **Why it helps:** All media-bearing backup workflows now reject same-size corruption and provide operators with file-level integrity metadata; large files remain streamed instead of being buffered in memory. Verification adds a second streaming read of the saved copy, so large-media backup time was not performance-benchmarked in this local fixture.
+- **Checked:** Focused backup/reset/media-copy tests passed 19/19; full `npm test -- --test-reporter=dot`, `npm run build` (including typecheck), and `git diff --check` passed. Local `/healthz`, `/readyz`, and Vite `/login` probes returned 200. No frontend runtime change, production host, or application data was changed.
+- **Commit title:** `fix(backups): verify media across backup workflows`.
+- **Commit description:** `Share streaming SHA-256 media-copy verification between reset and routine backups, persist per-file integrity metadata, and reject same-size corruption before reporting backup success.`
+
 ## 2026-10-16 — Cycle 162: verify pre-reset media backup contents
 
 - **Reviewed:** Current project guidance and working-tree state; the signed-out login route and API health/readiness endpoints; the reset preparation/confirmation sequence; media-copy validation; manifest consumers; and the existing platform-reset regression coverage. The recent installer, backup-scheduler, and lifecycle cycles were checked to avoid repeating those changes.

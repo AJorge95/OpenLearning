@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
@@ -107,6 +108,12 @@ test('backup command snapshots configured SQLite and media paths into a fresh di
     backupDatabase.close();
   }
   assert.deepEqual(await fs.readFile(path.join(backupDirectory, 'course-media', 'course-one', 'cover.png')), mediaContents);
+  const manifest = JSON.parse(await fs.readFile(path.join(backupDirectory, 'manifest.json'), 'utf8'));
+  assert.deepEqual(manifest.mediaFiles, [{
+    path: 'course-one/cover.png',
+    bytes: mediaContents.length,
+    sha256: createHash('sha256').update(mediaContents).digest('hex'),
+  }]);
 });
 
 test('database-only and media-only backups contain only the selected data components', async () => {
@@ -118,6 +125,7 @@ test('database-only and media-only backups contain only the selected data compon
   assert.equal(databaseManifest.scope, 'database');
   assert.equal(databaseManifest.database, 'openlearning.sqlite');
   assert.equal(databaseManifest.mediaDirectory, null);
+  assert.equal(databaseManifest.mediaFiles, null);
   assert.deepEqual((await fs.readdir(mediaOnly)).sort(), ['course-media', 'manifest.json']);
   assert.deepEqual(await fs.readFile(path.join(mediaOnly, 'course-media', 'course-one', 'cover.png')), mediaContents);
   const mediaManifest = JSON.parse(await fs.readFile(path.join(mediaOnly, 'manifest.json'), 'utf8'));
@@ -125,6 +133,11 @@ test('database-only and media-only backups contain only the selected data compon
   assert.equal(mediaManifest.database, null);
   assert.equal(mediaManifest.mediaFileCount, 1);
   assert.equal(mediaManifest.mediaBytes, mediaContents.length);
+  assert.deepEqual(mediaManifest.mediaFiles, [{
+    path: 'course-one/cover.png',
+    bytes: mediaContents.length,
+    sha256: createHash('sha256').update(mediaContents).digest('hex'),
+  }]);
 });
 
 test('backup help prints usage without creating a backup', async () => {

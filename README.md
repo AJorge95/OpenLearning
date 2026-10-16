@@ -292,6 +292,8 @@ Full backups include both SQLite and the complete media root. Platform identity,
 npm run backup
 ```
 
+Media and full backup manifests record each media file's relative path, byte count, and SHA-256 digest. The backup is only reported as successful after each persisted media copy is checked against its source digest.
+
 Each CLI run creates a new timestamped directory under `./backup` containing `openlearning.sqlite`, `course-media`, and a manifest describing the selected components. Set `BACKUP_DIR` to use another destination root; for example, in PowerShell run `$env:BACKUP_DIR = '.\backups'` before `npm run backup`. The command reads the project `.env` file and resolves relative paths from the same working directory used by OpenLearning. It uses the bundled SQLite driver, so the SQLite CLI is not required. Before copying media or reporting success, it verifies the SQLite snapshot with `quick_check`; if the check fails, incomplete output is removed. The database snapshot can run while the app is online; pause course edits and uploads during the media copy so the database and files describe the same point in time. The command rejects backup destinations inside the media root and removes incomplete output when a backup fails.
 
 To restore, stop OpenLearning, choose a timestamped backup directory, restore its database to `DB_PATH` and its media tree to `MEDIA_ROOT`, then start the app again. Keep the directory layout and course folders intact. Restoring only one of the database or media tree can leave course records without their uploaded files, or files without their course records.
