@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 128: enlarge registration-field removal target
+
+- **Reviewed:** The administrator registration-field editor structure, unsaved field removal action, dynamic accessible label, disabled fieldset behavior, responsive heading layout, forced-colors styling, and server-side field-schema validation, persistence, audit, and rollback paths.
+- **Improvement:** Raise the registration-field `Remove` action from a 34px minimum height to a compact 40px target with horizontal padding and explicit focus/forced-colors styling. Preserve its label, native button semantics, unsaved behavior, and save contract. Added `tests/client/registration-field-remove-target.test.js`.
+- **Why it helps:** Administrators can activate the destructive schema-editing action more reliably with a pointer or touch device, while keyboard and forced-colors users retain a clear focus and state signal without changing field-removal behavior or widening the editor heading.
+- **Backend review:** Registration-field schema validation, persistence, audit logging, authorization, and error recovery remain covered by the existing staff settings contract; no backend change was indicated.
+- **Checked:** Focused registration-field, required-indicator, and required-toggle checks passed (22/22); the full `npm test -- --test-reporter=spec` suite passed (996/996), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, CSRF, and Vite login probes returned 200; anonymous CSRF returned no `Set-Cookie`, and anonymous admin backups returned 401. The local `/login` shell exposed one heading plus named username/password controls with no browser warning/error logs. Authenticated registration-field editing remains source- and regression-verified because this development browser session has no authenticated staff fixture; no credentials, registration fields, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): enlarge registration field removal target`.
+- **Commit description:** `Give administrators a reliable registration-field removal target while preserving the existing editor semantics and responsive layout.`
+
 ## 2026-10-16 — Cycle 127: enlarge learner comment removal target
 
 - **Reviewed:** The learner lesson-comment structure, course-manager removal action, compact header wrapping, accessible author label, confirmation dialog, busy state, and the comment deletion authorization, validation, audit, and refresh paths.
