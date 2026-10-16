@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 158: print the detected server address after installation
+
+- **Reviewed:** The Red Hat install output and browser error, the production listener and loopback readiness check, current installer guidance, and the existing installer/configuration tests. The service binds to all IPv4 interfaces; its loopback HTTP health check is local validation, not the address to give a remote browser.
+- **Problem:** Installer and production startup guidance still printed a literal `<server-external-ip>` placeholder even when the host's actual network address was known.
+- **Change:** The installer now reports the IPv4 source address selected by the kernel's default route using `ip route get`, falls back to the default-route interface, and prints a clear manual-check instruction if neither yields an address. It installs `iproute2`/`iproute` on supported systems and does not send a network probe. Production startup guidance no longer prints a fake URL. README clarifies that a detected private address still needs a route from the browser network or public NAT/DNS access.
+- **Checked:** Mocked Bash regressions selected `10.123.89.19`, exercised the interface fallback, and confirmed no address is guessed when routing data is absent. Focused installer/config tests passed 23/23; full `npm test -- --test-reporter=dot`, `npm run build`, Bash syntax, and `git diff --check` passed. Local development `/healthz` and `/login` probes returned 200. No Red Hat installation, external connectivity, or production service was changed or verified.
+- **Commit title:** `fix(installer): print detected server address`.
+- **Commit description:** `Detect the route-selected IPv4 address at install completion so operators can open the app without replacing a placeholder. Fall back through the default-route interface, avoid network probes, and keep private-address routing limitations explicit.`
+
 ## 2026-10-16 — Cycle 157: recheck current public shell and data paths
 
 - **Reviewed:** The fresh signed-out `/login` shell at the current Vite port; form names, required indicators, password-visibility semantics, visual centering, and the existing responsive/table-scroll rules; course catalog and summary batching; filtered audit/system-log pagination; installer/configuration regressions; and the current read-only SQLite query plans.

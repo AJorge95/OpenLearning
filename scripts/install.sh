@@ -18,6 +18,39 @@ PORT="5173"
 log() { printf '[openlearning] %s\n' "$*"; }
 fail() { printf '[openlearning] ERROR: %s\n' "$*" >&2; exit 1; }
 
+detect_server_ipv4() {
+  local route_output=""
+  local address=""
+  local default_interface=""
+
+  command -v ip >/dev/null 2>&1 || return 1
+
+  # Ask the kernel which source address it would use for an outbound route;
+  # this reads routing state and does not send a network probe.
+  if route_output="$(ip -4 route get 1.1.1.1 2>/dev/null)"; then
+    address="$(awk '{ for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit } }' <<< "$route_output")"
+    if [[ "$address" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ && "$address" != 127.* && "$address" != 169.254.* ]]; then
+      printf '%s\n' "$address"
+      return 0
+    fi
+  fi
+
+  # If route lookup omits a preferred source, use the first address on the
+  # default-route interface instead of accidentally selecting a Docker bridge.
+  if route_output="$(ip -4 route show default 2>/dev/null)"; then
+    default_interface="$(awk 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit } }' <<< "$route_output")"
+  fi
+  if [[ -n "$default_interface" ]] && route_output="$(ip -o -4 addr show dev "$default_interface" scope global 2>/dev/null)"; then
+    address="$(awk 'NR == 1 { split($4, cidr, "/"); print cidr[1] }' <<< "$route_output")"
+    if [[ "$address" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ && "$address" != 127.* && "$address" != 169.254.* ]]; then
+      printf '%s\n' "$address"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
 package_manager_for() {
   local os_id="$1"
   local os_version="$2"
@@ -154,14 +187,14 @@ fi
 if [[ "$PACKAGE_MANAGER" == apt-get ]]; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y ca-certificates curl tar xz-utils build-essential python3 acl util-linux
+  apt-get install -y ca-certificates curl tar xz-utils build-essential python3 acl util-linux iproute2
   NODE_SETUP_FILE="$(mktemp /tmp/openlearning-nodesource-setup.XXXXXX)"
   curl -fsSL https://deb.nodesource.com/setup_24.x -o "$NODE_SETUP_FILE"
   bash "$NODE_SETUP_FILE"
   rm -f "$NODE_SETUP_FILE"
   apt-get install -y nodejs
 else
-  dnf install -y ca-certificates curl tar xz gcc gcc-c++ make python3 acl util-linux
+  dnf install -y ca-certificates curl tar xz gcc gcc-c++ make python3 acl util-linux iproute
   if has_required_node_runtime; then
     log "Using existing Node.js $(node --version) and npm; skipping NodeSource repository setup."
   else
@@ -459,5 +492,9 @@ if [[ "$FIREWALL_CONFIGURED" == false ]]; then
 fi
 
 log "OpenLearning is ready on all IPv4 interfaces on port $SERVICE_PORT."
-log "From another computer, open http://<this-server-IP-or-hostname>:$SERVICE_PORT (localhost refers to the computer running the browser)."
+if SERVER_IPV4="$(detect_server_ipv4)"; then
+  log "From a browser that can reach this server's network, open http://$SERVER_IPV4:$SERVICE_PORT."
+else
+  log "Could not determine the server IPv4 automatically; run 'ip -4 addr' and open http://<reachable-server-IP>:$SERVICE_PORT from another computer."
+fi
 log "Service: systemctl status $SERVICE_NAME; configuration: $ENV_FILE; data: $DATA_DIR"
