@@ -34,6 +34,14 @@ package_manager_for() {
   esac
 }
 
+has_required_node_runtime() {
+  command -v node >/dev/null 2>&1 || return 1
+  command -v npm >/dev/null 2>&1 || return 1
+  local node_major
+  node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null)" || return 1
+  [[ "$node_major" =~ ^[0-9]+$ ]] && (( node_major >= 24 ))
+}
+
 usage() {
   cat <<'EOF'
 OpenLearning Linux installer and updater
@@ -86,11 +94,15 @@ if [[ "$PACKAGE_MANAGER" == apt-get ]]; then
   apt-get install -y nodejs
 else
   dnf install -y ca-certificates curl tar xz gcc gcc-c++ make python3
-  NODE_SETUP_FILE="$(mktemp /tmp/openlearning-nodesource-setup.XXXXXX)"
-  curl -fsSL https://rpm.nodesource.com/setup_24.x -o "$NODE_SETUP_FILE"
-  bash "$NODE_SETUP_FILE"
-  rm -f "$NODE_SETUP_FILE"
-  dnf install -y nodejs
+  if has_required_node_runtime; then
+    log "Using existing Node.js $(node --version) and npm; skipping NodeSource repository setup."
+  else
+    NODE_SETUP_FILE="$(mktemp /tmp/openlearning-nodesource-setup.XXXXXX)"
+    curl -fsSL https://rpm.nodesource.com/setup_24.x -o "$NODE_SETUP_FILE"
+    bash "$NODE_SETUP_FILE"
+    rm -f "$NODE_SETUP_FILE"
+    dnf install -y nodejs
+  fi
 fi
 
 command -v node >/dev/null 2>&1 || fail "Node.js installation did not provide node."
