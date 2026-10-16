@@ -948,6 +948,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .comments-empty { margin: 0; padding: 22px 0; color: var(--muted); font-size: 13px; }
 .load-comments-button { min-height: 38px; margin-top: 16px; font-size: 12px; }
 .module-add-actions { display: flex; align-items: center; gap: 15px; padding: 5px 0 3px 38px; }
+/* Keep the recurring curriculum-add actions easy to activate and clear at keyboard focus. */
+.module-add-actions > .text-action { display: inline-flex; align-items: center; min-height: 40px; padding: 0 9px; border-radius: 4px; font-size: 11px; }
+.module-add-actions > .text-action:hover:not(:disabled) { background: var(--purple-soft); }
+.module-add-actions > .text-action:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 .add-action-divider { height: 15px; border-left: 1px solid var(--line-strong); }
 .quiz-editor { margin: 12px 0 4px 26px; padding: 17px; border: 1px solid var(--purple-border-strong); border-radius: 4px; background: var(--purple-hover-bg); }
 .quiz-editor-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
@@ -1485,7 +1489,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .quiz-editor { margin-left: 5px; padding: 11px; }
   .quiz-settings-row { grid-template-columns: minmax(0, 1fr) 100px; gap: 8px; }
   .module-add-actions { padding-left: 14px; gap: 9px; }
-  .module-add-actions .text-action { min-height: 36px; font-size: 12px; }
+  .module-add-actions .text-action { min-height: 40px; font-size: 12px; }
   .access-page .page-heading { flex-direction: column; align-items: flex-start; }
   .access-page .page-heading h1 { font-size: 31px; }
   .access-list-head { display: none; }
