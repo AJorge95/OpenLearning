@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 156: recheck current interface and service boundaries
+
+- **Reviewed:** The fresh signed-out login shell and password-visibility interaction; remaining sub-40px styles and their narrow player/editor contexts; custom select and empty-state icon semantics; management search, table, session, backup, pagination, and installer regressions; and the current root-owned release, service-user traversal, and configured-port boundaries.
+- **Result:** No runtime change. The current shell remains non-blank with one heading and named required username/password controls; `Show password` changes to `Hide password` and back without submitting credentials. Remaining compact dimensions are decorative, inner file-picker affordances, or the previously reviewed narrow-layout rhythm. The custom select and empty-state icons are already hidden from assistive technology, and the reviewed backend paths retain bounded validation, authorization, cleanup, and recovery behavior.
+- **Why no change:** No reproducible current-build interface, responsive, accessibility, reliability, authorization, maintainability, or query-plan defect was evidenced. Another isolated control-size or index edit would duplicate recent cycles without an authenticated fixture, changed requirement, representative workload data, or Linux systemd evidence showing a new failure.
+- **Checked:** Focused installer, custom-select, management-search, password, backup, migration, pagination, and session checks passed (34/34); the full `npm test -- --test-reporter=dot` suite, `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, public registration-fields, version, and Vite `/login` probes returned 200. The temporary in-app browser exposed the expected login accessibility tree and visual shell; no credentials, forms, uploads, account/course actions, or application data were submitted or changed. A separate uncommitted installer ACL change and its regression test appeared during the review; it was inspected and preserved, not staged or included in this cycle.
+- **Needed to continue:** A reproducible authenticated staff or learner mismatch, a changed product requirement, representative production-size workload evidence, or a Linux systemd deployment trace showing a new installer/service failure.
+- **Commit title:** `docs(quality): record current boundary review`.
+- **Commit description:** `Record the bounded interface, backend, installer, and live-shell review with no additional safe runtime change identified.
+
 ## 2026-10-16 — Cycle 155: repair installer service permissions and port defaults
 
 - **Reviewed:** The supplied systemd `CHDIR` failure, the Linux installer’s root-owned release layout, the generated unprivileged service unit, the default-port configuration across the Node server, Docker deployments, migration helper, and README, plus the existing installer regression coverage.
