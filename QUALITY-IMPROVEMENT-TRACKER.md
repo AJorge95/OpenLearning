@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 91 bounded interface and backend review: no distinct change indicated
+
+- **Reviewed:** The freshly launched signed-out login and registration routes, their heading, label, required, autofill, password-action, and form-submit semantics; shared image fallbacks and buttons; learner lesson/catalog controls; management and program search, pagination, status, and recovery states; responsive overflow and reduced-motion CSS; and the current request, CSRF, session, readiness, validation, authorization, media, course-version, and transactional server boundaries.
+- **Result:** No distinct current-build interface, accessibility, responsive, validation, authorization, recovery, data-integrity, performance, or maintainability defect was evidenced. The public forms expose named controls and one meaningful heading, shared controls keep explicit form behavior and decorative icons hidden, wide child panels retain their own scroll surfaces, and the reviewed backend paths keep bounded inputs, structured failures, fail-closed access checks, and transactional writes.
+- **Why no code change:** The source-level candidates were already covered by focused regressions or matched the existing design and architecture. A further implementation would duplicate established contracts without a reproducible rendered mismatch, changed product/security requirement, authenticated fixture exposing a concrete failure, or representative workload signal.
+- **Checked:** The full `npm test -- --test-reporter=spec` suite passed 965/965; `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh local browser inspection showed named login and registration controls with no blank interactive elements; `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and the Vite root returned 200; and anonymous CSRF returned no `Set-Cookie`. No credentials, forms, uploads, account/course actions, or application data were submitted or changed.
+- **Needed to continue:** A reproducible current-build interaction or accessibility mismatch outside the covered contracts, a changed product/security requirement, an authenticated fixture exposing a concrete failure, or representative latency/workload evidence.
+- **Commit title:** `docs(quality): record cycle 91 bounded review`.
+- **Commit description:** `Record the bounded interface and backend review with passing validation evidence and the next evidence gate.`
+
 ## 2026-10-16 — Cycle 90 bounded media-delivery and startup-cleanup review: no distinct change indicated
 
 - **Reviewed:** Orphaned course-media cleanup's path and age bounds, generated-file allowlist, referenced-file preservation, race/error handling, bounded diagnostics, protected media authorization, byte-range and disappearing-file recovery, private download headers, upload signature/size cleanup, public version and asset fallback responses, and the freshly relaunched public client.
