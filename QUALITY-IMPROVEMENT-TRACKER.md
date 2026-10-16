@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 125: enlarge course row-menu options
+
+- **Reviewed:** The staff course-table overflow menu, its 40px trigger, menu-item roles and labels, focus restoration and arrow-key navigation, viewport-bounded positioning, compact popover spacing, and the staff course status/deletion authorization and feedback paths.
+- **Improvement:** Raise the shared course-row menu options from a 38px minimum height to 40px, matching the trigger and preserving the existing menu width, labels, disabled/busy states, `role="menuitem"` semantics, keyboard navigation, and action handlers. Added `tests/client/row-menu-option-target.test.js`.
+- **Why it helps:** Staff can activate the frequently used Assign, Publish, Unpublish, Archive, and Delete actions more reliably with a pointer or touch device, without widening the popover or changing course mutations.
+- **Backend review:** Course status transitions, deletion, authorization, confirmation, audit persistence, and refresh/error recovery remain covered by the existing staff course-management contract; no backend change was indicated.
+- **Checked:** The focused row-menu checks passed (4/4); the full `npm test -- --test-reporter=spec` suite passed (992/992), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, and Vite-root probes returned 200; anonymous CSRF returned 200 without `Set-Cookie`, and anonymous admin backups returned 401. The reloaded `/login` shell exposed one heading plus named username/password controls without a blank-page or framework-overlay state. Authenticated course-row menu interaction remains source- and regression-verified because this development browser session has no authenticated staff fixture.
+- **Commit title:** `fix(a11y): enlarge course row-menu options`.
+- **Commit description:** `Give staff course-row overflow-menu options reliable touch targets while preserving their existing menu semantics and actions.`
+
 ## 2026-10-16 — Cycle 124: enlarge course-table action links
 
 - **Reviewed:** The staff course-table structure, `Edit` and `Analytics` link semantics, adjacent row-menu target, dense-row spacing, keyboard focus behavior, responsive table overflow, course-action feedback, and the staff-only course mutation and authorization paths.

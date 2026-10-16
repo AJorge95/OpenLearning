@@ -644,7 +644,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .row-menu-trigger:hover, .row-menu-trigger[aria-expanded="true"] { border-color: var(--line); color: var(--purple); background: var(--subtle); }
 .row-menu-trigger:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 .row-menu-popover { position: fixed; z-index: 220; display: grid; gap: 3px; overflow-y: auto; overscroll-behavior: contain; width: 196px; padding: 6px; border: 1px solid var(--line); background: #fff; box-shadow: 0 14px 36px rgba(20, 24, 36, .16); border-radius: 11px; }
-.row-menu-popover button, .row-menu-popover a { display: flex; align-items: center; width: 100%; min-height: 38px; border: 0; background: transparent; border-radius: 7px; padding: 8px 10px; color: #454a5a; text-align: left; font-size: 12px; font-weight: 550; text-decoration: none; overflow-wrap: anywhere; }
+/* Keep every course-row overflow-menu option as easy to hit as its trigger. */
+.row-menu-popover button, .row-menu-popover a { display: flex; align-items: center; width: 100%; min-height: 40px; border: 0; background: transparent; border-radius: 7px; padding: 8px 10px; color: #454a5a; text-align: left; font-size: 12px; font-weight: 550; text-decoration: none; overflow-wrap: anywhere; }
 .row-menu-popover button:hover, .row-menu-popover a:hover { color: var(--purple-dark); background: var(--purple-hover-bg); }
 .row-menu-popover [role="menuitem"]:focus-visible { outline: 2px solid var(--purple); outline-offset: -2px; color: var(--purple-dark); background: var(--purple-hover-bg); }
 .row-menu-popover button:disabled { cursor: not-allowed; opacity: .55; }
