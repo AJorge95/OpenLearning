@@ -38,7 +38,7 @@ test('all password-entry forms use the shared field while the setup token stays 
 });
 
 test('the visibility control keeps a clear target, palette focus, and room for password text', () => {
-  assert.match(styles, /\.password-visibility-toggle\s*\{[^}]*min-width:\s*44px;[^}]*min-height:\s*36px;/);
+  assert.match(styles, /\.password-visibility-toggle\s*\{[^}]*min-width:\s*44px;[^}]*min-height:\s*40px;/);
   assert.match(styles, /\.password-visibility-toggle:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--purple\);/);
   assert.match(styles, /\.form-stack \.password-input-control input, \.account-password-form \.password-input-control input\s*\{\s*padding-inline-end:\s*64px;\s*\}/);
 });
