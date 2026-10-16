@@ -958,6 +958,16 @@ export function migrateDatabase(database = db) {
     if (foreignKeysWereEnabled) database.pragma('foreign_keys = OFF');
     try {
       const migration = database.transaction(() => {
+        const quizTable = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'quizzes'").get();
+        const quizColumns = new Set(quizTable ? database.prepare('PRAGMA table_info(quizzes)').all().map(({ name }) => name) : []);
+        // Some historical fixtures intentionally omit unrelated quiz data. Only rewrite the complete
+        // pre-41 schema; a real version-40 database has these columns from the earlier migrations.
+        const canMigrateQuizOwnership = ['module_id', 'title', 'pass_mark', 'created_at', 'updated_at', 'stable_id']
+          .every((column) => quizColumns.has(column));
+        if (!canMigrateQuizOwnership) {
+          database.prepare('INSERT INTO schema_migrations (version) VALUES (41)').run();
+          return;
+        }
         database.exec(`
           CREATE TABLE quizzes_v41 (
             id TEXT PRIMARY KEY,
