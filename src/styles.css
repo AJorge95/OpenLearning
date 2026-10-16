@@ -636,7 +636,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .status-draft { color: #596173; background: #f0f1f5; }
 .status-archived { color: #795a18; background: #fff4d9; }
 .table-actions { display: flex; align-items: center; justify-content: flex-end; gap: 11px; }
-.table-actions .text-action { font-size: 12px; }
+/* Keep the primary course-row links as easy to hit as the adjacent menu trigger. */
+.table-actions .text-action { min-height: 40px; padding: 0 4px; font-size: 12px; }
 .row-menu { position: relative; }
 /* Keep the row action target easy to hit without widening the surrounding table action group. */
 .row-menu-trigger { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid transparent; border-radius: 8px; color: #666c7c; background: transparent; cursor: pointer; transition: border-color .15s ease, background .15s ease, color .15s ease; }
