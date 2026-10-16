@@ -21,6 +21,8 @@ test('Linux installer targets supported systems and repository main', () => {
   assert.match(installer, /RHEL 9\+/);
   assert.match(installer, /Node\.js 24 or newer/);
   assert.match(installer, /systemd is required/);
+  assert.match(installer, /PORT="6173"/);
+  assert.match(installer, /DEFAULT_PORT="\$PORT"/);
 });
 
 test('platform support check accepts supported releases and rejects unsupported ones', (context) => {
@@ -50,6 +52,15 @@ test('Linux installer protects first-run credentials and managed paths', () => {
   assert.match(installer, /EnvironmentFile=\$ENV_FILE/);
   assert.match(installer, /DATA_DIR="\/var\/lib\/openlearning"/);
   assert.match(installer, /Environment=/);
+});
+
+test('Linux installer makes root-owned releases readable by the service user', () => {
+  assert.match(installer, /normalize_release_permissions\(\) \{/);
+  assert.match(installer, /chown -R root:root "\$release_path"/);
+  assert.match(installer, /find "\$release_path" -type d -exec chmod 0755 \{\} \+/);
+  assert.match(installer, /find "\$release_path" -type f ! -perm \/111 -exec chmod 0644 \{\} \+/);
+  assert.match(installer, /normalize_release_permissions "\$NEW_RELEASE"/);
+  assert.match(installer, /User=openlearning/);
 });
 
 test('updater creates verified backups and restores data when readiness fails', () => {
