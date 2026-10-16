@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 159: recheck current interface and query boundaries
+
+- **Reviewed:** The fresh signed-out `/login` shell at Vite `5174` (the unrelated `5173` listener was preserved), its heading, named required fields, password action, visual focus state, and first-viewport layout; the current JSX button/input/image naming contracts, responsive control sizes, table-scroll guidance, and focus rules; authentication, CSRF/session, pagination, filtered logs, course-summary batching, and latest-quiz-attempt queries; the current migration/index set; and the preserved native-installer configuration boundaries.
+- **Result:** No runtime change. The live shell remained non-blank with one heading and named username/password controls. Source-level checks found no unnamed controls, missing native button types, or new independent sub-40px interaction target. Filtered audit/system-log queries and published-course ordering use their existing indexes. The latest-quiz-attempt query uses its `(user_id, quiz_id, submitted_at)` covering index; SQLite only reports a temporary sort for the final `rowid DESC` tie-break.
+- **Why no change:** No reproducible current-build interface, responsive, accessibility, reliability, validation, authorization, maintainability, or measured performance defect was evidenced. Replacing the latest-attempt insertion-order tie-break would change behavior without representative same-timestamp quiz data or an explicit schema/product decision. The local database remains small at 13 courses, 2 users, and 1,939 system rows; broader search/count tuning needs production-sized workload evidence. Authenticated staff/learner fixtures and a Linux systemd trace are still needed for the remaining protected and deployment-only surfaces.
+- **Checked:** Full `npm test -- --test-reporter=dot`, `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `GET /healthz`, `GET /readyz`, and Vite `/login` probes returned 200. The in-app browser screenshot and accessibility tree were inspected without entering credentials or changing application data. Read-only SQLite query plans were captured for latest quiz attempts, filtered logs, and published-course ordering.
+- **Commit title:** `docs(quality): record current query boundary review`.
+- **Commit description:** `Record the bounded interface, accessibility, backend query, and deployment review with no additional safe runtime change identified.
+
 ## 2026-10-16 — Cycle 158: print the detected server address after installation
 
 - **Reviewed:** The Red Hat install output and browser error, the production listener and loopback readiness check, current installer guidance, and the existing installer/configuration tests. The service binds to all IPv4 interfaces; its loopback HTTP health check is local validation, not the address to give a remote browser.
