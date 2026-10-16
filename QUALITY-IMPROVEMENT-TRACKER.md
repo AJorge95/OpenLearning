@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 153: recheck installer and backup boundaries
+
+- **Reviewed:** The post-Cycle-152 installer cleanup and release-finalization boundary; configurable backup destinations and retention; backup scheduler validation, queueing, artifact cleanup, and systemd writable-path assumptions; the current public login shell and status regions; and the latest working tree.
+- **Result:** No additional runtime change. Failed release candidates are now removed only before finalization, while backup jobs continue to validate absolute existing destinations, reject storage overlap, preserve verified artifacts, and report recoverable failures. The login shell remains non-blank with named required controls and the existing password action.
+- **Why no change:** The remaining custom-destination question depends on behavior of the target Linux systemd sandbox and a deployment decision about whether arbitrary per-job paths should be admitted to `ReadWritePaths`. This Windows development checkout cannot provide that representative evidence, and broadening or restricting destinations from static inspection could break existing installations.
+- **Checked:** Focused installer, backup, configuration, and readiness checks passed 33/33; the full Cycle-152 suite passed 1013/1013; `npm run typecheck`, `npm run build`, Bash syntax, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, and Vite `/login` probes returned 200. No credentials, forms, uploads, account/course actions, or application data were submitted or changed.
+- **Needed to continue:** A representative Linux systemd deployment with a configured non-default backup destination, or an explicit product decision for the allowed backup-path policy.
+- **Commit title:** `docs(quality): record installer backup boundary review`.
+- **Commit description:** `Record the post-fix installer and backup review while deferring custom systemd destination policy pending Linux evidence.`
+
 ## 2026-10-16 — Cycle 152: clean failed installer releases
 
 - **Reviewed:** The fresh signed-out login shell and password-visibility interaction; the current Linux installer preflight, release staging, backup, readiness rollback, and systemd service generation; and the existing installer/config-migration regression coverage.
