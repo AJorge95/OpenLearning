@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 127: enlarge learner comment removal target
+
+- **Reviewed:** The learner lesson-comment structure, course-manager removal action, compact header wrapping, accessible author label, confirmation dialog, busy state, and the comment deletion authorization, validation, audit, and refresh paths.
+- **Improvement:** Raise the course-manager `Remove` comment action from a 28px minimum height to a 40px target with compact horizontal padding and an explicit visible focus outline. Preserve the existing accessible label, destructive confirmation, disabled/removing state, responsive comment header, and delete handler. Added `tests/client/lesson-comment-remove-target.test.js`.
+- **Why it helps:** Staff can activate the destructive comment-moderation action more reliably with a pointer or touch device, while keyboard users can identify the focused action without changing comment-removal semantics or making the surrounding copy less compact.
+- **Backend review:** The comment-delete route still enforces course-manager authorization, validates the lesson/comment relationship, records the existing audit event, and refreshes the bounded feedback list; no backend change was indicated.
+- **Checked:** Focused lesson-comment target, confirmation, feedback-target, and icon checks passed (6/6); the full `npm test -- --test-reporter=spec` suite passed (994/994), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, CSRF, and Vite-root probes returned 200; anonymous CSRF returned no `Set-Cookie`, and anonymous admin backups returned 401. The local `/login` shell exposed one heading plus named username/password controls with no browser warning/error logs. Authenticated comment moderation remains source- and regression-verified because this development browser session has no authenticated staff fixture; no credentials, comments, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): enlarge comment removal target`.
+- **Commit description:** `Give course managers a reliable comment-removal touch target and visible focus without changing moderation behavior.`
+
 ## 2026-10-16 — Cycle 126: align learner lesson feedback targets
 
 - **Reviewed:** The learner lesson-feedback structure, reaction group, comment composer, load-more control, narrow stacked layout, accessible labels and pressed states, busy/disabled feedback, and the related comment/reaction authorization, rate-limit, validation, and pagination paths.
