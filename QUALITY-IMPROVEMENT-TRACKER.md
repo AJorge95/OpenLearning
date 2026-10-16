@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 129: align course version-history targets
+
+- **Reviewed:** The staff course-governance version-history disclosure, current-version and previous-version layout, “Newer”/“Older” pagination, keyboard focus treatment, narrow wrapping, version-history loading/retry behavior, and the server-side version listing and restore authorization, validation, transaction, audit, and refresh paths.
+- **Improvement:** Give the “Previous versions” disclosure and its pagination buttons consistent 40px minimum targets, with a local visible focus outline on the native disclosure summary. Preserve the existing summary semantics, version ordering, page status, disabled/loading states, and restore workflow. Added `tests/client/course-version-history-target.test.js`.
+- **Why it helps:** Staff can review and page through published course history more reliably with a pointer, touch device, or keyboard, without widening the governance panel or changing version-navigation behavior.
+- **Backend review:** Version-history reads and restore requests already enforce staff authorization, bounded page queries, current-revision checks, transactional publication, audit logging, and refresh/error feedback; no backend change was indicated.
+- **Checked:** Focused version-history target and pagination checks, the full test suite, typecheck, build, diff check, fresh health/readiness/API/Vite probes, and the signed-out local login shell were run. No credentials, version restores, course edits, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): align course version history targets`.
+- **Commit description:** `Give course version-history disclosure and paging controls reliable touch targets and visible focus while preserving governance behavior.`
+
 ## 2026-10-16 — Cycle 128: enlarge registration-field removal target
 
 - **Reviewed:** The administrator registration-field editor structure, unsaved field removal action, dynamic accessible label, disabled fieldset behavior, responsive heading layout, forced-colors styling, and server-side field-schema validation, persistence, audit, and rollback paths.
