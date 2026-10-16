@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 119: enlarge audit and system-log detail disclosures
+
+- **Reviewed:** Shared audit and system-log detail toggles, their accessible expanded state and controlled detail rows, dense table layout, keyboard focus treatment, log filtering and pagination, and the staff-only log query and authorization paths.
+- **Improvement:** Give the existing “View details” / “Hide details” control a compact 40px minimum target with a small inline padding boundary and rounded focus surface, while preserving its shared toggle handler, accessible name, `aria-expanded` state, and `aria-controls` relationship.
+- **Why it helps:** Administrators can open log details more reliably with a pointer or touch device in dense tables, and keyboard users retain a clear focus boundary without changing log content or filtering behavior.
+- **Backend review:** Audit and system-log routes already enforce staff/admin authorization, validate filters, keep pagination bounded, and return the detail data through the existing read-only contract; no backend change was indicated.
+- **Checked:** Added `tests/client/log-details-target.test.js`; the focused log-detail, empty-state, pagination, and timestamp checks passed (10/10). The full `npm test -- --test-reporter=spec` suite passed (987/987), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, and Vite-root probes returned 200; anonymous CSRF returned no `Set-Cookie`. Authenticated audit/system-log interaction remains source- and regression-verified because this development browser session has no authenticated staff fixture.
+- **Commit title:** `fix(a11y): enlarge log detail disclosures`.
+- **Commit description:** `Give audit and system-log detail toggles a reliable compact target and visible focus while preserving their disclosure semantics.
+
 ## 2026-10-16 — Cycle 118: enlarge the learner account-menu trigger
 
 - **Reviewed:** The shared learner header account disclosure, mobile avatar-only layout, accessible name and expanded state, outside-dismiss and Escape handling, route-change cleanup, keyboard focus behavior, and the session sign-out boundary.
