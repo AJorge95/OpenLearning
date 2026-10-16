@@ -145,7 +145,11 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 (( NODE_MAJOR >= 24 )) || fail "Node.js 24 or newer is required; found $(node --version)."
 command -v npm >/dev/null 2>&1 || fail "Node.js installation did not provide npm."
 
-install -d -m 0755 "$RELEASES_DIR" "$CONFIG_DIR" "$DATA_DIR" "$BACKUP_ROOT"
+# The service runs as an unprivileged account and must be able to traverse the
+# root-owned code directories to reach its release through the current symlink.
+install -d -m 0755 "$INSTALL_ROOT" "$RELEASES_DIR" "$CONFIG_DIR" "$DATA_DIR" "$BACKUP_ROOT"
+chown root:root "$INSTALL_ROOT" "$RELEASES_DIR"
+chmod 0755 "$INSTALL_ROOT" "$RELEASES_DIR"
 chmod 0700 "$CONFIG_DIR"
 chmod 0750 "$DATA_DIR" "$BACKUP_ROOT"
 
