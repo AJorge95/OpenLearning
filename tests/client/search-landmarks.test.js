@@ -102,7 +102,8 @@ test('course and management search landmarks hide decorative icons', () => {
   const forms = courseAndManagementSearchForms();
 
   for (const form of forms) {
-    assert.equal(form.searchIcons.length, 1, `${form.fileName} ${form.className} should contain one decorative Search icon`);
-    assert.equal(form.searchIcons[0], 'true', `${form.fileName} ${form.className} should hide its decorative Search icon`);
+    const expectedIconCount = form.className.includes('course-group-search') ? 2 : 1;
+    assert.equal(form.searchIcons.length, expectedIconCount, `${form.fileName} ${form.className} should contain its decorative Search icons`);
+    assert.ok(form.searchIcons.every((value) => value === 'true'), `${form.fileName} ${form.className} should hide its decorative Search icons`);
   }
 });

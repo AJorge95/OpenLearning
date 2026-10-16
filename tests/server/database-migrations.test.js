@@ -208,3 +208,46 @@ test('the exam migration preserves existing module quizzes, questions, choices, 
     legacyDatabase.close();
   }
 });
+
+test('the course-group migration coalesces legacy rows and recreates association indexes', () => {
+  const legacyDatabase = new Database(':memory:');
+  legacyDatabase.pragma('foreign_keys = ON');
+  try {
+    legacyDatabase.exec(`
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      INSERT INTO schema_migrations (version) VALUES (41);
+      CREATE TABLE users (id TEXT PRIMARY KEY);
+      CREATE TABLE courses (id TEXT PRIMARY KEY);
+      CREATE TABLE course_groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+        created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO users (id) VALUES ('legacy-admin');
+      INSERT INTO courses (id) VALUES ('legacy-course-1'), ('legacy-course-2');
+      INSERT INTO course_groups (id, name, description, course_id, created_by, created_at) VALUES
+        ('legacy-group-1', 'Onboarding', 'First description', 'legacy-course-1', 'legacy-admin', '2026-10-01 09:00:00'),
+        ('legacy-group-2', 'onboarding', 'Second description', 'legacy-course-2', 'legacy-admin', '2026-10-02 09:00:00');
+    `);
+
+    migrateDatabase(legacyDatabase);
+
+    assert.deepEqual(legacyDatabase.prepare('SELECT id, name, description, created_by FROM course_groups').all(), [
+      { id: 'legacy-group-1', name: 'Onboarding', description: 'First description\n\nSecond description', created_by: 'legacy-admin' },
+    ]);
+    assert.deepEqual(legacyDatabase.prepare('SELECT group_id, course_id, added_by, added_at FROM course_group_courses ORDER BY course_id').all(), [
+      { group_id: 'legacy-group-1', course_id: 'legacy-course-1', added_by: 'legacy-admin', added_at: '2026-10-01 09:00:00' },
+      { group_id: 'legacy-group-1', course_id: 'legacy-course-2', added_by: 'legacy-admin', added_at: '2026-10-02 09:00:00' },
+    ]);
+    assert.deepEqual(new Set(legacyDatabase.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('course_groups', 'course_group_courses')").all().map(({ name }) => name)), new Set(['course_groups', 'course_group_courses']));
+    assert.deepEqual(new Set(legacyDatabase.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'course_groups'").all().map(({ name }) => name)), new Set(['sqlite_autoindex_course_groups_1', 'course_groups_name', 'course_groups_created']));
+    assert.deepEqual(new Set(legacyDatabase.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'course_group_courses'").all().map(({ name }) => name)), new Set(['course_group_courses_course', 'sqlite_autoindex_course_group_courses_1']));
+    assert.equal(legacyDatabase.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, expectedLatestMigrationVersion);
+    assert.deepEqual(legacyDatabase.pragma('foreign_key_check'), []);
+  } finally {
+    legacyDatabase.close();
+  }
+});

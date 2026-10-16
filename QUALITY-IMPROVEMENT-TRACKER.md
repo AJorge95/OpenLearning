@@ -1,5 +1,18 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 177: cover course-group migration and management contracts
+
+- **Finding:** The new course-group feature had no dedicated server regression suite. The migration from legacy per-course course_groups(course_id) rows and the staff CRUD boundary were therefore protected only indirectly by the general suite.
+- **Change:** Added tests/server/course-groups.test.js with an isolated HTTP fixture covering authentication roles, case-insensitive group uniqueness, moderator/admin assignment and removal, duplicate assignment rejection, listing, and missing-course handling. Extended tests/server/database-migrations.test.js with a legacy version-41 fixture that verifies group coalescing, description preservation, association transfer, index recreation, and foreign-key integrity.
+- **Why it helps:** Future changes to course groups or schema migrations now fail close to the affected contract instead of relying on unrelated route or startup assertions; the test data never touches the development database.
+- **Follow-up:** The focused run also corrected the landmark assertion to expect the course-group field cue and submit cue as two intentional decorative icons.
+- **Interface review:** The live signed-in course-groups page exposed named group fields, a labeled search landmark, visible pagination state, usable empty-state actions, and consistent desktop spacing. No additional interface defect was evidenced without a narrow viewport override or a reproducible interaction mismatch.
+- **Checked:** Focused server and UI landmark tests passed (8/8); npm run typecheck, npm run build, and git diff --check passed. The live /healthz, /readyz, /api/version, and /manage/course-groups probes returned 200 before the isolated tests. No credentials, live forms, course data, deployment, or external service were changed.
+- **Full suite:** npm test -- --test-reporter=spec completed at 1,048/1,058 with the same 10 pre-existing failures in backup dashboard request ordering, course overview/catalog/pagination/quiz-focus source contracts, and historical migrations.
+- **Boundary:** Regression coverage only; runtime source behavior was unchanged. The pre-existing OpenLearning process on port 5173 was preserved because this cycle's launch attempt could not bind that occupied port.
+- **Commit title:** test(course-groups): cover migration and management contracts.
+- **Commit description:** Add isolated course-group route and legacy-migration regressions for staff authorization, association CRUD, duplicate handling, and schema preservation.
+
 ## 2026-10-16 — Cycle 176: align course-group search landmarks
 
 - **Finding:** The course-group assignment search was a named search landmark with a native search field, but it omitted the decorative search cue used by the other course and management search surfaces. The landmark regression also still expected the pre-course-groups form count and only detected top-level inputs, so the current feature made the suite report false failures.
