@@ -1165,7 +1165,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .log-loading { padding: 15px 18px; color: var(--muted); background: #fff; font-size: 12px; }
 .log-pagination { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding-top: 15px; color: var(--muted); font-size: 12px; }
 .log-pagination > div { display: flex; align-items: center; gap: 12px; }
-.log-pagination .button { min-height: 36px; padding: 0 12px; font-size: 12px; }
+/* Keep shared staff result paging easy to activate in dense and narrow layouts. */
+.log-pagination .button { min-height: 40px; padding: 0 12px; font-size: 12px; }
 
 @media (max-width: 720px) {
   .log-filters { grid-template-columns: 1fr; }

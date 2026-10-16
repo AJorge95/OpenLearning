@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 131: align shared staff pagination targets
+
+- **Reviewed:** The shared `LogPagination` component and its course list, learner progress, course access, account, course activity, audit-log, and system-log consumers; learning-path assignment paging; narrow wrapping; result-range announcements; disabled/loading states; native button semantics; and the corresponding bounded, authorized server queries.
+- **Improvement:** Raise the shared `Previous`/`Next` result-paging controls from a 36px minimum height to 40px while preserving their labels, page status, disabled/loading behavior, responsive stacking, and existing handlers. Added `tests/client/pagination-target.test.js`.
+- **Why it helps:** Staff can move through dense result tables more reliably with a pointer or touch device across every page that reuses the shared pager, without changing pagination semantics or widening the mobile layout.
+- **Backend review:** The consumed course, access, account, analytics, audit, system-log, and learning-path queries already validate filters, enforce role access, bound page sizes, and keep page state recoverable; no backend change was indicated.
+- **Checked:** Focused pagination target and landmark checks, the full test suite, typecheck, build, `git diff --check`, fresh health/readiness/API/Vite probes, and the signed-out local login shell were run. Authenticated result paging remains source- and regression-verified because the development browser session is signed out; no credentials, forms, account/course actions, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): align shared pagination targets`.
+- **Commit description:** `Give shared staff result paging reliable touch targets while preserving its responsive layout, labels, and loading semantics.`
+
 ## 2026-10-16 — Cycle 130: align lesson video-upload targets
 
 - **Reviewed:** The staff course-editor lesson row structure, native MP4 file input and format hint, upload progress/cancellation states, dense and narrow responsive layout, focus-within styling, and the server-side video validation, authorization, size limits, persistence, and cleanup paths.
