@@ -64,7 +64,7 @@ test('a stale course refresh cannot abort the newly selected course request', ()
   const loadSource = source.slice(loadStart, loadEnd);
 
   assert.ok(loadStart >= 0 && loadEnd > loadStart);
-  assert.match(loadSource, /async function load\(id = courseId\) \{\s*if \(!id \|\| routeCourseIdRef\.current !== id\) return;/);
+  assert.match(loadSource, /async function load\(id = courseId\): Promise<boolean> \{\s*if \(!id \|\| routeCourseIdRef\.current !== id\) return false;/);
   assert.ok(loadSource.indexOf('routeCourseIdRef.current !== id') < loadSource.indexOf('courseLoadControllerRef.current?.abort()'),
     'ignore stale refreshes before they can abort the active route request');
 });

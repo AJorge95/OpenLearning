@@ -711,7 +711,7 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
   lesson: Lesson;
   courseId: string;
   beforeChange: () => Promise<void>;
-  onChanged: () => Promise<void>;
+  onChanged: () => Promise<boolean>;
   onClose: () => void;
   onError: (message: string) => void;
   onNotice: (message: string) => void;
@@ -763,13 +763,21 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
     setTitle(cleanTitle);
   }
 
+  // Lesson mutations commit before the course refresh; keep feedback truthful if that follow-up read fails.
+  async function completeLessonChange(successMessage: string) {
+    if (await onChanged()) {
+      onNotice(successMessage);
+      return;
+    }
+    onError(`${successMessage} The course editor could not be refreshed. Reload before making another change.`);
+  }
+
   async function saveDetails(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true); onError('');
     try {
       await persistLessonDetails();
-      await onChanged();
-      onNotice('Lesson details saved.');
+      await completeLessonChange('Lesson details saved.');
     } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Lesson details could not be saved.'); }
     finally { setBusy(false); }
   }
@@ -789,9 +797,8 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
       await persistLessonDetails();
       const { resource } = await api.post<{ resource: LessonResource }>(`/api/manage/lessons/${lesson.id}/resources`, { title: linkTitle.trim(), url: linkUrl.trim() });
       setResources((current) => [...current, resource]);
-      await onChanged();
       setLinkTitle(''); setLinkUrl('');
-      onNotice('Lesson link added.');
+      await completeLessonChange('Lesson link added.');
     } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Lesson link could not be added.'); }
     finally { setBusy(false); }
   }
@@ -815,8 +822,7 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
       }, file, setUploadProgress, { signal: upload.controller.signal });
       if (upload.controller.signal.aborted) return;
       setResources((current) => [...current, resource]);
-      await onChanged();
-      if (!upload.controller.signal.aborted) onNotice(`${file.name} attached to this lesson.`);
+      if (!upload.controller.signal.aborted) await completeLessonChange(`${file.name} attached to this lesson.`);
     } catch (cause) {
       if (!upload.controller.signal.aborted) onError(cause instanceof ApiError ? cause.message : 'Document could not be uploaded.');
     } finally {
@@ -863,12 +869,11 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
       if (upload.controller.signal.aborted) return;
       setCaptions((current) => [...current.filter((item) => item.language.toLowerCase() !== caption.language.toLowerCase()), caption]
         .sort((a, b) => a.language.localeCompare(b.language)));
-      await onChanged();
-      if (!upload.controller.signal.aborted) onNotice(`${caption.label} captions uploaded.`);
       setCaptionFile(null);
       setCaptionLanguage('');
       setCaptionLabel('');
       if (input) input.value = '';
+      if (!upload.controller.signal.aborted) await completeLessonChange(`${caption.label} captions uploaded.`);
     } catch (cause) {
       if (!upload.controller.signal.aborted) onError(cause instanceof ApiError ? cause.message : 'Captions could not be uploaded.');
     } finally {
@@ -891,8 +896,7 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
       await persistLessonDetails();
       await api.delete(`/api/manage/lessons/${lesson.id}/resources/${resource.id}`);
       setResources((current) => current.filter((item) => item.id !== resource.id));
-      await onChanged();
-      onNotice('Lesson resource removed.');
+      await completeLessonChange('Lesson resource removed.');
     } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Lesson resource could not be removed.'); }
     finally { removalRequestRef.current = false; setBusy(false); }
   }
@@ -910,8 +914,7 @@ function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClos
       await persistLessonDetails();
       await api.delete(`/api/manage/lessons/${lesson.id}/captions/${caption.id}`);
       setCaptions((current) => current.filter((item) => item.id !== caption.id));
-      await onChanged();
-      onNotice('Caption track removed.');
+      await completeLessonChange('Caption track removed.');
     } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Caption track could not be removed.'); }
     finally { removalRequestRef.current = false; setBusy(false); }
   }
@@ -1172,8 +1175,8 @@ export function CourseEditorPage() {
     upload.controller.abort();
   }
 
-  async function load(id = courseId) {
-    if (!id || routeCourseIdRef.current !== id) return;
+  async function load(id = courseId): Promise<boolean> {
+    if (!id || routeCourseIdRef.current !== id) return false;
     const previousCourse = course?.id === id ? course : null;
     const requestSequence = ++courseLoadSequenceRef.current;
     courseLoadControllerRef.current?.abort();
@@ -1184,7 +1187,7 @@ export function CourseEditorPage() {
     setGovernanceCourseId(''); setGovernanceError(''); setCompetencyMappingError(''); setCompetencyMappingNotice(''); setGovernanceLoading(true);
     try {
       const response = await fetchCourse(id, true, { signal: controller.signal });
-      if (!isCurrentRequest()) return;
+      if (!isCurrentRequest()) return false;
       setCourse(response.course);
       void loadGovernance(id, isCurrentRequest).catch((cause) => {
         if (isCurrentRequest()) setError(cause instanceof ApiError ? cause.message : 'Course settings could not be loaded.');
@@ -1199,11 +1202,13 @@ export function CourseEditorPage() {
         setCategory((current) => current === previousCourse.category ? response.course.category : current);
         setVisibility((current) => current === previousCourse.visibility ? response.course.visibility : current);
       }
+      return true;
     } catch (cause) {
       if (isCurrentRequest()) {
         setError(cause instanceof ApiError ? cause.message : 'Course could not be loaded.');
         setGovernanceLoading(false);
       }
+      return false;
     } finally {
       if (isCurrentRequest()) {
         courseLoadControllerRef.current = null;
