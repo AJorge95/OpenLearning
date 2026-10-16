@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 175: review backup restore boundaries — no additional change indicated
+
+- **Reviewed:** The user's untracked restore CLI and server restore service, including the admin router, full-backup selection, media manifest/path checks, symlink rejection, database verification/migration, restore staging, rollback, and session clearing.
+- **Result:** No additional unauthorized-access path was found in the reviewed restore flow. The web routes are behind `requireAdmin`; backup inputs are constrained to retained full runs, and restore validates media entries and database state before replacing installation data.
+- **Why no code change:** The reviewed controls match the restore flow's intended administrator-only use; changing the in-progress user-owned restore implementation without a reproduced defect would be speculative.
+- **Checked:** `node --test tests/server/backup-restore.test.js` passed 1/1. No live restore was run. The broader repository scan and production filesystem review remain partial.
+- **Boundary:** Read-only review; preserved the user's untracked restore files and all other dirty work. No production data, deployment, or external service was changed.
+- **Commit title:** `docs(security): record backup restore boundary review`.
+- **Commit description:** `Record the bounded review of administrator-only backup restoration, path validation, and recovery behavior without altering the user's untracked restore implementation.`
+
 ## 2026-10-16 — Cycle 174: protect standalone backup output
 
 - **Finding:** The documented `npm run backup` command runs in its own process, so it did not inherit the production server's private umask. On POSIX hosts with a permissive default, its timestamped database/media backup directory could be accessible to other local accounts.

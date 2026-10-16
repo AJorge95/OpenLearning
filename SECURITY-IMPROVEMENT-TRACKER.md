@@ -1,5 +1,14 @@
 # Security Improvement Tracker
 
+## 2026-10-16 — Cycle 175: review backup restore boundaries — no additional finding
+
+- **Reviewed:** The user's untracked restore CLI and server restore service, the admin router boundary, full-backup selection, media manifest/path checks, symlink rejection, database verification/migration, staging/rollback, and session clearing.
+- **Result:** No additional unauthorized-access issue was identified in this bounded source review. Restore API routes are behind `requireAdmin`; candidates are limited to retained full backups, and the restore implementation validates media paths/checksums and database integrity before installation.
+- **Validation:** `node --test tests/server/backup-restore.test.js` passed 1/1. This does not exercise a live installation or prove active filesystem permissions.
+- **Coverage limit:** Repository scan coverage is partial across 432 files; active deployment, storage ACLs, host reachability, and operator configuration remain unknown.
+- **Commit title:** `docs(security): record backup restore boundary review`.
+- **Commit description:** `Record the bounded review of administrator-only backup restoration, path validation, and recovery behavior without altering the user's untracked restore implementation.`
+
 ## 2026-10-16 — Cycle 174: protect standalone backup output
 
 - **Finding:** README documents `npm run backup` as a way to create a verified full database/media backup under `./backup` or `BACKUP_DIR`. `scripts/backup.js` runs in a separate Node process and creates a timestamped directory, SQLite copy, media copy, and manifest without first restricting the inherited POSIX umask. With a typical `022` umask, the directory and files may allow local group/world reads, exposing backup contents outside the app's authorization checks.
