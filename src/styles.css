@@ -1486,7 +1486,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .staff-sidebar nav { display: flex; gap: 5px; overflow-x: auto; }
   .staff-sidebar nav a { min-height: 40px; padding: 0 10px; white-space: nowrap; font-size: 12px; }
   .staff-sidebar nav a svg { width: 16px; }
-  .staff-back-link { display: flex; min-height: 36px; margin: 8px 4px 0; padding: 0 4px; font-size: 12px; }
+  /* Keep the mobile return link as easy to activate as the adjacent staff controls. */
+  .staff-back-link { display: flex; min-height: 40px; margin: 8px 4px 0; padding: 0 4px; font-size: 12px; }
   .staff-account { display: flex; min-height: 48px; padding: 8px 4px 0; }
   .staff-content { padding: 28px 16px 45px; }
   .management-page .page-heading { flex-direction: row; align-items: center; }

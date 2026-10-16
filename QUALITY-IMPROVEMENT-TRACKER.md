@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 142: align mobile staff return target
+
+- **Reviewed:** The shared staff sidebar markup, `Back to learning` route link, decorative back-arrow semantics, desktop/mobile sidebar flow, adjacent navigation and sign-out targets, keyboard focus treatment, and staff-route authorization/session boundaries.
+- **Improvement:** Raise the mobile `Back to learning` link from its explicit 36px override to a 40px minimum target, preserving its visible label, decorative icon, desktop sizing, normal-flow mobile placement, route destination, and existing sidebar behavior. Added `tests/client/staff-back-link-target.test.js`.
+- **Why it helps:** Staff using course management on a narrow screen can return to learner pages more reliably with a pointer, touch device, or keyboard, matching the surrounding mobile navigation controls without widening the sidebar.
+- **Backend review:** The link remains a client-side navigation affordance to the existing protected learner catalog; staff authorization, session handling, and route guards are unchanged. No backend change was indicated.
+- **Checked:** The dedicated return-link and responsive navigation checks passed (10/10); the full `npm test -- --test-reporter=spec` suite passed (1009/1009); `npm run build` including strict typecheck, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, CSRF, and Vite `/login` probes returned 200 without response cookies. The signed-out in-app browser rendered a non-blank login shell with one heading and named username/password controls, with no warning/error diagnostics; no credentials, staff navigation, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): align mobile staff return target`.
+- **Commit description:** `Give the mobile staff return link a reliable target while preserving sidebar navigation behavior.`
+
 ## 2026-10-16 — Cycle 141: align platform-icon picker targets
 
 - **Reviewed:** The shared platform-icon picker used by first-run setup and administrator settings, its upload/remove semantics, hidden native file input, focus-within treatment, narrow-screen wrapping, image validation feedback, and the server-side branding authorization, size, dimension, signature, persistence, and audit boundaries.
