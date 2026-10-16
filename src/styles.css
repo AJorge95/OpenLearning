@@ -1129,7 +1129,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .log-level-info { color: #3e587b; background: #edf3fc; }
 .log-level-warn { color: #80570a; background: #fff4d9; }
 .log-level-error { color: #9a3141; background: #fbecef; }
-.log-details-toggle { display: inline-flex; align-items: center; gap: 5px; border: 0; padding: 0; color: var(--purple); background: transparent; cursor: pointer; font: inherit; font-size: 12px; font-weight: 650; white-space: nowrap; }
+/* Keep audit and system-log detail disclosures easy to activate in dense table rows. */
+.log-details-toggle { display: inline-flex; align-items: center; gap: 5px; min-height: 40px; border: 0; border-radius: 4px; padding: 0 6px; color: var(--purple); background: transparent; cursor: pointer; font: inherit; font-size: 12px; font-weight: 650; white-space: nowrap; }
 .log-details-toggle:hover { color: var(--purple-dark); }
 .log-details-toggle:focus-visible { outline: 2px solid var(--purple); outline-offset: 3px; }
 .log-details-toggle svg { transition: transform .15s ease; }
