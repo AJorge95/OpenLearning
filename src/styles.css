@@ -106,6 +106,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .module-disclosure:hover:not(:disabled), .module-disclosure:focus-visible { color: HighlightText; background: Highlight; outline-color: Highlight; }
   .staff-account button { color: ButtonText; border-color: ButtonText; }
   .staff-account button:hover:not(:disabled), .staff-account button:focus-visible { color: HighlightText; border-color: Highlight; background: Highlight; outline-color: Highlight; }
+  .registration-field-remove { color: ButtonText; }
+  .registration-field-remove:hover:not(:disabled), .registration-field-remove:focus-visible { color: HighlightText; background: Highlight; outline-color: Highlight; }
   .app-select-option.selected .app-select-option-indicator { color: HighlightText; border: 1px solid HighlightText; background: Highlight; }
 }
 a { color: inherit; text-decoration: none; }
@@ -1259,7 +1261,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .registration-field-editor { display: grid; gap: 15px; min-width: 0; padding: 17px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .registration-field-editor-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .registration-field-editor-heading h3 { margin: 0; color: var(--ink); font-size: 14px; }
-.registration-field-remove { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; color: var(--danger); font-size: 12px; }
+/* Keep the schema editor's destructive action easy to hit without widening its heading. */
+.registration-field-remove { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 8px; border-radius: 4px; color: var(--danger); font-size: 12px; }
+.registration-field-remove:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; }
 .registration-field-editor-grid { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(170px, .8fr) minmax(150px, .65fr); align-items: end; gap: 14px; min-width: 0; }
 .registration-field-editor-grid .app-select, .registration-field-editor-grid .app-select-trigger { width: 100%; min-width: 0; }
 .registration-field-editor input[aria-invalid="true"], .registration-field-editor .registration-options-field textarea[aria-invalid="true"] { border-color: var(--danger); }
