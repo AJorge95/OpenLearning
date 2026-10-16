@@ -141,8 +141,13 @@ function cleanupOrphanedMedia() {
   });
 }
 
-const server = app.listen(config.port, () => {
-  console.log(`OpenLearning listening on http://localhost:${config.port}`);
+const server = app.listen(config.port, config.host, () => {
+  console.log(`OpenLearning listening on ${config.host}:${config.port}`);
+  if (config.nodeEnv === 'production') {
+    console.log(`Open the app at http://<server-external-ip>:${config.port} from a browser on another computer.`);
+  } else {
+    console.log(`Open the local development API at http://${config.host}:${config.port}`);
+  }
   console.log(`Database: ${config.dbPath}`);
   console.log(`Course media: ${config.mediaRoot}`);
   writeSystemLog('info', 'server', 'OpenLearning server started', { port: config.port, environment: config.nodeEnv, nodeVersion: process.versions.node });

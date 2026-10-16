@@ -458,6 +458,6 @@ if [[ "$FIREWALL_CONFIGURED" == false ]]; then
   log "No active UFW or firewalld firewall was configured. If another firewall is in use, allow inbound TCP port $SERVICE_PORT there."
 fi
 
-log "OpenLearning is ready at http://localhost:$SERVICE_PORT."
+log "OpenLearning is ready on all IPv4 interfaces on port $SERVICE_PORT."
 log "From another computer, open http://<this-server-IP-or-hostname>:$SERVICE_PORT (localhost refers to the computer running the browser)."
 log "Service: systemctl status $SERVICE_NAME; configuration: $ENV_FILE; data: $DATA_DIR"

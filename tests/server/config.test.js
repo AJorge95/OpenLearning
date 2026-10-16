@@ -45,6 +45,7 @@ test('config defaults are stable and derived paths follow DATA_DIR', () => {
 
   assert.deepEqual({
     nodeEnv: config.nodeEnv,
+    host: config.host,
     port: config.port,
     dataDir: config.dataDir,
     dbPath: config.dbPath,
@@ -54,6 +55,7 @@ test('config defaults are stable and derived paths follow DATA_DIR', () => {
     trustProxy: config.trustProxy,
   }, {
     nodeEnv: 'development',
+    host: '127.0.0.1',
     port: 6173,
     dataDir: path.join(workingDirectory, 'custom-data'),
     dbPath: path.join(workingDirectory, 'custom-data', 'openlearning.sqlite'),
@@ -87,6 +89,7 @@ test('config accepts documented upper boundaries and normalizes a valid producti
   });
 
   assert.equal(config.nodeEnv, 'production');
+  assert.equal(config.host, '0.0.0.0');
   assert.equal(config.port, 65_535);
   assert.equal(config.dataDir, path.join(workingDirectory, 'data'));
   assert.equal(config.dbPath, path.join(workingDirectory, 'database', 'custom.sqlite'));

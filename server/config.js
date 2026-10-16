@@ -58,6 +58,9 @@ if (setupToken && (setupToken.length < 32 || setupToken.length > 256)) {
 
 export const config = {
   nodeEnv,
+  // Production must accept connections addressed to the server's network IP.
+  // Local development and tests remain bound to loopback.
+  host: nodeEnv === 'production' ? '0.0.0.0' : '127.0.0.1',
   port,
   dataDir,
   dbPath: path.resolve(baseDir, process.env.DB_PATH || path.join(dataDir, 'openlearning.sqlite')),
