@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 import { sessionUserIdFromJson } from './session-data.js';
 
-const latestSchemaVersion = 41;
+const latestSchemaVersion = 42;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -1001,6 +1001,108 @@ export function migrateDatabase(database = db) {
     } finally {
       if (foreignKeysWereEnabled) database.pragma('foreign_keys = ON');
     }
+  }
+
+  if (current < 42) {
+    const migration = database.transaction(() => {
+      const tables = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(({ name }) => name));
+      const courseGroupsExist = tables.has('course_groups');
+      const courseGroupColumns = courseGroupsExist
+        ? new Set(database.prepare('PRAGMA table_info(course_groups)').all().map(({ name }) => name))
+        : new Set();
+
+      if (courseGroupColumns.has('course_id')) {
+        const legacyGroups = database.prepare(`
+          SELECT id, name, description, course_id, created_by, created_at
+          FROM course_groups ORDER BY created_at, id
+        `).all();
+        const groupsByName = new Map();
+
+        for (const legacyGroup of legacyGroups) {
+          // Match SQLite's built-in NOCASE behavior when coalescing old per-course groups.
+          const key = legacyGroup.name.replace(/[A-Z]/g, (character) => character.toLowerCase());
+          let group = groupsByName.get(key);
+          if (!group) {
+            group = {
+              id: legacyGroup.id,
+              name: legacyGroup.name,
+              descriptions: [],
+              created_by: legacyGroup.created_by,
+              created_at: legacyGroup.created_at,
+              courses: [],
+            };
+            groupsByName.set(key, group);
+          }
+          if (legacyGroup.description && !group.descriptions.includes(legacyGroup.description)) {
+            group.descriptions.push(legacyGroup.description);
+          }
+          group.courses.push({
+            id: legacyGroup.course_id,
+            added_by: legacyGroup.created_by,
+            added_at: legacyGroup.created_at,
+          });
+        }
+
+        database.exec(`
+          ALTER TABLE course_groups RENAME TO course_groups_legacy_v42;
+          CREATE TABLE course_groups (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE TABLE IF NOT EXISTS course_group_courses (
+            group_id TEXT NOT NULL REFERENCES course_groups(id) ON DELETE CASCADE,
+            course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+            added_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+            added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, course_id)
+          );
+        `);
+
+        const insertGroup = database.prepare(`
+          INSERT INTO course_groups (id, name, description, created_by, created_at)
+          VALUES (?, ?, ?, ?, ?)
+        `);
+        const insertCourse = database.prepare(`
+          INSERT OR IGNORE INTO course_group_courses (group_id, course_id, added_by, added_at)
+          VALUES (?, ?, ?, ?)
+        `);
+        for (const group of groupsByName.values()) {
+          insertGroup.run(group.id, group.name, group.descriptions.join('\n\n'), group.created_by, group.created_at);
+          for (const course of group.courses) {
+            insertCourse.run(group.id, course.id, course.added_by, course.added_at);
+          }
+        }
+        database.exec('DROP TABLE course_groups_legacy_v42');
+      } else {
+        database.exec(`
+          CREATE TABLE IF NOT EXISTS course_groups (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE TABLE IF NOT EXISTS course_group_courses (
+            group_id TEXT NOT NULL REFERENCES course_groups(id) ON DELETE CASCADE,
+            course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+            added_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+            added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, course_id)
+          );
+        `);
+      }
+
+      database.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS course_groups_name ON course_groups(name COLLATE NOCASE);
+        CREATE INDEX IF NOT EXISTS course_groups_created ON course_groups(created_at, id);
+        CREATE INDEX IF NOT EXISTS course_group_courses_course ON course_group_courses(course_id, group_id);
+      `);
+      database.prepare('INSERT INTO schema_migrations (version) VALUES (42)').run();
+    });
+    migration();
   }
 
 }
