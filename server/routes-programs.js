@@ -577,9 +577,9 @@ programsRouter.get('/competencies', (req, res) => {
             WHERE p.user_id = ? AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
               OR progress_course.logical_course_id = COALESCE(c.logical_course_id, c.id)))
           OR EXISTS (SELECT 1 FROM quiz_attempts a
-            JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id
-            JOIN courses progress_course ON progress_course.id = m.course_id
-            WHERE a.user_id = ? AND a.passed = 1 AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
+            JOIN quizzes q ON q.id = a.quiz_id LEFT JOIN course_modules m ON m.id = q.module_id
+            JOIN courses progress_course ON progress_course.id = COALESCE(m.course_id, q.course_id)
+            WHERE a.user_id = ? AND a.passed = 1 AND q.required_for_completion = 1 AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
               OR progress_course.logical_course_id = COALESCE(c.logical_course_id, c.id)))
         )
       ORDER BY c.id ASC LIMIT ?`);

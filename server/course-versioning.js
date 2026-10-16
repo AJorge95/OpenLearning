@@ -7,8 +7,9 @@ const courseIdentityByModuleStatement = db.prepare(`SELECT c.id, c.logical_cours
   JOIN course_modules m ON m.course_id = c.id WHERE m.id = ?`);
 const courseIdentityByLessonStatement = db.prepare(`SELECT c.id, c.logical_course_id FROM courses c
   JOIN course_modules m ON m.course_id = c.id JOIN lessons l ON l.module_id = m.id WHERE l.id = ?`);
-const courseIdentityByQuizStatement = db.prepare(`SELECT c.id, c.logical_course_id FROM courses c
-  JOIN course_modules m ON m.course_id = c.id JOIN quizzes q ON q.module_id = m.id WHERE q.id = ?`);
+const courseIdentityByQuizStatement = db.prepare(`SELECT c.id, c.logical_course_id FROM quizzes q
+  LEFT JOIN course_modules m ON m.id = q.module_id
+  JOIN courses c ON c.id = COALESCE(m.course_id, q.course_id) WHERE q.id = ?`);
 const publishedVersionLookupStatement = db.prepare(`SELECT v.*, c.title, c.description, c.category, c.visibility, c.status,
     c.cover_media_id, c.created_by, c.updated_by, c.updated_at, c.completion_window_days
   FROM course_versions v JOIN courses c ON c.id = v.storage_course_id
@@ -52,8 +53,8 @@ export function logicalCourseIds(courseIds) {
     LEFT JOIN course_modules lesson_module ON lesson_module.id = lesson.module_id
     LEFT JOIN courses lesson_course ON lesson_course.id = lesson_module.course_id
     LEFT JOIN quizzes quiz ON quiz.id = requested.id
-    LEFT JOIN course_modules quiz_module ON quiz_module.id = quiz.module_id
-    LEFT JOIN courses quiz_course ON quiz_course.id = quiz_module.course_id`).all(...ids);
+     LEFT JOIN course_modules quiz_module ON quiz_module.id = quiz.module_id
+     LEFT JOIN courses quiz_course ON quiz_course.id = COALESCE(quiz_module.course_id, quiz.course_id)`).all(...ids);
   return new Map(rows.filter((row) => row.logical_course_id).map((row) => [row.input_id, row.logical_course_id]));
 }
 
@@ -94,7 +95,9 @@ function copyPublishedContent(sourceId, targetId, logicalId, actorId) {
   const addModule = db.prepare('INSERT INTO course_modules (id, course_id, title, position, created_at, stable_id) VALUES (?, ?, ?, ?, ?, ?)');
   const addLesson = db.prepare(`INSERT INTO lessons (id, module_id, title, description, transcript, media_id, position, created_at, stable_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  const addQuiz = db.prepare('INSERT INTO quizzes (id, module_id, title, pass_mark, created_at, updated_at, stable_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const addQuiz = db.prepare(`INSERT INTO quizzes
+    (id, module_id, course_id, title, pass_mark, questions_per_attempt, required_for_completion, created_at, updated_at, stable_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const getLessons = db.prepare(`SELECT l.* FROM lessons l
     JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?
     ORDER BY m.position, m.id, l.position, l.id`);
@@ -104,15 +107,15 @@ function copyPublishedContent(sourceId, targetId, logicalId, actorId) {
   const getCaptions = db.prepare(`SELECT lc.* FROM lesson_captions lc
     JOIN lessons l ON l.id = lc.lesson_id JOIN course_modules m ON m.id = l.module_id
     WHERE m.course_id = ? ORDER BY m.position, m.id, l.position, l.id, lc.id`);
-  const getQuizzes = db.prepare(`SELECT q.* FROM quizzes q JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id = ? ORDER BY m.position, m.id`);
+  const getQuizzes = db.prepare(`SELECT q.* FROM quizzes q LEFT JOIN course_modules m ON m.id = q.module_id
+    WHERE COALESCE(m.course_id, q.course_id) = ? ORDER BY CASE WHEN q.course_id IS NULL THEN 0 ELSE 1 END, m.position, m.id`);
   const getQuestions = db.prepare(`SELECT qq.* FROM quiz_questions qq
-    JOIN quizzes q ON q.id = qq.quiz_id JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id = ? ORDER BY m.position, m.id, qq.position, qq.id`);
+    JOIN quizzes q ON q.id = qq.quiz_id LEFT JOIN course_modules m ON m.id = q.module_id
+    WHERE COALESCE(m.course_id, q.course_id) = ? ORDER BY m.position, m.id, qq.position, qq.id`);
   const getChoices = db.prepare(`SELECT qc.* FROM quiz_choices qc
     JOIN quiz_questions qq ON qq.id = qc.question_id JOIN quizzes q ON q.id = qq.quiz_id
-    JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id = ? ORDER BY m.position, m.id, qq.position, qq.id, qc.position, qc.id`);
+    LEFT JOIN course_modules m ON m.id = q.module_id
+    WHERE COALESCE(m.course_id, q.course_id) = ? ORDER BY m.position, m.id, qq.position, qq.id, qc.position, qc.id`);
   const addResource = db.prepare(`INSERT INTO lesson_resources (id, lesson_id, resource_type, title, href, file_name, original_name, mime_type, byte_size, position, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const addCaption = db.prepare(`INSERT INTO lesson_captions (id, lesson_id, language, label, file_name, original_name, byte_size, created_at)
@@ -120,15 +123,30 @@ function copyPublishedContent(sourceId, targetId, logicalId, actorId) {
   const addQuestion = db.prepare('INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position) VALUES (?, ?, ?, ?, ?)');
   const addChoice = db.prepare('INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES (?, ?, ?, ?, ?)');
   // Read each content table once, then copy its rows from the in-memory groups.
-  const groupCourseRows = (statement, key) => modules.length
-    ? groupRowsBy(statement.all(sourceId), key)
-    : new Map();
+  const groupCourseRows = (statement, key) => groupRowsBy(statement.all(sourceId), key);
   const lessonsByModule = groupCourseRows(getLessons, 'module_id');
   const resourcesByLesson = lessonsByModule.size ? groupCourseRows(getResources, 'lesson_id') : new Map();
   const captionsByLesson = lessonsByModule.size ? groupCourseRows(getCaptions, 'lesson_id') : new Map();
-  const quizByModule = new Map((modules.length ? getQuizzes.all(sourceId) : []).map((quiz) => [quiz.module_id, quiz]));
-  const questionsByQuiz = quizByModule.size ? groupCourseRows(getQuestions, 'quiz_id') : new Map();
+  const quizRows = getQuizzes.all(sourceId);
+  const quizByModule = new Map(quizRows.filter((quiz) => quiz.module_id).map((quiz) => [quiz.module_id, quiz]));
+  const courseFinalExam = quizRows.find((quiz) => quiz.course_id === sourceId);
+  const questionsByQuiz = quizRows.length ? groupCourseRows(getQuestions, 'quiz_id') : new Map();
   const choicesByQuestion = questionsByQuiz.size ? groupCourseRows(getChoices, 'question_id') : new Map();
+  const copyQuiz = (quiz, nextModuleId, nextCourseId) => {
+    const nextQuizId = cloneId();
+    quizIds.set(quiz.id, nextQuizId);
+    addQuiz.run(nextQuizId, nextModuleId, nextCourseId, quiz.title, quiz.pass_mark, quiz.questions_per_attempt,
+      quiz.required_for_completion, quiz.created_at, quiz.updated_at, quiz.stable_id || quiz.id);
+    const questions = questionsByQuiz.get(quiz.id) ?? [];
+    for (const question of questions) {
+      const nextQuestionId = cloneId();
+      questionIds.set(question.id, nextQuestionId);
+      addQuestion.run(nextQuestionId, nextQuizId, question.prompt, question.explanation, question.position);
+      for (const choice of choicesByQuestion.get(question.id) ?? []) {
+        addChoice.run(cloneId(), nextQuestionId, choice.choice_text, choice.is_correct, choice.position);
+      }
+    }
+  };
   for (const module of modules) {
     const nextModuleId = cloneId();
     moduleIds.set(module.id, nextModuleId);
@@ -147,20 +165,9 @@ function copyPublishedContent(sourceId, targetId, logicalId, actorId) {
       }
     }
     const quiz = quizByModule.get(module.id);
-    if (!quiz) continue;
-    const nextQuizId = cloneId();
-    quizIds.set(quiz.id, nextQuizId);
-    addQuiz.run(nextQuizId, nextModuleId, quiz.title, quiz.pass_mark, quiz.created_at, quiz.updated_at, quiz.stable_id || quiz.id);
-    const questions = questionsByQuiz.get(quiz.id) ?? [];
-    for (const question of questions) {
-      const nextQuestionId = cloneId();
-      questionIds.set(question.id, nextQuestionId);
-      addQuestion.run(nextQuestionId, nextQuizId, question.prompt, question.explanation, question.position);
-      for (const choice of choicesByQuestion.get(question.id) ?? []) {
-        addChoice.run(cloneId(), nextQuestionId, choice.choice_text, choice.is_correct, choice.position);
-      }
-    }
+    if (quiz) copyQuiz(quiz, nextModuleId, null);
   }
+  if (courseFinalExam) copyQuiz(courseFinalExam, null, targetId);
   return { moduleIds, lessonIds, quizIds, questionIds };
 }
 

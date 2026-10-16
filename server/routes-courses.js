@@ -16,6 +16,7 @@ import { syncUnlockedPathStates } from './routes-programs.js';
 import { beginLessonWatch, getLessonWatchProgress, lessonVideoWasWatched, recordLessonWatchProgress, rewindLessonWatch } from './lesson-watch.js';
 import { readMp4Duration } from './mp4-duration.js';
 import { createVideoDurationReader } from './video-duration-reader.js';
+import { selectRandomQuizQuestions } from './quiz-question-selection.js';
 
 export const courseRouter = Router();
 courseRouter.use(requireAuth);
@@ -51,6 +52,34 @@ function intField(value, label, min, max) {
 function booleanField(value, label) {
   if (typeof value !== 'boolean') fail(400, `${label} must be true or false.`, 'validation_error');
   return value;
+}
+
+function normalizedQuizQuestion(question, label = 'Final exam question') {
+  if (!question || typeof question !== 'object' || Array.isArray(question)) fail(400, 'Each final exam question must be an object.', 'validation_error');
+  if (!Array.isArray(question.choices) || question.choices.length < 2 || question.choices.length > 6) {
+    fail(400, 'Each final exam question must have between two and six answer choices.', 'validation_error');
+  }
+  let correctChoiceCount = 0;
+  for (const choice of question.choices) {
+    if (!choice || typeof choice !== 'object' || Array.isArray(choice)) fail(400, 'Each answer choice must be an object.', 'validation_error');
+    if (choice.isCorrect !== undefined && typeof choice.isCorrect !== 'boolean') fail(400, 'Correct-answer flags must be true or false.', 'validation_error');
+    if (choice.isCorrect === true) correctChoiceCount += 1;
+  }
+  if (correctChoiceCount !== 1) fail(400, 'Each final exam question must have exactly one correct answer.', 'validation_error');
+  return {
+    prompt: textField(question.prompt, label, 1000, { required: true }),
+    explanation: textField(question.explanation, 'Explanation', 1000),
+    choices: question.choices.map((choice) => ({
+      text: textField(choice.text, 'Answer choice', 500, { required: true }),
+      isCorrect: choice.isCorrect === true,
+    })),
+  };
+}
+
+function finalExamForManager(courseId, user) {
+  const course = requireCourseManager(courseId, user);
+  const exam = db.prepare('SELECT * FROM quizzes WHERE course_id = ?').get(course.id);
+  return { course, exam };
 }
 
 function courseFileDirectory(courseId) {
@@ -478,8 +507,8 @@ function courseAnalyticsLearners(course, learnerRows, lessons, quizzes) {
         ORDER BY latest.submitted_at DESC, latest.rowid DESC LIMIT 1) AS latest_passed,
       MAX(a.submitted_at) AS latest_submitted_at
     FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-    JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id = ? AND a.user_id IN (${learnerIds.map(() => '?').join(',')})
+    LEFT JOIN course_modules m ON m.id = q.module_id
+    WHERE COALESCE(m.course_id, q.course_id) = ? AND a.user_id IN (${learnerIds.map(() => '?').join(',')})
     GROUP BY a.user_id, a.quiz_id
   `).all(course.id, ...learnerIds)) {
     const entries = quizResultsByUser.get(row.user_id) ?? new Map();
@@ -504,6 +533,7 @@ function courseAnalyticsLearners(course, learnerRows, lessons, quizzes) {
         title: quiz.title,
         moduleTitle: quiz.module_title,
         passMark: quiz.pass_mark,
+        requiredForCompletion: Boolean(quiz.required_for_completion),
         attempts: result?.attempts ?? 0,
         highestScore: result?.highest_score ?? null,
         latestScore: result?.latest_score ?? null,
@@ -513,8 +543,8 @@ function courseAnalyticsLearners(course, learnerRows, lessons, quizzes) {
       };
     });
     const completedLessonCount = lessonProgress.filter((lesson) => lesson.completed).length;
-    const passedQuizCount = quizProgress.filter((quiz) => quiz.passed).length;
-    const requiredItems = lessons.length + quizzes.length;
+    const passedQuizCount = quizProgress.filter((quiz) => quiz.requiredForCompletion && quiz.passed).length;
+    const requiredItems = lessons.length + quizzes.filter((quiz) => quiz.required_for_completion).length;
     const completedItems = completedLessonCount + passedQuizCount;
     const progress = requiredItems ? Math.round((completedItems / requiredItems) * 100) : 0;
     const activityDates = [
@@ -558,19 +588,21 @@ function courseAnalyticsLearnerSummaries(course, learnerRows, lessons, quizzes) 
     for (const row of db.prepare(`
       WITH quiz_by_user AS (
         SELECT a.user_id, a.quiz_id, COUNT(*) AS attempts, MAX(a.passed) AS passed,
+          MAX(q.required_for_completion) AS required_for_completion,
           MAX(a.submitted_at) AS latest_submitted_at
         FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-        JOIN course_modules m ON m.id = q.module_id
-        WHERE m.course_id = ? AND a.user_id IN (${learnerPlaceholders})
+        LEFT JOIN course_modules m ON m.id = q.module_id
+        WHERE COALESCE(m.course_id, q.course_id) = ? AND a.user_id IN (${learnerPlaceholders})
         GROUP BY a.user_id, a.quiz_id
       )
-      SELECT user_id, SUM(attempts) AS attempts, SUM(passed) AS passed_quizzes,
+      SELECT user_id, SUM(attempts) AS attempts,
+        SUM(CASE WHEN required_for_completion = 1 THEN passed ELSE 0 END) AS passed_quizzes,
         MAX(latest_submitted_at) AS latest_submitted_at
       FROM quiz_by_user GROUP BY user_id
     `).all(course.id, ...learnerIds)) quizTotalsByUser.set(row.user_id, row);
   }
 
-  const requiredItems = lessons.length + quizzes.length;
+  const requiredItems = lessons.length + quizzes.filter((quiz) => quiz.required_for_completion).length;
   return learnerRows.map((learner) => {
     const lessonTotals = lessonTotalsByUser.get(learner.id);
     const quizTotals = quizTotalsByUser.get(learner.id);
@@ -616,9 +648,11 @@ function courseAnalyticsContent(courseId) {
     WHERE m.course_id = ? ORDER BY m.position, m.id, l.position, l.id
   `).all(courseId);
   const quizzes = db.prepare(`
-    SELECT q.id, q.title, q.pass_mark, m.id AS module_id, m.title AS module_title, m.position AS module_position
-    FROM quizzes q JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id = ? ORDER BY m.position, m.id, q.id
+    SELECT q.id, q.title, q.pass_mark, q.required_for_completion, m.id AS module_id,
+      COALESCE(m.title, 'Final exam') AS module_title, COALESCE(m.position, 2147483647) AS module_position
+    FROM quizzes q LEFT JOIN course_modules m ON m.id = q.module_id
+    WHERE COALESCE(m.course_id, q.course_id) = ?
+    ORDER BY CASE WHEN q.course_id IS NULL THEN 0 ELSE 1 END, m.position, m.id, q.id
   `).all(courseId);
   return { lessons, quizzes };
 }
@@ -674,7 +708,7 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
     });
   }
 
-  const requiredItemCount = lessons.length + quizzes.length;
+  const requiredItemCount = lessons.length + quizzes.filter((quiz) => quiz.required_for_completion).length;
   const globalProgress = db.prepare(`
     WITH eligible AS (
       ${eligibleLearners}
@@ -686,13 +720,15 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
       WHERE m.course_id = ? GROUP BY lp.user_id
     ),
     quiz_by_user AS (
-      SELECT a.user_id, a.quiz_id, COUNT(*) AS attempts, MAX(a.passed) AS passed
+      SELECT a.user_id, a.quiz_id, COUNT(*) AS attempts, MAX(a.passed) AS passed,
+        MAX(q.required_for_completion) AS required_for_completion
       FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-      JOIN course_modules m ON m.id = q.module_id JOIN eligible e ON e.id = a.user_id
-      WHERE m.course_id = ? GROUP BY a.user_id, a.quiz_id
+      LEFT JOIN course_modules m ON m.id = q.module_id JOIN eligible e ON e.id = a.user_id
+      WHERE COALESCE(m.course_id, q.course_id) = ? GROUP BY a.user_id, a.quiz_id
     ),
     quiz_totals_by_user AS (
-      SELECT user_id, SUM(passed) AS passed_quizzes, SUM(attempts) AS quiz_attempts
+      SELECT user_id, SUM(CASE WHEN required_for_completion = 1 THEN passed ELSE 0 END) AS passed_quizzes,
+        SUM(attempts) AS quiz_attempts
       FROM quiz_by_user GROUP BY user_id
     ),
     learner_progress AS (
@@ -733,17 +769,17 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
     learner_quiz AS (
       SELECT a.quiz_id, a.user_id, COUNT(*) AS attempts, MAX(a.passed) AS passed, AVG(a.score) AS average_score
       FROM quiz_attempts a JOIN quizzes aq ON aq.id = a.quiz_id
-      JOIN course_modules am ON am.id = aq.module_id JOIN eligible e ON e.id = a.user_id
-      WHERE am.course_id = ? GROUP BY a.quiz_id, a.user_id
+      LEFT JOIN course_modules am ON am.id = aq.module_id JOIN eligible e ON e.id = a.user_id
+      WHERE COALESCE(am.course_id, aq.course_id) = ? GROUP BY a.quiz_id, a.user_id
     )
     SELECT q.id,
       COALESCE(SUM(lq.attempts), 0) AS attempts,
       COUNT(lq.user_id) AS learners_attempted,
       COALESCE(SUM(lq.passed), 0) AS learners_passed,
       CASE WHEN SUM(lq.attempts) > 0 THEN ROUND(SUM(lq.average_score * lq.attempts) / SUM(lq.attempts)) ELSE NULL END AS average_score
-    FROM quizzes q JOIN course_modules m ON m.id = q.module_id
+    FROM quizzes q LEFT JOIN course_modules m ON m.id = q.module_id
     LEFT JOIN learner_quiz lq ON lq.quiz_id = q.id
-    WHERE m.course_id = ? GROUP BY q.id
+    WHERE COALESCE(m.course_id, q.course_id) = ? GROUP BY q.id
   `).all(courseId, courseId, course.id, course.id);
   const quizTotalsById = new Map(quizTotals.map((row) => [row.id, row]));
 
@@ -755,6 +791,7 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
   const quizMetrics = quizzes.map((quiz) => {
     const totals = quizTotalsById.get(quiz.id) ?? { attempts: 0, learners_attempted: 0, learners_passed: 0, average_score: null };
     return { id: quiz.id, title: quiz.title, moduleTitle: quiz.module_title, passMark: quiz.pass_mark,
+      requiredForCompletion: Boolean(quiz.required_for_completion),
       attempts: totals.attempts, learnersAttempted: totals.learners_attempted, learnersPassed: totals.learners_passed,
       participationRate: learnerTotals.total ? Math.round((totals.learners_attempted / learnerTotals.total) * 100) : null,
       passRate: totals.learners_attempted ? Math.round((totals.learners_passed / totals.learners_attempted) * 100) : null,
@@ -817,6 +854,111 @@ courseRouter.post('/manage/courses', requireStaff, (req, res) => {
   });
   const course = createCourse.immediate();
   res.status(201).json({ course });
+});
+
+function courseForGroupManagement(courseRef, user) {
+  if (!user || !['admin', 'moderator'].includes(user.role)) fail(403, 'You do not have permission to manage course groups.', 'forbidden');
+  const id = logicalCourseId(courseRef);
+  const course = id ? canonicalCourse(id) : null;
+  if (!course) fail(404, 'Course not found.', 'not_found');
+  return { id, course };
+}
+
+courseRouter.get('/manage/course-groups', requireStaff, (req, res) => {
+  const rows = db.prepare(`SELECT g.id AS group_id, g.name, g.description, g.created_by, g.created_at,
+      gc.course_id, COALESCE(draft.title, c.title) AS course_title,
+      COALESCE(draft.category, c.category) AS course_category,
+      COALESCE(draft.status, c.status) AS course_status
+    FROM course_groups g
+    LEFT JOIN course_group_courses gc ON gc.group_id = g.id
+    LEFT JOIN courses c ON c.id = gc.course_id
+    LEFT JOIN course_revisions revision ON revision.course_id = c.id
+    LEFT JOIN courses draft ON draft.id = revision.revision_course_id
+    ORDER BY g.name COLLATE NOCASE, g.id, course_title COLLATE NOCASE, gc.course_id`).all();
+  const groupsById = new Map();
+  for (const row of rows) {
+    let group = groupsById.get(row.group_id);
+    if (!group) {
+      group = {
+        id: row.group_id,
+        name: row.name,
+        description: row.description,
+        createdBy: row.created_by,
+        createdAt: row.created_at,
+        courses: [],
+      };
+      groupsById.set(group.id, group);
+    }
+    if (row.course_id) group.courses.push({
+      id: row.course_id,
+      title: row.course_title,
+      category: row.course_category,
+      status: row.course_status,
+    });
+  }
+  res.json({ groups: [...groupsById.values()] });
+});
+
+courseRouter.post('/manage/course-groups', requireStaff, (req, res) => {
+  const body = requireObjectBody(req.body, 'Course group details');
+  const name = textField(body.name, 'Group name', 120, { required: true });
+  const description = textField(body.description, 'Description', 1000);
+  const id = randomUUID();
+  const createGroup = db.transaction(() => {
+    if (db.prepare('SELECT 1 FROM course_groups WHERE name = ? COLLATE NOCASE').get(name)) {
+      fail(409, 'A course group with this name already exists.', 'course_group_exists');
+    }
+    db.prepare(`INSERT INTO course_groups (id, name, description, created_by)
+      VALUES (?, ?, ?, ?)`).run(id, name, description, req.currentUser.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.group.created', entityType: 'course_group', entityId: id,
+      summary: `Created course group ${name}` });
+    if (!auditId) fail(500, 'The group could not be created because the audit log is unavailable.', 'audit_unavailable');
+    return db.prepare(`SELECT id, name, description, created_by, created_at
+      FROM course_groups WHERE id = ?`).get(id);
+  });
+  const group = createGroup.immediate();
+  res.status(201).json({ group: {
+    id: group.id,
+    name: group.name,
+    description: group.description,
+    createdBy: group.created_by,
+    createdAt: group.created_at,
+    courses: [],
+  } });
+});
+
+courseRouter.put('/manage/course-groups/:groupId/courses/:courseId', requireStaff, (req, res) => {
+  const assignCourse = db.transaction(() => {
+    const group = db.prepare('SELECT id, name FROM course_groups WHERE id = ?').get(req.params.groupId);
+    if (!group) fail(404, 'Course group not found.', 'not_found');
+    const { id: courseId, course } = courseForGroupManagement(req.params.courseId, req.currentUser);
+    if (db.prepare('SELECT 1 FROM course_group_courses WHERE group_id = ? AND course_id = ?').get(group.id, courseId)) {
+      fail(409, 'This course is already in the group.', 'course_group_course_exists');
+    }
+    db.prepare(`INSERT INTO course_group_courses (group_id, course_id, added_by)
+      VALUES (?, ?, ?)`).run(group.id, courseId, req.currentUser.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.group.course_added', entityType: 'course_group', entityId: group.id,
+      summary: `Added ${course.title} to course group ${group.name}`, details: { courseId } });
+    if (!auditId) fail(500, 'The course could not be added because the audit log is unavailable.', 'audit_unavailable');
+    return { id: courseId, title: course.title, category: course.category, status: course.status };
+  });
+  const course = assignCourse.immediate();
+  res.status(201).json({ course });
+});
+
+courseRouter.delete('/manage/course-groups/:groupId/courses/:courseId', requireStaff, (req, res) => {
+  const removeCourse = db.transaction(() => {
+    const group = db.prepare('SELECT id, name FROM course_groups WHERE id = ?').get(req.params.groupId);
+    if (!group) fail(404, 'Course group not found.', 'not_found');
+    const { id: courseId, course } = courseForGroupManagement(req.params.courseId, req.currentUser);
+    const result = db.prepare('DELETE FROM course_group_courses WHERE group_id = ? AND course_id = ?').run(group.id, courseId);
+    if (!result.changes) fail(404, 'This course is not in the group.', 'not_found');
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.group.course_removed', entityType: 'course_group', entityId: group.id,
+      summary: `Removed ${course.title} from course group ${group.name}`, details: { courseId } });
+    if (!auditId) fail(500, 'The course could not be removed because the audit log is unavailable.', 'audit_unavailable');
+  });
+  removeCourse.immediate();
+  res.status(204).end();
 });
 
 courseRouter.patch('/manage/courses/:courseId', requireStaff, (req, res) => {
@@ -1213,6 +1355,136 @@ courseRouter.post('/manage/lessons/:lessonId/move', requireStaff, (req, res) => 
   res.json({ ok: true });
 });
 
+courseRouter.put('/manage/courses/:courseId/final-exam', requireStaff, (req, res) => {
+  const body = requireObjectBody(req.body, 'Final exam settings');
+  const saveExam = db.transaction(() => {
+    const course = requireCourseManager(req.params.courseId, req.currentUser);
+    const existing = db.prepare('SELECT * FROM quizzes WHERE course_id = ?').get(course.id);
+    const title = textField(body.title ?? existing?.title ?? 'Final exam', 'Final exam title', 160, { required: true });
+    const passMark = body.passMark === undefined ? existing?.pass_mark ?? 70 : intField(body.passMark, 'Pass mark', 1, 100);
+    const questionsPerAttempt = body.questionsPerAttempt === undefined ? existing?.questions_per_attempt ?? 0 : body.questionsPerAttempt;
+    if (!Number.isInteger(questionsPerAttempt) || questionsPerAttempt < 0) {
+      fail(400, 'Questions per attempt must be zero (all questions) or a positive whole number.', 'validation_error');
+    }
+    const requiredForCompletion = body.requiredForCompletion === undefined
+      ? Boolean(existing?.required_for_completion ?? true)
+      : booleanField(body.requiredForCompletion, 'Required for course completion');
+    const quizId = existing?.id ?? randomUUID();
+    const stableId = existing?.stable_id || quizId;
+    if (existing) {
+      db.prepare(`UPDATE quizzes SET title = ?, pass_mark = ?, questions_per_attempt = ?, required_for_completion = ?,
+        updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .run(title, passMark, questionsPerAttempt, requiredForCompletion ? 1 : 0, quizId);
+    } else {
+      db.prepare(`INSERT INTO quizzes
+        (id, module_id, course_id, title, pass_mark, questions_per_attempt, required_for_completion, stable_id)
+        VALUES (?, NULL, ?, ?, ?, ?, ?, ?)`)
+        .run(quizId, course.id, title, passMark, questionsPerAttempt, requiredForCompletion ? 1 : 0, stableId);
+    }
+    db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, course.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: existing ? 'course.final_exam_updated' : 'course.final_exam_created',
+      entityType: 'quiz', entityId: quizId, summary: `${existing ? 'Updated' : 'Created'} final exam for ${course.title}`,
+      details: { courseId: course.id, passMark, questionsPerAttempt, requiredForCompletion } });
+    if (!auditId) fail(500, 'Final exam could not be saved because the audit log is unavailable.', 'audit_unavailable');
+    return getCoursePayload(course, req.currentUser, { includeAnswers: true });
+  });
+  res.json({ course: saveExam.immediate() });
+});
+
+courseRouter.delete('/manage/courses/:courseId/final-exam', requireStaff, (req, res) => {
+  const removeExam = db.transaction(() => {
+    const course = requireCourseManager(req.params.courseId, req.currentUser);
+    const exam = db.prepare('SELECT id FROM quizzes WHERE course_id = ?').get(course.id);
+    if (!exam) return false;
+    db.prepare('DELETE FROM quizzes WHERE id = ?').run(exam.id);
+    db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, course.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.final_exam_deleted', entityType: 'quiz', entityId: exam.id,
+      summary: `Removed final exam from ${course.title}`, details: { courseId: course.id } });
+    if (!auditId) fail(500, 'Final exam could not be removed because the audit log is unavailable.', 'audit_unavailable');
+    return true;
+  });
+  removeExam.immediate();
+  res.status(204).end();
+});
+
+courseRouter.get('/manage/courses/:courseId/final-exam/questions', requireStaff, (req, res) => {
+  const { course, exam } = finalExamForManager(req.params.courseId, req.currentUser);
+  if (!exam) fail(404, 'Final exam not found.', 'not_found');
+  const total = db.prepare('SELECT COUNT(*) AS count FROM quiz_questions WHERE quiz_id = ?').get(exam.id).count;
+  const { page, pageSize, offset, hasMore } = paginationWindow(total, req.query.page, 20);
+  const questions = db.prepare(`SELECT id, prompt, explanation, position FROM quiz_questions
+    WHERE quiz_id = ? ORDER BY position, id LIMIT ? OFFSET ?`).all(exam.id, pageSize, offset).map((question) => ({
+    id: question.id,
+    prompt: question.prompt,
+    explanation: question.explanation,
+    choices: db.prepare(`SELECT id, choice_text, is_correct FROM quiz_choices
+      WHERE question_id = ? ORDER BY position, id`).all(question.id).map((choice) => ({
+      id: choice.id, text: choice.choice_text, isCorrect: Boolean(choice.is_correct),
+    })),
+  }));
+  res.json({ courseId: course.id, questions, total, page, pageSize, hasMore });
+});
+
+courseRouter.post('/manage/courses/:courseId/final-exam/questions', requireStaff, (req, res) => {
+  const question = normalizedQuizQuestion(req.body);
+  const createQuestion = db.transaction(() => {
+    const { course, exam } = finalExamForManager(req.params.courseId, req.currentUser);
+    if (!exam) fail(404, 'Final exam not found.', 'not_found');
+    const id = randomUUID();
+    const position = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM quiz_questions WHERE quiz_id = ?').get(exam.id).next;
+    db.prepare('INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position) VALUES (?, ?, ?, ?, ?)')
+      .run(id, exam.id, question.prompt, question.explanation, position);
+    const insertChoice = db.prepare('INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES (?, ?, ?, ?, ?)');
+    question.choices.forEach((choice, index) => insertChoice.run(randomUUID(), id, choice.text, choice.isCorrect ? 1 : 0, index));
+    db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, course.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.final_exam_question_created', entityType: 'quiz_question', entityId: id,
+      summary: `Added a question to the final exam for ${course.title}`, details: { courseId: course.id, quizId: exam.id } });
+    if (!auditId) fail(500, 'Question could not be saved because the audit log is unavailable.', 'audit_unavailable');
+    return { id, prompt: question.prompt, explanation: question.explanation, choices: db.prepare(
+      'SELECT id, choice_text, is_correct FROM quiz_choices WHERE question_id = ? ORDER BY position, id',
+    ).all(id).map((choice) => ({ id: choice.id, text: choice.choice_text, isCorrect: Boolean(choice.is_correct) })) };
+  });
+  res.status(201).json({ question: createQuestion.immediate() });
+});
+
+courseRouter.put('/manage/courses/:courseId/final-exam/questions/:questionId', requireStaff, (req, res) => {
+  const question = normalizedQuizQuestion(req.body);
+  const updateQuestion = db.transaction(() => {
+    const { course, exam } = finalExamForManager(req.params.courseId, req.currentUser);
+    if (!exam) fail(404, 'Final exam not found.', 'not_found');
+    const existing = db.prepare('SELECT id FROM quiz_questions WHERE id = ? AND quiz_id = ?').get(req.params.questionId, exam.id);
+    if (!existing) fail(404, 'Final exam question not found.', 'not_found');
+    db.prepare('UPDATE quiz_questions SET prompt = ?, explanation = ? WHERE id = ?').run(question.prompt, question.explanation, existing.id);
+    db.prepare('DELETE FROM quiz_choices WHERE question_id = ?').run(existing.id);
+    const insertChoice = db.prepare('INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES (?, ?, ?, ?, ?)');
+    question.choices.forEach((choice, index) => insertChoice.run(randomUUID(), existing.id, choice.text, choice.isCorrect ? 1 : 0, index));
+    db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, course.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.final_exam_question_updated', entityType: 'quiz_question', entityId: existing.id,
+      summary: `Updated a final exam question for ${course.title}`, details: { courseId: course.id, quizId: exam.id } });
+    if (!auditId) fail(500, 'Question could not be saved because the audit log is unavailable.', 'audit_unavailable');
+    return { id: existing.id, prompt: question.prompt, explanation: question.explanation, choices: db.prepare(
+      'SELECT id, choice_text, is_correct FROM quiz_choices WHERE question_id = ? ORDER BY position, id',
+    ).all(existing.id).map((choice) => ({ id: choice.id, text: choice.choice_text, isCorrect: Boolean(choice.is_correct) })) };
+  });
+  res.json({ question: updateQuestion.immediate() });
+});
+
+courseRouter.delete('/manage/courses/:courseId/final-exam/questions/:questionId', requireStaff, (req, res) => {
+  const deleteQuestion = db.transaction(() => {
+    const { course, exam } = finalExamForManager(req.params.courseId, req.currentUser);
+    if (!exam) fail(404, 'Final exam not found.', 'not_found');
+    const question = db.prepare('SELECT id FROM quiz_questions WHERE id = ? AND quiz_id = ?').get(req.params.questionId, exam.id);
+    if (!question) fail(404, 'Final exam question not found.', 'not_found');
+    db.prepare('DELETE FROM quiz_questions WHERE id = ?').run(question.id);
+    db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, course.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.final_exam_question_deleted', entityType: 'quiz_question', entityId: question.id,
+      summary: `Removed a question from the final exam for ${course.title}`, details: { courseId: course.id, quizId: exam.id } });
+    if (!auditId) fail(500, 'Question could not be removed because the audit log is unavailable.', 'audit_unavailable');
+  });
+  deleteQuestion.immediate();
+  res.status(204).end();
+});
+
 courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
   const module = moduleCourse(req.params.moduleId);
   if (!module) fail(404, 'Module not found.', 'not_found');
@@ -1287,7 +1559,8 @@ courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
     }
     const quizId = existingQuiz?.id || randomUUID();
     db.prepare(`INSERT INTO quizzes (id, module_id, title, pass_mark) VALUES (?, ?, ?, ?)
-      ON CONFLICT(module_id) DO UPDATE SET title = excluded.title, pass_mark = excluded.pass_mark, updated_at = CURRENT_TIMESTAMP`)
+      ON CONFLICT(module_id) WHERE module_id IS NOT NULL
+      DO UPDATE SET title = excluded.title, pass_mark = excluded.pass_mark, updated_at = CURRENT_TIMESTAMP`)
       .run(quizId, currentModule.module_id, title, passMark);
     db.prepare('DELETE FROM quiz_questions WHERE quiz_id = ?').run(quizId);
     // Prepare each child insert once, then reuse it for the bounded question and choice batches.
@@ -1610,12 +1883,117 @@ function summarizeQuizAttempt(attempt, snapshot) {
   };
 }
 
+function finalExamAttemptQuestions(snapshot) {
+  return snapshot.map(({ correctChoiceId, explanation, ...question }) => question);
+}
+
+courseRouter.post('/quizzes/:quizId/attempts/start', quizAttemptLimiter, (req, res) => {
+  const startAttempt = db.transaction(() => {
+    const quiz = quizCourse(req.params.quizId);
+    if (!quiz || !quiz.quiz_course_id) fail(404, 'Final exam not found.', 'not_found');
+    requireCourseViewer(quiz.id, req.currentUser);
+    if (quiz.status !== 'published') fail(404, 'Final exam is not available.', 'not_found');
+    const active = db.prepare(`SELECT id, question_snapshot_json FROM quiz_attempt_sessions
+      WHERE quiz_id = ? AND user_id = ? AND completed_at IS NULL`).get(quiz.quiz_id, req.currentUser.id);
+    if (active) {
+      const snapshot = JSON.parse(active.question_snapshot_json);
+      return { attemptSessionId: active.id, questions: finalExamAttemptQuestions(snapshot) };
+    }
+    if (req.body?.resumeOnly === true) return null;
+    const questionRows = db.prepare('SELECT id, prompt, explanation FROM quiz_questions WHERE quiz_id = ? ORDER BY position, id').all(quiz.quiz_id);
+    if (!questionRows.length) fail(400, 'This final exam has no questions yet.', 'quiz_empty');
+    const selectionCount = quiz.questions_per_attempt || questionRows.length;
+    if (selectionCount > questionRows.length) fail(409, 'The final exam question bank is smaller than the configured attempt size.', 'quiz_incomplete');
+    const selectedQuestions = selectRandomQuizQuestions(questionRows, selectionCount);
+    const questionIds = selectedQuestions.map((question) => question.id);
+    const choicesByQuestion = new Map();
+    for (let offset = 0; offset < questionIds.length; offset += 500) {
+      const questionBatch = questionIds.slice(offset, offset + 500);
+      const placeholders = questionBatch.map(() => '?').join(', ');
+      for (const choice of db.prepare(`SELECT id, question_id, choice_text, is_correct FROM quiz_choices
+        WHERE question_id IN (${placeholders}) ORDER BY question_id, position, id`).all(...questionBatch)) {
+        const choices = choicesByQuestion.get(choice.question_id) ?? [];
+        choices.push({ id: choice.id, text: choice.choice_text, isCorrect: Boolean(choice.is_correct) });
+        choicesByQuestion.set(choice.question_id, choices);
+      }
+    }
+    const snapshot = selectedQuestions.map((question) => {
+      const choices = choicesByQuestion.get(question.id) ?? [];
+      const correctChoiceId = choices.find((choice) => choice.isCorrect)?.id;
+      if (choices.length < 2 || !correctChoiceId || choices.filter((choice) => choice.isCorrect).length !== 1) {
+        fail(409, 'The final exam contains an incomplete question.', 'quiz_incomplete');
+      }
+      return {
+        id: question.id,
+        prompt: question.prompt,
+        explanation: question.explanation,
+        correctChoiceId,
+        choices: choices.map(({ isCorrect, ...choice }) => choice),
+      };
+    });
+    const attemptSessionId = randomUUID();
+    db.prepare(`INSERT INTO quiz_attempt_sessions (id, quiz_id, user_id, question_snapshot_json)
+      VALUES (?, ?, ?, ?)`).run(attemptSessionId, quiz.quiz_id, req.currentUser.id, JSON.stringify(snapshot));
+    return { attemptSessionId, questions: finalExamAttemptQuestions(snapshot) };
+  });
+  const attempt = startAttempt.immediate();
+  res.status(attempt ? 201 : 200).json(attempt ?? { attemptSessionId: null, questions: [] });
+});
+
 courseRouter.post('/quizzes/:quizId/attempts', quizAttemptLimiter, (req, res) => {
   const submitAttempt = db.transaction(() => {
     const quiz = quizCourse(req.params.quizId);
     if (!quiz) fail(404, 'Quiz not found.', 'not_found');
     requireCourseViewer(quiz.id, req.currentUser);
     if (quiz.status !== 'published') fail(404, 'Quiz is not available.', 'not_found');
+    if (quiz.quiz_course_id) {
+      const sessionId = req.body?.attemptSessionId;
+      if (typeof sessionId !== 'string' || !sessionId) fail(400, 'Start a final exam attempt before submitting answers.', 'attempt_required');
+      const session = db.prepare(`SELECT * FROM quiz_attempt_sessions
+        WHERE id = ? AND quiz_id = ? AND user_id = ? AND completed_at IS NULL`)
+        .get(sessionId, quiz.quiz_id, req.currentUser.id);
+      if (!session) fail(409, 'This final exam attempt is no longer active. Start a new attempt.', 'attempt_expired');
+      let sessionSnapshot;
+      try {
+        sessionSnapshot = JSON.parse(session.question_snapshot_json);
+        if (!Array.isArray(sessionSnapshot) || !sessionSnapshot.length) throw new TypeError('Invalid exam attempt snapshot.');
+      } catch {
+        fail(500, 'The saved final exam attempt is unavailable.', 'attempt_unavailable');
+      }
+      const answers = req.body?.answers;
+      if (!answers || typeof answers !== 'object' || Array.isArray(answers)) fail(400, 'Choose an answer for every question.', 'answers_required');
+      const questionIds = sessionSnapshot.map((question) => question.id);
+      const answerIds = Object.keys(answers);
+      const questionIdSet = new Set(questionIds);
+      if (answerIds.some((id) => !questionIdSet.has(id))) fail(400, 'One of the selected answers is invalid.', 'invalid_answer');
+      if (answerIds.length !== questionIds.length) fail(400, 'Choose an answer for every question.', 'answers_required');
+      let correct = 0;
+      const snapshot = sessionSnapshot.map((question) => {
+        const selectedChoiceId = answers[question.id];
+        if (!question.choices.some((choice) => choice.id === selectedChoiceId)) fail(400, 'One of the selected answers is invalid.', 'invalid_answer');
+        if (question.correctChoiceId === selectedChoiceId) correct += 1;
+        return { ...question, selectedChoiceId };
+      });
+      const score = Math.round((correct / snapshot.length) * 100);
+      const passed = score >= quiz.pass_mark;
+      const attemptId = randomUUID();
+      enrollLearner(quiz.id, req.currentUser.id);
+      db.prepare(`INSERT INTO quiz_attempts (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(attemptId, quiz.quiz_id, req.currentUser.id, score, passed ? 1 : 0, JSON.stringify(answers), JSON.stringify(snapshot));
+      db.prepare('UPDATE quiz_attempt_sessions SET completed_at = CURRENT_TIMESTAMP WHERE id = ?').run(session.id);
+      if (passed && quiz.required_for_completion) {
+        syncLearnerPathsForCourse(quiz.id, req.currentUser.id);
+      }
+      const certificate = passed && quiz.required_for_completion ? issueCertificateIfComplete(quiz.id, req.currentUser) : null;
+      const attempt = summarizeQuizAttempt({
+        id: attemptId,
+        score,
+        passed,
+        submitted_at: db.prepare('SELECT submitted_at FROM quiz_attempts WHERE id = ?').get(attemptId).submitted_at,
+      }, snapshot);
+      return { attempt, certificate };
+    }
     const questions = db.prepare('SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY position, id').all(quiz.quiz_id);
     if (!questions.length) fail(400, 'This quiz has no questions yet.', 'quiz_empty');
     const answers = req.body?.answers;

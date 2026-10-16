@@ -110,3 +110,14 @@ test('returns no next activity when the lesson is missing or the course is finis
   assert.equal(nextCourseActivityAfterLesson(modules, 'missing'), null);
   assert.equal(nextCourseActivityAfterLesson(modules, 'lesson-1'), null);
 });
+
+test('adds the final exam after module lessons and quizzes, including exam-only courses', () => {
+  const exam = { id: 'final-exam', passed: false };
+  const modules = [{ lessons: [lesson('lesson-1', true)], quiz: quiz('quiz-1', true) }];
+
+  assert.deepEqual(nextCourseActivity(modules, exam), { type: 'exam', id: 'final-exam' });
+  assert.deepEqual(nextCourseActivity([], exam), { type: 'exam', id: 'final-exam' });
+  assert.deepEqual(nextCourseActivityAfterLesson(modules, 'lesson-1', exam), { type: 'exam', id: 'final-exam' });
+  assert.deepEqual(nextCourseActivityAfterLesson([], 'lesson-1', exam), null);
+  assert.equal(courseActivityActionLabel({ starting: false, completed: false, nextActivity: { type: 'exam', id: 'final-exam' }, progress: 0 }), 'Start final exam');
+});

@@ -35,3 +35,31 @@ test('a course without activities has zero progress and is not complete', () => 
     completed: false,
   });
 });
+
+test('a required final exam is included in completion while a practice exam is ignored', () => {
+  const modules = [{ lessons: [lesson('lesson-1', true)], quiz: null }];
+
+  assert.deepEqual(summarizeCourseProgress(modules, { id: 'exam-1', requiredForCompletion: true, passed: false }), {
+    completedLessons: 1,
+    progress: 50,
+    completed: false,
+  });
+  assert.deepEqual(summarizeCourseProgress(modules, { id: 'exam-1', requiredForCompletion: true, passed: true }), {
+    completedLessons: 1,
+    progress: 100,
+    completed: true,
+  });
+  assert.deepEqual(summarizeCourseProgress(modules, { id: 'practice-1', requiredForCompletion: false, passed: false }), {
+    completedLessons: 1,
+    progress: 100,
+    completed: true,
+  });
+});
+
+test('a required exam can be the only course completion activity', () => {
+  assert.deepEqual(summarizeCourseProgress([], { id: 'exam-1', requiredForCompletion: true, passed: true }), {
+    completedLessons: 0,
+    progress: 100,
+    completed: true,
+  });
+});

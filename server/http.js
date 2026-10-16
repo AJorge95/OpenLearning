@@ -26,7 +26,9 @@ const canonicalCourseStatement = db.prepare('SELECT id, logical_course_id, statu
 const activeCourseVersionStatement = db.prepare('SELECT storage_course_id FROM course_versions WHERE course_id = ? ORDER BY version_number DESC LIMIT 1');
 const courseByModuleIdStatement = db.prepare('SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id WHERE m.id = ?');
 const courseByLessonIdStatement = db.prepare('SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN lessons l ON l.module_id = m.id WHERE l.id = ?');
-const courseByQuizIdStatement = db.prepare('SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN quizzes q ON q.module_id = m.id WHERE q.id = ?');
+const courseByQuizIdStatement = db.prepare(`SELECT c.* FROM quizzes q
+  LEFT JOIN course_modules m ON m.id = q.module_id
+  JOIN courses c ON c.id = COALESCE(m.course_id, q.course_id) WHERE q.id = ?`);
 const enrolledCoursePathsStatement = db.prepare(`SELECT lp.id AS path_id, lp.status, pc.position, pc.requires_previous
   FROM learning_path_enrollments e JOIN learning_paths lp ON lp.id = e.path_id
   JOIN learning_path_courses pc ON pc.path_id = lp.id
@@ -245,14 +247,15 @@ function pathCompletionStatements(cache) {
     lessons: db.prepare(`SELECT l.id, l.stable_id FROM lessons l
       JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?`),
     quizzes: db.prepare(`SELECT q.id, q.stable_id FROM quizzes q
-      JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?`),
+      LEFT JOIN course_modules m ON m.id = q.module_id
+      WHERE COALESCE(m.course_id, q.course_id) = ? AND q.required_for_completion = 1`),
     lessonHistory: db.prepare(`SELECT l.id, l.stable_id FROM lesson_progress p
       JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id
       JOIN courses c ON c.id = m.course_id
       WHERE p.user_id = ? AND (c.id = ? OR c.logical_course_id = ?)`),
     quizHistory: db.prepare(`SELECT DISTINCT q.id, q.stable_id FROM quiz_attempts a
-      JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id
-      JOIN courses c ON c.id = m.course_id
+      JOIN quizzes q ON q.id = a.quiz_id LEFT JOIN course_modules m ON m.id = q.module_id
+      JOIN courses c ON c.id = COALESCE(m.course_id, q.course_id)
       WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)`),
   };
   if (cache) cache.pathCompletionStatements = statements;

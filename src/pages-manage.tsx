@@ -4,10 +4,11 @@ import { Activity, AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useBeforeUnload, useBlocker, useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { BlockerFunction } from 'react-router-dom';
-import { api, ApiError, fetchAccess, fetchAppVersion, fetchCourse } from './api';
+import { api, ApiError, assignCourseToGroup, createCourseGroup, fetchAccess, fetchAppVersion, fetchCourse, fetchCourseGroups, removeCourseFromGroup } from './api';
 import { requestPendingRegistrationCountRefresh } from './admin-navigation-events';
 import { AppSelect, Button, ConfirmationDialog, CourseStatus, EmptyState, ImageWithFallback, PageHeading, PalettePicker, PasswordField, PlatformIconPicker, ProgressBar, UserInitial, VisibilityLabel } from './components';
 import type { AppSelectOption } from './components';
+import type { CourseGroup } from './types';
 import { formatCountLabel } from './count-label';
 import { parseApiTimestamp } from './api-timestamp';
 import { formatApiTimestamp } from './format-api-timestamp';
@@ -122,7 +123,7 @@ function CourseRowMenu({ course, busyAction, onStatusChange, onDelete }: {
   const menuRef = useRef<HTMLDivElement>(null);
   const focusMenuOnOpenRef = useRef(false);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 196, maxHeight: 280 });
-  const itemCount = course.status === 'archived' ? 2 : 3;
+  const itemCount = course.status === 'archived' ? 3 : 4;
   const isBusy = Boolean(busyAction);
 
   function openMenu(focusFirst = false) {
@@ -187,6 +188,7 @@ function CourseRowMenu({ course, busyAction, onStatusChange, onDelete }: {
     <button ref={triggerRef} type="button" className="row-menu-trigger" aria-label={`More actions for ${course.title}`} aria-haspopup="menu" aria-expanded={open} aria-controls={`${id}-menu`} onClick={(event) => open ? closeMenu() : openMenu(event.detail === 0)} onKeyDown={(event) => { if (event.key === 'ArrowDown' && !open) { event.preventDefault(); openMenu(true); } }}><MoreVertical size={18} aria-hidden="true" /></button>
     {open && createPortal(<div ref={menuRef} id={`${id}-menu`} className="row-menu-popover" role="menu" aria-label={`Actions for ${course.title}`} style={position} onKeyDown={handleMenuKeyDown}>
       <Link to={`/manage/courses/${course.id}/access`} role="menuitem" onClick={() => closeMenu()}>Assign learners</Link>
+      <Link to="/manage/course-groups" role="menuitem" onClick={() => closeMenu()}>Manage course groups</Link>
       {course.status === 'draft' && <button type="button" role="menuitem" onClick={() => { closeMenu(true); onStatusChange(course, 'published'); }} disabled={isBusy} aria-busy={busyAction === 'publish'}>{busyAction === 'publish' ? 'Publishing…' : 'Publish'}</button>}
       {course.status === 'published' && <button type="button" role="menuitem" onClick={() => { closeMenu(true); onStatusChange(course, 'draft'); }} disabled={isBusy} aria-busy={busyAction === 'unpublish'}>{busyAction === 'unpublish' ? 'Unpublishing…' : 'Unpublish'}</button>}
       {course.status !== 'archived' && <button type="button" role="menuitem" onClick={() => { closeMenu(true); onStatusChange(course, 'archived'); }} disabled={isBusy} aria-busy={busyAction === 'archive'}>{busyAction === 'archive' ? 'Archiving…' : 'Archive'}</button>}
@@ -366,7 +368,7 @@ export function CourseManagementPage() {
     ? <Button type="button" variant="secondary" onClick={clearCourseSearch}>Clear search</Button>
     : status === 'all' && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} aria-hidden="true" />Create first course</Link>;
   return <div className="management-page">
-    <PageHeading title="Courses" action={<Link className="button button-primary" to="/manage/courses/new"><Plus size={18} aria-hidden="true" />Create course</Link>} />
+    <PageHeading title="Courses" action={<div className="analytics-heading-actions"><Link className="button button-secondary" to="/manage/course-groups"><UsersRound size={16} aria-hidden="true" />Course groups</Link><Link className="button button-primary" to="/manage/courses/new"><Plus size={18} aria-hidden="true" />Create course</Link></div>} />
     <div className="management-tabs" role="group" aria-label="Filter courses by status">
       {tabs.map((tab) => <button type="button" key={tab.value} aria-pressed={status === tab.value} className={status === tab.value ? 'active' : ''} onClick={() => changeCourseStatusFilter(tab.value)}>{tab.label}</button>)}
     </div>
@@ -705,6 +707,204 @@ function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: Cours
     </fieldset>
     {confirmingRemoval && existing && <ConfirmationDialog title="Remove this quiz?" description={`All saved learner attempts for ${quizContext} will also be removed. This action cannot be undone.`} confirmLabel="Remove quiz" onCancel={() => setConfirmingRemoval(false)} onConfirm={() => { setConfirmingRemoval(false); void remove(true); }} />}
   </div>;
+}
+
+type FinalExamChoiceEditor = { id?: string; editorKey: string; text: string; isCorrect: boolean };
+type FinalExamQuestionEditor = { id?: string; editorKey: string; prompt: string; explanation: string; choices: FinalExamChoiceEditor[] };
+
+function makeFinalExamQuestion(editorKey: string): FinalExamQuestionEditor {
+  return {
+    editorKey,
+    prompt: '',
+    explanation: '',
+    choices: [
+      { editorKey: `${editorKey}-choice-1`, text: '', isCorrect: true },
+      { editorKey: `${editorKey}-choice-2`, text: '', isCorrect: false },
+    ],
+  };
+}
+
+function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }: {
+  courseId: string;
+  exam: Course['finalExam'];
+  onChanged: () => Promise<boolean>;
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  const [title, setTitle] = useState(exam?.title ?? 'Final exam');
+  const [passMark, setPassMark] = useState(exam?.passMark ?? 70);
+  const [questionsPerAttempt, setQuestionsPerAttempt] = useState(exam?.questionsPerAttempt ?? 0);
+  const [requiredForCompletion, setRequiredForCompletion] = useState(exam?.requiredForCompletion ?? true);
+  const [questions, setQuestions] = useState<FinalExamQuestionEditor[]>([]);
+  const [total, setTotal] = useState(exam?.questionCount ?? 0);
+  const [page, setPage] = useState(1);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [busyAction, setBusyAction] = useState<'create' | 'settings' | 'delete-exam' | string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
+  const [confirmExamRemoval, setConfirmExamRemoval] = useState(false);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const editorKeySequenceRef = useRef(0);
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const totalPages = Math.max(1, Math.ceil(total / 20));
+
+  async function finishExamChange(successMessage: string) {
+    if (await onChanged()) onNotice(successMessage);
+    else onError(`${successMessage} The course editor could not be refreshed. Reload before making another change.`);
+  }
+  useEffect(() => {
+    setTitle(exam?.title ?? 'Final exam');
+    setPassMark(exam?.passMark ?? 70);
+    setQuestionsPerAttempt(exam?.questionsPerAttempt ?? 0);
+    setRequiredForCompletion(exam?.requiredForCompletion ?? true);
+    setTotal(exam?.questionCount ?? 0);
+  }, [courseId, exam?.id]);
+
+  useEffect(() => {
+    if (!exam?.id) { setQuestions([]); return; }
+    const controller = new AbortController();
+    setLoadingQuestions(true);
+    api.get<{ questions: FinalExamQuestionEditor[]; total: number; page: number }>(
+      `/api/manage/courses/${courseId}/final-exam/questions?page=${page}`,
+      { signal: controller.signal },
+    ).then((response) => {
+      setQuestions(response.questions.map((question) => ({
+        ...question,
+        editorKey: question.id || `saved-${editorKeySequenceRef.current++}`,
+        explanation: question.explanation ?? '',
+        choices: question.choices.map((choice, index) => ({ ...choice, isCorrect: Boolean(choice.isCorrect), editorKey: choice.id || `saved-choice-${index}` })),
+      })));
+      setTotal(response.total);
+    }).catch((cause) => {
+      if (!controller.signal.aborted) onErrorRef.current(cause instanceof ApiError ? cause.message : 'Final exam questions could not be loaded.');
+    }).finally(() => { if (!controller.signal.aborted) setLoadingQuestions(false); });
+    return () => controller.abort();
+  }, [courseId, exam?.id, page, refreshVersion]);
+
+  async function createExam() {
+    if (busyAction) return;
+    setBusyAction('create'); onError('');
+    try {
+      await api.put(`/api/manage/courses/${courseId}/final-exam`, {
+        title: 'Final exam', passMark: 70, questionsPerAttempt: 0, requiredForCompletion: true,
+      });
+      await finishExamChange('Final exam added.');
+    } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Final exam could not be created.'); }
+    finally { setBusyAction(null); }
+  }
+
+  async function saveSettings(event: React.FormEvent) {
+    event.preventDefault();
+    if (!exam || busyAction) return;
+    const titleValidation = validateQuizTitle(title);
+    if (titleValidation.value === null) { onError(titleValidation.error ?? QUIZ_TITLE_REQUIRED_ERROR); return; }
+    if (!Number.isInteger(questionsPerAttempt) || questionsPerAttempt < 0) { onError('Questions per attempt must be zero (all questions) or a positive whole number.'); return; }
+    setBusyAction('settings'); onError('');
+    try {
+      await api.put(`/api/manage/courses/${courseId}/final-exam`, {
+        title: titleValidation.value, passMark: Number(passMark), questionsPerAttempt, requiredForCompletion,
+      });
+      await finishExamChange('Final exam settings saved.');
+    } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Final exam settings could not be saved.'); }
+    finally { setBusyAction(null); }
+  }
+
+  function updateQuestion(questionIndex: number, patch: Partial<FinalExamQuestionEditor>) {
+    setQuestions((current) => current.map((question, index) => index === questionIndex ? { ...question, ...patch } : question));
+  }
+
+  function updateChoice(questionIndex: number, choiceIndex: number, patch: Partial<FinalExamChoiceEditor>) {
+    setQuestions((current) => current.map((question, index) => index !== questionIndex ? question : {
+      ...question,
+      choices: question.choices.map((choice, itemIndex) => ({
+        ...choice,
+        ...(itemIndex === choiceIndex ? patch : {}),
+        ...(patch.isCorrect === true && itemIndex !== choiceIndex ? { isCorrect: false } : {}),
+      })),
+    }));
+  }
+
+  async function saveQuestion(questionIndex: number) {
+    if (!exam) return;
+    const question = questions[questionIndex];
+    if (!question || busyAction) return;
+    if (!question.prompt.trim() || question.choices.some((choice) => !choice.text.trim())) { onError('Enter text for the question and every answer choice before saving.'); return; }
+    if (question.choices.length < 2 || question.choices.length > 6 || question.choices.filter((choice) => choice.isCorrect).length !== 1) { onError('Each final exam question needs two to six choices and exactly one correct answer.'); return; }
+    setBusyAction(question.id || question.editorKey); onError('');
+    const payload = {
+      prompt: question.prompt,
+      explanation: question.explanation,
+      choices: question.choices.map(({ text, isCorrect }) => ({ text, isCorrect })),
+    };
+    try {
+      if (question.id) await api.put(`/api/manage/courses/${courseId}/final-exam/questions/${question.id}`, payload);
+      else await api.post(`/api/manage/courses/${courseId}/final-exam/questions`, payload);
+      setRefreshVersion((version) => version + 1);
+      if (!question.id && totalPages === page && questions.length < 20) setTotal((count) => count + 1);
+      await finishExamChange(question.id ? 'Final exam question saved.' : 'Question added to the final exam bank.');
+    } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Final exam question could not be saved.'); }
+    finally { setBusyAction(null); }
+  }
+
+  function addQuestion() {
+    editorKeySequenceRef.current += 1;
+    setQuestions((current) => [...current, makeFinalExamQuestion(`new-question-${editorKeySequenceRef.current}`)]);
+  }
+
+  async function removeQuestion(questionId: string) {
+    if (!exam || busyAction) return;
+    setBusyAction(questionId); onError('');
+    try {
+      await api.delete(`/api/manage/courses/${courseId}/final-exam/questions/${questionId}`);
+      setPendingDelete(null);
+      setTotal((count) => Math.max(0, count - 1));
+      if (questions.length === 1 && page > 1) setPage((current) => current - 1);
+      else setRefreshVersion((version) => version + 1);
+      await finishExamChange('Final exam question removed.');
+    } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Final exam question could not be removed.'); }
+    finally { setBusyAction(null); }
+  }
+
+  async function removeExam() {
+    if (busyAction) return;
+    setBusyAction('delete-exam'); onError('');
+    try { await api.delete(`/api/manage/courses/${courseId}/final-exam`); setConfirmExamRemoval(false); await finishExamChange('Final exam removed.'); }
+    catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Final exam could not be removed.'); }
+    finally { setBusyAction(null); }
+  }
+
+  return <section className="course-final-exam-editor" aria-busy={busyAction !== null || loadingQuestions}>
+    <div className="course-final-exam-heading"><div><span className="editor-type"><CircleHelp size={15} aria-hidden="true" />Course-wide exam</span><h3>Final exam</h3><p>Add a large bank of questions and choose a random sample for each attempt.</p></div>
+      {exam && <button type="button" className="icon-button danger-icon" aria-label="Remove final exam" disabled={busyAction !== null} onClick={() => setConfirmExamRemoval(true)}><Trash2 size={16} aria-hidden="true" /></button>}
+    </div>
+    {!exam ? <Button type="button" variant="secondary" disabled={busyAction !== null} onClick={() => void createExam()}><Plus size={16} aria-hidden="true" />{busyAction === 'create' ? 'Adding final exam…' : 'Add final exam'}</Button> : <>
+      <form className="final-exam-settings" onSubmit={(event) => void saveSettings(event)}>
+        <label><span className="form-label-row"><span>Exam title</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input required maxLength={quizTitleLimit} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+        <div className="app-select-field"><span>Pass mark</span><AppSelect<number> ariaLabel="Final exam pass mark" value={passMark} onChange={setPassMark} options={QUIZ_PASS_MARK_OPTIONS} /></div>
+        <label><span>Questions per attempt</span><input type="number" min={0} step={1} value={questionsPerAttempt} onChange={(event) => setQuestionsPerAttempt(event.target.value === '' ? 0 : Number(event.target.value))} /><small>Enter 0 to draw all {formatCountLabel(total, 'bank question', 'bank questions')} on each attempt.</small></label>
+        <label className="final-exam-required-toggle"><input type="checkbox" checked={requiredForCompletion} onChange={(event) => setRequiredForCompletion(event.target.checked)} /><span>Passing this exam is required to complete the course</span></label>
+        {!requiredForCompletion && <p className="form-hint final-exam-practice-note">Practice exam attempts do not affect course completion or certificates. An exam-only course must make its exam required.</p>}
+        {questionsPerAttempt > total && <p className="form-hint final-exam-count-warning" role="status">Add at least {questionsPerAttempt - total} more {questionsPerAttempt - total === 1 ? 'question' : 'questions'} before publishing.</p>}
+        <Button type="submit" variant="secondary" disabled={busyAction !== null}>{busyAction === 'settings' ? 'Saving settings…' : 'Save exam settings'}</Button>
+      </form>
+      <div className="final-exam-question-heading"><div><h4>Question bank</h4><p>{formatCountLabel(total, 'question', 'questions')} · {formatCountLabel(questionsPerAttempt || total, 'question per attempt', 'questions per attempt')}{questionsPerAttempt === 0 ? ' (all)' : ''}</p></div><Button type="button" variant="secondary" disabled={busyAction !== null} onClick={addQuestion}><Plus size={16} aria-hidden="true" />Add question</Button></div>
+      {loadingQuestions ? <p role="status">Loading question bank…</p> : !questions.length ? <p className="form-hint">No questions yet. Add the first question to build the exam bank.</p> : questions.map((question, questionIndex) => <div className="question-editor final-exam-question-editor" key={question.editorKey}>
+        <div className="question-editor-head"><span>Question {(page - 1) * 20 + questionIndex + 1}</span><button type="button" className="text-action danger-text" aria-label={`Remove question ${(page - 1) * 20 + questionIndex + 1}`} disabled={busyAction !== null} onClick={() => question.id
+          ? setPendingDelete({ id: question.id, title: question.prompt || `Question ${(page - 1) * 20 + questionIndex + 1}` })
+          : setQuestions((current) => current.filter((item) => item.editorKey !== question.editorKey))}>Remove</button></div>
+        <textarea rows={2} maxLength={1000} placeholder="Write a question" aria-label={`Final exam question ${(page - 1) * 20 + questionIndex + 1}`} value={question.prompt} disabled={busyAction !== null} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} />
+        <fieldset className="quiz-answer-fieldset"><legend className="sr-only">Correct answer for final exam question {(page - 1) * 20 + questionIndex + 1}</legend><p className="form-hint">Select one correct answer. Each question needs two to six answer choices.</p>
+          {question.choices.map((choice, choiceIndex) => <div className="choice-editor-row" key={choice.id || choice.editorKey}><input type="radio" name={`final-exam-correct-${question.editorKey}`} checked={choice.isCorrect} disabled={busyAction !== null} onChange={() => updateChoice(questionIndex, choiceIndex, { isCorrect: true })} aria-label={`Mark answer choice ${choiceIndex + 1} correct`} /><input value={choice.text} maxLength={500} disabled={busyAction !== null} onChange={(event) => updateChoice(questionIndex, choiceIndex, { text: event.target.value })} aria-label={`Answer choice ${choiceIndex + 1}`} placeholder={`Answer ${choiceIndex + 1}`} /><button type="button" className="icon-button danger-icon" aria-label={`Remove answer choice ${choiceIndex + 1}`} disabled={busyAction !== null || question.choices.length <= 2} onClick={() => updateQuestion(questionIndex, { choices: question.choices.filter((_, index) => index !== choiceIndex) })}><Trash2 size={15} aria-hidden="true" /></button></div>)}
+          {question.choices.length < 6 && <button type="button" className="text-action add-choice" disabled={busyAction !== null} onClick={() => updateQuestion(questionIndex, { choices: [...question.choices, { editorKey: `${question.editorKey}-choice-${question.choices.length + 1}`, text: '', isCorrect: false }] })}><Plus size={15} aria-hidden="true" />Add answer choice</button>}
+        </fieldset>
+        <label className="explanation-label">Explanation (optional)<input maxLength={1000} value={question.explanation} disabled={busyAction !== null} onChange={(event) => updateQuestion(questionIndex, { explanation: event.target.value })} /></label>
+        <Button type="button" variant="secondary" disabled={busyAction !== null} onClick={() => void saveQuestion(questionIndex)}>{busyAction === (question.id || question.editorKey) ? 'Saving question…' : question.id ? 'Save question' : 'Add question to bank'}</Button>
+      </div>)}
+      {totalPages > 1 && <div className="final-exam-pagination"><Button type="button" variant="secondary" disabled={page <= 1 || loadingQuestions} onClick={() => setPage((current) => current - 1)}>Previous questions</Button><span>Page {page} of {totalPages}</span><Button type="button" variant="secondary" disabled={page >= totalPages || loadingQuestions} onClick={() => setPage((current) => current + 1)}>More questions</Button></div>}
+    </>}
+    {confirmExamRemoval && exam && <ConfirmationDialog title="Remove the final exam?" description="This removes its entire question bank and all saved exam attempts. This action cannot be undone." confirmLabel="Remove final exam" onCancel={() => setConfirmExamRemoval(false)} onConfirm={() => void removeExam()} />}
+    {pendingDelete && <ConfirmationDialog title={`Remove “${pendingDelete.title}”?`} description="This removes the question from the final exam bank. Saved past attempt snapshots remain available." confirmLabel="Remove question" onCancel={() => setPendingDelete(null)} onConfirm={() => void removeQuestion(pendingDelete.id)} />}
+  </section>;
 }
 
 function LessonDetailsEditor({ lesson, courseId, beforeChange, onChanged, onClose, onError, onNotice }: {
@@ -1951,7 +2151,7 @@ export function CourseEditorPage() {
   if (!course) return <div className="management-page">{error && <Notice>{error}</Notice>}<Link className="back-link" to="/manage/courses"><ArrowLeft size={17} aria-hidden="true" />Back to courses</Link></div>;
 
   return <div className="editor-page">
-    <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>{isNewCourseDraft ? 'Create course' : 'Edit course'}</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving || (review?.status === 'in_review' && review.submittedBy === editorUser?.id)} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
+    <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>{isNewCourseDraft ? 'Create course' : 'Edit course'}</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Link className="button button-secondary" to="/manage/course-groups"><UsersRound size={16} aria-hidden="true" />Groups</Link><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving || (review?.status === 'in_review' && review.submittedBy === editorUser?.id)} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
     {error && error !== COMPLETION_WINDOW_ERROR && error !== courseTitleError && error !== courseCategoryError && <Notice>{error}</Notice>}{notice && <Notice kind="success">{notice}</Notice>}
     {navigationBlocker.state === 'blocked' && <ConfirmationDialog
       title={saving ? 'Course save in progress' : 'Discard unsaved course details?'}
@@ -2090,8 +2290,9 @@ export function CourseEditorPage() {
             }} onError={(message) => { if (routeCourseIdRef.current === course.id) setError(message); }} titleInputRef={(node) => { if (node) quizTitleInputRefs.current.set(module.id, node); else quizTitleInputRefs.current.delete(module.id); }} />}
           </div>}
         </div>)}
-        {!course.modules?.length && <EmptyState headingLevel={3} icon={<BookOpen size={22} />} title="Start with a module" detail="Modules organize the video lessons in your course." action={<Button variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} onClick={(event) => { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); }}><Plus size={16} aria-hidden="true" />Add first module</Button>} />}
+        {!course.modules?.length && !course.finalExam && <EmptyState headingLevel={3} icon={<BookOpen size={22} />} title="Start with a module" detail="Modules organize the video lessons in your course. You can also create an exam-only certification practice course." action={<Button variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} onClick={(event) => { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); }}><Plus size={16} aria-hidden="true" />Add first module</Button>} />}
       </div>
+      <CourseFinalExamEditor key={`${course.id}:${course.finalExam?.id ?? 'no-exam'}`} courseId={course.id} exam={course.finalExam} onChanged={() => load(course.id)} onError={(message) => { if (routeCourseIdRef.current === course.id) setError(message); }} onNotice={(message) => { if (routeCourseIdRef.current === course.id) setNotice(message); }} />
     </section>
     {course.status === 'archived' && <div className="delete-course-row"><div><strong>Delete this course permanently</strong><span>This also removes its uploaded media and cannot be undone.</span></div><Button variant="danger" onClick={() => void deleteArchivedCourse()} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} aria-busy={deletingCourse}><Trash2 size={16} aria-hidden="true" />{deletingCourse ? 'Deleting course…' : 'Delete course'}</Button></div>}
     {pendingDeleteCourseId === course.id && routeCourseIdRef.current === course.id && <ConfirmationDialog {...courseDeletionConfirmation(course.title)} confirmLabel="Delete course" onCancel={() => setPendingDeleteCourseId(null)} onConfirm={() => { const requestedCourseId = pendingDeleteCourseId; setPendingDeleteCourseId(null); if (requestedCourseId === course.id && routeCourseIdRef.current === course.id) void deleteArchivedCourse(true); }} />}
@@ -2106,6 +2307,187 @@ export function CourseEditorPage() {
     />}
     {pendingDeleteModule?.courseId === course.id && routeCourseIdRef.current === course.id && course.modules?.some((module) => module.id === pendingDeleteModule.module.id) && <ConfirmationDialog title={`Remove “${pendingDeleteModule.module.title}”?`} description={`This removes all lessons in this module, its quiz and saved attempts, and their uploaded videos, documents, and captions. This action cannot be undone.`} confirmLabel="Remove module" onCancel={() => setPendingDeleteModule(null)} onConfirm={confirmPendingModuleDeletion} />}
     {pendingDeleteLesson?.courseId === course.id && routeCourseIdRef.current === course.id && course.modules?.some((module) => module.id === pendingDeleteLesson.moduleId && module.lessons.some((lesson) => lesson.id === pendingDeleteLesson.lessonId)) && <ConfirmationDialog title={`Remove “${pendingDeleteLesson.title}”?`} description="This removes the lesson, its video, attached resources, and caption tracks. This action cannot be undone." confirmLabel="Remove lesson" onCancel={() => setPendingDeleteLesson(null)} onConfirm={confirmPendingLessonDeletion} />}
+  </div>;
+}
+
+export function CourseGroupsPage() {
+  const [groups, setGroups] = useState<CourseGroup[]>([]);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [targetGroupId, setTargetGroupId] = useState('');
+  const [courseQuery, setCourseQuery] = useState('');
+  const [appliedCourseQuery, setAppliedCourseQuery] = useState('');
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [coursePage, setCoursePage] = useState(1);
+  const [coursePageSize, setCoursePageSize] = useState(50);
+  const [courseTotal, setCourseTotal] = useState(0);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [coursesLoading, setCoursesLoading] = useState(true);
+  const [busyCourses, setBusyCourses] = useState<Record<string, 'add' | 'remove'>>({});
+  const [loadAttempt, setLoadAttempt] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    setGroups([]);
+    setError('');
+    setNotice('');
+    setLoading(true);
+    fetchCourseGroups({ signal: controller.signal }).then(({ groups: loadedGroups }) => {
+      if (!active) return;
+      setGroups(loadedGroups);
+      setTargetGroupId((current) => loadedGroups.some((group) => group.id === current) ? current : loadedGroups[0]?.id || '');
+    }).catch((cause) => {
+      if (active && !controller.signal.aborted) {
+        setError(cause instanceof ApiError ? cause.message : 'Course groups could not be loaded.');
+      }
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; controller.abort(); };
+  }, [loadAttempt]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    setCoursesLoading(true);
+    const params = new URLSearchParams({ page: String(coursePage) });
+    if (appliedCourseQuery) params.set('q', appliedCourseQuery);
+    api.get<CourseListResponse>(`/api/manage/courses?${params}`, { signal: controller.signal }).then((response) => {
+      if (!active) return;
+      setCourses(response.courses);
+      setCoursePage(response.page);
+      setCoursePageSize(response.pageSize);
+      setCourseTotal(response.total);
+    }).catch((cause) => {
+      if (active && !controller.signal.aborted) {
+        setError(cause instanceof ApiError ? cause.message : 'Courses could not be loaded.');
+      }
+    }).finally(() => {
+      if (active) setCoursesLoading(false);
+    });
+    return () => { active = false; controller.abort(); };
+  }, [appliedCourseQuery, coursePage, loadAttempt]);
+
+  async function createGroup(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await createCourseGroup({ name: name.trim(), description: description.trim() });
+      setGroups((current) => [...current, response.group].sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })));
+      setTargetGroupId(response.group.id);
+      setName('');
+      setDescription('');
+      setNotice(`Created group “${response.group.name}”.`);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'The course group could not be created.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function searchCourses(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCoursePage(1);
+    setAppliedCourseQuery(courseQuery.trim());
+    setError('');
+  }
+
+  async function addCourse(group: CourseGroup, course: Course) {
+    const busyKey = `${group.id}:${course.id}`;
+    if (busyCourses[busyKey] || group.courses.some((entry) => entry.id === course.id)) return;
+    setBusyCourses((current) => ({ ...current, [busyKey]: 'add' }));
+    setError('');
+    setNotice('');
+    try {
+      const response = await assignCourseToGroup(group.id, course.id);
+      setGroups((current) => current.map((entry) => entry.id === group.id
+        ? { ...entry, courses: [...entry.courses, response.course].sort((left, right) => left.title.localeCompare(right.title, undefined, { sensitivity: 'base' })) }
+        : entry));
+      setNotice(`Added “${response.course.title}” to “${group.name}”.`);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'The course could not be added to the group.');
+    } finally {
+      setBusyCourses((current) => { const next = { ...current }; delete next[busyKey]; return next; });
+    }
+  }
+
+  async function removeCourse(group: CourseGroup, course: CourseGroup['courses'][number]) {
+    const busyKey = `${group.id}:${course.id}`;
+    if (busyCourses[busyKey]) return;
+    setBusyCourses((current) => ({ ...current, [busyKey]: 'remove' }));
+    setError('');
+    setNotice('');
+    try {
+      await removeCourseFromGroup(group.id, course.id);
+      setGroups((current) => current.map((entry) => entry.id === group.id
+        ? { ...entry, courses: entry.courses.filter((assignedCourse) => assignedCourse.id !== course.id) }
+        : entry));
+      setNotice(`Removed “${course.title}” from “${group.name}”.`);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'The course could not be removed from the group.');
+    } finally {
+      setBusyCourses((current) => { const next = { ...current }; delete next[busyKey]; return next; });
+    }
+  }
+
+  return <div className="management-page course-groups-page">
+    <div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>Groups</span></div>
+    <PageHeading title="Course groups" subtitle="Organize courses into groups, then add or remove courses as needed." action={<Link className="button button-secondary" to="/manage/courses"><ArrowLeft size={16} aria-hidden="true" />Back to courses</Link>} />
+    {error && <div className="error-notice-actionable"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Retry loading</Button></div>}
+    {notice && <Notice kind="success">{notice}</Notice>}
+    {loading ? <div className="page-loading" role="status" aria-live="polite">Loading course groups…</div>
+      : <>
+        <section className="program-editor-card course-group-create" aria-labelledby="course-group-create-heading">
+          <div className="program-card-heading"><div><span className="program-icon"><UsersRound size={20} aria-hidden="true" /></span><div><h2 id="course-group-create-heading">Create a group</h2><p>Give each group a clear name and an optional description.</p></div></div></div>
+          <form className="program-form-grid" onSubmit={createGroup} aria-busy={saving}>
+            <label>Group name<input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required disabled={saving} placeholder="e.g. Core curriculum" /></label>
+            <label className="program-full-field">Description (optional)<textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={1000} rows={3} disabled={saving} placeholder="What courses belong in this group" /></label>
+            <div className="program-form-actions"><Button type="submit" disabled={saving}>{saving ? 'Creating group…' : 'Create group'}</Button></div>
+          </form>
+        </section>
+        {groups.length > 0 && <section className="course-group-assign" aria-labelledby="course-group-assign-heading">
+          <div className="course-groups-heading"><h2 id="course-group-assign-heading">Add a course</h2></div>
+          <form className="course-group-search" role="search" aria-label="Find courses to add to a group" onSubmit={searchCourses}>
+            <label>Group<select value={targetGroupId} onChange={(event) => setTargetGroupId(event.target.value)} aria-label="Group to add courses to">
+              {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+            </select></label>
+            <label>Find courses<input type="search" value={courseQuery} onChange={(event) => setCourseQuery(event.target.value)} placeholder="Search courses" maxLength={120} /></label>
+            <Button type="submit" variant="secondary">Search</Button>
+          </form>
+          {coursesLoading ? <div className="page-loading" role="status" aria-live="polite">Loading courses…</div>
+            : courses.length ? <div className="course-group-candidates" role="list" aria-label="Courses you can add">
+              {courses.map((course) => {
+                const group = groups.find((entry) => entry.id === targetGroupId);
+                const alreadyAssigned = Boolean(group?.courses.some((entry) => entry.id === course.id));
+                const busy = busyCourses[`${targetGroupId}:${course.id}`];
+                return <div className="course-group-candidate" key={course.id} role="listitem">
+                  <div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category} · {course.status}</small></div>
+                  <Button type="button" variant="secondary" onClick={() => group && void addCourse(group, course)} disabled={!group || alreadyAssigned || Boolean(busy)} aria-busy={busy === 'add'}>{alreadyAssigned ? 'In group' : busy === 'add' ? 'Adding…' : 'Add to group'}</Button>
+                </div>;
+              })}
+            </div> : <EmptyState headingLevel={3} title={appliedCourseQuery ? 'No matching courses' : 'No courses available'} detail={appliedCourseQuery ? 'Try another search term.' : 'Create courses before adding them to a group.'} />}
+          {!coursesLoading && courseTotal > 0 && <LogPagination ariaLabel="Course search pages" page={coursePage} pageSize={coursePageSize} total={courseTotal} loading={coursesLoading} onChange={setCoursePage} />}
+        </section>}
+        <section aria-labelledby="course-groups-heading">
+          <div className="course-groups-heading"><h2 id="course-groups-heading">Groups</h2><span>{formatCountLabel(groups.length, 'group', 'groups')}</span></div>
+          {groups.length ? <div className="course-groups-list">{groups.map((group) => <article className="program-card" key={group.id}>
+            <div className="program-card-heading"><div><span className="program-icon"><UsersRound size={19} aria-hidden="true" /></span><div><h3>{group.name}</h3><p>{group.description || 'No description added.'}</p></div></div></div>
+            <div className="course-group-created">Created <DateTimeText value={group.createdAt} /></div>
+            <div className="course-group-members"><h4>Courses <span>{formatCountLabel(group.courses.length, 'course', 'courses')}</span></h4>
+              {group.courses.length ? <ul>{group.courses.map((course) => <li key={course.id}>
+                <div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category} · {course.status}</small></div>
+                <Button type="button" variant="secondary" onClick={() => void removeCourse(group, course)} disabled={Boolean(busyCourses[`${group.id}:${course.id}`])} aria-busy={busyCourses[`${group.id}:${course.id}`] === 'remove'} aria-label={`Remove ${course.title} from ${group.name}`}>{busyCourses[`${group.id}:${course.id}`] === 'remove' ? 'Removing…' : 'Remove'}</Button>
+              </li>)}</ul> : <p className="course-group-empty">No courses have been added to this group.</p>}
+            </div>
+          </article>)}</div> : <EmptyState headingLevel={3} title="No course groups yet" detail="Create a group to organize related courses." />}
+        </section>
+      </>}
   </div>;
 }
 

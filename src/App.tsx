@@ -12,6 +12,7 @@ const CoursePlayerPage = lazy(() => import('./pages-learner').then((pages) => ({
 const MyLearningPage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.MyLearningPage })));
 const QuizPage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.QuizPage })));
 const CourseAccessPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseAccessPage })));
+const CourseGroupsPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseGroupsPage })));
 const CourseAnalyticsPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseAnalyticsPage })));
 const CourseEditorPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseEditorPage })));
 const CourseManagementPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseManagementPage })));
@@ -157,6 +158,7 @@ function fallbackPageTitle(pathname: string, configured: boolean) {
   if (/^\/courses\/[^/]+\/quiz\/[^/]+$/.test(pathname)) return 'Quiz';
   if (/^\/courses\/[^/]+$/.test(pathname)) return 'Course';
   if (pathname === '/manage/courses') return 'Courses';
+  if (pathname === '/manage/course-groups') return 'Course groups';
   if (pathname === '/manage/courses/new') return 'Create course';
   if (/^\/manage\/courses\/[^/]+\/edit$/.test(pathname)) return 'Course editor';
   if (/^\/manage\/courses\/[^/]+\/analytics$/.test(pathname)) return 'Course dashboard';
@@ -245,6 +247,7 @@ function AuthRoutes() {
           <Route element={<StaffFrame />}>
             <Route element={<StaffPageOutlet />}>
               <Route path="/manage/courses" element={<CourseManagementPage />} />
+              <Route path="/manage/course-groups" element={<CourseGroupsPage />} />
               <Route path="/manage/courses/new" element={<CourseEditorRoute />} />
               <Route path="/manage/courses/:courseId/edit" element={<CourseEditorRoute />} />
               <Route path="/manage/courses/:courseId/analytics" element={<CourseAnalyticsPage />} />

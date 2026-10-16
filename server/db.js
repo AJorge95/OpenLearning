@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 import { sessionUserIdFromJson } from './session-data.js';
 
-const latestSchemaVersion = 39;
+const latestSchemaVersion = 41;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -926,6 +926,83 @@ export function migrateDatabase(database = db) {
     });
     migration();
   }
+
+  if (current < 40) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE course_groups (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE UNIQUE INDEX course_groups_name ON course_groups(name COLLATE NOCASE);
+        CREATE INDEX course_groups_created ON course_groups(created_at, id);
+        CREATE TABLE course_group_courses (
+          group_id TEXT NOT NULL REFERENCES course_groups(id) ON DELETE CASCADE,
+          course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+          added_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+          added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (group_id, course_id)
+        );
+        CREATE INDEX course_group_courses_course ON course_group_courses(course_id, group_id);
+        INSERT INTO schema_migrations (version) VALUES (40);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 41) {
+    const foreignKeysWereEnabled = Boolean(database.pragma('foreign_keys', { simple: true }));
+    if (foreignKeysWereEnabled) database.pragma('foreign_keys = OFF');
+    try {
+      const migration = database.transaction(() => {
+        database.exec(`
+          CREATE TABLE quizzes_v41 (
+            id TEXT PRIMARY KEY,
+            module_id TEXT REFERENCES course_modules(id) ON DELETE CASCADE,
+            course_id TEXT REFERENCES courses(id) ON DELETE CASCADE,
+            title TEXT NOT NULL DEFAULT 'Module quiz',
+            pass_mark INTEGER NOT NULL DEFAULT 70 CHECK (pass_mark BETWEEN 1 AND 100),
+            questions_per_attempt INTEGER NOT NULL DEFAULT 0 CHECK (questions_per_attempt >= 0),
+            required_for_completion INTEGER NOT NULL DEFAULT 1 CHECK (required_for_completion IN (0, 1)),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            stable_id TEXT,
+            CHECK ((module_id IS NOT NULL AND course_id IS NULL) OR (module_id IS NULL AND course_id IS NOT NULL))
+          );
+          INSERT INTO quizzes_v41
+            (id, module_id, course_id, title, pass_mark, questions_per_attempt, required_for_completion, created_at, updated_at, stable_id)
+          SELECT id, module_id, NULL, title, pass_mark, 0, 1, created_at, updated_at, stable_id FROM quizzes;
+          DROP TABLE quizzes;
+          ALTER TABLE quizzes_v41 RENAME TO quizzes;
+          CREATE UNIQUE INDEX quizzes_module_unique ON quizzes(module_id) WHERE module_id IS NOT NULL;
+          CREATE UNIQUE INDEX quizzes_course_unique ON quizzes(course_id) WHERE course_id IS NOT NULL;
+          CREATE INDEX quizzes_course_id ON quizzes(course_id) WHERE course_id IS NOT NULL;
+
+          CREATE TABLE quiz_attempt_sessions (
+            id TEXT PRIMARY KEY,
+            quiz_id TEXT NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            question_snapshot_json TEXT NOT NULL,
+            started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            completed_at TEXT
+          );
+          CREATE UNIQUE INDEX quiz_attempt_sessions_active_user_quiz
+            ON quiz_attempt_sessions(user_id, quiz_id) WHERE completed_at IS NULL;
+          CREATE INDEX quiz_attempt_sessions_quiz_user ON quiz_attempt_sessions(quiz_id, user_id, started_at DESC);
+        `);
+        const violations = database.pragma('foreign_key_check');
+        if (violations.length) throw new Error(`Quiz ownership migration found ${violations.length} foreign-key violation(s).`);
+        database.prepare('INSERT INTO schema_migrations (version) VALUES (41)').run();
+      });
+      migration.immediate();
+    } finally {
+      if (foreignKeysWereEnabled) database.pragma('foreign_keys = ON');
+    }
+  }
+
 }
 
 export function setting(key) {

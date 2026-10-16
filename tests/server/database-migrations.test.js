@@ -6,7 +6,7 @@ import test, { after, before } from 'node:test';
 import Database from 'better-sqlite3';
 
 const fixturePrefix = 'openlearning-database-migrations-';
-const expectedLatestMigrationVersion = 39;
+const expectedLatestMigrationVersion = 41;
 const configEnvironment = {
   NODE_ENV: 'test',
   DATA_DIR: '',
@@ -144,5 +144,67 @@ test('startup rejects a database from a newer schema before adding application t
     ]);
   } finally {
     futureDatabase.close();
+  }
+});
+
+test('the exam migration preserves existing module quizzes, questions, choices, and attempts', () => {
+  const legacyDatabase = new Database(':memory:');
+  legacyDatabase.pragma('foreign_keys = ON');
+  try {
+    legacyDatabase.exec(`
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      INSERT INTO schema_migrations (version) VALUES (39);
+      CREATE TABLE users (id TEXT PRIMARY KEY);
+      CREATE TABLE courses (id TEXT PRIMARY KEY);
+      CREATE TABLE course_modules (id TEXT PRIMARY KEY, course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE);
+      CREATE TABLE quizzes (
+        id TEXT PRIMARY KEY, module_id TEXT NOT NULL UNIQUE REFERENCES course_modules(id) ON DELETE CASCADE,
+        title TEXT NOT NULL DEFAULT 'Module quiz', pass_mark INTEGER NOT NULL DEFAULT 70,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        stable_id TEXT
+      );
+      CREATE TABLE quiz_questions (
+        id TEXT PRIMARY KEY, quiz_id TEXT NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+        prompt TEXT NOT NULL, explanation TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE quiz_choices (
+        id TEXT PRIMARY KEY, question_id TEXT NOT NULL REFERENCES quiz_questions(id) ON DELETE CASCADE,
+        choice_text TEXT NOT NULL, is_correct INTEGER NOT NULL DEFAULT 0, position INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE quiz_attempts (
+        id TEXT PRIMARY KEY, quiz_id TEXT NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, score INTEGER NOT NULL,
+        passed INTEGER NOT NULL, answers_json TEXT NOT NULL, question_snapshot_json TEXT NOT NULL,
+        submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO users (id) VALUES ('legacy-learner');
+      INSERT INTO courses (id) VALUES ('legacy-course');
+      INSERT INTO course_modules (id, course_id) VALUES ('legacy-module', 'legacy-course');
+      INSERT INTO quizzes (id, module_id, title, pass_mark, stable_id)
+        VALUES ('legacy-quiz', 'legacy-module', 'Preserved module quiz', 80, 'stable-legacy-quiz');
+      INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position)
+        VALUES ('legacy-question', 'legacy-quiz', 'Preserved question?', 'Saved explanation', 0);
+      INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES
+        ('legacy-choice-1', 'legacy-question', 'Correct', 1, 0),
+        ('legacy-choice-2', 'legacy-question', 'Incorrect', 0, 1);
+      INSERT INTO quiz_attempts (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json)
+        VALUES ('legacy-attempt', 'legacy-quiz', 'legacy-learner', 100, 1, '{"legacy-question":"legacy-choice-1"}', '[]');
+    `);
+
+    migrateDatabase(legacyDatabase);
+
+    assert.deepEqual(legacyDatabase.prepare('SELECT id, module_id, course_id, title, pass_mark, questions_per_attempt, required_for_completion, stable_id FROM quizzes').get(), {
+      id: 'legacy-quiz', module_id: 'legacy-module', course_id: null, title: 'Preserved module quiz', pass_mark: 80,
+      questions_per_attempt: 0, required_for_completion: 1, stable_id: 'stable-legacy-quiz',
+    });
+    assert.deepEqual(legacyDatabase.prepare('SELECT id, quiz_id, prompt, explanation, position FROM quiz_questions').get(), {
+      id: 'legacy-question', quiz_id: 'legacy-quiz', prompt: 'Preserved question?', explanation: 'Saved explanation', position: 0,
+    });
+    assert.equal(legacyDatabase.prepare('SELECT COUNT(*) AS count FROM quiz_choices WHERE question_id = ?').get('legacy-question').count, 2);
+    assert.equal(legacyDatabase.prepare('SELECT id, score, passed FROM quiz_attempts').get().id, 'legacy-attempt');
+    assert.equal(legacyDatabase.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, expectedLatestMigrationVersion);
+    assert.deepEqual(legacyDatabase.pragma('foreign_key_check'), []);
+  } finally {
+    legacyDatabase.close();
   }
 });
