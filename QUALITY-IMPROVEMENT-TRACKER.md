@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 130: align lesson video-upload targets
+
+- **Reviewed:** The staff course-editor lesson row structure, native MP4 file input and format hint, upload progress/cancellation states, dense and narrow responsive layout, focus-within styling, and the server-side video validation, authorization, size limits, persistence, and cleanup paths.
+- **Improvement:** Raise the lesson “Upload video” control from 34px at the base size and 36px on narrow screens to a consistent 40px minimum target. Preserve the native file-label semantics, hidden input, MP4 guidance, busy/progress states, compact row width, and existing upload handler. Added `tests/client/video-upload-target.test.js`.
+- **Why it helps:** Course authors can activate the frequent lesson-video upload action more reliably with a pointer or touch device at both desktop and phone-sized layouts, without widening curriculum rows or changing upload behavior.
+- **Backend review:** Video upload authorization, MP4 and size validation, progress/error handling, atomic media persistence, and cleanup remain covered by the existing course-editor contract; no backend change was indicated.
+- **Checked:** Focused video-upload target and accessibility checks passed (3/3); the full `npm test -- --test-reporter=spec` suite passed (998/998), `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, CSRF, and Vite login probes returned 200; anonymous admin backups returned 401. The reloaded local `/login` shell exposed one heading plus named username/password controls. Authenticated course-editor interaction remains source- and regression-verified because the development browser session is signed out; no credentials, media, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): enlarge lesson video upload target`.
+- **Commit description:** `Give course authors a reliable lesson-video upload target while preserving the existing file-input semantics and responsive curriculum layout.`
+
 ## 2026-10-16 — Cycle 129: align course version-history targets
 
 - **Reviewed:** The staff course-governance version-history disclosure, current-version and previous-version layout, “Newer”/“Older” pagination, keyboard focus treatment, narrow wrapping, version-history loading/retry behavior, and the server-side version listing and restore authorization, validation, transaction, audit, and refresh paths.
