@@ -2438,29 +2438,29 @@ export function CourseGroupsPage() {
 
   return <div className="management-page course-groups-page">
     <div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>Groups</span></div>
-    <PageHeading title="Course groups" subtitle="Organize courses into groups, then add or remove courses as needed." action={<Link className="button button-secondary" to="/manage/courses"><ArrowLeft size={16} aria-hidden="true" />Back to courses</Link>} />
+    <PageHeading title="Course groups" subtitle="Create reusable collections, then add or remove courses as your catalogue changes." action={<Link className="button button-secondary" to="/manage/courses"><ArrowLeft size={16} aria-hidden="true" />Back to courses</Link>} />
     {error && <div className="error-notice-actionable"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Retry loading</Button></div>}
     {notice && <Notice kind="success">{notice}</Notice>}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading course groups…</div>
       : <>
         <section className="program-editor-card course-group-create" aria-labelledby="course-group-create-heading">
-          <div className="program-card-heading"><div><span className="program-icon"><UsersRound size={20} aria-hidden="true" /></span><div><h2 id="course-group-create-heading">Create a group</h2><p>Give each group a clear name and an optional description.</p></div></div></div>
-          <form className="program-form-grid" onSubmit={createGroup} aria-busy={saving}>
+          <div className="program-card-heading"><div><span className="program-icon"><UsersRound size={20} aria-hidden="true" /></span><div><h2 id="course-group-create-heading">Create a group</h2><p>Give the group a name. You can add courses after creating it.</p></div></div></div>
+          <form className="program-form-grid course-group-create-form" onSubmit={createGroup} aria-busy={saving}>
             <label>Group name<input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required disabled={saving} placeholder="e.g. Core curriculum" /></label>
-            <label className="program-full-field">Description (optional)<textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={1000} rows={3} disabled={saving} placeholder="What courses belong in this group" /></label>
+            <label>Description (optional)<textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={1000} rows={2} disabled={saving} placeholder="What should learners know about this group?" /></label>
             <div className="program-form-actions"><Button type="submit" disabled={saving}>{saving ? 'Creating group…' : 'Create group'}</Button></div>
           </form>
         </section>
-        {groups.length > 0 && <section className="course-group-assign" aria-labelledby="course-group-assign-heading">
-          <div className="course-groups-heading"><h2 id="course-group-assign-heading">Add a course</h2></div>
-          <form className="course-group-search" role="search" aria-label="Find courses to add to a group" onSubmit={searchCourses}>
-            <Search size={18} aria-hidden="true" />
-            <label>Group<select value={targetGroupId} onChange={(event) => setTargetGroupId(event.target.value)} aria-label="Group to add courses to">
-              {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-            </select></label>
-            <label>Find courses<input type="search" value={courseQuery} onChange={(event) => setCourseQuery(event.target.value)} placeholder="Search courses" maxLength={120} /></label>
-            <Button type="submit" variant="secondary">Search</Button>
-          </form>
+        <section className="course-group-assign" aria-labelledby="course-group-assign-heading">
+          <div className="course-group-section-heading"><div><h2 id="course-group-assign-heading">Add courses to a group</h2><p>Choose a group, then find courses by name.</p></div></div>
+          {groups.length > 0 ? <>
+            <form id="course-group-search" className="course-group-search" role="search" aria-label="Find courses to add to a group" onSubmit={searchCourses}>
+              <label>Add to group<select value={targetGroupId} onChange={(event) => setTargetGroupId(event.target.value)} aria-label="Group to add courses to">
+                {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+              </select></label>
+              <label>Find courses<span className="course-group-search-input"><Search size={17} aria-hidden="true" /><input type="search" value={courseQuery} onChange={(event) => setCourseQuery(event.target.value)} placeholder="Search courses" maxLength={120} /></span></label>
+              <Button type="submit" variant="secondary"><Search size={16} aria-hidden="true" />Find courses</Button>
+            </form>
           {coursesLoading ? <div className="page-loading" role="status" aria-live="polite">Loading courses…</div>
             : courses.length ? <div className="course-group-candidates" role="list" aria-label="Courses you can add">
               {courses.map((course) => {
@@ -2469,22 +2469,23 @@ export function CourseGroupsPage() {
                 const busy = busyCourses[`${targetGroupId}:${course.id}`];
                 return <div className="course-group-candidate" key={course.id} role="listitem">
                   <div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category} · {course.status}</small></div>
-                  <Button type="button" variant="secondary" onClick={() => group && void addCourse(group, course)} disabled={!group || alreadyAssigned || Boolean(busy)} aria-busy={busy === 'add'}>{alreadyAssigned ? 'In group' : busy === 'add' ? 'Adding…' : 'Add to group'}</Button>
+                  <Button type="button" variant="secondary" onClick={() => group && void addCourse(group, course)} disabled={!group || alreadyAssigned || Boolean(busy)} aria-busy={busy === 'add'} aria-label={group ? alreadyAssigned ? `${course.title} is already in ${group.name}` : `Add ${course.title} to ${group.name}` : undefined}>{alreadyAssigned ? 'In group' : busy === 'add' ? 'Adding…' : 'Add to group'}</Button>
                 </div>;
               })}
             </div> : <EmptyState headingLevel={3} title={appliedCourseQuery ? 'No matching courses' : 'No courses available'} detail={appliedCourseQuery ? 'Try another search term.' : 'Create courses before adding them to a group.'} />}
           {!coursesLoading && courseTotal > 0 && <LogPagination ariaLabel="Course search pages" page={coursePage} pageSize={coursePageSize} total={courseTotal} loading={coursesLoading} onChange={setCoursePage} />}
-        </section>}
+          </> : <p className="course-group-no-groups">Create a group above to start adding courses.</p>}
+        </section>
         <section aria-labelledby="course-groups-heading">
-          <div className="course-groups-heading"><h2 id="course-groups-heading">Groups</h2><span>{formatCountLabel(groups.length, 'group', 'groups')}</span></div>
-          {groups.length ? <div className="course-groups-list">{groups.map((group) => <article className="program-card" key={group.id}>
+          <div className="course-groups-heading"><h2 id="course-groups-heading">Your groups</h2><span>{formatCountLabel(groups.length, 'group', 'groups')}</span></div>
+          {groups.length ? <div className="course-groups-list">{groups.map((group) => <article className="program-card course-group-card" key={group.id}>
             <div className="program-card-heading"><div><span className="program-icon"><UsersRound size={19} aria-hidden="true" /></span><div><h3>{group.name}</h3><p>{group.description || 'No description added.'}</p></div></div></div>
             <div className="course-group-created">Created <DateTimeText value={group.createdAt} /></div>
-            <div className="course-group-members"><h4>Courses <span>{formatCountLabel(group.courses.length, 'course', 'courses')}</span></h4>
+            <div className="course-group-members"><div className="course-group-members-heading"><h4>Courses</h4><span className="course-group-count">{formatCountLabel(group.courses.length, 'course', 'courses')}</span></div>
               {group.courses.length ? <ul>{group.courses.map((course) => <li key={course.id}>
                 <div><Link to={`/manage/courses/${course.id}/edit`}>{course.title}</Link><small>{course.category} · {course.status}</small></div>
                 <Button type="button" variant="secondary" onClick={() => void removeCourse(group, course)} disabled={Boolean(busyCourses[`${group.id}:${course.id}`])} aria-busy={busyCourses[`${group.id}:${course.id}`] === 'remove'} aria-label={`Remove ${course.title} from ${group.name}`}>{busyCourses[`${group.id}:${course.id}`] === 'remove' ? 'Removing…' : 'Remove'}</Button>
-              </li>)}</ul> : <p className="course-group-empty">No courses have been added to this group.</p>}
+              </li>)}</ul> : <div className="course-group-empty-state"><p>No courses in this group yet.</p><a href="#course-group-search" onClick={() => setTargetGroupId(group.id)}>Add a course</a></div>}
             </div>
           </article>)}</div> : <EmptyState headingLevel={3} title="No course groups yet" detail="Create a group to organize related courses." />}
         </section>
