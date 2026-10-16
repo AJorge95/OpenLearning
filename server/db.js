@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 import { sessionUserIdFromJson } from './session-data.js';
 
-const latestSchemaVersion = 36;
+const latestSchemaVersion = 37;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -881,6 +881,17 @@ export function migrateDatabase(database = db) {
         CREATE INDEX backup_runs_created ON backup_runs(created_at DESC, id DESC);
         CREATE INDEX backup_runs_job_status ON backup_runs(job_id, status, created_at DESC);
         INSERT INTO schema_migrations (version) VALUES (36);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 37) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        -- The backup dashboard resolves each job's newest run by job and creation time.
+        CREATE INDEX backup_runs_job_created ON backup_runs(job_id, created_at DESC, id DESC);
+        INSERT INTO schema_migrations (version) VALUES (37);
       `);
     });
     migration();

@@ -245,7 +245,7 @@ test('unhandled API errors still return a response when system logging fails', a
   }
 });
 
-test('migrations 15 to 36 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
+test('migrations 15 to 37 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
   const migrationDb = new Database(':memory:');
   try {
     migrationDb.pragma('foreign_keys = ON');
@@ -336,7 +336,7 @@ test('migrations 15 to 36 preserve account history, course versions, captions, c
     `);
 
     migrateDatabase(migrationDb);
-    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 36);
+    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 37);
     assert.ok(migrationDb.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'competencies_admin_order'`).get());
     assert.ok(migrationDb.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'users_registration_status_created'`).get());
     const pendingUserListPlan = migrationDb.prepare(`EXPLAIN QUERY PLAN

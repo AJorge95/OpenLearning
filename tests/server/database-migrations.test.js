@@ -6,7 +6,7 @@ import test, { after, before } from 'node:test';
 import Database from 'better-sqlite3';
 
 const fixturePrefix = 'openlearning-database-migrations-';
-const expectedLatestMigrationVersion = 36;
+const expectedLatestMigrationVersion = 37;
 const configEnvironment = {
   NODE_ENV: 'test',
   DATA_DIR: '',
@@ -84,6 +84,17 @@ test('fresh startup applies every migration and can be rerun without changing th
   ]) {
     assert.ok(tables.has(table), `expected migrated table ${table}`);
   }
+  const backupRunIndexes = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'backup_runs'").all().map(({ name }) => name));
+  assert.ok(backupRunIndexes.has('backup_runs_job_created'));
+  const latestRunPlan = database.prepare(`EXPLAIN QUERY PLAN
+    SELECT candidate.* FROM backup_runs AS candidate
+    WHERE NOT EXISTS (
+      SELECT 1 FROM backup_runs AS newer
+      WHERE newer.job_id = candidate.job_id
+        AND (newer.created_at > candidate.created_at
+          OR (newer.created_at = candidate.created_at AND newer.id > candidate.id))
+    )`).all().map(({ detail }) => detail).join('\n');
+  assert.match(latestRunPlan, /USING COVERING INDEX backup_runs_job_created/);
   assert.deepEqual(database.prepare('SELECT key, value FROM app_settings ORDER BY key').all(), [
     { key: 'platform_name', value: '' },
     { key: 'registration_approval_required', value: '0' },

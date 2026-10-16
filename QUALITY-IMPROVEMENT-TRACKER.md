@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 143: index backup-dashboard history lookups
+
+- **Reviewed:** The administrator backup dashboard polling and latest-run aggregation, backup-history table shape and indexes, visible loading/error/empty states, responsive settings layout, and the scheduler's queue, retention, destination-validation, authorization, and write-coordination boundaries.
+- **Improvement:** Add schema migration 37 with `backup_runs_job_created (job_id, created_at DESC, id DESC)` and document why the index supports the dashboard's correlated newest-run lookup. The query plan now uses the covering index while preserving the existing one-query-per-dashboard-refresh behavior and run ordering.
+- **Why it helps:** Administrators can keep the backup settings page open as run history grows without each five-second refresh scanning each job's history through the less-specific status index.
+- **Interface review:** The signed-out login shell remains non-blank with one heading, named username/password controls, responsive form structure, and the existing password visibility interaction; no UI markup or styling change was indicated for this backend-only improvement.
+- **Checked:** Focused migration and backup checks passed (6/6); the full `npm test -- --test-reporter=spec` suite passed (1009/1009); `npm run build` including strict typecheck, and `git diff --check` passed. The live query plan reports `USING COVERING INDEX backup_runs_job_created`; fresh API health/readiness/setup/registration/version probes returned 200. Playwright was not installed or configured in this checkout, so the temporary Codex in-app browser fallback rendered `/login`, exposed the named controls, and verified `Show password` → `Hide password`; no credentials, backup actions, or application data were submitted or changed.
+- **Commit title:** `perf(backup): index latest run lookups`.
+- **Commit description:** `Index backup history by job and creation time so dashboard refreshes stay bounded.`
+
 ## 2026-10-16 — Cycle 142: align mobile staff return target
 
 - **Reviewed:** The shared staff sidebar markup, `Back to learning` route link, decorative back-arrow semantics, desktop/mobile sidebar flow, adjacent navigation and sign-out targets, keyboard focus treatment, and staff-route authorization/session boundaries.

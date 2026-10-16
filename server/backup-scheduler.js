@@ -195,7 +195,8 @@ export function removeBackupJob(jobId, actor) {
 export function readBackupDashboard() {
   const now = new Date();
   // The dashboard polls frequently, so resolve every job's latest run in one query
-  // instead of issuing a separate lookup for each configured job.
+  // instead of issuing a separate lookup for each configured job. The migration-backed
+  // job/created index lets the correlated lookup seek directly through each job's history.
   const latestRunsByJob = new Map();
   const latestRuns = db.prepare(`SELECT candidate.* FROM backup_runs AS candidate
     WHERE NOT EXISTS (
