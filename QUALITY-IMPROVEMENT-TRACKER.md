@@ -1,5 +1,14 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 170: bounded post-startup consolidation review — no distinct change indicated
+
+- **Reviewed:** The newly pushed single-port startup and embedded-Vite implementation from Cycle 169; its CSP, production asset, installer rollback, migration, and shared-settings boundaries; the current signed-out login shell; remaining responsive and focus rules; authentication/session-cookie selection; graceful shutdown; backup/media cleanup; structured API errors; and the current clean branch state.
+- **Result:** No separate current-build interface, accessibility, responsive, reliability, validation, authorization, maintainability, or measured-performance defect was reproduced. The live development listener served `/healthz`, `/readyz`, `/login`, and `/api/version` with HTTP 200, and the login accessibility tree exposed one heading, named username/password fields, a named password-visibility action, sign-in, and account creation without entering credentials or changing data.
+- **Why no code change:** The immediately preceding startup/installer change already covers the observed blank-page, same-port, CSP, asset-validation, and deployment-configuration boundary. A second startup or compact-control edit would duplicate that work without an authenticated fixture, changed product requirement, representative workload evidence, or a Linux deployment trace showing a new failure.
+- **Checked:** Focused installer/config/web-client tests passed 37/37; the full Node suite passed with exit code 0; `npm run typecheck`, `npm run build`, and `git diff --check` passed. The tree is clean at `d648a45`, with `origin/main` verified at the same revision. The current local listener was stopped after this cycle; no remote service, firewall, deployment, or application data was changed.
+- **Commit title:** `docs(quality): record post-startup consolidation review`.
+- **Commit description:** `Record the bounded post-Cycle-169 interface, backend, and startup review with no distinct safe runtime change identified.`
+
 ## 2026-10-16 — Cycle 169: fix production HTTP loading and use one application port
 
 - **Problem and reproduction:** A production instance on the workstation's network IP returned HTML with HTTP 200 but rendered a blank page. Helmet merged `upgrade-insecure-requests` into the production CSP, causing the browser to request the JavaScript/CSS through HTTPS from an HTTP-only listener. Earlier development-mode probes did not exercise that policy. The installer only checked JSON health/readiness endpoints and could therefore report success with an unusable frontend.
