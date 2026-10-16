@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 84 bounded public-flow and shared-control review: no distinct change indicated
+
+- **Reviewed:** The freshly launched signed-out login and registration DOM, shared header/staff navigation and account-menu interactions, custom `AppSelect` keyboard/label/disabled behavior, mobile and reduced-motion CSS, learner calendar and competency loading/error states, course-management list recovery, and the related authentication, HTTP/CSRF, learning-path, calendar, competency, readiness, and registration-field server boundaries.
+- **Result:** No distinct current-build interface, responsive, accessibility, validation, authorization, recovery, data-integrity, or measured-performance defect was evidenced. Public forms expose named controls and required semantics; shared controls retain visible focus and forced-colors/reduced-motion support; page requests preserve abort/error recovery; and the reviewed server routes keep bounded inputs, access checks, and transactional writes.
+- **Why no code change:** The remaining plausible edits either duplicate the existing shared-control and public-flow contracts or require authenticated fixtures, a changed requirement, a reproducible rendered mismatch, or representative workload evidence before a safe implementation is justified.
+- **Checked:** Focused interface/backend regressions passed 99/99; the full `npm test -- --test-reporter=spec` suite passed 965/965; `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and the Vite root returned 200; the signed-out login and registration DOMs had named controls and no browser warning/error logs. No credentials, forms, uploads, account/course actions, or application data were submitted or changed.
+- **Needed to continue:** A reproducible current-build interaction or accessibility mismatch outside the covered shared contracts, a changed product/security requirement, authenticated fixture exposing a concrete failure, or representative latency/workload evidence.
+- **Commit title:** `docs(quality): record cycle 84 bounded review`.
+- **Commit description:** `Record the bounded public-flow, shared-control, and backend-boundary review with its passing evidence and next evidence gate.`
+
 ## 2026-10-16 — Cycle 83 bounded management-form review: no distinct change indicated
 
 - **Reviewed:** Native required inputs and visible field cues across administrator settings, course and learning-path editors, competency forms, backup jobs, registration-field editors, and the platform-reset confirmation; also reviewed their server-side validation, error mapping, authorization, and transactional contracts.
