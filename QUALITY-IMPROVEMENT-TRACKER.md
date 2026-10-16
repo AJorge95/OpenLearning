@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 150: review post-index boundaries
+
+- **Reviewed:** The fresh signed-out login shell and password-visibility interaction; current responsive and form semantics; post-Cycle-149 course-state indexing; certificate issuance lookups; grant and enrollment membership access; learner progress, quiz-attempt, comment, and reaction reads; course-version ordering; and the remaining server query plans for course-first and user-first access patterns.
+- **Result:** No runtime change. The remaining reviewed queries already use targeted or covering indexes, including certificate `(user_id, course_id, course_version_id)`, course grants `(course_id, user_id)`, enrollments `(user_id, enrolled_at)`, lesson comments `(lesson_id, created_at, id)`, and course-version `(course_id, version_number)` access. The fresh UI shell retained one heading, named required username/password fields, and a working password-visibility action.
+- **Why no change:** No additional reproducible interface, responsive, validation, authorization, recovery, maintainability, or backend query-plan defect was evidenced after the new course-first learner-state index. Another isolated index or control-size edit would be speculative without representative production-size workload evidence or an authenticated staff/learner mismatch.
+- **Checked:** Fresh `/healthz`, `/readyz`, setup status, registration-fields, and version probes returned 200. The signed-out in-app browser rendered `/login` without a blank state; the password action changed to `Hide password` and back to `Show password`; no credentials, forms, uploads, account/course actions, or application data were submitted or changed. Cycle 149's full suite (1012/1012), course/version regressions (131/131), typecheck, production build, and diff check remain green for the unchanged runtime commit.
+- **Needed to continue:** A reproducible authenticated staff or learner interaction mismatch, a changed product requirement, or representative production-size query/workload evidence identifying a concrete bottleneck.
+- **Commit title:** `docs(quality): record post-index boundary review`.
+- **Commit description:** `Record the bounded post-index interface and query-plan review with no additional safe runtime change identified.`
+
 ## 2026-10-16 — Cycle 149: index course-first learner state lookups
 
 - **Reviewed:** The fresh signed-out login shell and password-visibility interaction; shared form, navigation, and responsive boundaries; course publication/restoration learner-state queries; course summary and calendar state reads; current SQLite indexes; migration idempotence; and the existing version-history and learner-state regression coverage.
