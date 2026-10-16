@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 94: associate login failures with credential fields
+
+- **Reviewed:** The freshly launched signed-out login page, its native required and autofill semantics, password visibility control, alert behavior, shared auth components, and the sign-in request/error path.
+- **Improvement:** Give the login error a stable ID and reference it from both username and password controls while it is present. The existing alert announcement, wording, clearing-on-edit behavior, and authentication contract remain unchanged.
+- **Why it helps:** Keyboard and assistive-technology users who return to either credential field after a failed sign-in can review the relevant server feedback in the field's description instead of relying only on the one-time alert announcement.
+- **Backend review:** The sign-in endpoint and shared request/client error handling already return the authoritative failure message and clear stale feedback when either credential changes; no server change was indicated.
+- **Checked:** Focused login accessibility and post-login-path checks passed (4/4); the full `npm test -- --test-reporter=spec` suite passed 966/966, `npm run typecheck`, `npm run build`, and `git diff --check` passed. The signed-out browser check showed the server failure beside both named credential controls, and editing the username cleared the stale alert; no credentials or application data were changed.
+- **Commit title:** `fix(a11y): associate login errors with fields`.
+- **Commit description:** `Keep failed sign-in feedback available from both credential controls without changing authentication behavior.`
+
 ## 2026-10-16 — Cycle 93 bounded course-version and learning-path review: no distinct change indicated
 
 - **Reviewed:** The current signed-out authentication shell and shared controls, course-version history pagination and revision response boundaries, learning-path course-option paging and enrollment synchronization, learner course-access precedence, certificate lookup/issuance ownership, calendar access filtering, and the related route validation, authorization, batching, and transaction paths.
