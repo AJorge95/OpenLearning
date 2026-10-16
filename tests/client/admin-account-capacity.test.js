@@ -43,5 +43,5 @@ test('settings can refresh a stale registered-account count without saving other
   assert.match(page, /function refreshRegisteredUserCount\(\) \{\s*\/\/ Reuse the existing request effect so refreshes share its abort and stale-response guards\.\s*setRegisteredUserCountRetryVersion\(\(version\) => version \+ 1\);\s*\}/);
   assert.match(page, /<Button type="button" variant="quiet" className="registered-count-refresh" aria-busy=\{registeredUserCountLoading\} disabled=\{registeredUserCountLoading\} onClick=\{refreshRegisteredUserCount\}>\{registeredUserCountLoading \? registeredUserCount === null \? 'Loading account count…' : 'Refreshing account count…' : 'Refresh account count'\}<\/Button>/);
   assert.match(page, /registeredUserCountRevisionRef\.current \+= 1;[\s\S]*?registeredUserCountControllerRef\.current\?\.abort\(\);[\s\S]*?setRegisteredUserCountLoading\(false\);[\s\S]*?setRegisteredUserCount\(result\.registeredUserCount\)/);
-  assert.match(styles, /\.form-stack \.registered-account-usage \.registered-count-refresh\s*\{[^}]*width:\s*fit-content;[^}]*justify-self:\s*start;[^}]*min-height:\s*34px;/);
+  assert.match(styles, /\.form-stack \.registered-account-usage \.registered-count-refresh\s*\{[^}]*width:\s*fit-content;[^}]*justify-self:\s*start;[^}]*min-height:\s*40px;/);
 });

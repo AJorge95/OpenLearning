@@ -1099,7 +1099,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .registered-count-status { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-width: 0; margin: 0; color: var(--muted); font-size: 12px; }
 .registered-count-status strong { flex: 0 0 auto; color: var(--text); font-size: 12px; font-weight: 650; }
 .registered-count-limit-warning { margin: 0; padding: 10px 12px; border: 1px solid #efdfb5; border-radius: 4px; color: #80570a; background: #fff4d9; font-size: 12px; line-height: 1.5; }
-.form-stack .registered-account-usage .registered-count-refresh { width: fit-content; max-width: 100%; justify-self: start; min-height: 34px; padding-inline: 9px; font-size: 12px; }
+/* Keep the account-cap refresh action reliable to activate without widening the settings form. */
+.form-stack .registered-account-usage .registered-count-refresh { width: fit-content; max-width: 100%; justify-self: start; min-height: 40px; padding-inline: 9px; font-size: 12px; }
 .account-usage-track { height: 9px; overflow: hidden; border-radius: 999px; background: var(--line); }
 .account-usage-track > span { display: block; height: 100%; border-radius: inherit; background: var(--purple); transition: width .2s ease; }
 .registered-count-recovery { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
