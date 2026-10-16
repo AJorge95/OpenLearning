@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { config } from '../server/config.js';
+import { copyMediaTree } from '../server/media-backup.js';
 
 function isWithin(parentPath, childPath) {
   const relativePath = path.relative(parentPath, childPath);
@@ -48,33 +49,6 @@ async function removeDatabaseSidecars(databasePath) {
   await Promise.all(['-wal', '-shm'].map((suffix) => fs.rm(`${databasePath}${suffix}`, { force: true })));
 }
 
-async function copyMediaTree(source, destination) {
-  await fs.mkdir(destination, { recursive: true });
-  let fileCount = 0;
-  let byteCount = 0;
-  const entries = await fs.readdir(source, { withFileTypes: true });
-  for (const entry of entries) {
-    const from = path.join(source, entry.name);
-    const to = path.join(destination, entry.name);
-    if (entry.isSymbolicLink()) throw new Error('The course media directory contains a symbolic link; the backup cannot safely include it.');
-    if (entry.isDirectory()) {
-      const nested = await copyMediaTree(from, to);
-      fileCount += nested.fileCount;
-      byteCount += nested.byteCount;
-    } else if (entry.isFile()) {
-      const stats = await fs.stat(from);
-      await fs.copyFile(from, to);
-      const copied = await fs.stat(to);
-      if (copied.size !== stats.size) throw new Error(`Media file verification failed for ${entry.name}.`);
-      fileCount += 1;
-      byteCount += stats.size;
-    } else {
-      throw new Error(`Unsupported entry in course media directory: ${entry.name}.`);
-    }
-  }
-  return { fileCount, byteCount };
-}
-
 export async function createBackup({
   appConfig = config,
   destinationRoot = path.resolve(process.cwd(), process.env.BACKUP_DIR?.trim() || './backup'),
@@ -112,7 +86,7 @@ export async function createBackup({
 
   let sourceDatabase;
   let backupDirectoryCreated = false;
-  let mediaStats = { fileCount: 0, byteCount: 0 };
+  let mediaStats = { fileCount: 0, byteCount: 0, files: [] };
   try {
     if (includesDatabase) {
       sourceDatabase = new DatabaseClass(databasePath, { readonly: true, fileMustExist: true });
@@ -156,6 +130,7 @@ export async function createBackup({
       mediaDirectory: includesMedia ? 'course-media' : null,
       mediaFileCount: includesMedia ? mediaStats.fileCount : null,
       mediaBytes: includesMedia ? mediaStats.byteCount : null,
+      mediaFiles: includesMedia ? mediaStats.files : null,
     };
     await fs.writeFile(path.join(backupDirectory, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' });
     return backupDirectory;
