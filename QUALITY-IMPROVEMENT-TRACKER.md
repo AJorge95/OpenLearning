@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 154: align account-menu option targets
+
+- **Reviewed:** The fresh signed-out login shell; shared learner navigation and account-menu structure; compact popover links and Sign out action; keyboard focus treatment; narrow header behavior; and the authentication/session sign-out boundary.
+- **Improvement:** Raise every learner account-menu link and the Sign out action to a shared 40px minimum target, keep their compact horizontal padding, and add a local palette-aware focus outline that stays inside the popover. Preserve the existing destinations, labels, disabled/busy state, outside-dismiss behavior, and sign-out handler. Added `tests/client/account-menu-option-target.test.js`.
+- **Why it helps:** Learners can reach frequent account actions more reliably with a pointer, touch device, or keyboard, while the menu remains compact and its existing navigation and sign-out semantics are unchanged.
+- **Backend review:** The existing account links and sign-out route retain their current authentication, session invalidation, CSRF, audit, and recoverable-error behavior; no server change was indicated.
+- **Checked:** The focused account-menu option regression passed; the signed-out local browser continued to render a non-blank login shell with one heading and named required username/password controls, with no credentials or application data submitted. Full tests, typecheck, build, `git diff --check`, and final commit/push verification are recorded below after execution.
+- **Commit title:** `fix(a11y): align account-menu option targets`.
+- **Commit description:** `Give learner account-menu options reliable touch targets and visible keyboard focus while preserving their existing navigation and sign-out behavior.`
+
 ## 2026-10-16 — Cycle 153: recheck installer and backup boundaries
 
 - **Reviewed:** The post-Cycle-152 installer cleanup and release-finalization boundary; configurable backup destinations and retention; backup scheduler validation, queueing, artifact cleanup, and systemd writable-path assumptions; the current public login shell and status regions; and the latest working tree.
