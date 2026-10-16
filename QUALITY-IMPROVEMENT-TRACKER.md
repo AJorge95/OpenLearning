@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 146: strengthen shared recovery links
+
+- **Reviewed:** Learner course, lesson, quiz, certificate, and account-management recovery states; shared `Back to ...` destinations; narrow layouts; keyboard focus treatment; and the protected course/account authorization and error-response boundaries.
+- **Improvement:** Give the shared learner and management `.back-link` recovery links a 40px minimum target, compact horizontal padding, palette-aware hover feedback, and a local visible focus outline. Preserve each existing destination, label, decorative arrow, and inline placement.
+- **Why it helps:** Users recovering from a missing, locked, or unavailable page can return to a safe parent destination more reliably with a pointer, touch device, or keyboard without turning the link into a visually heavy primary action.
+- **Backend review:** Existing course/account lookup, access authorization, retry, and structured error paths already provide the destinations consumed by these links; no server change was indicated.
+- **Checked:** The focused shared recovery-link regression, related course navigation and error-state checks, `npm run typecheck`, `npm run build`, and `git diff --check` were run. The signed-out local browser continued to render the non-blank login shell; authenticated recovery pages were source- and regression-verified because no authenticated fixture was available, and no credentials or application data were submitted or changed.
+- **Commit title:** `fix(a11y): strengthen shared recovery links`.
+- **Commit description:** `Give learner and management recovery links reliable targets and visible focus while preserving their destinations.`
+
 ## 2026-10-16 — Cycle 145: align quiz editor text targets
 
 - **Reviewed:** The staff quiz editor's question, answer-choice, correct-answer, explanation, add/remove, save, disabled, validation, and narrow-layout behavior, plus the server-side quiz normalization, choice-count/correctness validation, authorization, transactional replacement, and audit boundaries.
