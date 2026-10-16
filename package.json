@@ -1,6 +1,6 @@
 {
   "name": "openlearning-platform",
-  "version": "0.33.0",
+  "version": "0.34.0",
   "private": true,
   "type": "module",
   "description": "A lightweight, self-hosted learning platform for courses, lessons, and quizzes.",
