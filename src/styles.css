@@ -1134,9 +1134,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .platform-icon-controls strong { color: #303443; font-size: 13px; }
 .platform-icon-controls > span { font-size: 11px; white-space: nowrap; }
 .platform-icon-actions { display: flex; align-items: center; flex-wrap: nowrap; gap: 9px; margin-left: auto; }
-.platform-icon-upload { position: relative; display: inline-flex !important; flex-direction: row !important; width: fit-content; min-height: 36px; padding: 0 12px; font-size: 12px; cursor: pointer; }
+/* Keep shared setup/settings branding actions reliable to activate without widening the picker. */
+.platform-icon-upload { position: relative; display: inline-flex !important; flex-direction: row !important; width: fit-content; min-height: 40px; padding: 0 12px; font-size: 12px; cursor: pointer; }
 .platform-icon-upload input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0; opacity: 0; cursor: pointer; }
-.platform-icon-remove { min-height: 36px; padding: 0 10px; font-size: 12px; }
+.platform-icon-remove { min-height: 40px; padding: 0 10px; font-size: 12px; }
 .platform-icon-error { display: block; padding: 6px 8px; margin-top: 2px; }
 .branding-choice-field { display: grid; justify-items: start; gap: 7px; }
 .branding-choice-label { color: #303443; font-size: 13px; font-weight: 650; }

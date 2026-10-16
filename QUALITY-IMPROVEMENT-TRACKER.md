@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 141: align platform-icon picker targets
+
+- **Reviewed:** The shared platform-icon picker used by first-run setup and administrator settings, its upload/remove semantics, hidden native file input, focus-within treatment, narrow-screen wrapping, image validation feedback, and the server-side branding authorization, size, dimension, signature, persistence, and audit boundaries.
+- **Improvement:** Raise the shared `Upload icon` and `Remove` actions from explicit 36px overrides to consistent 40px minimum targets, preserving the compact picker, hidden native file-input hit area, focus treatment, responsive wrapping, validation errors, and existing change/removal handlers. Added `tests/client/platform-icon-target.test.js`.
+- **Why it helps:** Staff configuring platform branding can activate the picker and clear action more reliably with a pointer, touch device, or keyboard in both setup and settings, without widening the branding panel or changing uploaded-image behavior.
+- **Backend review:** Branding updates remain restricted to the existing setup/admin flows; the server continues to validate supported image data, byte and dimension bounds, decoded signatures, persistence, and audit writes. No backend change was indicated.
+- **Checked:** The dedicated platform-icon target regression and related branding/responsive checks passed (9/9); the full `npm test -- --test-reporter=spec` suite passed (1008/1008); `npm run build` including strict typecheck, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, CSRF, and Vite `/login` probes returned 200 without response cookies. The signed-out in-app browser rendered a non-blank login shell with one heading and named username/password controls, with no warning/error diagnostics; no credentials, image files, settings changes, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): align platform icon targets`.
+- **Commit description:** `Give shared platform branding actions reliable targets while preserving file validation and responsive picker behavior.`
+
 ## 2026-10-16 — Cycle 140: align inline module rename controls
 
 - **Reviewed:** The staff course-editor module heading, inline rename field, Save title and Cancel actions, narrow wrapped layout, Escape/focus restoration, rename validation, course/module transaction, authorization, and audit behavior.
