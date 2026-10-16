@@ -1,5 +1,16 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 155: repair installer service permissions and port defaults
+
+- **Reviewed:** The supplied systemd `CHDIR` failure, the Linux installer’s root-owned release layout, the generated unprivileged service unit, the default-port configuration across the Node server, Docker deployments, migration helper, and README, plus the existing installer regression coverage.
+- **Improvement:** Keep the production installer on the application’s `6173` default and centralize environment-port fallback resolution. After dependency installation and the production build, normalize the staged release to root-owned, read-only code with traversable directories so the `openlearning` systemd user can enter `current` and load the server without weakening data-directory isolation.
+- **Why it helps:** Running the installer through `sudo` gives the installer permission to create and edit deployment files; it does not grant those permissions to the long-running service account. The generated unit now receives a release layout that matches its `User=openlearning` boundary, and first-run readiness checks target the same port used by the server and container deployments.
+- **Interface review:** The fresh local login shell remained non-blank with one heading and named required username/password controls; no separate current interface defect was evidenced while reproducing the deployment issue.
+- **Backend review:** The systemd service remains unprivileged, persistent data remains owned by `openlearning`, and the installer still writes configuration and code as root. No deployment, firewall, or external environment was mutated.
+- **Checked:** Focused installer tests, Bash syntax, full tests, typecheck, production build, `git diff --check`, and fresh local `/healthz`, `/readyz`, and Vite `/login` probes passed. The supplied production screenshot was treated as evidence of the `CHDIR` failure; this Windows checkout cannot execute a real Linux systemd installation, so Linux service startup remains deployment-only verification.
+- **Commit title:** `fix(installer): align service permissions and port defaults`.
+- **Commit description:** `Normalize root-owned release permissions for the unprivileged service and restore the application default port used by production deployments.`
+
 ## 2026-10-16 — Cycle 154: align account-menu option targets
 
 - **Reviewed:** The fresh signed-out login shell; shared learner navigation and account-menu structure; compact popover links and Sign out action; keyboard focus treatment; narrow header behavior; and the authentication/session sign-out boundary.

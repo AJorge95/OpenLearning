@@ -12,7 +12,7 @@ CONFIG_DIR="/etc/openlearning"
 ENV_FILE="$CONFIG_DIR/.env"
 DATA_DIR="/var/lib/openlearning"
 BACKUP_ROOT="/var/backups/openlearning"
-PORT="5173"
+PORT="6173"
 
 log() { printf '[openlearning] %s\n' "$*"; }
 fail() { printf '[openlearning] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -40,6 +40,22 @@ has_required_node_runtime() {
   local node_major
   node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null)" || return 1
   [[ "$node_major" =~ ^[0-9]+$ ]] && (( node_major >= 24 ))
+}
+
+configured_port() {
+  local environment_file="$1"
+  ENV_FILE="$environment_file" DEFAULT_PORT="$PORT" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || process.env.DEFAULT_PORT)'
+}
+
+normalize_release_permissions() {
+  local release_path="$1"
+  # The installer is root-owned, but systemd starts the service as the
+  # unprivileged openlearning user. Keep code immutable to that user while
+  # making every release directory traversable and every release file readable.
+  chown -R root:root "$release_path"
+  find "$release_path" -type d -exec chmod 0755 {} +
+  find "$release_path" -type f ! -perm /111 -exec chmod 0644 {} +
+  find "$release_path" -type f -perm /111 -exec chmod 0755 {} +
 }
 
 usage() {
@@ -185,12 +201,13 @@ chown -R root:root "$NEW_RELEASE"
 cd "$NEW_RELEASE"
 npm ci
 npm run build
+normalize_release_permissions "$NEW_RELEASE"
 
 if [[ "$OLD_UNIT_PRESENT" == true ]]; then
   log "Reading the current service configuration and resolving its data paths."
   OLD_WORKING_DIRECTORY="$OLD_WORKING_DIRECTORY" OLD_ENV_FILE="$OLD_ENV_FILE" NEW_ENV_FILE="$ENV_FILE" node scripts/migrate-install-config.js
   EXPECT_READY=false
-  EXISTING_PORT="$(ENV_FILE="$ENV_FILE" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || "5173")')"
+  EXISTING_PORT="$(configured_port "$ENV_FILE")"
   if curl -fsS "http://127.0.0.1:$EXISTING_PORT/readyz" >/dev/null 2>&1; then EXPECT_READY=true; fi
 else
   EXPECT_READY=false
@@ -322,7 +339,7 @@ STARTED=false
 if systemctl daemon-reload && systemctl enable "$SERVICE_NAME.service" && systemctl restart "$SERVICE_NAME.service"; then STARTED=true; fi
 
 READY=false
-SERVICE_PORT="$(ENV_FILE="$ENV_FILE" node --input-type=module -e 'import fs from "node:fs"; import dotenv from "dotenv"; console.log(dotenv.parse(fs.readFileSync(process.env.ENV_FILE)).PORT || "5173")')"
+SERVICE_PORT="$(configured_port "$ENV_FILE")"
 if [[ ! "$SERVICE_PORT" =~ ^[0-9]{1,5}$ ]] || (( 10#$SERVICE_PORT < 1 || 10#$SERVICE_PORT > 65535 )); then
   fail "The configured service port is invalid: $SERVICE_PORT"
 fi
