@@ -1,11 +1,27 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 157: recheck current public shell and data paths
+
+- **Reviewed:** The fresh signed-out `/login` shell at the current Vite port; form names, required indicators, password-visibility semantics, visual centering, and the existing responsive/table-scroll rules; course catalog and summary batching; filtered audit/system-log pagination; installer/configuration regressions; and the current read-only SQLite query plans.
+- **Result:** No runtime change. The current shell is non-blank with one heading and named username/password controls, the reviewed password control remains a labeled non-submit action, public course ordering and filtered log pages use their intended indexes, and the inspected pagination and error/recovery contracts remain covered.
+- **Why no change:** No reproducible current-build interface, responsive, accessibility, reliability, authorization, maintainability, or query-plan defect was evidenced. The local database is only 13 courses, 2 users, 80 audit rows, and 1,929 system rows; broad search/count behavior needs representative production-sized data before a performance change is justified. Authenticated staff/learner fixtures or a Linux systemd trace are also needed to assess the remaining protected and deployment-only surfaces without speculative edits.
+- **Checked:** Full `npm test -- --test-reporter=dot` passed; focused UI/log/course/installer/config/readiness checks passed 166/166; focused auth, password, required-field, pagination-announcement, and table-scroll checks passed 15/15; `npm run build` (including typecheck), `git diff --check`, and fresh `/healthz`, `/readyz`, and Vite `/login` probes passed. The browser shell screenshot and accessibility tree were inspected without entering or submitting credentials; the temporary QA tab's interaction binding detached before a password-toggle click could be rechecked, so live post-click interaction remains unverified in this cycle.
+- **Commit title:** `docs(quality): record current shell and data review`.
+- **Commit description:** `Record the bounded public-shell, responsive, backend-query, and deployment-boundary review with no additional safe runtime change identified.
+
 ## 2026-10-16 — Installer follow-up: restore the expected browser port
 
 - **Problem:** The latest screenshot confirms successful installation and HTTP health on 6173, while the user expects browser access on 5173. The earlier installer default reversal disrupted that expectation.
 - **Change:** Restore 5173 for fresh native installs and explain remote browser access in completion output. Production serves the built frontend and API together; it does not launch Vite. Preserve existing saved ports and legacy migration behavior, including the underlying server's 6173 fallback. Document the explicit configuration override and installer rerun needed to move an existing deployment and its local firewall to 5173.
 - **Validation:** Installer/config-migration regression tests passed 14/14, including Bash syntax; git diff --check passed. Target-host network access cannot be verified from the screenshot; successful loopback HTTP does not establish external firewall, proxy, or browser connectivity.
 - **Commit:** fix(installer): restore the expected browser port.
+
+## 2026-10-16 — Installer follow-up: bind production on server interfaces
+
+- **Problem:** Production startup logs advertised `localhost`, obscuring the address needed by remote browsers and leaving the listener host implicit.
+- **Change:** Configure production to bind explicitly to `0.0.0.0` on IPv4 while keeping development and tests on `127.0.0.1`. Report the actual bind address and tell remote users to open the server's external IP with the configured port.
+- **Validation:** Production host configuration, installer/config regression checks, and build checks are run. Public browser reachability still depends on the server's external address and network firewall; the loopback health probe remains a local app check.
+- **Commit:** fix(server): bind production on external interfaces.
 
 ## 2026-10-16 — Installer follow-up: repair preserved storage access
 
