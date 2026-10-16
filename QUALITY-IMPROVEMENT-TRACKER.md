@@ -1,5 +1,13 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Installer follow-up: repair preserved storage access
+
+- **Problem:** The supplied screenshot shows EACCES creating /home/a-antjore/OpenLearning/data. Private parent directories can block the service account even when root can access the preserved path.
+- **Change:** Install ACL/runuser prerequisites, grant only the service account traversal on inaccessible storage ancestors, prepare the resolved DATA_DIR and independent database/media/backup roots, and check directory access as openlearning before startup. Permission-check failures enter the existing rollback path.
+- **Health feedback:** Explain the local HTTP health check, suppress repeated connection-refused curl messages, and end retries for a failed systemd unit while retaining rollback and service logs.
+- **Validation:** Installer/config migration checks passed 14/14, including Bash syntax and execution of the permission helper with mocked host operations for traversal and ACL failure propagation. The full test suite and git diff --check passed. Actual target filesystem ACL behavior and systemd startup remain unverified.
+- **Commit:** fix(installer): grant service access to legacy storage.
+
 ## 2026-10-16 — Cycle 156: recheck current interface and service boundaries
 
 - **Reviewed:** The fresh signed-out login shell and password-visibility interaction; remaining sub-40px styles and their narrow player/editor contexts; custom select and empty-state icon semantics; management search, table, session, backup, pagination, and installer regressions; and the current root-owned release, service-user traversal, and configured-port boundaries.

@@ -72,6 +72,30 @@ test('updater creates verified backups and restores data when readiness fails', 
   assert.match(installer, /ENDPOINT="healthz"/);
 });
 
+test('legacy storage repair grants account-specific traversal and propagates ACL failure', () => {
+  const helper = installer.match(/prepare_storage_access\(\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(helper, 'expected the actual storage permission helper');
+  // Exercise the Bash helper without changing host accounts or filesystem modes.
+  const run = (aclStatus) => spawnSync(bashPath, ['-c', `
+    set -eu
+    ${helper}
+    runuser() { return 1; }
+    setfacl() { printf 'ACL %s\\n' "$*"; return ${aclStatus}; }
+    chown() { printf 'OWNER %s\\n' "$*"; }
+    chmod() { printf 'MODE %s\\n' "$*"; }
+    prepare_storage_access /home/legacy/OpenLearning/data
+  `], { encoding: 'utf8' });
+  const success = run(0);
+  assert.equal(success.status, 0, success.stderr);
+  assert.match(success.stdout, /ACL -m u:openlearning:--x \/home\/legacy\n/);
+  assert.match(success.stdout, /OWNER openlearning:openlearning \/home\/legacy\/OpenLearning\/data/);
+  assert.match(success.stdout, /MODE u\+rwx \/home\/legacy\/OpenLearning\/data/);
+  assert.doesNotMatch(success.stdout, /OWNER.*\/home\/legacy\n/);
+  const failure = run(1);
+  assert.notEqual(failure.status, 0, 'unsupported ACLs must prevent activation');
+  assert.doesNotMatch(failure.stdout, /OWNER/);
+});
+
 test('updater removes an unfinalized release without deleting the active release', () => {
   assert.match(installer, /NEW_RELEASE=""/);
   assert.match(installer, /RELEASE_FINALIZED=false/);

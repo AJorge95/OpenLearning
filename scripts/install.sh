@@ -58,6 +58,22 @@ normalize_release_permissions() {
   find "$release_path" -type f -perm /111 -exec chmod 0755 {} +
 }
 
+prepare_storage_access() {
+  local storage_directory="$1"
+  local parent_directory
+  # Legacy storage can live below a private home directory. Grant only this
+  # service account traversal, without opening home-directory listings to others.
+  parent_directory="$(dirname "$storage_directory")"
+  while [[ "$parent_directory" != / ]]; do
+    if ! runuser -u openlearning -- test -x "$parent_directory"; then
+      setfacl -m u:openlearning:--x "$parent_directory" || return 1
+    fi
+    parent_directory="$(dirname "$parent_directory")"
+  done
+  chown openlearning:openlearning "$storage_directory" || return 1
+  chmod u+rwx "$storage_directory"
+}
+
 usage() {
   cat <<'EOF'
 OpenLearning Linux installer and updater
@@ -137,14 +153,14 @@ fi
 if [[ "$PACKAGE_MANAGER" == apt-get ]]; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y ca-certificates curl tar xz-utils build-essential python3
+  apt-get install -y ca-certificates curl tar xz-utils build-essential python3 acl util-linux
   NODE_SETUP_FILE="$(mktemp /tmp/openlearning-nodesource-setup.XXXXXX)"
   curl -fsSL https://deb.nodesource.com/setup_24.x -o "$NODE_SETUP_FILE"
   bash "$NODE_SETUP_FILE"
   rm -f "$NODE_SETUP_FILE"
   apt-get install -y nodejs
 else
-  dnf install -y ca-certificates curl tar xz gcc gcc-c++ make python3
+  dnf install -y ca-certificates curl tar xz gcc gcc-c++ make python3 acl util-linux
   if has_required_node_runtime; then
     log "Using existing Node.js $(node --version) and npm; skipping NodeSource repository setup."
   else
@@ -335,8 +351,25 @@ chown -R openlearning:openlearning "${STORAGE_PATHS[2]}"
 if [[ -e "${STORAGE_PATHS[3]}" ]]; then chown openlearning:openlearning "${STORAGE_PATHS[3]}"; fi
 chown openlearning:openlearning "$BACKUP_ROOT"
 chmod 0750 "$DATA_DIR" "$BACKUP_ROOT"
+# Use resolved DATA_DIR as well as independently configured database/media roots.
+# Checking as root would hide exactly the permission errors the daemon sees.
+STORAGE_ACCESS_OK=true
+for storage_path in "${STORAGE_PATHS[0]}" "${STORAGE_PATHS[1]}" "${STORAGE_PATHS[2]}" "$BACKUP_ROOT"; do
+  if ! prepare_storage_access "$storage_path"; then
+    log "Could not prepare service-account storage permissions: $storage_path"
+    STORAGE_ACCESS_OK=false
+  fi
+done
+for storage_path in "${STORAGE_PATHS[0]}" "${STORAGE_PATHS[1]}" "${STORAGE_PATHS[2]}" "$BACKUP_ROOT"; do
+  if ! runuser -u openlearning -- test -r "$storage_path" ||
+     ! runuser -u openlearning -- test -w "$storage_path" ||
+     ! runuser -u openlearning -- test -x "$storage_path"; then
+    log "Service account cannot read, write, or traverse storage: $storage_path"
+    STORAGE_ACCESS_OK=false
+  fi
+done
 STARTED=false
-if systemctl daemon-reload && systemctl enable "$SERVICE_NAME.service" && systemctl restart "$SERVICE_NAME.service"; then STARTED=true; fi
+if [[ "$STORAGE_ACCESS_OK" == true ]] && systemctl daemon-reload && systemctl enable "$SERVICE_NAME.service" && systemctl restart "$SERVICE_NAME.service"; then STARTED=true; fi
 
 READY=false
 SERVICE_PORT="$(configured_port "$ENV_FILE")"
@@ -344,10 +377,12 @@ if [[ ! "$SERVICE_PORT" =~ ^[0-9]{1,5}$ ]] || (( 10#$SERVICE_PORT < 1 || 10#$SER
   fail "The configured service port is invalid: $SERVICE_PORT"
 fi
 if [[ "$STARTED" == true ]]; then
+  log "Checking application health over HTTP on 127.0.0.1:$SERVICE_PORT (local to this server)."
   for _attempt in $(seq 1 30); do
     ENDPOINT="healthz"
     [[ "$EXPECT_READY" == true ]] && ENDPOINT="readyz"
-    if curl -fsS "http://127.0.0.1:$SERVICE_PORT/$ENDPOINT" >/dev/null; then READY=true; break; fi
+    if curl -fsS "http://127.0.0.1:$SERVICE_PORT/$ENDPOINT" >/dev/null 2>&1; then READY=true; break; fi
+    if systemctl is-failed --quiet "$SERVICE_NAME.service"; then break; fi
     sleep 2
   done
 fi

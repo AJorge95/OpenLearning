@@ -52,6 +52,8 @@ Run the same command again to update. The installer preserves recognized `openle
 
 The installer serves the application on port 6173 by default (or the existing `PORT` setting) and allows that TCP port through an already-active UFW or firewalld firewall. It does not enable a firewall, configure external cloud firewall rules, a reverse proxy, or a TLS certificate. If neither UFW nor firewalld is active, allow the port through your firewall manually. Restrict direct access or configure HTTPS termination separately. Set `TRUST_PROXY=true` in the environment file only when a trusted reverse proxy supplies forwarding headers, then restart the service with `sudo systemctl restart openlearning`.
 
+The service runs as the dedicated `openlearning` account. For preserved storage inside a private home directory, the installer grants that account traversal through the parent directories using filesystem ACLs, then checks storage access as the service account. Home-directory ownership is preserved. Health checks use HTTP on `127.0.0.1:<configured PORT>` to check the app on the same server; this is not an ICMP ping or a test of public network access.
+
 ## Docker and Docker Swarm
 
 The Docker image runs the same Node server as the systemd installer, as the non-root `node` user. Both deployment examples use one app process, persistent host directories for application data and backups, and a container health check against `/healthz`. SQLite, session data, and the in-process backup scheduler are not configured for multiple concurrent replicas. For Swarm, the service is constrained to one node labeled for OpenLearning storage and uses stop-first updates.
