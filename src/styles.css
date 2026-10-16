@@ -572,7 +572,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .management-tabs button:hover { color: var(--purple); }
 .management-tabs button.active { border-bottom-color: var(--purple); color: var(--purple); font-weight: 650; }
 .management-search { max-width: none; margin-bottom: 22px; }
-.management-search button { min-width: 54px; padding: 7px; border: 0; background: transparent; color: var(--purple); font-size: 13px; font-weight: 650; }
+/* Keep shared staff search actions easy to activate while preserving the compact 48px field. */
+.management-search > button, .management-search > .button { min-width: 54px; min-height: 40px; padding: 0 7px; border: 0; background: transparent; color: var(--purple); font-size: 13px; font-weight: 650; }
+.management-search > button:focus-visible, .management-search > .button:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 .course-table-wrap, .user-table-wrap { width: 100%; overflow-x: auto; contain: layout; border: 1px solid var(--line); border-radius: 4px; }
 .course-table-wrap { container-type: inline-size; container-name: course-table; }
 .user-table-wrap { container-type: inline-size; container-name: user-table; }
@@ -717,7 +719,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .path-assignment-empty { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 .path-assignment-empty .button { min-height: 34px; }
 .path-assignment-search { max-width: none; height: 42px; margin: 0; background: #fff; }
-.path-assignment-search .button { min-height: 32px; padding: 0 8px; }
+.path-assignment-search .button { min-height: 40px; padding: 0 8px; }
 .path-assignment-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 9px; }
 .path-learner-pagination { padding-top: 10px; }
 .path-assigned-heading { margin: 2px 0 -4px; color: var(--muted); font-size: 11px; font-weight: 650; }
