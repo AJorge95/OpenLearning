@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 135: align quiz-editor text action targets
+
+- **Reviewed:** The staff quiz editor's repeated Remove question, Add answer choice, and Add question actions; contextual accessible names; disabled save/busy state; narrow quiz layout; forced-colors treatment; question/choice limits; and the matching quiz validation and persistence boundaries.
+- **Improvement:** Give quiz-editor text actions a consistent 40px minimum target with compact horizontal padding, quiet hover treatment, visible keyboard focus, danger-specific question-removal feedback, and forced-colors states. Preserve the existing contextual labels, disabled limit behavior, focus refs, and add/remove handlers. Added `tests/client/quiz-editor-action-target.test.js` and a readable CSS comment.
+- **Why it helps:** Course authors can add or remove quiz content more reliably with a pointer, touch device, or keyboard in the repeated question editor, without widening the quiz panel or changing quiz semantics.
+- **Backend review:** Quiz save validation still enforces title, question, answer-choice, correct-answer, pass-mark, and bounded-count rules; the existing transaction, audit, authorization, and learner-attempt removal paths remain unchanged. No backend change was indicated.
+- **Checked:** The focused quiz-editor target regression passed (1/1); the full `npm test -- --test-reporter=spec` suite passed (1003/1003); `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, version, and Vite `/` and `/login` probes returned 200. The in-app browser initialization timed out, and this checkout has no Playwright dependency or configured browser test, so authenticated quiz-editor rendering and screenshot interaction remain source- and regression-verified only; no credentials, quiz edits, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): align quiz-editor action targets`.
+- **Commit description:** `Give repeated quiz-editor actions reliable touch targets and visible focus while preserving their existing labels and handlers.`
+
 ## 2026-10-16 — Cycle 134: align administrator account action targets
 
 - **Reviewed:** The administrator Users table structure, account identity links, role selector, registration/status feedback, Approve/Details/Reset password/Enable/Disable actions, disabled and busy states, narrow horizontal table behavior, and the server-side account authorization, validation, last-administrator protection, session invalidation, audit, and refresh paths.
