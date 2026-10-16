@@ -131,8 +131,10 @@ h1, h2, h3, h4 { color: var(--ink); letter-spacing: -.035em; overflow-wrap: anyw
 .topnav a:hover, .topnav a.active { color: var(--purple); }
 .topnav a.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--purple); }
 .user-menu { margin-left: auto; position: relative; }
-.user-menu summary { list-style: none; display: flex; gap: 10px; align-items: center; cursor: pointer; color: #505567; font-size: 14px; }
+/* Keep the shared account disclosure easy to activate and identify at every breakpoint. */
+.user-menu summary { list-style: none; display: flex; gap: 10px; align-items: center; min-width: 40px; min-height: 40px; cursor: pointer; color: #505567; font-size: 14px; }
 .user-menu summary::-webkit-details-marker { display: none; }
+.user-menu summary:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; border-radius: 4px; }
 .user-menu summary > svg { transition: transform .15s ease; }
 .user-menu[open] summary > svg { transform: rotate(180deg); }
 .avatar { width: 38px; height: 38px; display: inline-grid; place-items: center; flex: 0 0 auto; border-radius: 50%; background: var(--purple-soft); color: var(--purple-dark); font-size: 14px; font-weight: 700; }
@@ -1376,7 +1378,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .topnav a { flex: 0 0 auto; font-size: 12px; white-space: nowrap; }
   .user-menu { grid-column: 2; grid-row: 1; margin-left: 0; }
   .account-name, .user-menu summary > svg { display: none; }
-  .user-menu summary { gap: 0; }
+  .user-menu summary { justify-content: center; gap: 0; }
   .avatar { width: 34px; height: 34px; }
   .app-main { min-height: calc(100vh - 118px); }
   .catalog-page { padding: 34px 16px 54px; }
