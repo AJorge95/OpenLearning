@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 85 bounded route-recovery and request-boundary review: no distinct change indicated
+
+- **Reviewed:** The freshly launched lazy route boundaries and chunk-failure recovery, signed-out authentication and registration loading states, learner calendar and competency abort/retry flows, course-access and management-list request sequencing, shared error/status announcements, and the related API parser, session, CSRF, readiness, authorization, pagination, and payload-recovery boundaries.
+- **Result:** No distinct current-build interface, responsive, accessibility, validation, authorization, recovery, data-integrity, or measured-performance defect was evidenced. Route failures retain actionable reload paths, aborted requests are guarded from stale state updates, retryable page failures preserve the relevant recovery action, and the server rejects malformed or out-of-scope requests with bounded structured responses.
+- **Why no code change:** The remaining plausible edits would duplicate existing route-boundary, request-sequencing, and error-announcement contracts or require an authenticated fixture, reproducible rendered mismatch, changed requirement, or representative workload evidence before a safe implementation is justified.
+- **Checked:** The full `npm test -- --test-reporter=spec` suite passed 965/965; `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live `/healthz`, `/readyz`, `/api/setup/status`, `/api/registration-fields`, `/api/csrf`, and the Vite root returned 200; the public registration accessibility tree exposed named controls and the layout remained usable at the default viewport with no browser warning/error logs. No credentials, forms, uploads, account/course actions, or application data were submitted or changed.
+- **Needed to continue:** A reproducible current-build route, request-recovery, or accessibility mismatch outside the covered contracts, a changed product/security requirement, an authenticated fixture exposing a concrete failure, or representative latency/workload evidence.
+- **Commit title:** `docs(quality): record cycle 85 bounded review`.
+- **Commit description:** `Record the bounded route-recovery and request-boundary review with its passing evidence and next evidence gate.`
+
 ## 2026-10-16 — Cycle 84 bounded public-flow and shared-control review: no distinct change indicated
 
 - **Reviewed:** The freshly launched signed-out login and registration DOM, shared header/staff navigation and account-menu interactions, custom `AppSelect` keyboard/label/disabled behavior, mobile and reduced-motion CSS, learner calendar and competency loading/error states, course-management list recovery, and the related authentication, HTTP/CSRF, learning-path, calendar, competency, readiness, and registration-field server boundaries.
