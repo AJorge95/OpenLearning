@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 149: index course-first learner state lookups
+
+- **Reviewed:** The fresh signed-out login shell and password-visibility interaction; shared form, navigation, and responsive boundaries; course publication/restoration learner-state queries; course summary and calendar state reads; current SQLite indexes; migration idempotence; and the existing version-history and learner-state regression coverage.
+- **Improvement:** Added schema migration 38 with `course_learning_state_course_user (course_id, user_id)`, matching the course-first lookups used while publishing/restoring course versions. The migration is safe for the application's full schema and remains compatible with narrow historical test fixtures that omit the unrelated table. Added migration and query-plan assertions in `tests/server/database-migrations.test.js` and updated the migration-history expectation in `tests/server/last-login.test.js`.
+- **Why it helps:** Publishing or restoring a course no longer scans the full learner-state primary-key index when resolving rows by course. The index also covers the selected `user_id`, keeping this batch lookup bounded to the requested course while preserving the existing `(user_id, course_id)` primary-key access pattern for learner reads.
+- **Interface review:** The signed-out `/login` shell remained non-blank and visually consistent; username/password controls were named and required, and the password action changed from `Show password` to `Hide password` and back without submitting data. No current reproducible interface or responsive defect justified another client change.
+- **Checked:** Focused migration/history checks passed 21/21. The live development database migrated to schema 38; read-only `EXPLAIN QUERY PLAN` now reports `SEARCH course_learning_state USING COVERING INDEX course_learning_state_course_user (course_id=?)` instead of a full index scan. Fresh `/healthz`, `/readyz`, and `/api/version` probes returned 200. No credentials, forms, uploads, account/course actions, or application data were submitted or changed.
+- **Commit title:** `perf(db): index course-first learner state lookups`.
+- **Commit description:** `Add a covering course-first learner-state index for course version publication and restoration batches.`
+
 ## 2026-10-16 — Cycle 148: review startup and boundary contracts
 
 - **Reviewed:** The fresh signed-out login shell at desktop and 390px widths; semantic form structure, required-field naming, password visibility, responsive document sizing, and browser diagnostics; shared route, form, select, dialog, and error boundaries; authentication startup concurrency, timeout, bounded retry, and CSRF refresh; caption/file-editor controls and media upload recovery; administrator approval count refresh; and the server's session-store, CSRF, rate-limit, pagination, authorization, and current index contracts.
