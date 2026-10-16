@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 109: enlarge learning-path reorder targets
+
+- **Reviewed:** Learning-path course ordering controls, their accessible names and decorative arrows, desktop and narrow responsive grid placement, keyboard focus treatment, forced-colors behavior, and the path-save validation and authorization boundary.
+- **Improvement:** Increase the learning-path course reorder buttons from 34×34px to consistent 40×40px targets, add a palette-aware focus outline, and preserve visible button borders and states in forced-colors mode. The existing earlier/later labels, disabled boundary buttons, selection order, and save behavior remain unchanged.
+- **Why it helps:** Staff and learners editing guided paths can more reliably move courses with a pointer or touch device, while keyboard and high-contrast users can identify the active reorder control without changing the path's ordering semantics.
+- **Backend review:** Learning-path creation/update still validates published-course availability, selection limits, prerequisite positions, role access, and transactional audit behavior; no backend change was indicated.
+- **Checked:** Added `tests/client/learning-path-reorder-target.test.js`; focused learning-path checks passed 4/4 and the full `npm test -- --test-reporter=spec` suite passed 977/977. `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, version, and Vite-root probes returned 200; unauthenticated admin backups returned 401. The relaunched signed-out browser shell retained one heading and named credential controls with no warning/error diagnostics; authenticated learning-path interaction remains source- and regression-verified because this development browser session has no authenticated fixture.
+- **Commit title:** `fix(a11y): enlarge learning-path reorder targets`.
+- **Commit description:** `Give learning-path reorder actions reliable touch targets and visible focus in palette and forced-colors modes while preserving ordering behavior.`
+
 ## 2026-10-16 — Cycle 108: enlarge course-editor removal targets
 
 - **Reviewed:** Course-editor quiz-choice, lesson-resource, and caption removal controls; their accessible names, confirmation flow, disabled state, row sizing, narrow responsive layout, forced-colors behavior, and related mutation validation and authorization.
