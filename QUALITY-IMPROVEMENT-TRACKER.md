@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 81 bounded registration-flow review: no distinct change indicated
+
+- **Reviewed:** The freshly launched public registration route and its heading, labels, native required semantics, password actions, custom-field loading/retry and stale-schema recovery; registration availability and account-cap responses; server-side field normalization, duplicate handling, answer validation, audit rollback, and concurrent account-limit enforcement.
+- **Result:** No distinct current-build interface, responsive, accessibility, validation, authorization, recovery, data-integrity, or measured-performance defect was evidenced. The public form exposes one meaningful heading and named controls, custom fields preserve compatible answers after schema refresh, stale submissions explain that review is needed, and server responses fail closed without creating partial accounts.
+- **Why no code change:** The reviewed public and backend contracts already have focused regressions, and another edit would duplicate existing behavior without a reproducible mismatch, changed requirement, or representative workload signal.
+- **Checked:** The focused registration client/server suite passed 53/53, including registration availability, custom-field compatibility, stale-schema recovery, invalid answers, audit rollback, platform-settings rollback, account-limit concurrency, and disabled/unlimited registration. The running browser showed the settled public registration structure with no warning/error logs; no credentials, forms, uploads, account/course actions, or application data were submitted.
+- **Needed to continue:** A reproducible current-build registration interaction or accessibility defect, changed signup requirement, representative workload/latency evidence, or a concrete failure state outside the covered contracts.
+- **Commit title:** `docs(quality): record cycle 81 registration review`.
+- **Commit description:** `Record the bounded public registration and server validation review with its passing focused evidence.`
+
 ## 2026-10-16 — Associate admin account-limit errors with their field
 
 - **Reviewed:** The administrator Settings account-cap form, its `invalid_user_limit` server response, native number constraints, registered-account usage recovery, and the equivalent field-level recovery in the setup wizard.
