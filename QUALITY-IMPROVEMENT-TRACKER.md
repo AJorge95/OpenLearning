@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 95 bounded authentication, responsive, and request-boundary review: no distinct change indicated
+
+- **Reviewed:** The freshly relaunched signed-out auth shell; shared password, button, image-fallback, and form controls; native button/input/image structure; responsive and reduced-motion rules; startup/auth-context request sequencing; login validation and dummy-hash behavior; session regeneration/destruction and audit fallback; CSRF bootstrap; authentication rate-limit mounting; and readiness handling.
+- **Result:** No distinct current-build interface, accessibility, responsive, validation, authorization, recovery, data-integrity, performance, or maintainability defect was evidenced. The login error association from cycle 94 remains present, public controls expose names and required semantics, the static scan found no untyped native buttons or missing image alternatives, and the reviewed backend keeps bounded credential parsing, constant-shape failed-login responses, session fixation protection, stateless anonymous CSRF, and fail-closed readiness.
+- **Why no code change:** The reviewed contracts already match the current architecture and have focused regression coverage. A further implementation would be speculative without a reproducible current-build mismatch, changed product or security requirement, authenticated fixture exposing a concrete failure, or representative workload evidence identifying a bottleneck.
+- **Checked:** Focused interface/auth/session/readiness checks passed 29/29; the full `npm test -- --test-reporter=dot` suite exited 0, `npm run typecheck` passed, and fresh `/healthz`, `/readyz`, setup status, registration fields, CSRF, and Vite-root probes returned 200. The relaunched browser exposed one heading and named credential controls with no submission or application-data mutation.
+- **Needed to continue:** A reproducible authentication or shared-control mismatch outside these covered contracts, a changed product/security requirement, an authenticated fixture exposing a concrete failure, or representative workload evidence.
+- **Commit title:** `docs(quality): record cycle 95 auth review`.
+- **Commit description:** `Record the bounded authentication, responsive, and request-boundary review with passing validation evidence and the next evidence gate.`
+
 ## 2026-10-16 — Cycle 94: associate login failures with credential fields
 
 - **Reviewed:** The freshly launched signed-out login page, its native required and autofill semantics, password visibility control, alert behavior, shared auth components, and the sign-in request/error path.
