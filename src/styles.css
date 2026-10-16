@@ -71,7 +71,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .app-select-chevron { flex: 0 0 auto; color: #656b7b; transition: transform .15s ease; }
 .app-select-trigger[aria-expanded="true"] .app-select-chevron { transform: rotate(180deg); }
 .app-select-menu { position: fixed; z-index: 220; display: grid; gap: 3px; overflow-y: auto; overscroll-behavior: contain; padding: 6px; border: 1px solid var(--line); border-radius: 11px; background: #fff; box-shadow: 0 14px 36px rgba(20, 24, 36, .16); }
-.app-select-option { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 7px 9px; border: 0; border-radius: 7px; color: #454a5a; background: transparent; font-size: 13px; font-weight: 500; line-height: 1.4; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+/* Keep every custom option easy to activate without changing the compact menu rhythm. */
+.app-select-option { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 7px 9px; border: 0; border-radius: 7px; color: #454a5a; background: transparent; font-size: 13px; font-weight: 500; line-height: 1.4; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .app-select-menu--match-trigger .app-select-option { gap: 5px; padding-inline: 5px; }
 .app-select-menu--match-trigger .app-select-option-indicator { width: 16px; flex-basis: 16px; }
 .app-select-option:hover, .app-select-option.active { color: var(--purple-dark); background: var(--purple-hover-bg); }
