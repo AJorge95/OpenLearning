@@ -621,7 +621,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .table-actions { display: flex; align-items: center; justify-content: flex-end; gap: 11px; }
 .table-actions .text-action { font-size: 12px; }
 .row-menu { position: relative; }
-.row-menu-trigger { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid transparent; border-radius: 8px; color: #666c7c; background: transparent; cursor: pointer; transition: border-color .15s ease, background .15s ease, color .15s ease; }
+/* Keep the row action target easy to hit without widening the surrounding table action group. */
+.row-menu-trigger { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid transparent; border-radius: 8px; color: #666c7c; background: transparent; cursor: pointer; transition: border-color .15s ease, background .15s ease, color .15s ease; }
 .row-menu-trigger:hover, .row-menu-trigger[aria-expanded="true"] { border-color: var(--line); color: var(--purple); background: var(--subtle); }
 .row-menu-trigger:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 .row-menu-popover { position: fixed; z-index: 220; display: grid; gap: 3px; overflow-y: auto; overscroll-behavior: contain; width: 196px; padding: 6px; border: 1px solid var(--line); background: #fff; box-shadow: 0 14px 36px rgba(20, 24, 36, .16); border-radius: 11px; }

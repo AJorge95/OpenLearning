@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-16 — Cycle 105: enlarge course row action targets
+
+- **Reviewed:** The course-management table structure, icon-only row-menu trigger, accessible menu naming and expansion state, keyboard focus restoration, viewport-bounded menu positioning, responsive table overflow, course-action feedback, and the related management authorization and mutation paths.
+- **Improvement:** Give each course row’s `More actions` trigger a centered 40px square target while preserving its accessible name, menu state, keyboard handling, focus ring, and surrounding table action layout.
+- **Why it helps:** Course managers can reliably open row actions with a pointer or touch device, including on dense course lists, without changing the available actions or making the table columns wider than necessary.
+- **Backend review:** Course status changes and deletion remain behind the existing manager authorization, confirmation, transactional mutation, audit, and refresh-feedback paths; no backend change was indicated.
+- **Checked:** Focused row-menu, course-action, table-identity, and status-feedback checks passed 9/9; the full `npm test -- --test-reporter=spec` suite passed 973/973; `npm run typecheck`, `npm run build`, and `git diff --check` passed. Live `/healthz`, `/readyz`, and the Vite root returned 200. Authenticated course-management interaction remains source- and regression-verified because this development browser session has no authenticated staff fixture; no credentials, forms, course actions, or application data were submitted or changed.
+- **Commit title:** `fix(a11y): enlarge course row action target`.
+- **Commit description:** `Give course row menus a reliable compact touch target while preserving their menu semantics.`
+
 ## 2026-10-16 — Cycle 104: enlarge learner video action targets
 
 - **Reviewed:** The learner video toolbar structure, play/rewind/mute/fullscreen and caption controls, narrow-screen grid layout, keyboard focus treatment, watch-progress semantics, protected media behavior, and the related learner player and course-service boundaries.
