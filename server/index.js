@@ -20,13 +20,20 @@ import { cleanupOrphanedCourseMedia, getOrphanedMediaCleanupLog } from './media-
 import { programsRouter } from './routes-programs.js';
 import { isReadyToServe } from './readiness.js';
 import { isPlatformResetActive, platformResetGate } from './platform-reset.js';
-import { backupWriteGate, startBackupScheduler, stopBackupScheduler } from './backup-scheduler.js';
+import { backupWriteGate, isBackupRestoreInProgress, startBackupScheduler, stopBackupScheduler } from './backup-scheduler.js';
 import { createSecurityHeaders } from './security-headers.js';
 import { mountWebClient } from './web-client.js';
+import { recoverInterruptedBackupRestore } from './backup-restore.js';
+import { setStartupMediaCleanup } from './media-maintenance.js';
+
+await recoverInterruptedBackupRestore();
 
 const app = express();
 const server = createServer(app);
 let isShuttingDown = false;
+let finishStartupMediaCleanup;
+const startupMediaCleanup = new Promise((resolve) => { finishStartupMediaCleanup = resolve; });
+setStartupMediaCleanup(startupMediaCleanup);
 if (config.trustProxy) app.set('trust proxy', 1);
 
 app.disable('x-powered-by');
@@ -36,7 +43,7 @@ app.use('/api', versionRouter);
 app.get('/healthz', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({ status: 'ok' }));
 app.get('/readyz', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  return isReadyToServe(db, isShuttingDown || isPlatformResetActive())
+  return isReadyToServe(db, isShuttingDown || isPlatformResetActive() || isBackupRestoreInProgress())
     ? res.json({ status: 'ok' })
     : res.status(503).json({ status: 'unavailable' });
 });
@@ -99,7 +106,11 @@ const webClient = await mountWebClient(app, server, config);
 app.use(errorHandler);
 
 function cleanupOrphanedMedia() {
-  if (isShuttingDown) return;
+  if (isShuttingDown) {
+    finishStartupMediaCleanup?.();
+    finishStartupMediaCleanup = null;
+    return;
+  }
   const startedAt = performance.now();
   void cleanupOrphanedCourseMedia(db, config.mediaRoot, Math.max(config.requestTimeoutMs, 24 * 60 * 60 * 1000)).then((cleanupResult) => {
     if (isShuttingDown) return;
@@ -112,6 +123,9 @@ function cleanupOrphanedMedia() {
       errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
       durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
     });
+  }).finally(() => {
+    finishStartupMediaCleanup?.();
+    finishStartupMediaCleanup = null;
   });
 }
 

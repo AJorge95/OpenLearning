@@ -19,8 +19,12 @@ let queuedJobIds = new Set();
 let activeRunId = null;
 let workerRunning = false;
 let mediaWritesPaused = false;
+let restoreInProgress = false;
+let restoreRecoveryRequired = false;
+let activeRequests = 0;
 let activeMutations = 0;
 let mutationWaiters = [];
+let requestWaiters = [];
 let idleWaiters = [];
 
 function isWithin(parentPath, childPath) {
@@ -216,6 +220,12 @@ export function readBackupDashboard() {
   return { jobs, runs, backupInProgress: isBackupInProgress(), mediaWritesPaused, defaultDestinationPath: backupPathDefault };
 }
 
+export function readRestorableBackupRuns() {
+  return db.prepare(`SELECT * FROM backup_runs WHERE status = 'success' AND scope = 'full'
+    AND backup_path IS NOT NULL AND artifact_deleted_at IS NULL
+    ORDER BY finished_at DESC, created_at DESC, id DESC`).all().map(runFromRow);
+}
+
 function completeMutation() {
   activeMutations = Math.max(0, activeMutations - 1);
   if (activeMutations === 0) {
@@ -227,26 +237,57 @@ function completeMutation() {
 
 export function backupWriteGate(req, res, next) {
   const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
-  const isBackupControl = req.path.startsWith('/api/admin/backups');
-  if (!isMutation || isBackupControl) return next();
-  if (mediaWritesPaused) {
+  const normalizedPath = req.path.replace(/\/+$/, '').toLowerCase();
+  const isBackupControl = normalizedPath.startsWith('/api/admin/backups');
+  const isRestoreRequest = req.method === 'POST' && normalizedPath === '/api/admin/backups/restore';
+  if (restoreInProgress) {
+    return res.status(503).json({ error: 'OpenLearning is temporarily unavailable while a backup is being restored.', code: 'restore_in_progress' });
+  }
+  // The restore request owns the maintenance lock itself. All other backup controls
+  // count as active mutations so the restore waits for their handlers to finish.
+  if (isRestoreRequest) return next();
+  trackActiveRequest(res);
+  if (!isMutation) return next();
+  if (mediaWritesPaused && !isBackupControl) {
     return res.status(503).json({ error: 'Course changes are temporarily paused while a media backup is created.', code: 'backup_in_progress' });
   }
   activeMutations += 1;
+  let mutationReleased = false;
+  const releaseMutation = () => {
+    if (mutationReleased) return;
+    mutationReleased = true;
+    completeMutation();
+  };
+  res.once('finish', releaseMutation);
+  res.once('close', releaseMutation);
+  return next();
+}
+
+function trackActiveRequest(res) {
+  activeRequests += 1;
   let released = false;
   const release = () => {
     if (released) return;
     released = true;
-    completeMutation();
+    activeRequests = Math.max(0, activeRequests - 1);
+    if (activeRequests === 0) {
+      const waiters = requestWaiters;
+      requestWaiters = [];
+      waiters.forEach((resolve) => resolve());
+    }
   };
   res.once('finish', release);
   res.once('close', release);
-  return next();
 }
 
 function waitForActiveMutations() {
   if (activeMutations === 0) return Promise.resolve();
   return new Promise((resolve) => mutationWaiters.push(resolve));
+}
+
+function waitForActiveRequests() {
+  if (activeRequests === 0) return Promise.resolve();
+  return new Promise((resolve) => requestWaiters.push(resolve));
 }
 
 function waitForQueueToFinish() {
@@ -265,11 +306,39 @@ export function isBackupInProgress() {
   return Boolean(activeRunId || queuedRuns.length || workerRunning);
 }
 
+export function isBackupRestoreInProgress() {
+  return restoreInProgress;
+}
+
+export async function withBackupRestoreLock(operation) {
+  if (restoreInProgress) fail(409, 'Another backup restoration is already running.', 'restore_in_progress');
+  restoreInProgress = true;
+  mediaWritesPaused = true;
+  try {
+    await waitForActiveMutations();
+    await waitForActiveRequests();
+    await waitForQueueToFinish();
+    return await operation();
+  } finally {
+    if (!restoreRecoveryRequired) {
+      mediaWritesPaused = false;
+      restoreInProgress = false;
+    }
+  }
+}
+
+export function markBackupRestoreRecoveryRequired() {
+  restoreRecoveryRequired = true;
+  restoreInProgress = true;
+  mediaWritesPaused = true;
+}
+
 function runIsActive(jobId) {
   return Boolean(db.prepare("SELECT 1 FROM backup_runs WHERE job_id = ? AND status IN ('pending', 'running') LIMIT 1").get(jobId));
 }
 
 function enqueueRun(job, { triggerType, triggeredBy = null, scheduledFor = null }) {
+  if (restoreInProgress) return null;
   if (runIsActive(job.id) || queuedJobIds.has(job.id)) return null;
   const id = randomUUID();
   const now = new Date().toISOString();
@@ -283,6 +352,7 @@ function enqueueRun(job, { triggerType, triggeredBy = null, scheduledFor = null 
 }
 
 export function runBackupNow(jobId, actor) {
+  if (restoreInProgress) fail(409, 'A backup cannot be started while a backup restoration is running.', 'restore_in_progress');
   const row = db.prepare('SELECT * FROM backup_jobs WHERE id = ?').get(jobId);
   if (!row) fail(404, 'Backup job not found.', 'not_found');
   const job = jobFromRow(row);
@@ -393,7 +463,7 @@ function refreshBackupSchedules(now = new Date()) {
 }
 
 export async function tickBackupScheduler(now = new Date()) {
-  if (shouldDeferScheduledRun()) return;
+  if (restoreInProgress || shouldDeferScheduledRun()) return;
   const jobs = refreshBackupSchedules(now);
   for (const job of jobs) {
     const nextRunAt = nextRunByJob.get(job.id);

@@ -34,6 +34,7 @@ RUN apt-get update \
 
 COPY --from=build --chown=node:node /app/server ./server
 COPY --from=build --chown=node:node /app/scripts/backup.js ./scripts/backup.js
+COPY --from=build --chown=node:node /app/scripts/restore.js ./scripts/restore.js
 COPY --from=build --chown=node:node /app/scripts/start.js ./scripts/start.js
 COPY --from=build --chown=node:node /app/dist/client ./dist/client
 

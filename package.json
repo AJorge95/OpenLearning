@@ -1,6 +1,6 @@
 {
   "name": "openlearning-platform",
-  "version": "0.89.0",
+  "version": "0.90.0",
   "private": true,
   "type": "module",
   "description": "A lightweight, self-hosted learning platform for courses, lessons, and quizzes.",
@@ -15,6 +15,7 @@
     "build": "npm run typecheck && vite build",
     "test": "node --test",
     "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js",
     "version:major": "node scripts/versioning.js major",
     "start": "node scripts/start.js",
     "db:migrate": "node server/migrate.js"

@@ -12,13 +12,18 @@ import { courseSummaries } from './course-service.js';
 import { normalizeRegistrationFields, readRegistrationFields, saveRegistrationFields } from './registration-fields.js';
 import { adminPasswordResetLimiter } from './rate-limits.js';
 import { cancelPlatformReset, confirmPlatformReset, finishPlatformReset, getPlatformResetStatus, preparePlatformReset } from './platform-reset.js';
-import { readBackupDashboard, removeBackupJob, runBackupNow, saveBackupJob } from './backup-scheduler.js';
+import { readBackupDashboard, readRestorableBackupRuns, removeBackupJob, runBackupNow, saveBackupJob } from './backup-scheduler.js';
+import { restoreBackupRun } from './backup-restore.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
 
 adminRouter.get('/backups', (_req, res) => {
   res.json(readBackupDashboard());
+});
+
+adminRouter.get('/backups/restorable-runs', (_req, res) => {
+  res.json({ runs: readRestorableBackupRuns() });
 });
 
 adminRouter.post('/backups/jobs', async (req, res) => {
@@ -38,6 +43,12 @@ adminRouter.delete('/backups/jobs/:jobId', (req, res) => {
 adminRouter.post('/backups/jobs/:jobId/run', (req, res) => {
   const run = runBackupNow(req.params.jobId, req.currentUser);
   res.status(202).json({ run });
+});
+
+adminRouter.post('/backups/restore', async (req, res) => {
+  const body = requireObjectBody(req.body, 'Backup restoration request');
+  const result = await restoreBackupRun(body.runId, req.currentUser);
+  res.json(result);
 });
 
 function isLastActiveAdministrator(user, activeAdminCount) {
