@@ -1,5 +1,16 @@
 # Quality Improvement Tracker
 
+## 2026-10-17 — Cycle 180: restore defined interface color tokens
+
+- **Finding:** The stylesheet referenced undefined `--text` and `--border` custom properties in course-group search/results, settings, account registration, course-version history, and the app-version card. Browsers silently discard declarations that contain an unresolved custom property, so those surfaces could lose their intended text color or border.
+- **Improvement:** Reused the existing semantic `--ink` and `--line` tokens for all seven references and added `tests/client/styles-token-definitions.test.js`, which checks that every `var(--...)` token used by the interface is declared in the shared `:root` block.
+- **Why it helps:** The affected controls now inherit the project palette consistently, including alternate palette themes, and future token drift becomes a focused test failure instead of a silent visual regression.
+- **Interface review:** Launched the development application before inspection. The signed-out shell rendered with one clear heading, named required username/password fields, a visible password toggle, and a full-width sign-in action; no credentials or live forms were submitted. Source review covered current responsive rules, focus states, course-group management controls, settings surfaces, and course-version disclosures. The pre-existing Chrome management tab was stale/blank, so a disposable local QA tab was used for the verified shell check.
+- **Checked:** Focused token regression passed 1/1; the full `npm test -- --test-reporter=spec` suite passed 1,061/1,061; `npm run typecheck`, `npm run build`, and `git diff --check` passed. Fresh `/healthz`, `/readyz`, `/api/version`, and `/login` probes returned 200. A CSS token scan found no remaining references without root definitions.
+- **Boundary:** CSS and dedicated regression coverage only. The user-owned `.github/workflows/publish-container.yml` edit and untracked `tests/security/publish-container-workflow.test.js` were preserved and not staged. No credentials, application data, deployment, publication, or external service was changed.
+- **Commit title:** `fix(ui): use defined style tokens`.
+- **Commit description:** `Replace unresolved interface color and border tokens with the shared palette variables and add a regression that catches undefined CSS custom properties.`
+
 ## 2026-10-17 — Cycle 179: restore current UI regression coverage
 
 - **Finding:** The full suite had seven failing client source-contract checks even though the current UI already implemented the guarded backup refresh flow, empty-course guidance, exam-aware quiz results and focus transitions. The course-group feature also added a legitimate `Course search pages` landmark and a third decorative course-overview arrow.
