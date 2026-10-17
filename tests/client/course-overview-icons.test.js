@@ -12,7 +12,7 @@ const curriculumEnd = componentsSource.indexOf('\nfunction CurriculumLesson', cu
 const curriculum = componentsSource.slice(curriculumStart, curriculumEnd);
 
 test('course overview hides icons that duplicate adjacent labels', () => {
-  for (const [icon, count] of [['BookOpen', 1], ['Play', 1], ['ArrowRight', 2], ['Award', 2]]) {
+  for (const [icon, count] of [['BookOpen', 1], ['Play', 1], ['ArrowRight', 3], ['Award', 2]]) {
     const matches = overview.match(new RegExp(`<${icon}\\b[^>]*aria-hidden="true"[^>]*/>`, 'g')) ?? [];
     assert.equal(matches.length, count, `${icon} should be hidden wherever the overview already has a text label`);
   }

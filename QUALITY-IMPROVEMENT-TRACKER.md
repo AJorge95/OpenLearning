@@ -1,5 +1,16 @@
 # Quality Improvement Tracker
 
+## 2026-10-17 — Cycle 179: restore current UI regression coverage
+
+- **Finding:** The full suite had seven failing client source-contract checks even though the current UI already implemented the guarded backup refresh flow, empty-course guidance, exam-aware quiz results and focus transitions. The course-group feature also added a legitimate `Course search pages` landmark and a third decorative course-overview arrow.
+- **Improvement:** Updated the dedicated `tests/client` contracts to normalize harmless source formatting, assert the current exam-aware markup and focus behavior, include the course-group pagination landmark, and retain the existing accessibility and stale-response guarantees. No runtime application code changed.
+- **Why it helps:** CI now verifies the current interface structure instead of failing on obsolete line breaks, pre-exam markup, or pre-course-group counts. The tests remain specific to the user-facing guarantees rather than accepting unrelated source changes.
+- **Interface review:** Launched the development application before inspection. The live signed-in course-groups page rendered the skip link, named group fields, named search landmark, course candidates, empty-group actions, and `Course search pages` navigation. A desktop screenshot and accessibility snapshot were captured; no credentials, live forms, or application data were changed. Browser-plugin/Playwright visual QA and a narrow viewport override remain unavailable in this checkout.
+- **Checked:** Focused client contracts passed 14/14; the full `npm test -- --test-reporter=dot` suite passed 1,059/1,059; `npm run typecheck`, `npm run build`, and `git diff --check` passed. The refreshed local page returned the expected management structure with no captured browser warnings or errors.
+- **Boundary:** Test and tracker maintenance only. No production deployment, remote service, external publication, credentials, or application-data mutation was performed. The local dev process launched for this cycle remains to be stopped after commit verification.
+- **Commit title:** `test(client): align UI contracts with current markup`.
+- **Commit description:** `Refresh stale accessibility and request-order source contracts for current course-group, course-overview, backup, pagination, and quiz behavior while preserving their user-facing guarantees.`
+
 ## 2026-10-17 — Cycle 178: preserve sparse historical database upgrades
 
 - **Finding:** Migration 41 rewrote `quizzes` unconditionally. Historical upgrade fixtures that intentionally omit quiz data, or retain only an `id` placeholder, failed with `no such table: quizzes` or `no such column: module_id` before later migrations could complete.

@@ -13,6 +13,7 @@ test('admin result pagination exposes a named navigation landmark on every page'
   assert.deepEqual(labels, [
     'Course list pages',
     'Learner progress pages',
+    'Course search pages',
     'Course access pages',
     'User accounts pages',
     'Course activity pages',

@@ -13,9 +13,10 @@ test('course overview keeps its visible course description available to assistiv
 });
 
 test('course overview explains empty published courses instead of showing inert start actions', () => {
-  assert.match(overview, /const hasLearningActivities = \(course\.modules \?\? \[\]\)\.some\(\(module\) => module\.lessons\.length > 0 \|\| Boolean\(module\.quiz\)\)/);
-  assert.match(overview, /hasLearningActivities \? course\.modules\?\.map\([\s\S]*?: <EmptyState title="No learning activities yet" detail="This course does not have any lessons or quizzes available yet\." headingLevel=\{3\} \/>/);
-  assert.match(overview, /hasLearningActivities \|\| course\.completed \|\| course\.progress > 0 \? \(\s*<div className="course-hero-actions">/);
-  assert.match(overview, /nextActivity \? <Button onClick=\{startLearning\} disabled=\{starting\}>/);
-  assert.match(overview, /nextActivity \? \(\s*<div className="course-bottom-cta">[\s\S]*?<Button onClick=\{startLearning\} disabled=\{starting\}>/);
+  const compactOverview = overview.replace(/\s+/g, ' ');
+  assert.match(compactOverview, /const hasLearningActivities = Boolean\(course\.finalExam\) \|\| \(course\.modules \?\? \[\]\)\.some\(\(module\) => module\.lessons\.length > 0 \|\| Boolean\(module\.quiz\)\);/);
+  assert.match(compactOverview, /: <EmptyState title="No learning activities yet" detail="This course does not have any lessons or quizzes available yet\." headingLevel=\{3\} \/>/);
+  assert.match(compactOverview, /hasLearningActivities \|\| course\.completed \|\| course\.progress > 0 \? \( <div className="course-hero-actions">/);
+  assert.match(compactOverview, /nextActivity \? <Button onClick=\{startLearning\} disabled=\{starting\}>/);
+  assert.match(compactOverview, /nextActivity \? \( <div className="course-bottom-cta">.*?<Button onClick=\{startLearning\} disabled=\{starting\}>/);
 });
