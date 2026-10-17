@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Activity, AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, FileText, Filter, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload, UsersRound } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, Download, FileText, Filter, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload, UsersRound } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useBeforeUnload, useBlocker, useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { BlockerFunction } from 'react-router-dom';
@@ -35,6 +35,8 @@ import { COMPLETION_WINDOW_ERROR, COURSE_CATEGORY_REQUIRED_ERROR, COURSE_CATEGOR
 import { isCourseCoverDimensionAllowed, MAX_COURSE_COVER_DIMENSION } from './course-cover-validation';
 import { readImageDimensions } from './image-dimensions';
 import { firstQuizTextIssue, MAX_QUIZ_TITLE_LENGTH, QUIZ_TITLE_REQUIRED_ERROR, QUIZ_TITLE_TOO_LONG_ERROR, validateQuizTitle } from './quiz-validation';
+import { downloadFinalExamImportTemplate, parseDelimitedFinalExamFile, parseFinalExamImportRows } from './final-exam-import';
+import type { FinalExamImportPreview } from './final-exam-import';
 import { lessonResourceUrlError } from './resource-validation';
 import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordConfirmationFieldProps } from './password-confirmation';
 import { validateEmail } from './email-validation';
@@ -711,18 +713,42 @@ function QuizEditor({ module, onSaved, onError, titleInputRef }: { module: Cours
 }
 
 type FinalExamChoiceEditor = { id?: string; editorKey: string; text: string; isCorrect: boolean };
-type FinalExamQuestionEditor = { id?: string; editorKey: string; prompt: string; explanation: string; choices: FinalExamChoiceEditor[] };
+type FinalExamQuestionEditor = { id?: string; editorKey: string; prompt: string; explanation: string; position: number; choices: FinalExamChoiceEditor[] };
+type FinalExamQuestionResponse = Omit<FinalExamQuestionEditor, 'editorKey' | 'choices' | 'id'> & {
+  id: string;
+  choices: Array<Omit<FinalExamChoiceEditor, 'editorKey'>>;
+};
+type FinalExamQuestionBankResponse = { questions: FinalExamQuestionResponse[]; total: number; page: number; pageSize: number; hasMore: boolean };
 
-function makeFinalExamQuestion(editorKey: string): FinalExamQuestionEditor {
+function makeFinalExamQuestion(editorKey: string, position: number): FinalExamQuestionEditor {
   return {
     editorKey,
     prompt: '',
     explanation: '',
+    position,
     choices: [
       { editorKey: `${editorKey}-choice-1`, text: '', isCorrect: true },
       { editorKey: `${editorKey}-choice-2`, text: '', isCorrect: false },
     ],
   };
+}
+
+function hydrateFinalExamQuestion(question: FinalExamQuestionResponse, fallbackPosition: number): FinalExamQuestionEditor {
+  return {
+    ...question,
+    editorKey: question.id || `saved-${fallbackPosition}`,
+    explanation: question.explanation ?? '',
+    position: Number.isInteger(question.position) ? question.position : fallbackPosition,
+    choices: question.choices.map((choice, index) => ({
+      ...choice,
+      isCorrect: Boolean(choice.isCorrect),
+      editorKey: choice.id || `saved-choice-${fallbackPosition}-${index}`,
+    })),
+  };
+}
+
+function finalExamQuestionKey(question: FinalExamQuestionEditor) {
+  return question.id || question.editorKey;
 }
 
 function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }: {
@@ -737,17 +763,38 @@ function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }:
   const [questionsPerAttempt, setQuestionsPerAttempt] = useState(exam?.questionsPerAttempt ?? 0);
   const [requiredForCompletion, setRequiredForCompletion] = useState(exam?.requiredForCompletion ?? true);
   const [questions, setQuestions] = useState<FinalExamQuestionEditor[]>([]);
-  const [total, setTotal] = useState(exam?.questionCount ?? 0);
+  const [questionCache, setQuestionCache] = useState<Record<string, FinalExamQuestionEditor>>({});
+  const [questionDrafts, setQuestionDrafts] = useState<Record<string, FinalExamQuestionEditor>>({});
+  const [questionCount, setQuestionCount] = useState(exam?.questionCount ?? 0);
+  const [resultCount, setResultCount] = useState(exam?.questionCount ?? 0);
+  const [searchText, setSearchText] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedQuestionKey, setSelectedQuestionKey] = useState<string | null>(null);
+  const [mobileEditorOpen, setMobileEditorOpen] = useState(false);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [busyAction, setBusyAction] = useState<'create' | 'settings' | 'delete-exam' | string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
   const [confirmExamRemoval, setConfirmExamRemoval] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<FinalExamImportPreview | null>(null);
+  const [importFileName, setImportFileName] = useState('');
+  const [importError, setImportError] = useState('');
+  const [importStatus, setImportStatus] = useState('');
+  const [readingImportFile, setReadingImportFile] = useState(false);
+  const [importing, setImporting] = useState(false);
   const editorKeySequenceRef = useRef(0);
+  const importFileInputId = useId();
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
-  const totalPages = Math.max(1, Math.ceil(total / 20));
+  const pageSize = 20;
+  const totalPages = Math.max(1, Math.ceil(resultCount / pageSize));
+  const activeQuestion = selectedQuestionKey
+    ? questionDrafts[selectedQuestionKey] ?? questionCache[selectedQuestionKey] ?? null
+    : null;
+  const activeQuestionIsDirty = Boolean(selectedQuestionKey && questionDrafts[selectedQuestionKey]);
+  const unsavedNewQuestions = Object.values(questionDrafts).filter((question) => !question.id);
 
   async function finishExamChange(successMessage: string) {
     if (await onChanged()) onNotice(successMessage);
@@ -758,29 +805,59 @@ function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }:
     setPassMark(exam?.passMark ?? 70);
     setQuestionsPerAttempt(exam?.questionsPerAttempt ?? 0);
     setRequiredForCompletion(exam?.requiredForCompletion ?? true);
-    setTotal(exam?.questionCount ?? 0);
+    setQuestionCount(exam?.questionCount ?? 0);
+    setResultCount(exam?.questionCount ?? 0);
+    setQuestions([]);
+    setQuestionCache({});
+    setQuestionDrafts({});
+    setSelectedQuestionKey(null);
+    setSearchText('');
+    setSearchQuery('');
+    setPage(1);
+    setMobileEditorOpen(false);
+    setImportOpen(false);
+    setImportPreview(null);
+    setImportFileName('');
+    setImportError('');
+    setImportStatus('');
   }, [courseId, exam?.id]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const nextQuery = searchText.trim();
+      if (nextQuery !== searchQuery) {
+        setSearchQuery(nextQuery);
+        setPage(1);
+      }
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [searchText, searchQuery]);
 
   useEffect(() => {
     if (!exam?.id) { setQuestions([]); return; }
     const controller = new AbortController();
     setLoadingQuestions(true);
-    api.get<{ questions: FinalExamQuestionEditor[]; total: number; page: number }>(
-      `/api/manage/courses/${courseId}/final-exam/questions?page=${page}`,
+    const params = new URLSearchParams({ page: String(page) });
+    if (searchQuery) params.set('q', searchQuery);
+    api.get<FinalExamQuestionBankResponse>(
+      `/api/manage/courses/${courseId}/final-exam/questions?${params}`,
       { signal: controller.signal },
     ).then((response) => {
-      setQuestions(response.questions.map((question) => ({
-        ...question,
-        editorKey: question.id || `saved-${editorKeySequenceRef.current++}`,
-        explanation: question.explanation ?? '',
-        choices: question.choices.map((choice, index) => ({ ...choice, isCorrect: Boolean(choice.isCorrect), editorKey: choice.id || `saved-choice-${index}` })),
-      })));
-      setTotal(response.total);
+      const loadedQuestions = response.questions.map((question, index) => hydrateFinalExamQuestion(question, (response.page - 1) * response.pageSize + index));
+      setQuestions(loadedQuestions);
+      setQuestionCache((current) => ({
+        ...current,
+        ...Object.fromEntries(loadedQuestions.map((question) => [finalExamQuestionKey(question), question])),
+      }));
+      setResultCount(response.total);
+      if (!searchQuery) setQuestionCount(response.total);
+      setPage(response.page);
+      setSelectedQuestionKey((current) => current ?? loadedQuestions[0]?.id ?? null);
     }).catch((cause) => {
       if (!controller.signal.aborted) onErrorRef.current(cause instanceof ApiError ? cause.message : 'Final exam questions could not be loaded.');
     }).finally(() => { if (!controller.signal.aborted) setLoadingQuestions(false); });
     return () => controller.abort();
-  }, [courseId, exam?.id, page, refreshVersion]);
+  }, [courseId, exam?.id, page, searchQuery, refreshVersion]);
 
   async function createExam() {
     if (busyAction) return;
@@ -810,25 +887,26 @@ function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }:
     finally { setBusyAction(null); }
   }
 
-  function updateQuestion(questionIndex: number, patch: Partial<FinalExamQuestionEditor>) {
-    setQuestions((current) => current.map((question, index) => index === questionIndex ? { ...question, ...patch } : question));
-  }
-
-  function updateChoice(questionIndex: number, choiceIndex: number, patch: Partial<FinalExamChoiceEditor>) {
-    setQuestions((current) => current.map((question, index) => index !== questionIndex ? question : {
-      ...question,
-      choices: question.choices.map((choice, itemIndex) => ({
-        ...choice,
-        ...(itemIndex === choiceIndex ? patch : {}),
-        ...(patch.isCorrect === true && itemIndex !== choiceIndex ? { isCorrect: false } : {}),
-      })),
+  function updateActiveQuestion(patch: Partial<FinalExamQuestionEditor>) {
+    if (!activeQuestion || !selectedQuestionKey) return;
+    setQuestionDrafts((current) => ({
+      ...current,
+      [selectedQuestionKey]: { ...(current[selectedQuestionKey] ?? activeQuestion), ...patch },
     }));
   }
 
-  async function saveQuestion(questionIndex: number) {
-    if (!exam) return;
-    const question = questions[questionIndex];
-    if (!question || busyAction) return;
+  function updateActiveChoice(choiceIndex: number, patch: Partial<FinalExamChoiceEditor>) {
+    if (!activeQuestion) return;
+    updateActiveQuestion({ choices: activeQuestion.choices.map((choice, index) => ({
+      ...choice,
+      ...(index === choiceIndex ? patch : {}),
+      ...(patch.isCorrect === true && index !== choiceIndex ? { isCorrect: false } : {}),
+    })) });
+  }
+
+  async function saveQuestion(addAnother = false) {
+    if (!exam || !activeQuestion || !selectedQuestionKey || busyAction) return;
+    const question = activeQuestion;
     if (!question.prompt.trim() || question.choices.some((choice) => !choice.text.trim())) { onError('Enter text for the question and every answer choice before saving.'); return; }
     if (question.choices.length < 2 || question.choices.length > 6 || question.choices.filter((choice) => choice.isCorrect).length !== 1) { onError('Each final exam question needs two to six choices and exactly one correct answer.'); return; }
     setBusyAction(question.id || question.editorKey); onError('');
@@ -838,18 +916,103 @@ function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }:
       choices: question.choices.map(({ text, isCorrect }) => ({ text, isCorrect })),
     };
     try {
-      if (question.id) await api.put(`/api/manage/courses/${courseId}/final-exam/questions/${question.id}`, payload);
-      else await api.post(`/api/manage/courses/${courseId}/final-exam/questions`, payload);
+      const response = question.id
+        ? await api.put<{ question: FinalExamQuestionResponse }>(`/api/manage/courses/${courseId}/final-exam/questions/${question.id}`, payload)
+        : await api.post<{ question: FinalExamQuestionResponse }>(`/api/manage/courses/${courseId}/final-exam/questions`, payload);
+      const newQuestionCount = question.id ? questionCount : questionCount + 1;
+      const savedQuestion = hydrateFinalExamQuestion(response.question, question.position);
+      const newDraft = addAnother ? makeFinalExamQuestion(`new-question-${++editorKeySequenceRef.current}`, newQuestionCount) : null;
+      setQuestionCount(newQuestionCount);
+      if (!question.id && !searchQuery) setResultCount(newQuestionCount);
+      setQuestionCache((current) => ({ ...current, [response.question.id]: savedQuestion }));
+      setQuestionDrafts((current) => {
+        const next = { ...current };
+        delete next[selectedQuestionKey];
+        if (newDraft) next[finalExamQuestionKey(newDraft)] = newDraft;
+        return next;
+      });
+      if (!question.id) {
+        setSearchText('');
+        setSearchQuery('');
+        setPage(Math.max(1, Math.ceil(newQuestionCount / pageSize)));
+      }
+      setSelectedQuestionKey(newDraft ? finalExamQuestionKey(newDraft) : response.question.id);
       setRefreshVersion((version) => version + 1);
-      if (!question.id && totalPages === page && questions.length < 20) setTotal((count) => count + 1);
-      await finishExamChange(question.id ? 'Final exam question saved.' : 'Question added to the final exam bank.');
+      await finishExamChange(addAnother ? 'Question added. Start the next question.' : question.id ? 'Final exam question saved.' : 'Question added to the final exam bank.');
     } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Final exam question could not be saved.'); }
     finally { setBusyAction(null); }
   }
 
+  async function readImportFile(file: File, input: HTMLInputElement) {
+    setImportError('');
+    setImportStatus('');
+    setImportPreview(null);
+    setImportFileName(file.name);
+    const extension = file.name.toLowerCase().split('.').pop();
+    if (!['xlsx', 'csv', 'tsv'].includes(extension ?? '')) {
+      setImportError('Choose an .xlsx, .csv, or .tsv file. Legacy .xls files should be saved as .xlsx first.');
+      input.value = '';
+      return;
+    }
+    if (file.size === 0 || file.size > 10 * 1024 * 1024) {
+      setImportError('Choose a non-empty spreadsheet that is 10 MB or smaller.');
+      input.value = '';
+      return;
+    }
+    setReadingImportFile(true);
+    try {
+      const rows = extension === 'xlsx'
+        ? await import('read-excel-file/universal').then(({ readSheet }) => readSheet(file))
+        : parseDelimitedFinalExamFile(await file.text(), extension === 'tsv' ? '\t' : ',');
+      setImportPreview(parseFinalExamImportRows(rows as readonly (readonly unknown[])[]));
+    } catch {
+      setImportError('This spreadsheet could not be read. Check that the file is valid and try again.');
+    } finally {
+      setReadingImportFile(false);
+      input.value = '';
+    }
+  }
+
+  async function importQuestions() {
+    if (!exam || !importPreview || importPreview.errors.length || !importPreview.questions.length || importing || busyAction !== null) return;
+    const payload = { questions: importPreview.questions };
+    if (new TextEncoder().encode(JSON.stringify(payload)).byteLength > 900_000) {
+      setImportError('The question text is too large for one import. Split the spreadsheet into smaller files and try again.');
+      return;
+    }
+    setImporting(true);
+    setBusyAction('import');
+    setImportError('');
+    onError('');
+    try {
+      const response = await api.post<{ importedCount: number }>(`/api/manage/courses/${courseId}/final-exam/questions/import`, payload);
+      const newCount = questionCount + response.importedCount;
+      setQuestionCount(newCount);
+      setResultCount(newCount);
+      setSearchText('');
+      setSearchQuery('');
+      setPage(Math.max(1, Math.ceil(newCount / pageSize)));
+      setRefreshVersion((version) => version + 1);
+      setImportPreview(null);
+      setImportFileName('');
+      setImportStatus(`${response.importedCount} ${response.importedCount === 1 ? 'question' : 'questions'} added to the exam bank.`);
+      await finishExamChange(`${response.importedCount} ${response.importedCount === 1 ? 'question' : 'questions'} imported.`);
+    } catch (cause) {
+      const message = cause instanceof ApiError ? cause.message : 'The questions could not be imported.';
+      setImportError(message);
+      onError(message);
+    } finally {
+      setImporting(false);
+      setBusyAction(null);
+    }
+  }
+
   function addQuestion() {
-    editorKeySequenceRef.current += 1;
-    setQuestions((current) => [...current, makeFinalExamQuestion(`new-question-${editorKeySequenceRef.current}`)]);
+    const newDraft = makeFinalExamQuestion(`new-question-${++editorKeySequenceRef.current}`, questionCount);
+    const key = finalExamQuestionKey(newDraft);
+    setQuestionDrafts((current) => ({ ...current, [key]: newDraft }));
+    setSelectedQuestionKey(key);
+    setMobileEditorOpen(true);
   }
 
   async function removeQuestion(questionId: string) {
@@ -858,9 +1021,16 @@ function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }:
     try {
       await api.delete(`/api/manage/courses/${courseId}/final-exam/questions/${questionId}`);
       setPendingDelete(null);
-      setTotal((count) => Math.max(0, count - 1));
-      if (questions.length === 1 && page > 1) setPage((current) => current - 1);
-      else setRefreshVersion((version) => version + 1);
+      setQuestionCount((count) => Math.max(0, count - 1));
+      setQuestionDrafts((current) => { const next = { ...current }; delete next[questionId]; return next; });
+      setQuestionCache((current) => { const next = { ...current }; delete next[questionId]; return next; });
+      setSelectedQuestionKey((current) => current === questionId ? (unsavedNewQuestions[0] ? finalExamQuestionKey(unsavedNewQuestions[0]) : null) : current);
+      if (!searchQuery || questions.some((question) => question.id === questionId)) setResultCount((count) => Math.max(0, count - 1));
+      const remainingResults = Math.max(0, resultCount - (searchQuery && !questions.some((question) => question.id === questionId) ? 0 : 1));
+      const lastPage = Math.max(1, Math.ceil(remainingResults / pageSize));
+      setPage((current) => Math.min(current, lastPage));
+      setMobileEditorOpen(false);
+      setRefreshVersion((version) => version + 1);
       await finishExamChange('Final exam question removed.');
     } catch (cause) { onError(cause instanceof ApiError ? cause.message : 'Final exam question could not be removed.'); }
     finally { setBusyAction(null); }
@@ -882,26 +1052,76 @@ function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }:
       <form className="final-exam-settings" onSubmit={(event) => void saveSettings(event)}>
         <label><span className="form-label-row"><span>Exam title</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input required maxLength={quizTitleLimit} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
         <div className="app-select-field"><span>Pass mark</span><AppSelect<number> ariaLabel="Final exam pass mark" value={passMark} onChange={setPassMark} options={QUIZ_PASS_MARK_OPTIONS} /></div>
-        <label><span>Questions per attempt</span><input type="number" min={0} step={1} value={questionsPerAttempt} onChange={(event) => setQuestionsPerAttempt(event.target.value === '' ? 0 : Number(event.target.value))} /><small>Enter 0 to draw all {formatCountLabel(total, 'bank question', 'bank questions')} on each attempt.</small></label>
+        <label><span>Questions per attempt</span><input type="number" min={0} step={1} value={questionsPerAttempt} onChange={(event) => setQuestionsPerAttempt(event.target.value === '' ? 0 : Number(event.target.value))} /><small>Enter 0 to draw all {formatCountLabel(questionCount, 'bank question', 'bank questions')} on each attempt.</small></label>
         <label className="final-exam-required-toggle"><input type="checkbox" checked={requiredForCompletion} onChange={(event) => setRequiredForCompletion(event.target.checked)} /><span>Passing this exam is required to complete the course</span></label>
         {!requiredForCompletion && <p className="form-hint final-exam-practice-note">Practice exam attempts do not affect course completion or certificates. An exam-only course must make its exam required.</p>}
-        {questionsPerAttempt > total && <p className="form-hint final-exam-count-warning" role="status">Add at least {questionsPerAttempt - total} more {questionsPerAttempt - total === 1 ? 'question' : 'questions'} before publishing.</p>}
+        {questionsPerAttempt > questionCount && <p className="form-hint final-exam-count-warning" role="status">Add at least {questionsPerAttempt - questionCount} more {questionsPerAttempt - questionCount === 1 ? 'question' : 'questions'} before publishing.</p>}
         <Button type="submit" variant="secondary" disabled={busyAction !== null}>{busyAction === 'settings' ? 'Saving settings…' : 'Save exam settings'}</Button>
       </form>
-      <div className="final-exam-question-heading"><div><h4>Question bank</h4><p>{formatCountLabel(total, 'question', 'questions')} · {formatCountLabel(questionsPerAttempt || total, 'question per attempt', 'questions per attempt')}{questionsPerAttempt === 0 ? ' (all)' : ''}</p></div><Button type="button" variant="secondary" disabled={busyAction !== null} onClick={addQuestion}><Plus size={16} aria-hidden="true" />Add question</Button></div>
-      {loadingQuestions ? <p role="status">Loading question bank…</p> : !questions.length ? <p className="form-hint">No questions yet. Add the first question to build the exam bank.</p> : questions.map((question, questionIndex) => <div className="question-editor final-exam-question-editor" key={question.editorKey}>
-        <div className="question-editor-head"><span>Question {(page - 1) * 20 + questionIndex + 1}</span><button type="button" className="text-action danger-text" aria-label={`Remove question ${(page - 1) * 20 + questionIndex + 1}`} disabled={busyAction !== null} onClick={() => question.id
-          ? setPendingDelete({ id: question.id, title: question.prompt || `Question ${(page - 1) * 20 + questionIndex + 1}` })
-          : setQuestions((current) => current.filter((item) => item.editorKey !== question.editorKey))}>Remove</button></div>
-        <textarea rows={2} maxLength={1000} placeholder="Write a question" aria-label={`Final exam question ${(page - 1) * 20 + questionIndex + 1}`} value={question.prompt} disabled={busyAction !== null} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} />
-        <fieldset className="quiz-answer-fieldset"><legend className="sr-only">Correct answer for final exam question {(page - 1) * 20 + questionIndex + 1}</legend><p className="form-hint">Select one correct answer. Each question needs two to six answer choices.</p>
-          {question.choices.map((choice, choiceIndex) => <div className="choice-editor-row" key={choice.id || choice.editorKey}><input type="radio" name={`final-exam-correct-${question.editorKey}`} checked={choice.isCorrect} disabled={busyAction !== null} onChange={() => updateChoice(questionIndex, choiceIndex, { isCorrect: true })} aria-label={`Mark answer choice ${choiceIndex + 1} correct`} /><input value={choice.text} maxLength={500} disabled={busyAction !== null} onChange={(event) => updateChoice(questionIndex, choiceIndex, { text: event.target.value })} aria-label={`Answer choice ${choiceIndex + 1}`} placeholder={`Answer ${choiceIndex + 1}`} /><button type="button" className="icon-button danger-icon" aria-label={`Remove answer choice ${choiceIndex + 1}`} disabled={busyAction !== null || question.choices.length <= 2} onClick={() => updateQuestion(questionIndex, { choices: question.choices.filter((_, index) => index !== choiceIndex) })}><Trash2 size={15} aria-hidden="true" /></button></div>)}
-          {question.choices.length < 6 && <button type="button" className="text-action add-choice" disabled={busyAction !== null} onClick={() => updateQuestion(questionIndex, { choices: [...question.choices, { editorKey: `${question.editorKey}-choice-${question.choices.length + 1}`, text: '', isCorrect: false }] })}><Plus size={15} aria-hidden="true" />Add answer choice</button>}
-        </fieldset>
-        <label className="explanation-label">Explanation (optional)<input maxLength={1000} value={question.explanation} disabled={busyAction !== null} onChange={(event) => updateQuestion(questionIndex, { explanation: event.target.value })} /></label>
-        <Button type="button" variant="secondary" disabled={busyAction !== null} onClick={() => void saveQuestion(questionIndex)}>{busyAction === (question.id || question.editorKey) ? 'Saving question…' : question.id ? 'Save question' : 'Add question to bank'}</Button>
-      </div>)}
-      {totalPages > 1 && <div className="final-exam-pagination"><Button type="button" variant="secondary" disabled={page <= 1 || loadingQuestions} onClick={() => setPage((current) => current - 1)}>Previous questions</Button><span>Page {page} of {totalPages}</span><Button type="button" variant="secondary" disabled={page >= totalPages || loadingQuestions} onClick={() => setPage((current) => current + 1)}>More questions</Button></div>}
+      <div className="final-exam-question-heading"><div><h4>Question bank</h4><p>{formatCountLabel(questionCount, 'question', 'questions')} · {formatCountLabel(questionsPerAttempt || questionCount, 'question per attempt', 'questions per attempt')}{questionsPerAttempt === 0 ? ' (all)' : ''}</p></div></div>
+      <div className="final-exam-question-workspace" data-mobile-view={mobileEditorOpen ? 'editor' : 'bank'}>
+        <section className="final-exam-bank-pane" aria-label="Final exam question bank">
+          <div className="final-exam-bank-toolbar">
+            <label className="final-exam-question-search"><Search size={17} aria-hidden="true" /><span className="sr-only">Search questions</span><input type="search" value={searchText} maxLength={120} placeholder="Search questions" aria-label="Search questions" onChange={(event) => setSearchText(event.target.value)} />{searchText && <button type="button" className="text-action" onClick={() => setSearchText('')}>Clear</button>}</label>
+            <Button type="button" variant="secondary" disabled={busyAction !== null} onClick={() => setImportOpen((open) => !open)}><Upload size={16} aria-hidden="true" />Import questions</Button>
+            <Button type="button" variant="secondary" disabled={busyAction !== null} onClick={addQuestion}><Plus size={16} aria-hidden="true" />Add question</Button>
+          </div>
+          {importOpen && <section className="final-exam-import-panel" aria-label="Import questions from spreadsheet">
+            <div className="final-exam-import-heading"><div><strong>Import from a spreadsheet</strong><p>Put the headers in row 1 of the first worksheet. Import up to 100 questions at a time.</p></div><button type="button" className="text-action" disabled={importing} onClick={() => setImportOpen(false)}>Close</button></div>
+            <p className="final-exam-import-format">Required columns: <strong>Question</strong>, at least two answer columns, and <strong>Correct Answer</strong>. You can also include <strong>Explanation</strong>.</p>
+            <div className="final-exam-import-actions">
+              <Button type="button" variant="secondary" onClick={downloadFinalExamImportTemplate}><Download size={15} aria-hidden="true" />Download template</Button>
+              <label className="button button-secondary file-button"><FileText size={15} aria-hidden="true" />{readingImportFile ? 'Reading spreadsheet…' : 'Choose spreadsheet'}<input id={importFileInputId} type="file" accept=".xlsx,.csv,.tsv" disabled={readingImportFile || importing} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void readImportFile(file, event.currentTarget); }} /></label>
+            </div>
+            <p className="final-exam-import-hint">Accepts .xlsx, .csv, and .tsv files up to 10 MB. Answer columns can be named Answer 1–6, Choice 1–6, or A–F. Correct Answer accepts a number, letter, or exact answer text.</p>
+            {importFileName && <p className="final-exam-import-filename">Selected: {importFileName}</p>}
+            {importError && <p className="final-exam-import-error" role="alert">{importError}</p>}
+            {importStatus && <p className="final-exam-import-success" role="status">{importStatus}</p>}
+            {importPreview && <div className="final-exam-import-preview">
+              <p className="final-exam-import-summary" role="status">{formatCountLabel(importPreview.questions.length, 'question ready', 'questions ready')} to import{importPreview.skippedRows ? ` · ${importPreview.skippedRows} blank ${importPreview.skippedRows === 1 ? 'row' : 'rows'} skipped` : ''}.</p>
+              {importPreview.errors.length > 0 && <div className="final-exam-import-issues"><strong>Fix these spreadsheet issues before importing:</strong><ul>{importPreview.errors.slice(0, 8).map((error) => <li key={error}>{error}</li>)}</ul>{importPreview.errors.length > 8 && <small>And {importPreview.errors.length - 8} more issue(s).</small>}</div>}
+              {importPreview.questions.length > 0 && <ol className="final-exam-import-question-preview">{importPreview.questions.slice(0, 4).map((question, index) => <li key={`${index}-${question.prompt}`}><strong>{question.prompt}</strong><small>Correct answer: {question.choices.find((choice) => choice.isCorrect)?.text}</small></li>)}</ol>}
+              {importPreview.questions.length > 4 && <p className="final-exam-import-hint">Showing 4 of {importPreview.questions.length} questions.</p>}
+              <div className="final-exam-import-footer"><Button type="button" variant="secondary" disabled={busyAction !== null || readingImportFile || importPreview.errors.length > 0 || importPreview.questions.length === 0} onClick={() => void importQuestions()}>{importing ? 'Adding questions…' : `Add ${importPreview.questions.length} questions to bank`}</Button></div>
+            </div>}
+          </section>}
+          <div className="final-exam-bank-pagination" aria-live="polite">
+            <span>{searchQuery ? `${resultCount} matching ${resultCount === 1 ? 'question' : 'questions'}` : `${formatCountLabel(questionCount, 'question', 'questions')}`}</span>
+            {totalPages > 1 && <div><Button type="button" variant="secondary" disabled={page <= 1 || loadingQuestions} onClick={() => setPage((current) => current - 1)}>Previous questions</Button><span>Page {page} of {totalPages}</span><Button type="button" variant="secondary" disabled={page >= totalPages || loadingQuestions} onClick={() => setPage((current) => current + 1)}>More questions</Button></div>}
+          </div>
+          {unsavedNewQuestions.length > 0 && <div className="final-exam-draft-list"><strong>Unsaved drafts</strong>{unsavedNewQuestions.map((draft) => <button key={finalExamQuestionKey(draft)} type="button" className={`final-exam-question-row${selectedQuestionKey === finalExamQuestionKey(draft) ? ' is-selected' : ''}`} aria-pressed={selectedQuestionKey === finalExamQuestionKey(draft)} onClick={() => { setSelectedQuestionKey(finalExamQuestionKey(draft)); setMobileEditorOpen(true); }}><span className="final-exam-question-number">Draft</span><span className="final-exam-question-summary"><strong>{draft.prompt.trim() || 'New question'}</strong><small>{formatCountLabel(draft.choices.length, 'choice', 'choices')} · Unsaved</small></span></button>)}</div>}
+          {loadingQuestions ? <p className="final-exam-bank-status" role="status">Loading question bank…</p> : questions.length ? <ol className="final-exam-question-list" aria-label="Questions on this page">{questions.map((question, questionIndex) => {
+            const key = finalExamQuestionKey(question);
+            const displayQuestion = questionDrafts[key] ?? question;
+            const questionNumber = (page - 1) * pageSize + questionIndex + 1;
+            return <li key={key}><button type="button" className={`final-exam-question-row${selectedQuestionKey === key ? ' is-selected' : ''}`} aria-pressed={selectedQuestionKey === key} aria-label={`Edit question ${questionNumber}: ${displayQuestion.prompt || 'Untitled question'}`} onClick={() => { setSelectedQuestionKey(key); setMobileEditorOpen(true); }}><span className="final-exam-question-number">{questionNumber}</span><span className="final-exam-question-summary"><strong>{displayQuestion.prompt.trim() || 'Untitled question'}</strong><small>{formatCountLabel(displayQuestion.choices.length, 'choice', 'choices')}{questionDrafts[key] ? ' · Unsaved changes' : ''}</small></span><span className="final-exam-question-chevron" aria-hidden="true">›</span></button></li>;
+          })}</ol> : searchQuery ? <p className="final-exam-bank-status">No questions match “{searchQuery}”. Try another search.</p> : <p className="final-exam-bank-status">No questions yet. Add the first question to build the exam bank.</p>}
+          {totalPages > 1 && <div className="final-exam-bank-pagination final-exam-bank-pagination-bottom"><span>{Math.min((page - 1) * pageSize + 1, resultCount)}–{Math.min(page * pageSize, resultCount)} of {resultCount}</span><div><Button type="button" variant="secondary" disabled={page <= 1 || loadingQuestions} onClick={() => setPage((current) => current - 1)}>Previous questions</Button><Button type="button" variant="secondary" disabled={page >= totalPages || loadingQuestions} onClick={() => setPage((current) => current + 1)}>More questions</Button></div></div>}
+        </section>
+        <section className="final-exam-question-editor-pane" aria-label="Selected final exam question" aria-busy={busyAction !== null}>
+          {activeQuestion && selectedQuestionKey ? <>
+            <div className="final-exam-active-question-heading">
+              <button type="button" className="final-exam-back-to-bank" onClick={() => setMobileEditorOpen(false)}><ArrowLeft size={16} aria-hidden="true" />Questions</button>
+              <div><span className="editor-type">{activeQuestion.id ? 'Question bank' : 'New question'}</span><h5>{activeQuestion.id ? `Question ${activeQuestion.position + 1}` : 'Add question'}</h5></div>
+              {activeQuestion.id
+                ? <button type="button" className="icon-button danger-icon" aria-label={`Remove question ${activeQuestion.position + 1}`} disabled={busyAction !== null} onClick={() => setPendingDelete({ id: activeQuestion.id!, title: activeQuestion.prompt || `Question ${activeQuestion.position + 1}` })}><Trash2 size={16} aria-hidden="true" /></button>
+                : <button type="button" className="text-action danger-text" disabled={busyAction !== null} onClick={() => { setQuestionDrafts((current) => { const next = { ...current }; delete next[selectedQuestionKey]; return next; }); setSelectedQuestionKey(questions[0]?.id ?? null); setMobileEditorOpen(false); }}>Discard draft</button>}
+            </div>
+            <div className="final-exam-question-editor">
+              <label className="final-exam-question-prompt">Question prompt<textarea rows={3} maxLength={1000} placeholder="Write a question" aria-label={`Final exam question ${activeQuestion.position + 1}`} value={activeQuestion.prompt} disabled={busyAction !== null} onChange={(event) => updateActiveQuestion({ prompt: event.target.value })} /></label>
+              <fieldset className="quiz-answer-fieldset final-exam-answer-fieldset" disabled={busyAction !== null}><legend>Answer choices</legend><p className="form-hint">Select one correct answer. Each question needs two to six answer choices.</p>
+                {activeQuestion.choices.map((choice, choiceIndex) => <div className="choice-editor-row" key={choice.id || choice.editorKey}><input type="radio" name={`final-exam-correct-${selectedQuestionKey}`} checked={choice.isCorrect} onChange={() => updateActiveChoice(choiceIndex, { isCorrect: true })} aria-label={`Mark answer choice ${choiceIndex + 1} correct`} /><input value={choice.text} maxLength={500} onChange={(event) => updateActiveChoice(choiceIndex, { text: event.target.value })} aria-label={`Answer choice ${choiceIndex + 1}`} placeholder={`Answer ${choiceIndex + 1}`} /><button type="button" className="icon-button danger-icon" aria-label={`Remove answer choice ${choiceIndex + 1}`} disabled={busyAction !== null || activeQuestion.choices.length <= 2} onClick={() => updateActiveQuestion({ choices: activeQuestion.choices.filter((_, index) => index !== choiceIndex) })}><Trash2 size={15} aria-hidden="true" /></button></div>)}
+                {activeQuestion.choices.length < 6 && <button type="button" className="text-action add-choice" disabled={busyAction !== null} onClick={() => updateActiveQuestion({ choices: [...activeQuestion.choices, { editorKey: `${selectedQuestionKey}-choice-${activeQuestion.choices.length + 1}`, text: '', isCorrect: false }] })}><Plus size={15} aria-hidden="true" />Add answer choice</button>}
+              </fieldset>
+              <label className="explanation-label final-exam-explanation">Explanation (optional)<textarea rows={3} maxLength={1000} value={activeQuestion.explanation} disabled={busyAction !== null} onChange={(event) => updateActiveQuestion({ explanation: event.target.value })} /></label>
+              <div className="final-exam-question-actions">
+                {!activeQuestion.id && <Button type="button" variant="secondary" disabled={busyAction !== null || !activeQuestionIsDirty} onClick={() => void saveQuestion(true)}>Save &amp; add another</Button>}
+                <Button type="button" variant="secondary" disabled={busyAction !== null || !activeQuestionIsDirty} onClick={() => void saveQuestion()}>{busyAction === selectedQuestionKey ? 'Saving question…' : activeQuestion.id ? activeQuestionIsDirty ? 'Save question' : 'No changes' : 'Add question to bank'}</Button>
+              </div>
+            </div>
+          </> : <div className="final-exam-question-empty"><h5>Choose a question</h5><p>Select a question from the bank or add a new one.</p></div>}
+        </section>
+      </div>
     </>}
     {confirmExamRemoval && exam && <ConfirmationDialog title="Remove the final exam?" description="This removes its entire question bank and all saved exam attempts. This action cannot be undone." confirmLabel="Remove final exam" onCancel={() => setConfirmExamRemoval(false)} onConfirm={() => void removeExam()} />}
     {pendingDelete && <ConfirmationDialog title={`Remove “${pendingDelete.title}”?`} description="This removes the question from the final exam bank. Saved past attempt snapshots remain available." confirmLabel="Remove question" onCancel={() => setPendingDelete(null)} onConfirm={() => void removeQuestion(pendingDelete.id)} />}

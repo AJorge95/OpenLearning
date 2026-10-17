@@ -153,8 +153,10 @@ test('authors can build a paginated bank above 50 questions and publish an exam-
   assert.equal(forbidden.response.status, 403);
 
   for (let index = 1; index <= 62; index += 1) {
+    const payload = questionPayload(index, index === 62 ? 'Question 62 uses 100% completion?' : undefined);
+    if (index === 62) payload.choices[1].text = 'Incorrect_choice_62';
     const created = await request('/manage/courses/exam-only-course/final-exam/questions', {
-      method: 'POST', body: questionPayload(index),
+      method: 'POST', body: payload,
     });
     assert.equal(created.response.status, 201, `question ${index} should be saved independently`);
   }
@@ -164,6 +166,20 @@ test('authors can build a paginated bank above 50 questions and publish an exam-
   assert.equal(pageOne.data.questions.length, 20);
   assert.equal(pageFour.data.questions.length, 2);
   assert.equal(pageOne.data.questions[0].choices.filter((choice) => choice.isCorrect).length, 1);
+
+  const promptMatch = await request('/manage/courses/exam-only-course/final-exam/questions?q=qUeStIoN%2062');
+  assert.equal(promptMatch.data.total, 1);
+  assert.equal(promptMatch.data.questions[0].position, 61);
+  const choiceMatch = await request('/manage/courses/exam-only-course/final-exam/questions?q=Incorrect_choice_62');
+  assert.equal(choiceMatch.data.total, 1);
+  assert.equal(choiceMatch.data.questions[0].prompt, 'Question 62 uses 100% completion?');
+  const literalPercentMatch = await request('/manage/courses/exam-only-course/final-exam/questions?q=100%25');
+  assert.equal(literalPercentMatch.data.total, 1);
+  const literalUnderscoreMatch = await request('/manage/courses/exam-only-course/final-exam/questions?q=Incorrect%5Fchoice');
+  assert.equal(literalUnderscoreMatch.data.total, 1);
+  const emptyMatch = await request('/manage/courses/exam-only-course/final-exam/questions?q=not-found');
+  assert.equal(emptyMatch.data.total, 0);
+  assert.equal(emptyMatch.data.questions.length, 0);
 
   const firstQuestion = pageOne.data.questions[0];
   const updated = await request(`/manage/courses/exam-only-course/final-exam/questions/${firstQuestion.id}`, {

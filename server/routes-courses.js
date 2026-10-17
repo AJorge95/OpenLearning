@@ -1410,13 +1410,25 @@ courseRouter.delete('/manage/courses/:courseId/final-exam', requireStaff, (req, 
 courseRouter.get('/manage/courses/:courseId/final-exam/questions', requireStaff, (req, res) => {
   const { course, exam } = finalExamForManager(req.params.courseId, req.currentUser);
   if (!exam) fail(404, 'Final exam not found.', 'not_found');
-  const total = db.prepare('SELECT COUNT(*) AS count FROM quiz_questions WHERE quiz_id = ?').get(exam.id).count;
+  const search = String(req.query.q ?? '').trim().slice(0, 120);
+  const searchClause = search
+    ? ` AND (instr(lower(prompt), lower(?)) > 0 OR EXISTS (
+      SELECT 1 FROM quiz_choices searched_choice
+      WHERE searched_choice.question_id = quiz_questions.id
+        AND instr(lower(searched_choice.choice_text), lower(?)) > 0
+    ))`
+    : '';
+  const searchParams = search ? [search, search] : [];
+  const total = db.prepare(`SELECT COUNT(*) AS count FROM quiz_questions WHERE quiz_id = ?${searchClause}`)
+    .get(exam.id, ...searchParams).count;
   const { page, pageSize, offset, hasMore } = paginationWindow(total, req.query.page, 20);
   const questions = db.prepare(`SELECT id, prompt, explanation, position FROM quiz_questions
-    WHERE quiz_id = ? ORDER BY position, id LIMIT ? OFFSET ?`).all(exam.id, pageSize, offset).map((question) => ({
+    WHERE quiz_id = ?${searchClause} ORDER BY position, id LIMIT ? OFFSET ?`)
+    .all(exam.id, ...searchParams, pageSize, offset).map((question) => ({
     id: question.id,
     prompt: question.prompt,
     explanation: question.explanation,
+    position: question.position,
     choices: db.prepare(`SELECT id, choice_text, is_correct FROM quiz_choices
       WHERE question_id = ? ORDER BY position, id`).all(question.id).map((choice) => ({
       id: choice.id, text: choice.choice_text, isCorrect: Boolean(choice.is_correct),
@@ -1440,11 +1452,40 @@ courseRouter.post('/manage/courses/:courseId/final-exam/questions', requireStaff
     const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.final_exam_question_created', entityType: 'quiz_question', entityId: id,
       summary: `Added a question to the final exam for ${course.title}`, details: { courseId: course.id, quizId: exam.id } });
     if (!auditId) fail(500, 'Question could not be saved because the audit log is unavailable.', 'audit_unavailable');
-    return { id, prompt: question.prompt, explanation: question.explanation, choices: db.prepare(
+    return { id, prompt: question.prompt, explanation: question.explanation, position, choices: db.prepare(
       'SELECT id, choice_text, is_correct FROM quiz_choices WHERE question_id = ? ORDER BY position, id',
     ).all(id).map((choice) => ({ id: choice.id, text: choice.choice_text, isCorrect: Boolean(choice.is_correct) })) };
   });
   res.status(201).json({ question: createQuestion.immediate() });
+});
+
+courseRouter.post('/manage/courses/:courseId/final-exam/questions/import', requireStaff, (req, res) => {
+  const rows = req.body?.questions;
+  if (!Array.isArray(rows) || rows.length < 1 || rows.length > 100) {
+    fail(400, 'Import between one and 100 final exam questions at a time.', 'validation_error');
+  }
+  const questions = rows.map((question, index) => normalizedQuizQuestion(question, `Imported question ${index + 1}`));
+  const importQuestions = db.transaction(() => {
+    const { course, exam } = finalExamForManager(req.params.courseId, req.currentUser);
+    if (!exam) fail(404, 'Final exam not found.', 'not_found');
+    let position = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM quiz_questions WHERE quiz_id = ?').get(exam.id).next;
+    const insertQuestion = db.prepare('INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position) VALUES (?, ?, ?, ?, ?)');
+    const insertChoice = db.prepare('INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES (?, ?, ?, ?, ?)');
+    for (const question of questions) {
+      const questionId = randomUUID();
+      insertQuestion.run(questionId, exam.id, question.prompt, question.explanation, position++);
+      question.choices.forEach((choice, choiceIndex) => {
+        insertChoice.run(randomUUID(), questionId, choice.text, choice.isCorrect ? 1 : 0, choiceIndex);
+      });
+    }
+    db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, course.id);
+    const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.final_exam_questions_imported', entityType: 'quiz', entityId: exam.id,
+      summary: `Imported ${questions.length} questions into the final exam for ${course.title}`,
+      details: { courseId: course.id, quizId: exam.id, questionCount: questions.length } });
+    if (!auditId) fail(500, 'Questions could not be imported because the audit log is unavailable.', 'audit_unavailable');
+    return questions.length;
+  });
+  res.status(201).json({ importedCount: importQuestions.immediate() });
 });
 
 courseRouter.put('/manage/courses/:courseId/final-exam/questions/:questionId', requireStaff, (req, res) => {
@@ -1452,7 +1493,7 @@ courseRouter.put('/manage/courses/:courseId/final-exam/questions/:questionId', r
   const updateQuestion = db.transaction(() => {
     const { course, exam } = finalExamForManager(req.params.courseId, req.currentUser);
     if (!exam) fail(404, 'Final exam not found.', 'not_found');
-    const existing = db.prepare('SELECT id FROM quiz_questions WHERE id = ? AND quiz_id = ?').get(req.params.questionId, exam.id);
+    const existing = db.prepare('SELECT id, position FROM quiz_questions WHERE id = ? AND quiz_id = ?').get(req.params.questionId, exam.id);
     if (!existing) fail(404, 'Final exam question not found.', 'not_found');
     db.prepare('UPDATE quiz_questions SET prompt = ?, explanation = ? WHERE id = ?').run(question.prompt, question.explanation, existing.id);
     db.prepare('DELETE FROM quiz_choices WHERE question_id = ?').run(existing.id);
@@ -1462,7 +1503,7 @@ courseRouter.put('/manage/courses/:courseId/final-exam/questions/:questionId', r
     const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.final_exam_question_updated', entityType: 'quiz_question', entityId: existing.id,
       summary: `Updated a final exam question for ${course.title}`, details: { courseId: course.id, quizId: exam.id } });
     if (!auditId) fail(500, 'Question could not be saved because the audit log is unavailable.', 'audit_unavailable');
-    return { id: existing.id, prompt: question.prompt, explanation: question.explanation, choices: db.prepare(
+    return { id: existing.id, prompt: question.prompt, explanation: question.explanation, position: existing.position, choices: db.prepare(
       'SELECT id, choice_text, is_correct FROM quiz_choices WHERE question_id = ? ORDER BY position, id',
     ).all(existing.id).map((choice) => ({ id: choice.id, text: choice.choice_text, isCorrect: Boolean(choice.is_correct) })) };
   });
