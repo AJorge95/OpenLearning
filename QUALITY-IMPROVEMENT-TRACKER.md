@@ -1,5 +1,16 @@
 # Quality Improvement Tracker
 
+## 2026-10-17 — Cycle 181: keep progress indicators valid for malformed data
+
+- **Finding:** The shared `ProgressBar` clamped finite values to the 0–100 range, but a missing, `NaN`, or infinite progress value from a partial or malformed API payload flowed into both the inline CSS width and `aria-valuenow` as `NaN` or `Infinity`.
+- **Improvement:** Treat non-finite progress as zero before applying the existing 0–100 clamp, and add `tests/client/progress-bar-safety.test.js` to protect the CSS and accessibility output contract.
+- **Why it helps:** Learners and staff now see a valid empty progress bar instead of a broken visual or invalid assistive-technology value when shared progress data is not usable.
+- **Interface review:** Launched the development application before inspection. A fresh local QA tab rendered the signed-out shell with one heading, named required username/password fields, a visible password toggle, and a full-width sign-in action; no credentials or live forms were submitted. Source review covered the current tracker, responsive CSS, focus states, management/course-group surfaces, and backend pagination, authorization, upload, and error-handling boundaries. The pre-existing Chrome management tab was stale/blank while its server was stopped, so it was not treated as product evidence.
+- **Checked:** Focused progress-bar regression, full test suite, typecheck, production build, `git diff --check`, and fresh `/healthz`, `/readyz`, `/api/version`, and `/login` probes. The user-owned `.github/workflows/publish-container.yml` edit and untracked `tests/security/publish-container-workflow.test.js` remain preserved and unstaged.
+- **Boundary:** Shared UI resilience and dedicated regression coverage only. No credentials, application data, deployment, publication, or external service was changed.
+- **Commit title:** `fix(ui): guard progress bar values`.
+- **Commit description:** `Normalize non-finite progress data before rendering CSS and ARIA values, with a focused client regression for the shared progress indicator.`
+
 ## 2026-10-17 — Cycle 180: restore defined interface color tokens
 
 - **Finding:** The stylesheet referenced undefined `--text` and `--border` custom properties in course-group search/results, settings, account registration, course-version history, and the app-version card. Browsers silently discard declarations that contain an unresolved custom property, so those surfaces could lose their intended text color or border.
