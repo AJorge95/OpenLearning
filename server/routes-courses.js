@@ -1422,18 +1422,28 @@ courseRouter.get('/manage/courses/:courseId/final-exam/questions', requireStaff,
   const total = db.prepare(`SELECT COUNT(*) AS count FROM quiz_questions WHERE quiz_id = ?${searchClause}`)
     .get(exam.id, ...searchParams).count;
   const { page, pageSize, offset, hasMore } = paginationWindow(total, req.query.page, 20);
-  const questions = db.prepare(`SELECT id, prompt, explanation, position FROM quiz_questions
+  const questionRows = db.prepare(`SELECT id, prompt, explanation, position FROM quiz_questions
     WHERE quiz_id = ?${searchClause} ORDER BY position, id LIMIT ? OFFSET ?`)
     .all(exam.id, ...searchParams, pageSize, offset).map((question) => ({
     id: question.id,
     prompt: question.prompt,
     explanation: question.explanation,
     position: question.position,
-    choices: db.prepare(`SELECT id, choice_text, is_correct FROM quiz_choices
-      WHERE question_id = ? ORDER BY position, id`).all(question.id).map((choice) => ({
-      id: choice.id, text: choice.choice_text, isCorrect: Boolean(choice.is_correct),
-    })),
   }));
+  // The page is bounded, so load all of its answer choices in one query instead of
+  // adding a database round trip for every question in the bank.
+  const questionIds = questionRows.map((question) => question.id);
+  const choicesByQuestionId = new Map();
+  if (questionRows.length > 0) {
+    const placeholders = questionIds.map(() => '?').join(', ');
+    for (const choice of db.prepare(`SELECT id, question_id, choice_text, is_correct FROM quiz_choices
+      WHERE question_id IN (${placeholders}) ORDER BY question_id, position, id`).all(...questionIds)) {
+      const choices = choicesByQuestionId.get(choice.question_id) ?? [];
+      choices.push({ id: choice.id, text: choice.choice_text, isCorrect: Boolean(choice.is_correct) });
+      choicesByQuestionId.set(choice.question_id, choices);
+    }
+  }
+  const questions = questionRows.map((question) => ({ ...question, choices: choicesByQuestionId.get(question.id) ?? [] }));
   res.json({ courseId: course.id, questions, total, page, pageSize, hasMore });
 });
 

@@ -785,6 +785,7 @@ function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }:
   const [readingImportFile, setReadingImportFile] = useState(false);
   const [importing, setImporting] = useState(false);
   const editorKeySequenceRef = useRef(0);
+  const questionSearchInputId = useId();
   const importFileInputId = useId();
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
@@ -1062,7 +1063,7 @@ function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }:
       <div className="final-exam-question-workspace" data-mobile-view={mobileEditorOpen ? 'editor' : 'bank'}>
         <section className="final-exam-bank-pane" aria-label="Final exam question bank">
           <div className="final-exam-bank-toolbar">
-            <label className="final-exam-question-search"><Search size={17} aria-hidden="true" /><span className="sr-only">Search questions</span><input type="search" value={searchText} maxLength={120} placeholder="Search questions" aria-label="Search questions" onChange={(event) => setSearchText(event.target.value)} />{searchText && <button type="button" className="text-action" onClick={() => setSearchText('')}>Clear</button>}</label>
+            <div className="final-exam-question-search"><Search size={17} aria-hidden="true" /><label className="sr-only" htmlFor={questionSearchInputId}>Search questions</label><input id={questionSearchInputId} type="search" value={searchText} maxLength={120} placeholder="Search questions" aria-label="Search questions" onChange={(event) => setSearchText(event.target.value)} />{searchText && <button type="button" className="text-action" onClick={() => setSearchText('')}>Clear</button>}</div>
             <Button type="button" variant="secondary" disabled={busyAction !== null} onClick={() => setImportOpen((open) => !open)}><Upload size={16} aria-hidden="true" />Import questions</Button>
             <Button type="button" variant="secondary" disabled={busyAction !== null} onClick={addQuestion}><Plus size={16} aria-hidden="true" />Add question</Button>
           </div>
