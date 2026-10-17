@@ -2,6 +2,8 @@
 
 OpenLearning is a self-hosted learning platform with courses, video lessons, quizzes, learning paths, learner progress, and administrator and moderator tools. It stores application data in SQLite and serves the web client, API, and media from one Node.js process.
 
+If OpenLearning is useful for your team, please [star the repository](https://github.com/AJorge95/OpenLearning) to help others discover it.
+
 ## Install on Linux
 
 The one-command installer supports Ubuntu 22.04 or newer, or RHEL 9 or newer compatible systems with systemd. Run it as root:
