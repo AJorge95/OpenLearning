@@ -8,6 +8,7 @@ import test from 'node:test';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const versionScript = path.join(projectRoot, 'scripts/versioning.js');
+const indexCheckScript = path.join(projectRoot, 'scripts/check-git-index.js');
 const hookInstaller = path.join(projectRoot, 'scripts/install-git-hooks.js');
 const preCommitHook = path.join(projectRoot, '.githooks/pre-commit');
 const tempBase = path.resolve(os.tmpdir());
@@ -21,6 +22,8 @@ function createFixture() {
   fs.mkdirSync(path.join(resolvedDirectory, 'scripts'), { recursive: true });
   fs.mkdirSync(path.join(resolvedDirectory, '.githooks'), { recursive: true });
   fs.copyFileSync(versionScript, path.join(resolvedDirectory, 'scripts/versioning.js'));
+  // Keep the fixture runnable when the configured hook grows additional checks.
+  fs.copyFileSync(indexCheckScript, path.join(resolvedDirectory, 'scripts/check-git-index.js'));
   fs.copyFileSync(hookInstaller, path.join(resolvedDirectory, 'scripts/install-git-hooks.js'));
   const copiedHookPath = path.join(resolvedDirectory, '.githooks/pre-commit');
   fs.copyFileSync(preCommitHook, copiedHookPath);
@@ -29,8 +32,8 @@ function createFixture() {
   fs.writeFileSync(path.join(resolvedDirectory, 'package-lock.json'), `${JSON.stringify({ name: 'fixture', version: '0.1.0', lockfileVersion: 3, packages: { '': { name: 'fixture', version: '0.1.0' } } }, null, 2)}\n`);
   execFileSync('git', ['init', '-q'], { cwd: resolvedDirectory });
   execFileSync('git', ['config', 'user.name', 'Version Test'], { cwd: resolvedDirectory });
-  execFileSync('git', ['config', 'user.email', 'version-test@example.invalid'], { cwd: resolvedDirectory });
-  execFileSync('git', ['add', 'package.json', 'package-lock.json', 'scripts/versioning.js'], { cwd: resolvedDirectory });
+  execFileSync('git', ['config', 'user.email', 'version-test@users.noreply.github.com'], { cwd: resolvedDirectory });
+  execFileSync('git', ['add', 'package.json', 'package-lock.json', 'scripts/versioning.js', 'scripts/check-git-index.js'], { cwd: resolvedDirectory });
   execFileSync('git', ['commit', '-qm', 'baseline'], { cwd: resolvedDirectory });
   return resolvedDirectory;
 }
