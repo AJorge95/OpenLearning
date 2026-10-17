@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-17 — Cycle 193: bounded learner catalog and course review — no separate change indicated
+
+- **Reviewed:** Launched `npm run dev` first and verified fresh `/healthz`, `/readyz`, `/api/version`, and `/login` probes on `127.0.0.1:5173`. The existing authenticated browser session rendered the learner catalog and an available course detail page; the accessibility tree exposed the catalog heading, category and sort controls, search landmark, course identity, course content disclosures, lesson links, and progress state. Source review covered catalog filtering and reset behavior, course-card structure, responsive layout rules, pagination announcements, published-course filtering, category loading, access checks, query bounds, and request cancellation.
+- **Result:** No distinct, reproducible, non-duplicate improvement was evidenced. The live catalog and course detail surfaces rendered cleanly, and the existing source/tests already cover the reviewed accessible names, empty states, search actions, filter semantics, pagination, snapshot exclusion, category-query optimization, and learner access boundary.
+- **Why no code change:** The remaining plausible work requires a repeatable narrow-viewport mismatch, authenticated fixture data for another learner flow, a changed product requirement, or representative workload evidence. Editing the already-covered catalog or course-detail boundaries would be speculative or duplicate existing protections.
+- **Checked:** `npm test -- --test-reporter=dot`, `npm run typecheck`, `npm run build`, fresh local probes, authenticated catalog/course-detail accessibility inspection and screenshots, and `git diff --check` passed. No credentials, forms, filters, course actions, or application data were submitted or changed.
+- **Boundary:** Tracker documentation only. The user-owned `.gitignore` edit remains preserved and unstaged. No deployment, publication, remote service, or external write was performed; the requested push remains unresolved because this automation also prohibits external changes.
+- **Commit title:** `docs(quality): record bounded learner catalog review`.
+- **Commit description:** `Record the current learner catalog and course-detail review with passing validation and an explicit evidence boundary without making a speculative runtime change.`
+
 ## 2026-10-17 — Cycle 192: bounded authenticated management review — no separate change indicated
 
 - **Reviewed:** The authenticated course-management page, management navigation and search controls, course table row semantics and status/revision labels, pagination, shared narrow-table guidance, and the corresponding admin list/access contracts.
