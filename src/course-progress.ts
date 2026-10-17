@@ -1,6 +1,6 @@
-import type { CourseModule } from './types';
+import type { CourseModule, Quiz } from './types';
 
-export function summarizeCourseProgress(modules: CourseModule[]) {
+export function summarizeCourseProgress(modules: CourseModule[], finalExam?: Quiz | null) {
   let lessonCount = 0;
   let completedLessons = 0;
   let quizCount = 0;
@@ -16,10 +16,13 @@ export function summarizeCourseProgress(modules: CourseModule[]) {
   }
 
   const totalActivities = lessonCount + quizCount;
-  const completedActivities = completedLessons + passedQuizzes;
+  const finalExamRequired = Boolean(finalExam?.requiredForCompletion);
+  const finalExamPassed = Boolean(finalExam?.passed);
+  const requiredActivities = totalActivities + Number(finalExamRequired);
+  const completedActivities = completedLessons + passedQuizzes + Number(finalExamRequired && finalExamPassed);
   return {
     completedLessons,
-    progress: totalActivities > 0 ? Math.round((completedActivities / totalActivities) * 100) : 0,
-    completed: totalActivities > 0 && completedActivities === totalActivities,
+    progress: requiredActivities > 0 ? Math.round((completedActivities / requiredActivities) * 100) : 0,
+    completed: requiredActivities > 0 && completedActivities === requiredActivities,
   };
 }

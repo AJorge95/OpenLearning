@@ -1,17 +1,25 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { createBrowserRouter, Link, Navigate, Outlet, Route, Routes, RouterProvider, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth-context';
 import { AppFrame, Button, LoadingScreen, PageHeading, PlatformBrand, StaffFrame } from './components';
 import { AccountSecurityPage, LoginPage, RegisterPage, SetupPage } from './pages-auth';
-import { CatalogPage, CourseCertificatePage, CourseOverviewPage, CoursePlayerPage, MyLearningPage, QuizPage } from './pages-learner';
 
+// Keep the larger learner page module out of the signed-out entry bundle.
+const CatalogPage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.CatalogPage })));
+const CourseCertificatePage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.CourseCertificatePage })));
+const CourseOverviewPage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.CourseOverviewPage })));
+const CoursePlayerPage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.CoursePlayerPage })));
+const MyLearningPage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.MyLearningPage })));
+const QuizPage = lazy(() => import('./pages-learner').then((pages) => ({ default: pages.QuizPage })));
 const CourseAccessPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseAccessPage })));
+const CourseGroupsPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseGroupsPage })));
 const CourseAnalyticsPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseAnalyticsPage })));
 const CourseEditorPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseEditorPage })));
 const CourseManagementPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.CourseManagementPage })));
 const AdminAuditLogPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminAuditLogPage })));
 const AdminSettingsPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminSettingsPage })));
 const AdminRegistrationFieldsPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminRegistrationFieldsPage })));
+const AdminBackupsPage = lazy(() => import('./pages-backups').then((pages) => ({ default: pages.AdminBackupsPage })));
 const AdminSystemLogPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminSystemLogPage })));
 const AdminUserCreatePage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminUserCreatePage })));
 const AdminUserDetailsPage = lazy(() => import('./pages-manage').then((pages) => ({ default: pages.AdminUserDetailsPage })));
@@ -41,6 +49,27 @@ function AdminOnly() {
 function CourseEditorRoute() {
   const { pathname } = useLocation();
   return <CourseEditorPage key={pathname} />;
+}
+
+class LearnerPageBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <div className="page-loading" role="alert"><p>This learning page could not be loaded. You can try another page or reload.</p><Button type="button" onClick={() => window.location.reload()}>Reload page</Button></div>;
+    }
+    return this.props.children;
+  }
+}
+
+function LearnerPageOutlet() {
+  const { pathname } = useLocation();
+  // Reset a failed chunk state after navigation so the rest of the app stays usable.
+  return <LearnerPageBoundary key={pathname}><Suspense fallback={<div className="page-loading" role="status" aria-live="polite">Loading learning page…</div>}><Outlet /></Suspense></LearnerPageBoundary>;
 }
 
 class ManagementPageBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -129,6 +158,7 @@ function fallbackPageTitle(pathname: string, configured: boolean) {
   if (/^\/courses\/[^/]+\/quiz\/[^/]+$/.test(pathname)) return 'Quiz';
   if (/^\/courses\/[^/]+$/.test(pathname)) return 'Course';
   if (pathname === '/manage/courses') return 'Courses';
+  if (pathname === '/manage/course-groups') return 'Course groups';
   if (pathname === '/manage/courses/new') return 'Create course';
   if (/^\/manage\/courses\/[^/]+\/edit$/.test(pathname)) return 'Course editor';
   if (/^\/manage\/courses\/[^/]+\/analytics$/.test(pathname)) return 'Course dashboard';
@@ -138,6 +168,7 @@ function fallbackPageTitle(pathname: string, configured: boolean) {
   if (/^\/admin\/users\/[^/]+$/.test(pathname)) return 'Account details';
   if (pathname === '/admin/settings') return 'Settings';
   if (pathname === '/admin/settings/registration-fields') return 'Registration fields';
+  if (pathname === '/admin/settings/backups') return 'Backups';
   if (pathname === '/admin/audit-log') return 'Audit log';
   if (pathname === '/admin/system-log') return 'System log';
   return 'OpenLearning';
@@ -177,7 +208,9 @@ function RouteStatus({ configured }: { configured: boolean }) {
     return () => observer.disconnect();
   }, [pathname, platformName, configured]);
 
-  return <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</div>;
+  // Do not mount an idle live region; assistive technology only needs a node
+  // when there is a page heading to announce after navigation or loading.
+  return announcement ? <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</div> : null;
 }
 
 function AuthRoutes() {
@@ -188,7 +221,7 @@ function AuthRoutes() {
     <p className="auth-description" role="alert">{startupError}</p>
     <Button type="button" onClick={() => void retryStartup()}>Try again</Button>
   </section></main>;
-  return <BrowserRouter>
+  return <>
     <RouteStatus configured={configured} />
     {!configured ? <Routes><Route path="*" element={<SetupPage />} /></Routes> : <Routes>
       <Route path="/setup" element={<Navigate to="/login" replace />} />
@@ -197,21 +230,24 @@ function AuthRoutes() {
       <Route element={<SignedIn />}>
         <Route element={<AppFrame />}>
           <Route path="/" element={<Navigate to="/courses" replace />} />
-          <Route path="/courses" element={<CatalogPage />} />
-          <Route path="/courses/:courseId" element={<CourseOverviewPage />} />
-          <Route path="/courses/:courseId/learn/:lessonId" element={<CoursePlayerPage />} />
-          <Route path="/courses/:courseId/quiz/:quizId" element={<QuizPage />} />
-          <Route path="/my-learning" element={<MyLearningPage />} />
+          <Route element={<LearnerPageOutlet />}>
+            <Route path="/courses" element={<CatalogPage />} />
+            <Route path="/courses/:courseId" element={<CourseOverviewPage />} />
+            <Route path="/courses/:courseId/learn/:lessonId" element={<CoursePlayerPage />} />
+            <Route path="/courses/:courseId/quiz/:quizId" element={<QuizPage />} />
+            <Route path="/my-learning" element={<MyLearningPage />} />
+            <Route path="/my-learning/certificates/:courseId" element={<CourseCertificatePage />} />
+          </Route>
           <Route path="/learning-paths" element={<Suspense fallback={<LoadingScreen label="Loading learning paths…" />}><LearningPathsPage /></Suspense>} />
           <Route path="/competencies" element={<Suspense fallback={<LoadingScreen label="Loading competencies…" />}><CompetenciesPage /></Suspense>} />
           <Route path="/calendar" element={<Suspense fallback={<LoadingScreen label="Loading calendar…" />}><CalendarPage /></Suspense>} />
-          <Route path="/my-learning/certificates/:courseId" element={<CourseCertificatePage />} />
           <Route path="/account/security" element={<AccountSecurityPage />} />
         </Route>
         <Route element={<StaffOnly />}>
           <Route element={<StaffFrame />}>
             <Route element={<StaffPageOutlet />}>
               <Route path="/manage/courses" element={<CourseManagementPage />} />
+              <Route path="/manage/course-groups" element={<CourseGroupsPage />} />
               <Route path="/manage/courses/new" element={<CourseEditorRoute />} />
               <Route path="/manage/courses/:courseId/edit" element={<CourseEditorRoute />} />
               <Route path="/manage/courses/:courseId/analytics" element={<CourseAnalyticsPage />} />
@@ -224,6 +260,7 @@ function AuthRoutes() {
                 <Route path="/admin/users/:userId" element={<AdminUserDetailsPage />} />
                 <Route path="/admin/settings" element={<AdminSettingsPage />} />
                 <Route path="/admin/settings/registration-fields" element={<AdminRegistrationFieldsPage />} />
+                <Route path="/admin/settings/backups" element={<AdminBackupsPage />} />
                 <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
                 <Route path="/admin/system-log" element={<AdminSystemLogPage />} />
               </Route>
@@ -233,9 +270,15 @@ function AuthRoutes() {
       </Route>
       <Route path="*" element={<NotFoundRoute />} />
     </Routes>}
-  </BrowserRouter>;
+  </>;
 }
 
+const applicationRouter = createBrowserRouter([{
+  id: 'application',
+  path: '*',
+  element: <AuthProvider><AuthRoutes /></AuthProvider>,
+}]);
+
 export function App() {
-  return <ApplicationErrorBoundary><AuthProvider><AuthRoutes /></AuthProvider></ApplicationErrorBoundary>;
+  return <ApplicationErrorBoundary><RouterProvider router={applicationRouter} /></ApplicationErrorBoundary>;
 }

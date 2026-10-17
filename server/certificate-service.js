@@ -61,7 +61,7 @@ export function issueCertificateIfComplete(courseId, user) {
 export function issueCompletedCertificatesForUser(userId) {
   const user = db.prepare('SELECT id, role, first_name, last_name, email FROM users WHERE id = ?').get(userId);
   if (!user || user.role !== 'learner' || !user.first_name?.trim() || !user.last_name?.trim()) return [];
-  const courses = db.prepare(`SELECT * FROM courses c
+  const courseCandidates = `SELECT * FROM courses c
     WHERE c.status = 'published' AND c.logical_course_id IS NULL AND c.id IN (
       SELECT COALESCE(storage.logical_course_id, storage.id)
       FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id
@@ -69,13 +69,22 @@ export function issueCompletedCertificatesForUser(userId) {
       WHERE p.user_id = ?
       UNION
       SELECT COALESCE(storage.logical_course_id, storage.id)
-      FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-      JOIN course_modules m ON m.id = q.module_id JOIN courses storage ON storage.id = m.course_id
-      WHERE a.user_id = ? AND a.passed = 1
-    ) ORDER BY c.id`).all(userId, userId);
+       FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
+       LEFT JOIN course_modules m ON m.id = q.module_id JOIN courses storage ON storage.id = COALESCE(m.course_id, q.course_id)
+       WHERE a.user_id = ? AND a.passed = 1 AND q.required_for_completion = 1
+    )`;
+  const firstCourseBatch = db.prepare(`${courseCandidates} ORDER BY c.id LIMIT ?`);
+  let nextCourseBatch;
   const newlyIssued = [];
-  for (let offset = 0; offset < courses.length; offset += certificateBatchSize) {
-    const batch = courses.slice(offset, offset + certificateBatchSize);
+  let lastCourseId = null;
+  while (true) {
+    // Page candidates too, so a learner's full course history is never loaded at once.
+    const batch = lastCourseId === null
+      ? firstCourseBatch.all(userId, userId, certificateBatchSize)
+      : (nextCourseBatch ??= db.prepare(`${courseCandidates} AND c.id > ? ORDER BY c.id LIMIT ?`))
+        .all(userId, userId, lastCourseId, certificateBatchSize);
+    if (batch.length === 0) break;
+    lastCourseId = batch[batch.length - 1].id;
     const courseIds = batch.map((course) => course.id);
     const placeholders = courseIds.map(() => '?').join(', ');
     const versions = new Map(db.prepare(`SELECT v.course_id, v.id

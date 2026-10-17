@@ -1,4 +1,5 @@
 export type Role = 'admin' | 'moderator' | 'learner';
+export type RegistrationStatus = 'pending' | 'approved';
 
 export type RegistrationFieldType = 'date' | 'text' | 'select' | 'checkbox';
 
@@ -27,6 +28,7 @@ export interface User {
   lastName?: string;
   role: Role;
   disabled: boolean;
+  registrationStatus?: RegistrationStatus;
   isLastActiveAdmin?: boolean;
   createdAt?: string;
   lastLoginAt?: string | null;
@@ -61,6 +63,22 @@ export interface QuizAttemptPreview {
   submittedAt?: string;
 }
 
+export interface CourseGroup {
+  id: string;
+  name: string;
+  description: string;
+  createdBy: string | null;
+  createdAt: string;
+  courses: CourseGroupCourse[];
+}
+
+export interface CourseGroupCourse {
+  id: string;
+  title: string;
+  category: string;
+  status: Course['status'];
+}
+
 export interface Quiz {
   id: string;
   title: string;
@@ -68,6 +86,10 @@ export interface Quiz {
   questions: QuizQuestion[];
   latestAttempt: QuizAttemptPreview | null;
   passed: boolean;
+  questionsPerAttempt?: number;
+  requiredForCompletion?: boolean;
+  isCourseFinalExam?: boolean;
+  questionCount?: number;
 }
 
 export interface LessonResource {
@@ -152,6 +174,7 @@ export interface Course {
   hasUnpublishedChanges?: boolean;
   reviewStatus?: 'draft' | 'in_review' | 'changes_requested' | null;
   modules?: CourseModule[];
+  finalExam?: Quiz | null;
 }
 
 export interface LearningPathCourse extends Course {
@@ -241,6 +264,7 @@ export interface CourseAnalytics {
     title: string;
     moduleTitle: string;
     passMark: number;
+    requiredForCompletion: boolean;
     attempts: number;
     learnersAttempted: number;
     learnersPassed: number;
@@ -248,41 +272,92 @@ export interface CourseAnalytics {
     passRate: number | null;
     averageScore: number | null;
   }>;
-  learners: Array<{
+  learners: CourseAnalyticsLearner[];
+}
+
+export interface CourseAnalyticsLearner {
+  id: string;
+  username: string;
+  disabled: boolean;
+  enrolledAt: string | null;
+  assignedAt: string | null;
+  completedLessonCount: number;
+  lessonCount: number;
+  passedQuizCount: number;
+  quizCount: number;
+  progress: number;
+  completed: boolean;
+  started: boolean;
+  lastActivityAt: string | null;
+}
+
+export interface CourseAnalyticsLearnerDetails {
+  lessonProgress: Array<{ id: string; title: string; moduleTitle: string; completedAt: string | null; completed: boolean }>;
+  quizProgress: Array<{
     id: string;
-    username: string;
-    disabled: boolean;
-    enrolledAt: string | null;
-    assignedAt: string | null;
-    completedLessonCount: number;
-    lessonCount: number;
-    passedQuizCount: number;
-    quizCount: number;
-    progress: number;
-    completed: boolean;
-    started: boolean;
-    lastActivityAt: string | null;
-    lessonProgress: Array<{ id: string; title: string; moduleTitle: string; completedAt: string | null; completed: boolean }>;
-    quizProgress: Array<{
-      id: string;
-      title: string;
-      moduleTitle: string;
-      passMark: number;
-      attempts: number;
-      highestScore: number | null;
-      latestScore: number | null;
-      latestPassed: boolean | null;
-      passed: boolean;
-      latestSubmittedAt: string | null;
-    }>;
+    title: string;
+    moduleTitle: string;
+    passMark: number;
+    requiredForCompletion: boolean;
+    attempts: number;
+    highestScore: number | null;
+    latestScore: number | null;
+    latestPassed: boolean | null;
+    passed: boolean;
+    latestSubmittedAt: string | null;
   }>;
 }
+
+export type CourseAnalyticsLearnerPage = Pick<CourseAnalytics, 'learners' | 'page' | 'pageSize'> & {
+  learnerCount: number;
+  disabledLearnerCount: number;
+};
 
 export interface CourseAccessUser {
   id: string;
   username: string;
   disabled: boolean;
   granted: boolean;
+  hasAccess: boolean;
+  accessViaPath: boolean;
   grantedAt: string | null;
   grantedBy: string | null;
+}
+
+export type BackupScope = 'full' | 'database' | 'media';
+export type BackupFrequency = 'daily' | 'weekly';
+export type BackupRunStatus = 'pending' | 'running' | 'success' | 'failed';
+
+export interface BackupRun {
+  id: string;
+  jobId: string;
+  jobName: string;
+  scope: BackupScope;
+  destinationPath: string;
+  triggerType: 'scheduled' | 'manual';
+  triggeredBy: string | null;
+  status: BackupRunStatus;
+  scheduledFor: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  backupPath: string | null;
+  artifactDeletedAt: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface BackupJob {
+  id: string;
+  name: string;
+  scope: BackupScope;
+  frequency: BackupFrequency;
+  weekday: number | null;
+  runTimeUtc: string;
+  destinationPath: string;
+  retentionCount: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  nextRunAt: string | null;
+  lastRun: BackupRun | null;
 }

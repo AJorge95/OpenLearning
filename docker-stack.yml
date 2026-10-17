@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  openlearning:
+    image: ${OPENLEARNING_IMAGE:?Set OPENLEARNING_IMAGE to a pushed image tag}
+    init: true
+    stop_grace_period: 40s
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    ports:
+      - target: 5173
+        published: 5173
+        protocol: tcp
+        mode: host
+    environment:
+      PORT: "5173"
+      DATA_DIR: /var/lib/openlearning
+      BACKUP_DIR: /var/backups/openlearning
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      SESSION_SECRET_FILE: /run/secrets/session_secret
+    secrets:
+      - session_secret
+    volumes:
+      - type: bind
+        source: ${OPENLEARNING_DATA_PATH:?Set OPENLEARNING_DATA_PATH to the node data directory}
+        target: /var/lib/openlearning
+      - type: bind
+        source: ${OPENLEARNING_BACKUP_PATH:?Set OPENLEARNING_BACKUP_PATH to the node backup directory}
+        target: /var/backups/openlearning
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5173/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.openlearning-data == true
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+        monitor: 30s
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+
+secrets:
+  session_secret:
+    external: true
+    name: openlearning_session_secret

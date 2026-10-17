@@ -26,10 +26,10 @@ test('learner choice order stays fixed for an attempt and changes when retrying'
   assert.match(page, /choiceOrders\.get\(question\.id \|\| String\(index\)\)/);
 });
 
-test('learner results omit per-question answer review and only offer a retry after failure', () => {
+test('learner results preserve aggregate scores without answer review and only offer a retry after failure', () => {
   const page = fs.readFileSync(path.join(sourceDirectory, 'pages-learner.tsx'), 'utf8');
 
-  assert.match(page, /\{currentResult\.correctCount\} of \{currentResult\.questionCount\} correct/);
+  assert.match(page, /hasQuizAttemptBreakdown\(currentResult\) \? `\$\{currentResult\.correctCount\} of \$\{currentResult\.questionCount\} correct` : 'Question breakdown unavailable'/);
   assert.match(page, /\{currentResult\.score\}%/);
   assert.doesNotMatch(page, /Review your answers|Correct answer:|Your answer is (?:correct|incorrect)/);
   assert.match(page, /!currentResult\.passed && <Button variant="secondary" onClick=\{retryQuiz\}>Try again<\/Button>/);

@@ -44,6 +44,22 @@ test('ImageWithFallback requires an explicit alt decision', () => {
   assert.ok(altIsRequired, 'ImageWithFallbackProps should require alt');
 });
 
+test('ImageWithFallback resets failed state on source changes and names both visual fallbacks', () => {
+  const source = fs.readFileSync(path.join(sourceDirectory, 'components.tsx'), 'utf8');
+  const wrapperStart = source.indexOf('export function ImageWithFallback');
+  const wrapperEnd = source.indexOf('\nfunction ImageWithFallbackImage', wrapperStart);
+  const wrapper = source.slice(wrapperStart, wrapperEnd);
+  const imageImplementationStart = wrapperEnd + 1;
+  const imageImplementationEnd = source.indexOf('\nexport function PalettePicker', imageImplementationStart);
+  const imageImplementation = source.slice(imageImplementationStart, imageImplementationEnd);
+
+  assert.match(wrapper, /<ImageWithFallbackImage key=\{props\.src\}/);
+  assert.match(wrapper, /if \(!props\.src\) return imageFallback\(props\.fallback, props\.alt\);/);
+  assert.match(imageImplementation, /const \[failed, setFailed\] = useState\(false\);[\s\S]*?if \(failed\) return imageFallback\(fallback, alt\);/);
+  assert.match(source, /function imageFallback\(fallback: React\.ReactNode, alt: string\) \{\s*\/\/ Keep meaningful image context available when a preview has no source or cannot load\.\s*return <>\{fallback\}\{alt && <span className="sr-only" role="img" aria-label=\{alt\} \/>}<\/>;/);
+  assert.match(imageImplementation, /onError=\{\(\) => \{ setFailed\(true\); onError\?\.\(\); \}\}/);
+});
+
 test('all ImageWithFallback JSX call sites state their alt intent', () => {
   const missingAlt = [];
 

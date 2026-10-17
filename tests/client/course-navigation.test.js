@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from '../../src/course-navigation.ts';
+import { completedCourseActionLabel, courseActivityActionLabel, courseCardActionLabel, nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from '../../src/course-navigation.ts';
 
 const lesson = (id, completed) => ({ id, completed });
 const quiz = (id, passed) => ({ id, passed });
@@ -36,6 +36,26 @@ test('keeps lesson review available after all course activities are complete', (
   const modules = [{ lessons: [lesson('lesson-1', true)], quiz: quiz('quiz-1', true) }];
 
   assert.deepEqual(nextCourseActivity(modules), { type: 'lesson', id: 'lesson-1' });
+  assert.equal(courseActivityActionLabel({ starting: false, completed: true, nextActivity: nextCourseActivity(modules), progress: 100 }), 'Review course');
+});
+
+test('labels course cards according to exact completion and progress state', () => {
+  assert.equal(completedCourseActionLabel(true), 'Review course');
+  assert.equal(completedCourseActionLabel(false), null);
+  assert.equal(courseCardActionLabel({ completed: false, progress: 0 }), 'Start course');
+  assert.equal(courseCardActionLabel({ completed: false, progress: 45 }), 'Continue course');
+  assert.equal(courseCardActionLabel({ completed: false, progress: 100 }), 'Continue course');
+  assert.equal(courseCardActionLabel({ completed: true, progress: 100 }), 'Review course');
+});
+
+test('keeps the continuation label when rounded progress is 100 but an activity remains', () => {
+  const nextActivity = { type: 'quiz', id: 'quiz-1' };
+
+  assert.equal(courseActivityActionLabel({ starting: false, completed: false, nextActivity, progress: 100 }), 'Continue to quiz');
+});
+
+test('shows the pending label before completed-course review', () => {
+  assert.equal(courseActivityActionLabel({ starting: true, completed: true, nextActivity: { type: 'lesson', id: 'lesson-1' }, progress: 100 }), 'Starting…');
 });
 
 test('returns no activity when the course has no modules or lessons', () => {
@@ -89,4 +109,15 @@ test('returns no next activity when the lesson is missing or the course is finis
 
   assert.equal(nextCourseActivityAfterLesson(modules, 'missing'), null);
   assert.equal(nextCourseActivityAfterLesson(modules, 'lesson-1'), null);
+});
+
+test('adds the final exam after module lessons and quizzes, including exam-only courses', () => {
+  const exam = { id: 'final-exam', passed: false };
+  const modules = [{ lessons: [lesson('lesson-1', true)], quiz: quiz('quiz-1', true) }];
+
+  assert.deepEqual(nextCourseActivity(modules, exam), { type: 'exam', id: 'final-exam' });
+  assert.deepEqual(nextCourseActivity([], exam), { type: 'exam', id: 'final-exam' });
+  assert.deepEqual(nextCourseActivityAfterLesson(modules, 'lesson-1', exam), { type: 'exam', id: 'final-exam' });
+  assert.deepEqual(nextCourseActivityAfterLesson([], 'lesson-1', exam), null);
+  assert.equal(courseActivityActionLabel({ starting: false, completed: false, nextActivity: { type: 'exam', id: 'final-exam' }, progress: 0 }), 'Start final exam');
 });

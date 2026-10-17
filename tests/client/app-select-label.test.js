@@ -117,6 +117,16 @@ function appSelectFieldLabels(sourceFile) {
 function accountRoleControls(sourceFile) {
   const controls = [];
 
+  function findRoleSelect(node) {
+    if (ts.isJsxElement(node) && jsxTagName(node.openingElement.tagName) === 'AppSelect') return node.openingElement;
+    if (ts.isJsxSelfClosingElement(node) && jsxTagName(node.tagName) === 'AppSelect') return node;
+    let found;
+    ts.forEachChild(node, (child) => {
+      if (!found) found = findRoleSelect(child);
+    });
+    return found;
+  }
+
   function visit(node) {
     if (ts.isJsxElement(node)) {
       const rowClasses = stringJsxAttribute(node.openingElement, 'className').split(/\s+/);
@@ -125,15 +135,18 @@ function accountRoleControls(sourceFile) {
           && stringJsxAttribute(child.openingElement, 'className').split(/\s+/).includes('account-role-control'));
         const label = field?.children.find((child) => ts.isJsxElement(child)
           && jsxTagName(child.openingElement.tagName) === 'span');
-        const select = field?.children.find((child) => ts.isJsxSelfClosingElement(child)
-          && jsxTagName(child.tagName) === 'AppSelect');
+        const select = field && findRoleSelect(field);
         if (label && select) {
           controls.push({
+            container: jsxTagName(field.openingElement.tagName),
             visibleLabel: label.children.filter(ts.isJsxText).map((child) => child.text).join(' ').trim(),
             labelId: stringJsxAttribute(label.openingElement, 'id'),
             controlId: stringJsxAttribute(select, 'controlId'),
-            accessibleName: stringJsxAttribute(select, 'ariaLabel'),
+            accessibleName: stringJsxAttribute(select, 'ariaLabelledBy') === 'account-platform-role-label' ? 'Platform role' : '',
             labelledBy: stringJsxAttribute(select, 'ariaLabelledBy'),
+            matchTriggerWidth: select.attributes.properties.some((property) => (
+              ts.isJsxAttribute(property) && property.name.text === 'matchTriggerWidth'
+            )),
           });
         }
         return;
@@ -182,7 +195,19 @@ test('AppSelect controls are not nested inside native labels', () => {
   assert.deepEqual(violations, [], `AppSelect must use a separate field container instead of a wrapping label:\n${violations.join('\n')}`);
 });
 
-test('the administrator role selector keeps clicks inside its visible trigger', () => {
+test('AppSelect ignores pointer clicks forwarded from outside its trigger', () => {
+  const componentSource = fs.readFileSync(path.join(sourceDirectory, 'components.tsx'), 'utf8');
+  const activationSource = fs.readFileSync(path.join(sourceDirectory, 'app-select-activation.ts'), 'utf8');
+
+  assert.match(componentSource, /const pointerStartedWithinTrigger = isAppSelectPointerDownWithinTrigger\(event\.currentTarget\);/);
+  assert.match(componentSource, /if \(!isAppSelectActivationWithinTrigger\(event\.nativeEvent, event\.currentTarget\.getBoundingClientRect\(\), pointerStartedWithinTrigger\)\) return;/);
+  assert.match(componentSource, /useEffect\(\(\) => subscribeToAppSelectPointerTracking\(\), \[\]\);/);
+  assert.match(componentSource, /clearAppSelectPointerDownTarget\(\);/);
+  assert.match(activationSource, /document\.addEventListener\('pointerdown', rememberPointerDown, true\)/);
+  assert.match(activationSource, /pointerTrackingSubscribers === 0/);
+});
+
+test('the administrator role selector keeps its custom trigger and menu at the visible field width', () => {
   const pageSource = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
   const sourceFile = ts.createSourceFile('pages-manage.tsx', pageSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const controls = accountRoleControls(sourceFile);
@@ -190,27 +215,25 @@ test('the administrator role selector keeps clicks inside its visible trigger', 
   const styles = fs.readFileSync(path.join(sourceDirectory, 'styles.css'), 'utf8');
 
   assert.deepEqual(controls, [{
+    container: 'div',
     visibleLabel: 'Platform role',
     labelId: 'account-platform-role-label',
     controlId: 'account-platform-role',
     accessibleName: 'Platform role',
     labelledBy: 'account-platform-role-label',
+    matchTriggerWidth: true,
   }]);
-  assert.match(pageSource, /className="account-role-select"[^>]*matchTriggerWidth/);
-  assert.match(pageSource, /ariaLabel="Platform role"[^>]*matchTriggerWidth/);
+  assert.match(pageSource, /<AppSelect<Role> controlId="account-platform-role" ariaLabel="Platform role" ariaLabelledBy="account-platform-role-label"/);
+  assert.match(pageSource, /onChange=\{\(role\) => updateAccount\(\{ role \}\)\}/);
+  assert.match(pageSource, /const ACCOUNT_ROLE_OPTIONS: AppSelectOption<Role>\[\] = \[\s*\{ value: 'learner', label: 'Learner' \},\s*\{ value: 'moderator', label: 'Moderator' \},\s*\{ value: 'admin', label: 'Administrator' \},\s*\];/);
   assert.match(componentSource, /app-select-menu--match-trigger/);
   assert.match(componentSource, /aria-labelledby=\{ariaLabelledBy\}/);
-  assert.match(styles, /\.account-role-control\s*\{[^}]*flex:\s*0\s+0\s+9rem;[^}]*width:\s*9rem;/);
-  assert.match(styles, /\.account-role-control\s*\{\s*pointer-events:\s*none;\s*\}/);
-  assert.doesNotMatch(styles, /\.account-role-control\s*>\s*label\s*\{[^}]*pointer-events:\s*auto;/);
-  assert.match(styles, /\.account-role-control\s+\.app-select-trigger\s*\{\s*pointer-events:\s*auto;\s*\}/);
-  assert.match(styles, /\.account-control-row \.account-role-control\s*>\s*\.account-role-select\s*\{\s*width:\s*9rem;\s*max-width:\s*9rem;\s*\}/);
-  assert.match(styles, /\.account-control-row \.account-role-control\s*>\s*\.account-role-select \.app-select-trigger\s*\{\s*width:\s*100%;\s*\}/);
-  assert.match(styles, /\.account-control-row \.account-role-control\s*>\s*\.account-role-select,\s*\.account-control-row \.account-role-control\s*>\s*\.account-role-select \.app-select-trigger\s*\{\s*width:\s*100%;\s*max-width:\s*none;\s*\}/);
-  assert.match(styles, /\.account-role-control\s*>\s*\.app-select\s*\{\s*width:\s*100%;\s*max-width:\s*100%;\s*\}/);
-  assert.match(styles, /\.account-control-row \.account-role-control\s*\{\s*flex-basis:\s*auto;\s*width:\s*100%;\s*max-width:\s*none;\s*\}/);
-  assert.match(styles, /\.app-select-menu--match-trigger \.app-select-option \{\s*gap:\s*5px;\s*padding-inline:\s*5px;\s*\}/);
-  assert.match(styles, /\.app-select-menu--match-trigger \.app-select-option-indicator \{\s*width:\s*16px;\s*flex-basis:\s*16px;\s*\}/);
+  assert.match(styles, /\.account-role-control\s*\{[^}]*flex:\s*0\s+0\s+8\.5rem;[^}]*width:\s*8\.5rem;/);
+  assert.match(styles, /\.account-role-control\s*\{[^}]*pointer-events:\s*none;/);
+  assert.match(styles, /\.account-role-select-control\s*\{[^}]*width:\s*8\.5rem;[^}]*pointer-events:\s*none;/);
+  assert.match(styles, /\.account-role-select-control \.app-select\s*\{[^}]*width:\s*100%;[^}]*pointer-events:\s*none;/);
+  assert.match(styles, /\.account-role-select-control \.app-select-trigger\s*\{[^}]*pointer-events:\s*auto;/);
+  assert.match(styles, /\.account-control-row \.account-role-select-control, \.account-control-row \.account-role-select-control \.app-select \{\s*width:\s*100%;\s*max-width:\s*none;\s*\}/);
 });
 
 test('account details explain and disable controls for the last active administrator', () => {
@@ -218,8 +241,8 @@ test('account details explain and disable controls for the last active administr
 
   assert.match(pageSource, /isLastActiveAdmin: boolean/);
   assert.equal((pageSource.match(/disabled=\{saving \|\| user\.isLastActiveAdmin\}/g) || []).length, 2);
-  assert.match(pageSource, /ariaLabelledBy="account-platform-role-label" describedBy=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\} matchTriggerWidth/);
-  assert.match(pageSource, /disabled=\{saving \|\| user\.isLastActiveAdmin\} aria-describedby=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\}/);
+  assert.match(pageSource, /ariaLabelledBy="account-platform-role-label" describedBy=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\}/);
+  assert.match(pageSource, /disabled=\{saving \|\| user\.isLastActiveAdmin\} busy=\{saving\} onChange=\{\(role\) => updateAccount\(\{ role \}\)\}/);
   assert.match(pageSource, /user\.isLastActiveAdmin && <p className="account-admin-protection" id=\{lastAdminHelpId\}>This is the only active administrator\./);
 });
 
@@ -233,7 +256,7 @@ test('user list explains and disables inline changes for the last active adminis
   assert.match(pageSource, /aria-describedby=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\} disabled=\{savingIds\.has\(user\.id\) \|\| user\.isLastActiveAdmin\} onClick=\{\(\) => updateUser\(user, \{ disabled: !user\.disabled \}\)\}/);
   assert.match(pageSource, /className="last-active-admin-note" id=\{lastAdminHelpId\}>This is the only active administrator\./);
   assert.match(pageSource, /changes\.role !== undefined \|\| \(changes\.disabled !== undefined && user\.role === 'admin'\)/);
-  assert.match(pageSource, /cause instanceof ApiError && cause\.code === 'last_admin'[\s\S]*?await load\(currentListState\.page, currentListState\.query, currentListState\.roleFilter\)\) setError\(cause\.message\)/);
+  assert.match(pageSource, /cause instanceof ApiError && cause\.code === 'last_admin'[\s\S]*?await load\(currentListState\.page, currentListState\.query, currentListState\.roleFilter, currentListState\.approvalFilter\)\) setError\(cause\.message\)/);
   assert.match(styles, /\.last-active-admin-note\s*\{[^}]*white-space:\s*normal;/);
 });
 

@@ -29,7 +29,7 @@ test('lesson document input announces its visible accepted-format guidance', () 
   const documentInputs = [];
   function visit(node) {
     if (ts.isJsxElement(node) && node.openingElement.tagName.getText() === 'span'
-      && node.getText(sourceFile).includes('PDF, text, Word, PowerPoint, Excel, CSV/TSV, or OpenDocument.')) {
+      && node.getText(sourceFile).includes('PDF, TXT, Markdown, RTF, Word, PowerPoint, Excel, CSV/TSV, or OpenDocument.')) {
       helpTexts.push(node.openingElement);
     }
     if (ts.isJsxSelfClosingElement(node) && node.tagName.getText() === 'input'
@@ -46,4 +46,5 @@ test('lesson document input announces its visible accepted-format guidance', () 
   const hintId = expressionAttribute(helpTexts[0], 'id');
   assert.ok(hintId, 'the document format hint should have an id');
   assert.equal(expressionAttribute(documentInputs[0], 'aria-describedby'), hintId);
+  assert.equal(jsxAttribute(documentInputs[0], 'accept')?.initializer?.getText(), '".pdf,.txt,.md,.rtf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.tsv,.odt,.odp,.ods"');
 });

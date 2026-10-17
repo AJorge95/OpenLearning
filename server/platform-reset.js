@@ -1,5 +1,4 @@
 import fs from 'node:fs/promises';
-import { constants } from 'node:fs';
 import Database from 'better-sqlite3';
 import path from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -7,6 +6,8 @@ import { db, setSetting } from './db.js';
 import { config } from './config.js';
 import { fail } from './http.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
+import { isBackupInProgress } from './backup-scheduler.js';
+import { copyMediaTree } from './media-backup.js';
 
 const confirmationLifetimeMs = 15 * 60 * 1000;
 const resetDefaults = {
@@ -92,6 +93,15 @@ async function resolveNewPath(targetPath) {
   return path.join(realParentPath, path.basename(targetPath));
 }
 
+function logResetCleanupFailure(message, error, details = {}) {
+  // Preserve the reset error while recording bounded cleanup details for operators.
+  writeSystemLog('error', 'platform-reset', message, {
+    ...details,
+    errorName: String(error?.name || 'Error').slice(0, 100),
+    errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+  });
+}
+
 export async function assertResetBackupPathsSafe({ mediaRoot, databasePath, backupDirectory }) {
   const [realMediaRoot, realDatabasePath, realBackupDirectory] = await Promise.all([
     fs.realpath(mediaRoot),
@@ -104,33 +114,6 @@ export async function assertResetBackupPathsSafe({ mediaRoot, databasePath, back
   if (pathIsInside(realMediaRoot, realDatabasePath)) {
     throw new Error('The configured database path is inside the course media directory, so it cannot be reset safely.');
   }
-}
-
-async function copyMediaTree(source, destination) {
-  await fs.mkdir(destination, { recursive: true });
-  let fileCount = 0;
-  let byteCount = 0;
-  const entries = await fs.readdir(source, { withFileTypes: true });
-  for (const entry of entries) {
-    const from = path.join(source, entry.name);
-    const to = path.join(destination, entry.name);
-    if (entry.isSymbolicLink()) throw new Error('The course media directory contains a symbolic link; the backup cannot safely include it.');
-    if (entry.isDirectory()) {
-      const nested = await copyMediaTree(from, to);
-      fileCount += nested.fileCount;
-      byteCount += nested.byteCount;
-    } else if (entry.isFile()) {
-      const stats = await fs.stat(from);
-      await fs.copyFile(from, to, constants.COPYFILE_EXCL);
-      const copied = await fs.stat(to);
-      if (copied.size !== stats.size) throw new Error(`Media file verification failed for ${entry.name}.`);
-      fileCount += 1;
-      byteCount += stats.size;
-    } else {
-      throw new Error('The course media directory contains an unsupported file type.');
-    }
-  }
-  return { fileCount, byteCount };
 }
 
 async function createBackup() {
@@ -148,9 +131,11 @@ async function createBackup() {
     const mediaStats = await copyMediaTree(config.mediaRoot, mediaPath);
     const backupDb = new Database(databasePath, { readonly: true, fileMustExist: true });
     try {
-      backupDb.pragma('quick_check').forEach((row) => {
-        if (row.quick_check !== 'ok') throw new Error('SQLite backup verification failed.');
-      });
+      // Empty quick_check output is not evidence that SQLite verified the backup.
+      const checkResults = backupDb.pragma('quick_check');
+      if (checkResults.length === 0 || checkResults.some((row) => row.quick_check !== 'ok')) {
+        throw new Error('SQLite backup verification failed.');
+      }
     } finally {
       backupDb.close();
     }
@@ -160,17 +145,20 @@ async function createBackup() {
       mediaDirectory: 'course-media',
       mediaFileCount: mediaStats.fileCount,
       mediaBytes: mediaStats.byteCount,
+      mediaFiles: mediaStats.files,
     };
     await fs.writeFile(path.join(backupDirectory, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' });
     return { backupDirectory, backupLocation: path.relative(config.dataDir, backupDirectory).split(path.sep).join('/') };
   } catch (error) {
-    await fs.rm(backupDirectory, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(backupDirectory, { recursive: true, force: true })
+      .catch((cleanupError) => logResetCleanupFailure('Incomplete reset backup cleanup failed', cleanupError, { backupDirectory }));
     throw error;
   }
 }
 
 export async function preparePlatformReset(actor) {
   if (resetState) fail(409, 'A platform reset is already in progress.', 'platform_reset_in_progress');
+  if (isBackupInProgress()) fail(409, 'A platform reset cannot start while a scheduled or manual backup is queued or running.', 'backup_in_progress');
   const initialState = {
     phase: 'preparing',
     actorId: actor.id,
@@ -219,7 +207,7 @@ async function replaceMediaRoot() {
     await fs.rename(mediaRoot, quarantinePath);
     moved = true;
     await fs.mkdir(mediaRoot, { recursive: true });
-    return async (committed) => {
+    const restore = async (committed) => {
       if (committed) {
         await fs.rm(quarantinePath, { recursive: true, force: true });
       } else {
@@ -227,10 +215,29 @@ async function replaceMediaRoot() {
         await fs.rename(quarantinePath, mediaRoot);
       }
     };
+    restore.recoveryDetails = { mediaRoot, quarantinePath };
+    return restore;
   } catch (error) {
+    let mediaRestoreFailed = false;
     if (moved) {
-      await fs.rm(mediaRoot, { recursive: true, force: true }).catch(() => {});
-      await fs.rename(quarantinePath, mediaRoot).catch(() => {});
+      await fs.rm(mediaRoot, { recursive: true, force: true })
+        .catch((cleanupError) => logResetCleanupFailure('Partial media directory cleanup failed', cleanupError, {
+          mediaRoot,
+          quarantinePath,
+        }));
+      await fs.rename(quarantinePath, mediaRoot)
+        .catch((cleanupError) => {
+          mediaRestoreFailed = true;
+          logResetCleanupFailure('Quarantined media restore failed', cleanupError, {
+            mediaRoot,
+            quarantinePath,
+            operationErrorName: String(error?.name || 'Error').slice(0, 100),
+            operationErrorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+          });
+        });
+    }
+    if (mediaRestoreFailed) {
+      fail(500, 'The reset could not start and course media could not be restored. Check the System log for the recovery path before retrying.', 'platform_reset_recovery_required');
     }
     throw error;
   }
@@ -269,13 +276,25 @@ export async function confirmPlatformReset(actor, confirmationId, phrase) {
       await restoreMedia(true);
     } catch (error) {
       writeSystemLog('error', 'platform-reset', 'The platform reset completed but old course media could not be removed from its quarantine folder', {
+        ...restoreMedia.recoveryDetails,
         errorName: String(error?.name || 'Error').slice(0, 100), errorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
       });
     }
     writeSystemLog('warn', 'platform-reset', 'Platform data was reset to defaults', { actorId: actor.id, backupLocation: current.backupLocation });
     return { reset: true, backupLocation: current.backupLocation };
   } catch (error) {
-    if (!committed && restoreMedia) await restoreMedia(false).catch(() => {});
+    if (!committed && restoreMedia) {
+      try {
+        await restoreMedia(false);
+      } catch (cleanupError) {
+        logResetCleanupFailure('Media restore failed after platform reset rollback', cleanupError, {
+          ...restoreMedia.recoveryDetails,
+          operationErrorName: String(error?.name || 'Error').slice(0, 100),
+          operationErrorCode: typeof error?.code === 'string' ? error.code.slice(0, 100) : undefined,
+        });
+        fail(500, 'The reset failed and course media could not be restored. Check the System log for the recovery path before retrying.', 'platform_reset_recovery_required');
+      }
+    }
     throw error;
   } finally {
     if (!committed && resetState === current) resetState = null;

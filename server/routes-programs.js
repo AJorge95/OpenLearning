@@ -2,16 +2,17 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireObjectBody, requireStaff } from './http.js';
-import { courseSummaries, courseSummary, ensureCourseLearningStateWithStatus } from './course-service.js';
-import { courseVersionHistoryPage, logicalCourseId, publishRevision, restoreCourseVersion } from './course-versioning.js';
-import { writeAuditLog } from './log-store.js';
+import { courseLearningDeadlineAt, courseSummaries, courseSummariesWithState, insertCourseLearningStates, prepareCourseLearnerSummaryData, prepareCourseSummaryData } from './course-service.js';
+import { courseVersionHistoryPage, logicalCourseId, logicalCourseIds, publishRevision, restoreCourseVersion } from './course-versioning.js';
+import { writeAuditLog, writeSystemLog } from './log-store.js';
 import { textSearchPredicate } from './sql.js';
 import { MAX_LEARNING_PATH_COURSES } from '../shared/learning-path-limits.js';
-import { COMPETENCY_PROGRESS_PAGE_SIZE } from '../shared/competency-progress.js';
+import { COMPETENCY_ACHIEVEMENT_BATCH_SIZE, COMPETENCY_PROGRESS_PAGE_SIZE } from '../shared/competency-progress.js';
 
 export const programsRouter = Router();
 programsRouter.use(requireAuth);
 const LEARNING_PATH_PAGE_SIZE = 20;
+const LEARNING_PATH_LEARNER_PROGRESS_BATCH_SIZE = 10;
 const COURSE_VERSION_PAGE_SIZE = 20;
 const COMPETENCY_ADMIN_PAGE_SIZE = 25;
 const COURSE_COMPETENCY_SELECTION_LIMIT = 200;
@@ -47,16 +48,38 @@ function isCalendarDate(value) {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
+function calendarDeadlineDate(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const trimmed = value.trim();
+  const datePart = /^(\d{4}-\d{2}-\d{2})(?:T| |$)/.exec(trimmed)?.[1];
+  // JavaScript normalizes impossible dates such as 2099-02-31 instead of rejecting them.
+  if (!datePart || !isCalendarDate(datePart)) return null;
+  // SQLite's space-separated timestamps have no zone; interpret them as UTC like stored deadlines.
+  const normalized = trimmed.replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
+  const hasDateTime = /^\d{4}-\d{2}-\d{2}T/.test(normalized);
+  const hasTimezone = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(normalized);
+  const date = new Date(hasDateTime && !hasTimezone ? `${normalized}Z` : normalized);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
 function logAudit(actor, action, entityType, entityId, summary, details = {}) {
   const auditId = writeAuditLog({ actor, action, entityType, entityId, summary, details });
   if (!auditId) fail(500, 'The change could not be saved because the audit log is unavailable.', 'audit_unavailable');
 }
 
-function competencyAdminPage(competency) {
-  const precedingCount = db.prepare(`SELECT COUNT(*) AS count FROM competencies
-    WHERE active > ? OR (active = ? AND (title COLLATE NOCASE < ?
-      OR (title COLLATE NOCASE = ? AND id < ?)))`)
-    .get(competency.active, competency.active, competency.title, competency.title, competency.id).count;
+function competencyAdminPage(competency, query = '') {
+  const conditions = [];
+  const params = [];
+  if (query) {
+    const search = textSearchPredicate(['title', 'description'], query);
+    conditions.push(`(${search.sql})`);
+    params.push(...search.params);
+  }
+  conditions.push(`(active > ? OR (active = ? AND (title COLLATE NOCASE < ?
+    OR (title COLLATE NOCASE = ? AND id < ?))))`);
+  params.push(competency.active, competency.active, competency.title, competency.title, competency.id);
+  const precedingCount = db.prepare(`SELECT COUNT(*) AS count FROM competencies WHERE ${conditions.join(' AND ')}`)
+    .get(...params).count;
   return Math.floor(precedingCount / COMPETENCY_ADMIN_PAGE_SIZE) + 1;
 }
 
@@ -77,32 +100,89 @@ function splitIntoBatches(values, size) {
   return batches;
 }
 
-export function syncUnlockedPathStates(pathIds, userId) {
+export function syncUnlockedPathStates(
+  pathIds,
+  userId,
+  pathRowsById = new Map(),
+  summaryDataByPathId = new Map(),
+  learnerSummaryDataByPathId = new Map(),
+  { deferStateInsertions = false } = {},
+) {
   const user = { id: userId, role: 'learner', disabled: false };
   const statesByCourse = new Map();
+  const deferredStateInsertions = [];
   for (const pathId of pathIds) {
-    const rows = pathCourseRows(pathId);
-    const summaries = courseSummaries(rows, user);
+    const rows = pathRowsById.get(pathId) ?? pathCourseRows(pathId);
+    const summaries = courseSummariesWithState(rows, user, summaryDataByPathId.get(pathId), learnerSummaryDataByPathId.get(pathId));
+    const pendingStateInsertions = [];
+    const startedAtDate = new Date();
+    const startedAt = startedAtDate.toISOString();
     let allEarlierCoursesCompleted = true;
     for (const [index, row] of rows.entries()) {
       const unlocked = !row.requires_previous || row.position === 0 || allEarlierCoursesCompleted;
-      let summary = summaries[index];
+      const summaryDetails = summaries[index];
+      let summary = summaryDetails.summary;
       if (unlocked) {
         const logicalId = row.logical_course_id || row.course_id;
-        let state;
-        let created = false;
-        if (statesByCourse.has(logicalId)) state = statesByCourse.get(logicalId);
-        else {
-          const ensured = ensureCourseLearningStateWithStatus(row.course_id, userId);
-          state = ensured.state;
-          created = ensured.created;
-          statesByCourse.set(logicalId, state);
+        let courseState = statesByCourse.get(logicalId);
+        if (!courseState) {
+          const state = summaryDetails.learningState;
+          const created = !state;
+          if (created) {
+            const deadlineDays = row.completion_window_days;
+            const targetVersionId = summaryDetails.version?.requires_recompletion ? summaryDetails.version.id : null;
+            const deadlineAt = courseLearningDeadlineAt(deadlineDays, startedAtDate);
+            const nextState = { user_id: userId, course_id: logicalId, target_version_id: targetVersionId, deadline_at: deadlineAt };
+            pendingStateInsertions.push({
+              courseId: logicalId,
+              targetVersionId,
+              deadlineAt,
+              deadlineWindowDays: deadlineDays ?? null,
+              startedAt,
+            });
+            courseState = { state: nextState, created: true };
+          } else {
+            courseState = { state, created: false };
+          }
+          statesByCourse.set(logicalId, courseState);
         }
-        // Creating a state can activate a version's required-recompletion reset.
-        if (created && state?.target_version_id) summary = courseSummary(row, user);
+        // A newly created recompletion state evaluates prior progress against the active version's exact IDs.
+        if (courseState.created && courseState.state?.target_version_id) {
+          summary = { ...summary, completed: summaryDetails.completedWithVersionReset };
+        }
       }
       allEarlierCoursesCompleted = allEarlierCoursesCompleted && summary.completed;
     }
+    const stateInsertions = pendingStateInsertions.map((state) => ({ userId, ...state }));
+    if (deferStateInsertions) deferredStateInsertions.push(...stateInsertions);
+    else insertCourseLearningStates(stateInsertions);
+  }
+  if (deferStateInsertions) return deferredStateInsertions;
+}
+
+function syncUnlockedPathStatesForEnrollments(pathId, enrollments) {
+  if (!enrollments.length) return;
+  // Path order and course structure are shared by every learner, so prepare them once.
+  const rows = pathCourseRows(pathId);
+  const pathRowsById = new Map([[pathId, rows]]);
+  const summaryDataByPathId = new Map([[pathId, prepareCourseSummaryData(rows)]]);
+  // Ten learners plus two 200-course ID lists use at most 410 bind variables; batching also bounds history memory.
+  for (const enrollmentBatch of splitIntoBatches(enrollments, LEARNING_PATH_LEARNER_PROGRESS_BATCH_SIZE)) {
+    const progressByUser = prepareCourseLearnerSummaryData(rows, enrollmentBatch.map((enrollment) => enrollment.user_id));
+    // Learner unlock decisions are independent, so defer writes until the whole progress batch is evaluated.
+    const pendingStateInsertions = [];
+    for (const enrollment of enrollmentBatch) {
+      const learnerSummaryDataByPathId = new Map([[pathId, progressByUser.get(enrollment.user_id)]]);
+      pendingStateInsertions.push(...syncUnlockedPathStates(
+        [pathId],
+        enrollment.user_id,
+        pathRowsById,
+        summaryDataByPathId,
+        learnerSummaryDataByPathId,
+        { deferStateInsertions: true },
+      ));
+    }
+    insertCourseLearningStates(pendingStateInsertions);
   }
 }
 
@@ -176,19 +256,24 @@ programsRouter.get('/learning-paths', (req, res) => {
   const staff = ['admin', 'moderator'].includes(req.currentUser.role);
   const requestedPage = pageQuery(req.query.page);
   const statusFilter = staff ? staffPathStatusFilter(req.query.status) : null;
+  const searchText = text(req.query.q, 'Search', 120);
+  const search = searchText ? textSearchPredicate(['p.title', 'p.description'], searchText) : null;
+  const searchClause = search ? ` AND (${search.sql})` : '';
+  const searchParams = search?.params || [];
   const total = staff
-    ? db.prepare(`SELECT COUNT(*) AS count FROM learning_paths WHERE ${statusFilter.sql}`).get(...statusFilter.params).count
+    ? db.prepare(`SELECT COUNT(*) AS count FROM learning_paths p WHERE ${statusFilter.sql}${searchClause}`).get(...statusFilter.params, ...searchParams).count
     : db.prepare(`SELECT COUNT(DISTINCT p.id) AS count FROM learning_paths p
       LEFT JOIN learning_path_enrollments e ON e.path_id = p.id AND e.user_id = ?
-      WHERE p.status = 'published' AND (e.id IS NOT NULL OR (${SELF_ENROLLMENT_PATH_COURSE_FILTER}))`).get(req.currentUser.id).count;
+      WHERE p.status = 'published' AND (e.id IS NOT NULL OR (${SELF_ENROLLMENT_PATH_COURSE_FILTER}))${searchClause}`)
+      .get(req.currentUser.id, ...searchParams).count;
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / LEARNING_PATH_PAGE_SIZE)));
   const paths = staff
-    ? db.prepare(`SELECT * FROM learning_paths WHERE ${statusFilter.sql} ORDER BY updated_at DESC, id LIMIT ? OFFSET ?`)
-      .all(...statusFilter.params, LEARNING_PATH_PAGE_SIZE, (page - 1) * LEARNING_PATH_PAGE_SIZE)
+    ? db.prepare(`SELECT p.* FROM learning_paths p WHERE ${statusFilter.sql}${searchClause} ORDER BY p.updated_at DESC, p.id LIMIT ? OFFSET ?`)
+      .all(...statusFilter.params, ...searchParams, LEARNING_PATH_PAGE_SIZE, (page - 1) * LEARNING_PATH_PAGE_SIZE)
     : db.prepare(`SELECT DISTINCT p.* FROM learning_paths p LEFT JOIN learning_path_enrollments e ON e.path_id = p.id AND e.user_id = ?
-      WHERE p.status = 'published' AND (e.id IS NOT NULL OR (${SELF_ENROLLMENT_PATH_COURSE_FILTER}))
+      WHERE p.status = 'published' AND (e.id IS NOT NULL OR (${SELF_ENROLLMENT_PATH_COURSE_FILTER}))${searchClause}
       ORDER BY p.title COLLATE NOCASE, p.id LIMIT ? OFFSET ?`)
-      .all(req.currentUser.id, LEARNING_PATH_PAGE_SIZE, (page - 1) * LEARNING_PATH_PAGE_SIZE);
+      .all(req.currentUser.id, ...searchParams, LEARNING_PATH_PAGE_SIZE, (page - 1) * LEARNING_PATH_PAGE_SIZE);
   res.json({ paths: pathPayloads(paths, req.currentUser), total, page, pageSize: LEARNING_PATH_PAGE_SIZE,
     hasMore: page * LEARNING_PATH_PAGE_SIZE < total });
 });
@@ -205,9 +290,11 @@ programsRouter.post('/learning-paths/:pathId/enroll', (req, res) => {
       VALUES (?, ?, ?, 'self')`).run(randomUUID(), path.id, req.currentUser.id);
     syncUnlockedPathStates([path.id], req.currentUser.id);
     if (result.changes) logAudit(req.currentUser, 'path.enrolled', 'learning_path', path.id, `Enrolled in learning path: ${path.title}`);
-    return pathPayload(path, req.currentUser);
+    return { created: result.changes > 0, path: pathPayload(path, req.currentUser) };
   });
-  res.status(201).json({ path: enroll.immediate() });
+  const enrollment = enroll.immediate();
+  // Keep the retry successful without reporting that it created a second enrollment.
+  res.status(enrollment.created ? 201 : 200).json({ path: enrollment.path });
 });
 
 programsRouter.get('/learning-paths/:pathId', (req, res) => {
@@ -235,17 +322,7 @@ function normalizePathCourses(courseInput, selfEnrollment) {
   }
   const inputIds = courseInput.map((item) => typeof item?.courseId === 'string' ? item.courseId : '');
   const distinctInputIds = [...new Set(inputIds)];
-  const courseIdByInputId = new Map();
-  if (distinctInputIds.length) {
-    const directCourses = db.prepare(`SELECT id, logical_course_id FROM courses WHERE id IN (${distinctInputIds.map(() => '?').join(', ')})`)
-      .all(...distinctInputIds);
-    for (const course of directCourses) courseIdByInputId.set(course.id, course.logical_course_id || course.id);
-    for (const id of distinctInputIds) {
-      if (courseIdByInputId.has(id)) continue;
-      const logicalId = logicalCourseId(id);
-      if (logicalId) courseIdByInputId.set(id, logicalId);
-    }
-  }
+  const courseIdByInputId = logicalCourseIds(distinctInputIds);
   const courseIds = inputIds.map((id) => courseIdByInputId.get(id) || id);
   const distinctCourseIds = [...new Set(courseIds)];
   const publishedCourses = distinctCourseIds.length
@@ -337,7 +414,7 @@ programsRouter.patch('/manage/learning-paths/:pathId', requireStaff, (req, res) 
     if (coursesChanged) {
       savePathCourses(current.id, courses);
       const enrolledLearners = db.prepare('SELECT user_id FROM learning_path_enrollments WHERE path_id = ?').all(current.id);
-      for (const enrollment of enrolledLearners) syncUnlockedPathStates([current.id], enrollment.user_id);
+      syncUnlockedPathStatesForEnrollments(current.id, enrolledLearners);
     }
     logAudit(req.currentUser, 'path.updated', 'learning_path', current.id, `Updated learning path: ${title}`, { status, selfEnrollment, courseCount: courses.length });
     return pathPayload(db.prepare('SELECT * FROM learning_paths WHERE id = ?').get(current.id), null);
@@ -422,12 +499,31 @@ programsRouter.get('/calendar', (req, res) => {
       AND c.status = 'published' ORDER BY s.deadline_at, c.title COLLATE NOCASE, c.id ASC`).all(req.currentUser.id, from, endExclusive);
   const canView = createCourseAccessChecker(req.currentUser);
   const visibleItems = items.filter((item) => item.visibility === 'public' || canView(item));
-  const summaries = courseSummaries(visibleItems, req.currentUser);
+  const validItems = [];
+  const invalidDeadlineCourseIds = [];
+  for (const item of visibleItems) {
+    const dueAt = calendarDeadlineDate(item.deadline_at);
+    if (!dueAt) {
+      if (invalidDeadlineCourseIds.length < 10) invalidDeadlineCourseIds.push(item.course_id);
+      continue;
+    }
+    validItems.push({ ...item, dueAt });
+  }
+  const invalidDeadlineCount = visibleItems.length - validItems.length;
+  // Normalize mixed ISO and SQLite timestamp formats before presenting calendar events.
+  validItems.sort((first, second) => first.dueAt.getTime() - second.dueAt.getTime());
+  if (invalidDeadlineCount > 0) {
+    writeSystemLog('warn', 'calendar', 'Malformed course deadlines were omitted from the calendar response.', {
+      invalidDeadlineCount,
+      courseIds: invalidDeadlineCourseIds,
+    });
+  }
+  const summaries = courseSummaries(validItems, req.currentUser);
   const now = Date.now();
-  res.json({ items: visibleItems.map((item, index) => {
+  res.json({ hasInvalidDeadlines: invalidDeadlineCount > 0, items: validItems.map((item, index) => {
     const completed = summaries[index].completed;
-    const dueAt = new Date(item.deadline_at);
-    return { courseId: item.course_id, title: item.title, category: item.category, dueAt: item.deadline_at,
+    const { dueAt } = item;
+    return { courseId: item.course_id, title: item.title, category: item.category, dueAt: dueAt.toISOString(),
       status: completed ? 'completed' : dueAt.getTime() < now ? 'overdue' : 'upcoming', completed,
       url: `/courses/${item.course_id}` };
   }) });
@@ -448,26 +544,9 @@ programsRouter.get('/competencies', (req, res) => {
     WHERE competency.active = 1 AND c.status = 'published'
       AND cc.competency_id IN (${summaryIds.map(() => '?').join(', ')})
     ORDER BY cc.competency_id, c.title COLLATE NOCASE, c.id ASC`).all(...summaryIds) : [];
-  const achievementCandidates = page === 1 ? db.prepare(`SELECT DISTINCT cc.competency_id, c.* FROM course_competencies cc
-    JOIN competencies competency ON competency.id = cc.competency_id
-    JOIN courses c ON c.id = cc.course_id
-    WHERE competency.active = 1 AND c.status = 'published' AND (
-      EXISTS (SELECT 1 FROM lesson_progress p
-        JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id
-        JOIN courses progress_course ON progress_course.id = m.course_id
-        WHERE p.user_id = ? AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
-          OR progress_course.logical_course_id = COALESCE(c.logical_course_id, c.id)))
-      OR EXISTS (SELECT 1 FROM quiz_attempts a
-        JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id
-        JOIN courses progress_course ON progress_course.id = m.course_id
-        WHERE a.user_id = ? AND a.passed = 1 AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
-          OR progress_course.logical_course_id = COALESCE(c.logical_course_id, c.id)))
-    )`).all(req.currentUser.id, req.currentUser.id) : [];
   const canView = createCourseAccessChecker(req.currentUser);
   const visiblePageCourses = pageCourses.filter((course) => course.visibility === 'public' || canView(course));
-  const visibleAchievementCandidates = achievementCandidates.filter((course) => course.visibility === 'public' || canView(course));
-  const summaryCourses = [...new Map([...visiblePageCourses, ...visibleAchievementCandidates]
-    .map((course) => [course.id, course])).values()];
+  const summaryCourses = [...new Map(visiblePageCourses.map((course) => [course.id, course])).values()];
   const summaries = courseSummaries(summaryCourses, req.currentUser);
   const summariesByCourseId = new Map(summaryCourses.map((course, index) => [course.id, summaries[index]]));
   const coursesByCompetency = new Map(pageRows.map((item) => [item.id, []]));
@@ -484,9 +563,49 @@ programsRouter.get('/competencies', (req, res) => {
     return { id: item.id, title: item.title, description: item.description, achieved: mapped.some((course) => course.completed),
       completedCourses, courseCount: mapped.length, courses: mapped };
   });
-  const achievedCompetencyIds = new Set(visibleAchievementCandidates
-    .filter((course) => summariesByCourseId.get(course.id)?.completed)
-    .map((course) => course.competency_id));
+  const achievedCompetencyIds = new Set();
+  if (page === 1) {
+    // Keyset batches keep history scans and course-summary IN lists bounded on large accounts.
+    const achievementCandidates = db.prepare(`SELECT c.* FROM courses c
+      WHERE c.status = 'published' AND (? IS NULL OR c.id > ?)
+        AND EXISTS (SELECT 1 FROM course_competencies cc JOIN competencies competency ON competency.id = cc.competency_id
+          WHERE cc.course_id = c.id AND competency.active = 1)
+        AND (
+          EXISTS (SELECT 1 FROM lesson_progress p
+            JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id
+            JOIN courses progress_course ON progress_course.id = m.course_id
+            WHERE p.user_id = ? AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
+              OR progress_course.logical_course_id = COALESCE(c.logical_course_id, c.id)))
+          OR EXISTS (SELECT 1 FROM quiz_attempts a
+            JOIN quizzes q ON q.id = a.quiz_id LEFT JOIN course_modules m ON m.id = q.module_id
+            JOIN courses progress_course ON progress_course.id = COALESCE(m.course_id, q.course_id)
+            WHERE a.user_id = ? AND a.passed = 1 AND q.required_for_completion = 1 AND (progress_course.id = COALESCE(c.logical_course_id, c.id)
+              OR progress_course.logical_course_id = COALESCE(c.logical_course_id, c.id)))
+        )
+      ORDER BY c.id ASC LIMIT ?`);
+    let lastCourseId = null;
+    while (true) {
+      const candidateBatch = achievementCandidates.all(lastCourseId, lastCourseId, req.currentUser.id,
+        req.currentUser.id, COMPETENCY_ACHIEVEMENT_BATCH_SIZE);
+      if (!candidateBatch.length) break;
+      lastCourseId = candidateBatch.at(-1).id;
+
+      const visibleCandidates = candidateBatch.filter((course) => course.visibility === 'public' || canView(course));
+      const uncachedCourses = visibleCandidates.filter((course) => !summariesByCourseId.has(course.id));
+      const candidateSummaries = courseSummaries(uncachedCourses, req.currentUser);
+      uncachedCourses.forEach((course, index) => summariesByCourseId.set(course.id, candidateSummaries[index]));
+
+      const completedCourseIds = visibleCandidates
+        .filter((course) => summariesByCourseId.get(course.id)?.completed)
+        .map((course) => course.id);
+      if (!completedCourseIds.length) continue;
+      const mappedCompetencies = db.prepare(`SELECT DISTINCT cc.competency_id FROM course_competencies cc
+        JOIN competencies competency ON competency.id = cc.competency_id
+        WHERE competency.active = 1 AND cc.course_id IN (${completedCourseIds.map(() => '?').join(', ')})`)
+        .all(...completedCourseIds);
+      mappedCompetencies.forEach((item) => achievedCompetencyIds.add(item.competency_id));
+    }
+  }
   res.json({
     competencies: mappedCompetencies,
     total,
@@ -497,13 +616,17 @@ programsRouter.get('/competencies', (req, res) => {
   });
 });
 
-programsRouter.get('/admin/competencies', requireAdmin, (_req, res) => {
-  const requestedPage = pageQuery(_req.query.page);
-  const total = db.prepare('SELECT COUNT(*) AS count FROM competencies').get().count;
+programsRouter.get('/admin/competencies', requireAdmin, (req, res) => {
+  const query = text(req.query.q, 'Search', 100);
+  const search = query ? textSearchPredicate(['title', 'description'], query) : null;
+  const where = search ? `WHERE (${search.sql})` : '';
+  const params = search?.params ?? [];
+  const requestedPage = pageQuery(req.query.page);
+  const total = db.prepare(`SELECT COUNT(*) AS count FROM competencies ${where}`).get(...params).count;
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / COMPETENCY_ADMIN_PAGE_SIZE)));
-  const competencies = db.prepare(`SELECT * FROM competencies
+  const competencies = db.prepare(`SELECT * FROM competencies ${where}
     ORDER BY active DESC, title COLLATE NOCASE, id LIMIT ? OFFSET ?`)
-    .all(COMPETENCY_ADMIN_PAGE_SIZE, (page - 1) * COMPETENCY_ADMIN_PAGE_SIZE);
+    .all(...params, COMPETENCY_ADMIN_PAGE_SIZE, (page - 1) * COMPETENCY_ADMIN_PAGE_SIZE);
   res.json({ competencies, total, page, pageSize: COMPETENCY_ADMIN_PAGE_SIZE,
     hasMore: page * COMPETENCY_ADMIN_PAGE_SIZE < total });
 });
@@ -525,6 +648,7 @@ programsRouter.post('/admin/competencies', requireAdmin, (req, res) => {
 });
 
 programsRouter.patch('/admin/competencies/:competencyId', requireAdmin, (req, res) => {
+  const query = text(req.query.q, 'Search', 100);
   const body = requireObjectBody(req.body, 'Competency changes');
   const change = db.transaction(() => {
     const current = db.prepare('SELECT * FROM competencies WHERE id = ?').get(req.params.competencyId);
@@ -541,7 +665,7 @@ programsRouter.patch('/admin/competencies/:competencyId', requireAdmin, (req, re
       logAudit(req.currentUser, 'competency.updated', 'competency', current.id, `Updated competency: ${title}`, { active: Boolean(active) });
     }
     const competency = db.prepare('SELECT * FROM competencies WHERE id = ?').get(current.id);
-    return { competency, page: competencyAdminPage(competency) };
+    return { competency, page: competencyAdminPage(competency, query) };
   });
   res.json(change.immediate());
 });
@@ -600,14 +724,20 @@ programsRouter.get('/manage/courses/:courseId/versions', requireStaff, (req, res
   const currentVersion = currentVersionNumber === null ? null : courseVersionHistoryPage(courseId, 1, 0)[0] ?? null;
   const total = Math.max(0, historySummary.count - Number(currentVersionNumber !== null));
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / COURSE_VERSION_PAGE_SIZE)));
-  const revision = db.prepare('SELECT r.*, u.username AS author FROM course_revisions r LEFT JOIN users u ON u.id = r.author_id WHERE r.course_id = ?').get(courseId);
+  // The draft author and review submitter can be different staff members.
+  const revision = db.prepare(`SELECT r.*, author.username AS author, submitter.username AS submitter_name
+    FROM course_revisions r
+    LEFT JOIN users author ON author.id = r.author_id
+    LEFT JOIN users submitter ON submitter.id = r.submitted_by
+    WHERE r.course_id = ?`).get(courseId);
   res.json({ currentVersion, versions: courseVersionHistoryPage(courseId, COURSE_VERSION_PAGE_SIZE,
     (page - 1) * COURSE_VERSION_PAGE_SIZE + Number(currentVersionNumber !== null)),
     total, page, pageSize: COURSE_VERSION_PAGE_SIZE, hasMore: page * COURSE_VERSION_PAGE_SIZE < total,
     revision: revision ? {
-    status: revision.review_status, author: revision.author, submittedAt: revision.submitted_at,
-    submittedBy: revision.submitted_by, reviewedBy: revision.reviewed_by, reviewNote: revision.review_note,
-  } : null });
+      status: revision.review_status, author: revision.author, submittedAt: revision.submitted_at,
+      submittedBy: revision.submitted_by, submittedByName: revision.submitter_name,
+      reviewedBy: revision.reviewed_by, reviewNote: revision.review_note,
+    } : null });
 });
 
 programsRouter.post('/manage/courses/:courseId/review', requireStaff, (req, res) => {
@@ -636,8 +766,12 @@ programsRouter.post('/manage/courses/:courseId/review/decision', requireStaff, (
     const revision = db.prepare('SELECT * FROM course_revisions WHERE course_id = ?').get(logicalId);
     if (!revision || revision.review_status !== 'in_review') fail(409, 'This revision is not awaiting review.', 'review_not_pending');
     if (revision.submitted_by === req.currentUser.id) fail(403, 'A different administrator or moderator must review this revision.', 'self_review_forbidden');
-    const note = text(req.body?.note, outcome === 'approve' ? 'Publication note' : 'Review note', outcome === 'approve' ? 500 : 1000);
-    if (outcome === 'changes_requested') {
+    const requestsChanges = outcome === 'changes_requested';
+    // A change request must give its editor actionable feedback; approval notes remain optional.
+    const noteLabel = requestsChanges ? 'Review note' : 'Publication note';
+    const noteLimit = requestsChanges ? 1000 : 500;
+    const note = text(req.body?.note, noteLabel, noteLimit, requestsChanges);
+    if (requestsChanges) {
       db.prepare(`UPDATE course_revisions SET review_status = 'changes_requested', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP,
         review_note = ?, updated_at = CURRENT_TIMESTAMP WHERE course_id = ?`).run(req.currentUser.id, note, logicalId);
       logAudit(req.currentUser, 'course.review_changes_requested', 'course', logicalId, `Requested changes to ${current.title}`, { note });

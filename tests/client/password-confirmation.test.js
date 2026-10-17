@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { clearPasswordConfirmationError, getPasswordConfirmationError, PASSWORD_CONFIRMATION_ERROR } from '../../src/password-confirmation.ts';
+import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordConfirmationFieldProps, PASSWORD_CONFIRMATION_ERROR } from '../../src/password-confirmation.ts';
 
 const sourceDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
 
@@ -20,6 +20,24 @@ test('password confirmation reports mismatched values', () => {
 test('password edits clear only the password confirmation warning', () => {
   assert.equal(clearPasswordConfirmationError(PASSWORD_CONFIRMATION_ERROR), '');
   assert.equal(clearPasswordConfirmationError('Another validation error.'), 'Another validation error.');
+});
+
+test('password mismatch feedback marks and describes only the confirmation field', () => {
+  assert.deepEqual(passwordConfirmationFieldProps(PASSWORD_CONFIRMATION_ERROR, 'password-error'), {
+    'aria-invalid': true,
+    'aria-describedby': 'password-error',
+  });
+  assert.deepEqual(passwordConfirmationFieldProps('Another validation error.', 'password-error'), {
+    'aria-invalid': undefined,
+    'aria-describedby': undefined,
+  });
+});
+
+test('server-confirmation errors can keep the confirmation field associated with the alert', () => {
+  assert.deepEqual(passwordConfirmationFieldProps('The passwords differ.', 'password-error', true), {
+    'aria-invalid': true,
+    'aria-describedby': 'password-error',
+  });
 });
 
 test('all password confirmation forms use the shared client validation', () => {
@@ -40,4 +58,19 @@ test('all password confirmation forms clear a stale warning when either value ch
 
   assert.equal(countErrorClears('pages-auth.tsx'), 6);
   assert.equal(countErrorClears('pages-manage.tsx'), 6);
+});
+
+test('all six confirmation fields link mismatch feedback to their rendered alert', () => {
+  for (const fileName of ['pages-auth.tsx', 'pages-manage.tsx']) {
+    const source = fs.readFileSync(path.join(sourceDirectory, fileName), 'utf8');
+    const fields = source.match(/<PasswordField label="Confirm(?: new)? password"[\s\S]*?\/>/g) || [];
+
+    assert.equal(fields.length, 3, `${fileName} should contain three password-confirmation fields`);
+    for (const field of fields) {
+      const errorId = field.match(/passwordConfirmationFieldProps\(error,\s*(?:'([^']+)'|([A-Za-z][\w]*))(?:,\s*[^)]*)?\)/);
+      assert.ok(errorId, `${fileName} confirmation field should derive invalid state from the shared helper`);
+      const id = errorId[1] || errorId[2];
+      assert.match(source, new RegExp(`(?:<p|<Notice)[^>]*id=(?:\\{${id}\\}|"${id}")`), `${fileName} should render the referenced mismatch alert`);
+    }
+  }
 });

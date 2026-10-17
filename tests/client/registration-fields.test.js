@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { findMissingRequiredRegistrationField, refreshRegistrationFieldValues, validateRegistrationFieldEditor } from '../../src/registration-fields.ts';
+import { buildRegistrationFieldSelectOptions, findMissingRequiredRegistrationField, refreshRegistrationFieldValues, validateRegistrationFieldEditor } from '../../src/registration-fields.ts';
 
 const fields = [
   { id: 'department', label: 'Department', type: 'select', required: true, options: ['Design', 'Research'] },
@@ -25,6 +25,27 @@ test('custom signup fields use a navigable heading without changing its visual s
   assert.match(styles, /\.registration-form-fields-heading h2 \{ margin: 0; color: var\(--ink\); font-size: 14px; \}/);
 });
 
+test('registration field editor stacks before its fixed minimum columns overflow staff content', () => {
+  const styles = fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
+
+  assert.match(styles, /\.registration-field-editor-grid \{ display: grid; grid-template-columns: minmax\(180px, 1fr\) minmax\(170px, \.8fr\) minmax\(150px, \.65fr\);/);
+  assert.match(styles, /@media \(max-width: 860px\) \{\s*\.registration-field-editor-grid \{ grid-template-columns: 1fr; \}\s*\}/);
+});
+
+test('registration select options stay stable while answer values rerender the form', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-auth.tsx', import.meta.url), 'utf8');
+  const optionsByFieldId = buildRegistrationFieldSelectOptions(fields);
+
+  assert.match(pageSource, /useMemo\(\(\) => buildRegistrationFieldSelectOptions\(fields\), \[fields\]\)/);
+  assert.match(pageSource, /options=\{selectOptionsByFieldId\.get\(field\.id\) \?\? EMPTY_REGISTRATION_SELECT_OPTIONS\}/);
+  assert.deepEqual(optionsByFieldId.get('department'), [
+    { value: '', label: 'Choose an option' },
+    { value: 'Design', label: 'Design' },
+    { value: 'Research', label: 'Research' },
+  ]);
+  assert.equal(optionsByFieldId.has('about'), false);
+});
+
 test('checkbox requiredness and optional blank fields are handled separately', () => {
   const values = { department: 'Research', about: 'Here', 'start-date': '2026-10-09', policy: false, optional: '  ' };
   assert.equal(findMissingRequiredRegistrationField(fields, values)?.id, 'policy');
@@ -38,7 +59,7 @@ test('registration field refresh keeps only answers that remain compatible with 
     { id: 'long-text', label: 'Long response', type: 'text', required: false, options: [] },
   ];
   const nextFields = [
-    { ...fields[0], label: 'Team', options: ['Design', 'Research', 'Support'] },
+    { ...fields[0], label: 'Team', options: ['Design', 'Support'] },
     { ...fields[1], label: 'Updated about you' },
     { ...fields[2], required: false },
     { ...fields[3], label: 'Updated policy text' },
@@ -57,7 +78,7 @@ test('registration field refresh keeps only answers that remain compatible with 
     'long-text': 'x'.repeat(2001),
     removed: 'Old field answer',
   }), {
-    department: 'Research',
+    department: '',
     policy: true,
     'start-date': '2026-10-09',
     about: 'Returning learner',
@@ -70,7 +91,8 @@ test('registration field refresh keeps only answers that remain compatible with 
 test('stale registration field answers reload the schema and announce that review is needed', () => {
   const source = fs.readFileSync(new URL('../../src/pages-auth.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /cause instanceof ApiError && cause\.code === 'registration_fields_changed'/);
+  assert.match(source, /cause instanceof ApiError && \(cause\.code === 'registration_fields_changed' \|\| cause\.code === 'invalid_registration_answers'\)/);
+  assert.match(source, /Select options may change while the learner's registration form is open; refresh before asking them to retry\./);
   assert.match(source, /setRegistrationFieldsRetryVersion\(\(version\) => version \+ 1\)/);
   assert.match(source, /refreshRegistrationFieldValues\(previousFields, result\.fields, current\)/);
   assert.match(source, /Answers that still match were kept; review the updated fields and submit again\./);

@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { cleanupOrphanedCourseMedia } from '../../server/media-cleanup.js';
+import { cleanupOrphanedCourseMedia, getOrphanedMediaCleanupLog } from '../../server/media-cleanup.js';
 
 async function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -39,6 +39,45 @@ function createDatabase() {
   return database;
 }
 
+test('startup cleanup logs clean passes and retains bounded failure diagnostics', () => {
+  assert.deepEqual(getOrphanedMediaCleanupLog({
+    removed: 0,
+    failed: 0,
+    courseDirectoriesScanned: 0,
+    directoryEntriesScanned: 0,
+    failureSamples: [],
+  }, 7), {
+    level: 'info',
+    message: 'Completed orphaned course media cleanup during startup',
+    details: {
+      removed: 0,
+      failed: 0,
+      courseDirectoriesScanned: 0,
+      directoryEntriesScanned: 0,
+      durationMs: 7,
+    },
+  });
+
+  const failureSample = { stage: 'read_course_directory', errorCode: 'EACCES' };
+  const failedLog = getOrphanedMediaCleanupLog({
+    removed: 1,
+    failed: 1,
+    courseDirectoriesScanned: 3,
+    directoryEntriesScanned: 12,
+    failureSamples: [failureSample],
+  }, 19);
+  assert.equal(failedLog.level, 'warn');
+  assert.equal(failedLog.message, 'Some orphaned course media files could not be removed during startup');
+  assert.deepEqual(failedLog.details, {
+    removed: 1,
+    failed: 1,
+    courseDirectoriesScanned: 3,
+    directoryEntriesScanned: 12,
+    durationMs: 19,
+    failureSamples: [failureSample],
+  });
+});
+
 test('orphan cleanup removes only stale generated files not referenced by course data', async () => {
   const root = await createFixtureDirectory();
   const database = createDatabase();
@@ -70,7 +109,13 @@ test('orphan cleanup removes only stale generated files not referenced by course
 
     const result = await cleanupOrphanedCourseMedia(database, root, 60_000);
 
-    assert.deepEqual(result, { removed: 1, failed: 0, failureSamples: [] });
+    assert.deepEqual(result, {
+      removed: 1,
+      failed: 0,
+      courseDirectoriesScanned: 1,
+      directoryEntriesScanned: 6,
+      failureSamples: [],
+    });
     await assert.rejects(fs.stat(path.join(courseDirectory, staleName)), { code: 'ENOENT' });
     for (const fileName of [mediaName, documentName, captionName, recentName, unrecognizedName]) {
       await fs.access(path.join(courseDirectory, fileName));
@@ -89,10 +134,120 @@ test('orphan cleanup treats a missing media root as empty and rejects invalid ag
     assert.deepEqual(await cleanupOrphanedCourseMedia(database, missingRoot, 0), {
       removed: 0,
       failed: 0,
+      courseDirectoriesScanned: 0,
+      directoryEntriesScanned: 0,
       failureSamples: [],
     });
     await assert.rejects(cleanupOrphanedCourseMedia(database, root, -1), TypeError);
   } finally {
+    database.close();
+    await removeFixtureDirectory(root);
+  }
+});
+
+test('orphan cleanup propagates inaccessible media-root errors', async () => {
+  const root = await createFixtureDirectory();
+  const database = createDatabase();
+  const originalReaddir = fs.readdir;
+  try {
+    fs.readdir = async (target, options) => {
+      if (path.resolve(target) === path.resolve(root)) {
+        throw Object.assign(new Error('Media root is not readable.'), { code: 'EACCES' });
+      }
+      return Reflect.apply(originalReaddir, fs, [target, options]);
+    };
+
+    await assert.rejects(cleanupOrphanedCourseMedia(database, root, 0), { code: 'EACCES' });
+  } finally {
+    fs.readdir = originalReaddir;
+    database.close();
+    await removeFixtureDirectory(root);
+  }
+});
+
+test('orphan cleanup continues after directory errors and caps diagnostic samples', async () => {
+  const root = await createFixtureDirectory();
+  const database = createDatabase();
+  const originalReaddir = fs.readdir;
+  const courseIds = Array.from({ length: 12 }, (_, index) => (
+    `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`
+  ));
+  try {
+    await Promise.all(courseIds.map((courseId) => fs.mkdir(path.join(root, courseId))));
+    fs.readdir = async (target, options) => {
+      if (path.resolve(target) !== path.resolve(root)) {
+        throw Object.assign(new Error('Directory is not readable.'), { code: 'EACCES' });
+      }
+      return Reflect.apply(originalReaddir, fs, [target, options]);
+    };
+
+    const result = await cleanupOrphanedCourseMedia(database, root, 0);
+
+    assert.equal(result.removed, 0);
+    assert.equal(result.failed, courseIds.length);
+    assert.equal(result.courseDirectoriesScanned, courseIds.length);
+    assert.equal(result.directoryEntriesScanned, 0);
+    assert.equal(result.failureSamples.length, 10);
+    assert.ok(result.failureSamples.every((sample) => (
+      sample.stage === 'read_course_directory' && sample.errorCode === 'EACCES'
+    )));
+  } finally {
+    fs.readdir = originalReaddir;
+    database.close();
+    await removeFixtureDirectory(root);
+  }
+});
+
+test('orphan cleanup ignores files lost to races and preserves files after inspection or removal errors', async () => {
+  const root = await createFixtureDirectory();
+  const database = createDatabase();
+  const courseId = '123e4567-e89b-12d3-a456-426614174000';
+  const courseDirectory = path.join(root, courseId);
+  const disappearedName = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.txt';
+  const inspectionFailureName = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.txt';
+  const removalFailureName = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc.txt';
+  const originalLstat = fs.lstat;
+  const originalUnlink = fs.unlink;
+  try {
+    await fs.mkdir(courseDirectory);
+    await Promise.all([disappearedName, inspectionFailureName, removalFailureName]
+      .map((name) => fs.writeFile(path.join(courseDirectory, name), 'orphan')));
+    const oldTime = new Date(Date.now() - 60_000);
+    await Promise.all([disappearedName, inspectionFailureName, removalFailureName]
+      .map((name) => fs.utimes(path.join(courseDirectory, name), oldTime, oldTime)));
+
+    fs.lstat = async (filePath) => {
+      const fileName = path.basename(filePath);
+      if (fileName === disappearedName) {
+        await Reflect.apply(originalUnlink, fs, [filePath]);
+        throw Object.assign(new Error('File disappeared.'), { code: 'ENOENT' });
+      }
+      if (fileName === inspectionFailureName) {
+        throw Object.assign(new Error('File cannot be inspected.'), { code: 'EACCES' });
+      }
+      return Reflect.apply(originalLstat, fs, [filePath]);
+    };
+    fs.unlink = async (filePath) => {
+      if (path.basename(filePath) === removalFailureName) {
+        throw Object.assign(new Error('File cannot be removed.'), { code: 'EACCES' });
+      }
+      return Reflect.apply(originalUnlink, fs, [filePath]);
+    };
+
+    const result = await cleanupOrphanedCourseMedia(database, root, 0);
+
+    assert.equal(result.removed, 0);
+    assert.equal(result.failed, 2);
+    assert.equal(result.courseDirectoriesScanned, 1);
+    assert.equal(result.directoryEntriesScanned, 3);
+    assert.deepEqual(result.failureSamples.map((sample) => sample.stage).sort(), ['inspect_file', 'remove_file']);
+    assert.ok(result.failureSamples.every((sample) => sample.errorCode === 'EACCES'));
+    await assert.rejects(fs.stat(path.join(courseDirectory, disappearedName)), { code: 'ENOENT' });
+    await fs.access(path.join(courseDirectory, inspectionFailureName));
+    await fs.access(path.join(courseDirectory, removalFailureName));
+  } finally {
+    fs.lstat = originalLstat;
+    fs.unlink = originalUnlink;
     database.close();
     await removeFixtureDirectory(root);
   }

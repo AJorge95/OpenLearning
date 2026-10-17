@@ -1,0 +1,14 @@
+.git
+.githooks
+node_modules
+dist
+data
+backup
+backups
+coverage
+tests
+.env
+.env.*
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

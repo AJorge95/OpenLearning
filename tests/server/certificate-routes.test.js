@@ -124,11 +124,18 @@ after(async () => {
   }
 });
 
-test('certificate route issues once for a completed learner and restricts saved lookup to its owner', async () => {
-  const issuedResponse = await fetch(apiUrl('/certificates/certificate-route-complete'), {
+test('certificate GET stays read-only and the explicit issue route creates once for its owner', async () => {
+  const notIssuedResponse = await fetch(apiUrl('/certificates/certificate-route-complete'), {
     headers: userHeaders('certificate-route-owner'),
   });
-  assert.equal(issuedResponse.status, 200);
+  await assertApiError(notIssuedResponse, 409, 'certificate_not_issued');
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_certificates WHERE user_id = ?')
+    .get('certificate-route-owner').count, 0);
+
+  const issuedResponse = await fetch(apiUrl('/certificates/certificate-route-complete/issue'), {
+    method: 'POST', headers: userHeaders('certificate-route-owner'),
+  });
+  assert.equal(issuedResponse.status, 201);
   const { certificate } = await issuedResponse.json();
   assert.equal(certificate.recipientName, 'Taylor Nguyen');
   assert.equal(certificate.recipientEmail, 'owner@example.invalid');
@@ -137,6 +144,18 @@ test('certificate route issues once for a completed learner and restricts saved 
   assert.match(certificate.certificateCode, /^OL-[A-F0-9]{32}$/);
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_certificates WHERE user_id = ?')
     .get('certificate-route-owner').count, 1);
+
+  const retryResponse = await fetch(apiUrl('/certificates/certificate-route-complete/issue'), {
+    method: 'POST', headers: userHeaders('certificate-route-owner'),
+  });
+  assert.equal(retryResponse.status, 200);
+  assert.deepEqual((await retryResponse.json()).certificate, certificate);
+
+  const courseLookupResponse = await fetch(apiUrl('/certificates/certificate-route-complete'), {
+    headers: userHeaders('certificate-route-owner'),
+  });
+  assert.equal(courseLookupResponse.status, 200);
+  assert.deepEqual((await courseLookupResponse.json()).certificate, certificate);
 
   const savedResponse = await fetch(apiUrl(`/certificates/${certificate.id}`), {
     headers: userHeaders('certificate-route-owner'),
@@ -165,6 +184,16 @@ test('certificate route distinguishes incomplete courses from missing profile na
     headers: userHeaders('certificate-route-no-name'),
   });
   await assertApiError(missingNameResponse, 409, 'certificate_name_required');
+
+  const incompleteIssueResponse = await fetch(apiUrl('/certificates/certificate-route-incomplete/issue'), {
+    method: 'POST', headers: userHeaders('certificate-route-owner'),
+  });
+  await assertApiError(incompleteIssueResponse, 409, 'course_incomplete');
+
+  const missingNameIssueResponse = await fetch(apiUrl('/certificates/certificate-route-no-name-course/issue'), {
+    method: 'POST', headers: userHeaders('certificate-route-no-name'),
+  });
+  await assertApiError(missingNameIssueResponse, 409, 'certificate_name_required');
 
   assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM course_certificates
     WHERE course_id IN ('certificate-route-incomplete', 'certificate-route-no-name-course')`).get().count, 0);

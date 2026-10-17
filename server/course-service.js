@@ -7,38 +7,31 @@ function progressForStorage(logicalId, contentId, user, version) {
   const lessonRows = db.prepare(`SELECT l.id, COALESCE(l.stable_id, l.id) AS stable_id FROM lessons l
     JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?`).all(contentId);
   const quizRows = db.prepare(`SELECT q.id, COALESCE(q.stable_id, q.id) AS stable_id FROM quizzes q
-    JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?`).all(contentId);
+    LEFT JOIN course_modules m ON m.id = q.module_id WHERE COALESCE(m.course_id, q.course_id) = ?`).all(contentId);
   if (!user) return { completedLessonIds: new Set(), passedQuizIds: new Set() };
-  const state = db.prepare('SELECT target_version_id FROM course_learning_state WHERE user_id = ? AND course_id = ?').get(user.id, logicalId);
+  // Share the exact-ID and stable-ID history rules used by normal course summaries.
+  const learnerSummary = loadCourseLearnerSummaryData([logicalId], [user.id]).get(user.id);
+  const state = learnerSummary.learningStateByCourse.get(logicalId);
   const resetRequired = Boolean(version && state?.target_version_id === version.id);
-  const lessonHistory = db.prepare(`SELECT l.id, COALESCE(l.stable_id, l.id) AS stable_id FROM lesson_progress p
-    JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id
-    JOIN courses c ON c.id = m.course_id WHERE p.user_id = ? AND (c.id = ? OR c.logical_course_id = ?)`)
-    .all(user.id, logicalId, logicalId);
-  const quizHistory = db.prepare(`SELECT DISTINCT q.id, COALESCE(q.stable_id, q.id) AS stable_id FROM quiz_attempts a
-    JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = m.course_id
-    WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)`)
-    .all(user.id, logicalId, logicalId);
-  const lessonHistoryIds = new Set(lessonHistory.map((saved) => saved.id));
-  const lessonHistoryStableIds = new Set(lessonHistory.map((saved) => saved.stable_id));
-  const quizHistoryIds = new Set(quizHistory.map((saved) => saved.id));
-  const quizHistoryStableIds = new Set(quizHistory.map((saved) => saved.stable_id));
+  const lessonHistory = learnerSummary.lessonHistoryByCourse.get(logicalId);
+  const quizHistory = learnerSummary.quizHistoryByCourse.get(logicalId);
   const completedLessonIds = new Set(lessonRows.filter((active) => resetRequired
-    ? lessonHistoryIds.has(active.id)
-    : lessonHistoryStableIds.has(active.stable_id)).map((row) => row.id));
+    ? lessonHistory?.ids.has(active.id)
+    : lessonHistory?.stableIds.has(active.stable_id)).map((row) => row.id));
   const passedQuizIds = new Set(quizRows.filter((active) => resetRequired
-    ? quizHistoryIds.has(active.id)
-    : quizHistoryStableIds.has(active.stable_id)).map((row) => row.id));
+    ? quizHistory?.ids.has(active.id)
+    : quizHistory?.stableIds.has(active.stable_id)).map((row) => row.id));
   return { completedLessonIds, passedQuizIds };
 }
 
-function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloadedContentCoursesById) {
-  if (!courses.length) return [];
+export function prepareCourseSummaryData(courses, preloadedVersionsByCourse, preloadedContentCoursesById = new Map()) {
+  if (!courses.length) return null;
+  // Batch related reads across the requested page to avoid per-course summary queries.
   const logicalIdsByCourse = courses.map((course) => course.logical_course_id || course.id);
   const logicalIds = [...new Set(logicalIdsByCourse)];
   const logicalPlaceholders = logicalIds.map(() => '?').join(', ');
   const latestVersionsByCourse = preloadedVersionsByCourse ?? new Map(db.prepare(`
-    SELECT v.course_id, v.id, v.storage_course_id, v.version_number
+    SELECT v.course_id, v.id, v.storage_course_id, v.version_number, v.requires_recompletion
     FROM course_versions v
     JOIN (
       SELECT course_id, MAX(version_number) AS version_number
@@ -76,45 +69,45 @@ function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloade
     lessonsByCourse.set(row.course_id, lessons);
   }
   const quizzesByCourse = new Map();
-  for (const row of db.prepare(`SELECT m.course_id, q.id, COALESCE(q.stable_id, q.id) AS stable_id
-    FROM quizzes q JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id IN (${contentPlaceholders})`).all(...contentIds)) {
+  for (const row of db.prepare(`SELECT COALESCE(m.course_id, q.course_id) AS course_id,
+      q.id, COALESCE(q.stable_id, q.id) AS stable_id, q.required_for_completion
+    FROM quizzes q LEFT JOIN course_modules m ON m.id = q.module_id
+    WHERE COALESCE(m.course_id, q.course_id) IN (${contentPlaceholders})`).all(...contentIds)) {
     const quizzes = quizzesByCourse.get(row.course_id) ?? [];
     quizzes.push(row);
     quizzesByCourse.set(row.course_id, quizzes);
   }
-  const learningStateByCourse = new Map();
-  const lessonHistoryByCourse = new Map();
-  const quizHistoryByCourse = new Map();
-  if (user) {
-    for (const row of db.prepare(`SELECT course_id, target_version_id, deadline_at FROM course_learning_state
-      WHERE user_id = ? AND course_id IN (${logicalPlaceholders})`).all(user.id, ...logicalIds)) {
-      learningStateByCourse.set(row.course_id, row);
-    }
-    for (const row of db.prepare(`SELECT COALESCE(c.logical_course_id, c.id) AS course_id, l.id,
-        COALESCE(l.stable_id, l.id) AS stable_id
-      FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id
-      JOIN course_modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id
-      WHERE p.user_id = ? AND (c.id IN (${logicalPlaceholders}) OR c.logical_course_id IN (${logicalPlaceholders}))`)
-      .all(user.id, ...logicalIds, ...logicalIds)) {
-      const history = lessonHistoryByCourse.get(row.course_id) ?? { ids: new Set(), stableIds: new Set() };
-      history.ids.add(row.id);
-      history.stableIds.add(row.stable_id);
-      lessonHistoryByCourse.set(row.course_id, history);
-    }
-    for (const row of db.prepare(`SELECT DISTINCT COALESCE(c.logical_course_id, c.id) AS course_id, q.id,
-        COALESCE(q.stable_id, q.id) AS stable_id
-      FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-      JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = m.course_id
-      WHERE a.user_id = ? AND a.passed = 1
-        AND (c.id IN (${logicalPlaceholders}) OR c.logical_course_id IN (${logicalPlaceholders}))`)
-      .all(user.id, ...logicalIds, ...logicalIds)) {
-      const history = quizHistoryByCourse.get(row.course_id) ?? { ids: new Set(), stableIds: new Set() };
-      history.ids.add(row.id);
-      history.stableIds.add(row.stable_id);
-      quizHistoryByCourse.set(row.course_id, history);
-    }
-  }
+  return {
+    logicalIdsByCourse,
+    logicalIds,
+    latestVersionsByCourse,
+    contentIdByCourse,
+    contentCoursesById,
+    countsByCourse,
+    lessonsByCourse,
+    quizzesByCourse,
+  };
+}
+
+function courseSummaryDetails(
+  courses,
+  user,
+  preloadedVersionsByCourse,
+  preloadedContentCoursesById,
+  preloadedCourseSummaryData,
+  includeVersionResetCompletion = false,
+  preloadedLearnerSummaryData,
+) {
+  if (!courses.length) return [];
+  // Path edits can reuse immutable metadata and preload learner progress in bounded batches.
+  const summaryData = preloadedCourseSummaryData
+    ?? prepareCourseSummaryData(courses, preloadedVersionsByCourse, preloadedContentCoursesById);
+  const { logicalIdsByCourse, logicalIds, latestVersionsByCourse, contentIdByCourse, contentCoursesById, countsByCourse, lessonsByCourse, quizzesByCourse } = summaryData;
+  const learnerSummaryData = preloadedLearnerSummaryData
+    ?? (user ? loadCourseLearnerSummaryData(logicalIds, [user.id]).get(user.id) : null);
+  const learningStateByCourse = learnerSummaryData?.learningStateByCourse ?? new Map();
+  const lessonHistoryByCourse = learnerSummaryData?.lessonHistoryByCourse ?? new Map();
+  const quizHistoryByCourse = learnerSummaryData?.quizHistoryByCourse ?? new Map();
   return courses.map((course, index) => {
     const logicalId = logicalIdsByCourse[index];
     const contentId = contentIdByCourse.get(logicalId);
@@ -131,15 +124,20 @@ function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloade
       ? lessonHistory?.ids.has(row.id)
       : lessonHistory?.stableIds.has(row.stable_id)).map((row) => row.id));
     const quizCount = activeQuizzes.length;
+    const requiredQuizzes = activeQuizzes.filter((quiz) => quiz.required_for_completion);
     const passedQuizIds = new Set(activeQuizzes.filter((row) => resetRequired
       ? quizHistory?.ids.has(row.id)
       : quizHistory?.stableIds.has(row.stable_id)).map((row) => row.id));
     const completedLessons = completedLessonIds.size;
     const passedQuizzes = passedQuizIds.size;
-    const requiredItems = counts.lesson_count + quizCount;
-    const completedItems = completedLessons + passedQuizzes;
+    const requiredItems = counts.lesson_count + requiredQuizzes.length;
+    const completedRequiredQuizzes = requiredQuizzes.filter((row) => passedQuizIds.has(row.id)).length;
+    const completedItems = completedLessons + completedRequiredQuizzes;
     const progress = requiredItems > 0 ? Math.round((completedItems / requiredItems) * 100) : 0;
     const completed = requiredItems > 0 && completedItems === requiredItems;
+    const completedWithVersionReset = includeVersionResetCompletion && requiredItems > 0
+      && (activeLessons.filter((row) => lessonHistory?.ids.has(row.id)).length
+        + requiredQuizzes.filter((row) => quizHistory?.ids.has(row.id)).length) === requiredItems;
     return {
       summary: {
         id: course.id,
@@ -155,6 +153,7 @@ function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloade
         updatedAt: course.updated_at,
         moduleCount: counts.module_count,
         lessonCount: counts.lesson_count,
+        quizCount,
         completedLessons,
         progress,
         completed,
@@ -165,19 +164,111 @@ function courseSummaryDetails(courses, user, preloadedVersionsByCourse, preloade
       contentId: content.id,
       completedLessonIds,
       passedQuizIds,
+      learningState,
+      version,
+      completedWithVersionReset,
     };
   });
 }
 
-export function courseSummaries(courses, user, preloadedVersionsByCourse) {
-  return courseSummaryDetails(courses, user, preloadedVersionsByCourse).map(({ summary }) => summary);
+function emptyCourseLearnerSummaryData() {
+  return {
+    learningStateByCourse: new Map(),
+    lessonHistoryByCourse: new Map(),
+    quizHistoryByCourse: new Map(),
+  };
+}
+
+// Keep each learner's state and both progress histories together for path unlock decisions.
+function loadCourseLearnerSummaryData(logicalIds, userIds) {
+  const summariesByUser = new Map(userIds.map((userId) => [userId, emptyCourseLearnerSummaryData()]));
+  if (!logicalIds.length || !userIds.length) return summariesByUser;
+
+  const userPlaceholders = userIds.map(() => '?').join(', ');
+  const logicalPlaceholders = logicalIds.map(() => '?').join(', ');
+  for (const row of db.prepare(`SELECT user_id, course_id, target_version_id, deadline_at FROM course_learning_state
+    WHERE user_id IN (${userPlaceholders}) AND course_id IN (${logicalPlaceholders})`).all(...userIds, ...logicalIds)) {
+    summariesByUser.get(row.user_id)?.learningStateByCourse.set(row.course_id, row);
+  }
+  for (const row of db.prepare(`SELECT p.user_id, COALESCE(c.logical_course_id, c.id) AS course_id, l.id,
+      COALESCE(l.stable_id, l.id) AS stable_id
+    FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id
+    JOIN course_modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id
+    WHERE p.user_id IN (${userPlaceholders})
+      AND (c.id IN (${logicalPlaceholders}) OR c.logical_course_id IN (${logicalPlaceholders}))`)
+    .all(...userIds, ...logicalIds, ...logicalIds)) {
+    const historyByCourse = summariesByUser.get(row.user_id)?.lessonHistoryByCourse;
+    if (!historyByCourse) continue;
+    const history = historyByCourse.get(row.course_id) ?? { ids: new Set(), stableIds: new Set() };
+    history.ids.add(row.id);
+    history.stableIds.add(row.stable_id);
+    historyByCourse.set(row.course_id, history);
+  }
+  for (const row of db.prepare(`SELECT DISTINCT a.user_id, COALESCE(c.logical_course_id, c.id) AS course_id, q.id,
+      COALESCE(q.stable_id, q.id) AS stable_id
+    FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
+    LEFT JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = COALESCE(m.course_id, q.course_id)
+    WHERE a.user_id IN (${userPlaceholders}) AND a.passed = 1
+      AND (c.id IN (${logicalPlaceholders}) OR c.logical_course_id IN (${logicalPlaceholders}))`)
+    .all(...userIds, ...logicalIds, ...logicalIds)) {
+    const historyByCourse = summariesByUser.get(row.user_id)?.quizHistoryByCourse;
+    if (!historyByCourse) continue;
+    const history = historyByCourse.get(row.course_id) ?? { ids: new Set(), stableIds: new Set() };
+    history.ids.add(row.id);
+    history.stableIds.add(row.stable_id);
+    historyByCourse.set(row.course_id, history);
+  }
+  return summariesByUser;
+}
+
+export function prepareCourseLearnerSummaryData(courses, userIds) {
+  const logicalIds = [...new Set(courses.map((course) => course.logical_course_id || course.id))];
+  return loadCourseLearnerSummaryData(logicalIds, userIds);
+}
+
+export function courseSummaries(courses, user, preloadedVersionsByCourse, preloadedCourseSummaryData) {
+  return courseSummaryDetails(courses, user, preloadedVersionsByCourse, undefined, preloadedCourseSummaryData).map(({ summary }) => summary);
+}
+
+export function courseSummariesWithState(
+  courses,
+  user,
+  preloadedCourseSummaryData,
+  preloadedLearnerSummaryData,
+) {
+  return courseSummaryDetails(courses, user, undefined, undefined, preloadedCourseSummaryData, true, preloadedLearnerSummaryData)
+    .map(({ summary, learningState, version, completedWithVersionReset }) => ({ summary, learningState, version, completedWithVersionReset }));
+}
+
+// Six bindings per row; 100-row chunks stay below SQLite's traditional 999-variable limit.
+const COURSE_LEARNING_STATE_INSERT_BATCH_SIZE = 100;
+
+export function insertCourseLearningStates(states) {
+  if (!states.length) return;
+  for (let start = 0; start < states.length; start += COURSE_LEARNING_STATE_INSERT_BATCH_SIZE) {
+    const batch = states.slice(start, start + COURSE_LEARNING_STATE_INSERT_BATCH_SIZE);
+    const values = batch.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+    const insert = db.prepare(`INSERT OR IGNORE INTO course_learning_state
+      (user_id, course_id, target_version_id, deadline_at, deadline_window_days, started_at)
+      VALUES ${values}`);
+    insert.run(...batch.flatMap((state) => [state.userId, state.courseId, state.targetVersionId,
+      state.deadlineAt, state.deadlineWindowDays, state.startedAt]));
+  }
 }
 
 export function courseSummary(course, user, preloadedVersionsByCourse) {
   return courseSummaryDetails([course], user, preloadedVersionsByCourse)[0].summary;
 }
 
-export function getCoursePayload(course, user, { includeAnswers = false, storageCourseId } = {}) {
+export function getCoursePayload(course, user, {
+  includeAnswers = false,
+  includeQuizQuestions = true,
+  // Editor payloads expose answer keys but do not display the current user's attempt details.
+  includeLatestAttempts = !includeAnswers,
+  includeLessonDetails = true,
+  quizId = null,
+  storageCourseId,
+} = {}) {
   const logicalId = course.logical_course_id || course.id;
   const editingCopy = Boolean(course.logical_course_id && includeAnswers);
   const version = publishedVersionForLogicalCourse(logicalId);
@@ -196,82 +287,105 @@ export function getCoursePayload(course, user, { includeAnswers = false, storage
   } : summary;
   const contentId = content.id;
   const versionProgress = contentId === summaryDetails.contentId ? summaryDetails : progressForStorage(logicalId, contentId, user, version);
+  if (quizId !== null && !includeQuizQuestions) fail(400, 'Quiz question selection requires quiz questions.', 'validation_error');
+  if (quizId !== null && !db.prepare(`SELECT 1 FROM quizzes q
+    LEFT JOIN course_modules m ON m.id = q.module_id
+    WHERE COALESCE(m.course_id, q.course_id) = ? AND q.id = ?`).get(contentId, quizId)) {
+    fail(404, 'Quiz not found.', 'not_found');
+  }
+  const quizQuestionFilter = quizId === null ? '' : 'AND q.id = ?';
+  const quizQuestionParameters = quizId === null ? [contentId] : [contentId, quizId];
+  // Outlines and quiz screens only need lesson navigation and progress, not long transcripts or attachments.
   const lessonResources = new Map();
-  for (const resource of db.prepare(`
-    SELECT lr.id, lr.lesson_id, lr.resource_type, lr.title, lr.href, lr.original_name
-    FROM lesson_resources lr
-    JOIN lessons l ON l.id = lr.lesson_id
-    JOIN course_modules m ON m.id = l.module_id
-    WHERE m.course_id = ?
-    ORDER BY lr.lesson_id, lr.position, lr.id
-  `).all(contentId)) {
-    const resources = lessonResources.get(resource.lesson_id) ?? [];
-    resources.push({
-      id: resource.id,
-      kind: resource.resource_type,
-      title: resource.title,
-      url: resource.resource_type === 'link' ? resource.href : `/media/resources/${resource.id}`,
-      fileName: resource.original_name,
-    });
-    lessonResources.set(resource.lesson_id, resources);
+  if (includeLessonDetails) {
+    for (const resource of db.prepare(`
+      SELECT lr.id, lr.lesson_id, lr.resource_type, lr.title, lr.href, lr.original_name
+      FROM lesson_resources lr
+      JOIN lessons l ON l.id = lr.lesson_id
+      JOIN course_modules m ON m.id = l.module_id
+      WHERE m.course_id = ?
+      ORDER BY lr.lesson_id, lr.position, lr.id
+    `).all(contentId)) {
+      const resources = lessonResources.get(resource.lesson_id) ?? [];
+      resources.push({
+        id: resource.id,
+        kind: resource.resource_type,
+        title: resource.title,
+        url: resource.resource_type === 'link' ? resource.href : `/media/resources/${resource.id}`,
+        fileName: resource.original_name,
+      });
+      lessonResources.set(resource.lesson_id, resources);
+    }
   }
   const captionsByLesson = new Map();
-  for (const caption of db.prepare(`
-    SELECT lc.id, lc.lesson_id, lc.language, lc.label, lc.original_name
-    FROM lesson_captions lc
-    JOIN lessons l ON l.id = lc.lesson_id
-    JOIN course_modules m ON m.id = l.module_id
-    WHERE m.course_id = ?
-    ORDER BY lc.lesson_id, lc.language
-  `).all(contentId)) {
-    const captions = captionsByLesson.get(caption.lesson_id) ?? [];
-    captions.push({
-      id: caption.id,
-      language: caption.language,
-      label: caption.label,
-      url: `/media/captions/${caption.id}`,
-      fileName: caption.original_name,
-    });
-    captionsByLesson.set(caption.lesson_id, captions);
+  if (includeLessonDetails) {
+    for (const caption of db.prepare(`
+      SELECT lc.id, lc.lesson_id, lc.language, lc.label, lc.original_name
+      FROM lesson_captions lc
+      JOIN lessons l ON l.id = lc.lesson_id
+      JOIN course_modules m ON m.id = l.module_id
+      WHERE m.course_id = ?
+      ORDER BY lc.lesson_id, lc.language
+    `).all(contentId)) {
+      const captions = captionsByLesson.get(caption.lesson_id) ?? [];
+      captions.push({
+        id: caption.id,
+        language: caption.language,
+        label: caption.label,
+        url: `/media/captions/${caption.id}`,
+        fileName: caption.original_name,
+      });
+      captionsByLesson.set(caption.lesson_id, captions);
+    }
   }
   const completedLessonIds = versionProgress.completedLessonIds;
   const quizChoicesByQuestion = new Map();
-  for (const choice of db.prepare(`
-    SELECT qc.id, qc.question_id, qc.choice_text, qc.is_correct
-    FROM quiz_choices qc
-    JOIN quiz_questions qq ON qq.id = qc.question_id
-    JOIN quizzes q ON q.id = qq.quiz_id
-    JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id = ?
-    ORDER BY qq.position, qq.id, qc.position, qc.id
-  `).all(contentId)) {
-    const choices = quizChoicesByQuestion.get(choice.question_id) ?? [];
-    choices.push(choice);
-    quizChoicesByQuestion.set(choice.question_id, choices);
+  // Course and lesson views can skip prompts; quiz views load only their own questions and choices.
+  if (includeQuizQuestions) {
+    for (const choice of db.prepare(`
+      SELECT qc.id, qc.question_id, qc.choice_text, qc.is_correct
+      FROM quiz_choices qc
+      JOIN quiz_questions qq ON qq.id = qc.question_id
+      JOIN quizzes q ON q.id = qq.quiz_id
+      JOIN course_modules m ON m.id = q.module_id
+      WHERE m.course_id = ? ${quizQuestionFilter}
+      ORDER BY qq.position, qq.id, qc.position, qc.id
+    `).all(...quizQuestionParameters)) {
+      const choices = quizChoicesByQuestion.get(choice.question_id) ?? [];
+      choices.push(choice);
+      quizChoicesByQuestion.set(choice.question_id, choices);
+    }
   }
   const moduleRows = db.prepare('SELECT * FROM course_modules WHERE course_id = ? ORDER BY position, id').all(contentId);
   const lessonsByModule = new Map();
-  for (const lesson of db.prepare(`
-    SELECT l.*, mf.original_name, mf.mime_type
+  const lessonRows = includeLessonDetails ? db.prepare(`
+    SELECT l.id, l.module_id, l.title, l.description, l.transcript, l.position, l.media_id, mf.original_name
     FROM lessons l
     JOIN course_modules m ON m.id = l.module_id
     LEFT JOIN media_files mf ON mf.id = l.media_id
     WHERE m.course_id = ?
     ORDER BY m.position, m.id, l.position, l.id
-  `).all(contentId)) {
+  `).all(contentId) : db.prepare(`
+    SELECT l.id, l.module_id, l.title, l.position, l.media_id
+    FROM lessons l
+    JOIN course_modules m ON m.id = l.module_id
+    WHERE m.course_id = ?
+    ORDER BY m.position, m.id, l.position, l.id
+  `).all(contentId);
+  for (const lesson of lessonRows) {
     const lessons = lessonsByModule.get(lesson.module_id) ?? [];
     lessons.push({
       id: lesson.id,
       title: lesson.title,
-      description: lesson.description,
-      transcript: lesson.transcript,
+      description: includeLessonDetails ? lesson.description : '',
+      transcript: includeLessonDetails ? lesson.transcript : '',
       position: lesson.position,
       mediaId: lesson.media_id,
-      mediaUrl: lesson.media_id ? `/media/${lesson.media_id}` : null,
-      videoName: lesson.original_name,
+      mediaUrl: includeLessonDetails && lesson.media_id ? `/media/${lesson.media_id}` : null,
+      videoName: includeLessonDetails ? lesson.original_name : null,
       hasVideo: Boolean(lesson.media_id),
-      resources: lessonResources.get(lesson.id) ?? [],
-      captions: captionsByLesson.get(lesson.id) ?? [],
+      resources: includeLessonDetails ? lessonResources.get(lesson.id) ?? [] : [],
+      captions: includeLessonDetails ? captionsByLesson.get(lesson.id) ?? [] : [],
       completed: completedLessonIds.has(lesson.id),
     });
     lessonsByModule.set(lesson.module_id, lessons);
@@ -287,47 +401,46 @@ export function getCoursePayload(course, user, { includeAnswers = false, storage
   }
 
   const questionsByQuiz = new Map();
-  for (const question of db.prepare(`
-    SELECT qq.* FROM quiz_questions qq
-    JOIN quizzes q ON q.id = qq.quiz_id
-    JOIN course_modules m ON m.id = q.module_id
-    WHERE m.course_id = ?
-    ORDER BY m.position, m.id, qq.position, qq.id
-  `).all(contentId)) {
-    const questions = questionsByQuiz.get(question.quiz_id) ?? [];
-    questions.push({
-      id: question.id,
-      prompt: question.prompt,
-      explanation: question.explanation,
-      choices: (quizChoicesByQuestion.get(question.id) ?? []).map((choice) => ({
-        id: choice.id,
-        text: choice.choice_text,
-        ...(includeAnswers ? { isCorrect: Boolean(choice.is_correct) } : {}),
-      })),
-    });
-    questionsByQuiz.set(question.quiz_id, questions);
+  if (includeQuizQuestions) {
+    for (const question of db.prepare(`
+      SELECT qq.* FROM quiz_questions qq
+      JOIN quizzes q ON q.id = qq.quiz_id
+      JOIN course_modules m ON m.id = q.module_id
+      WHERE m.course_id = ? ${quizQuestionFilter}
+      ORDER BY m.position, m.id, qq.position, qq.id
+    `).all(...quizQuestionParameters)) {
+      const questions = questionsByQuiz.get(question.quiz_id) ?? [];
+      questions.push({
+        id: question.id,
+        prompt: question.prompt,
+        // Explanations can disclose the answer, so only course managers receive them.
+        ...(includeAnswers ? { explanation: question.explanation } : {}),
+        choices: (quizChoicesByQuestion.get(question.id) ?? []).map((choice) => ({
+          id: choice.id,
+          text: choice.choice_text,
+          ...(includeAnswers ? { isCorrect: Boolean(choice.is_correct) } : {}),
+        })),
+      });
+      questionsByQuiz.set(question.quiz_id, questions);
+    }
   }
 
+  // Pass state comes from versionProgress; this query only supplies latest-attempt details.
   const latestAttemptsByQuiz = new Map();
-  const passedQuizIds = new Set();
-  if (user) {
+  if (user && includeLatestAttempts) {
+    const latestAttemptQuizFilter = quizId === null ? '' : 'AND q.id = ?';
     for (const attempt of db.prepare(`
-      SELECT q.id AS quiz_id, a.id, a.score, a.passed, a.submitted_at,
-        EXISTS (
-          SELECT 1 FROM quiz_attempts p
-          WHERE p.user_id = ? AND p.quiz_id = q.id AND p.passed = 1
-        ) AS any_passed
-      FROM course_modules m
-      JOIN quizzes q ON q.module_id = m.id
+      SELECT q.id AS quiz_id, a.id, a.score, a.passed, a.submitted_at
+      FROM quizzes q
+      LEFT JOIN course_modules m ON m.id = q.module_id
       LEFT JOIN quiz_attempts a ON a.rowid = (
         SELECT newest.rowid FROM quiz_attempts newest
         WHERE newest.user_id = ? AND newest.quiz_id = q.id
         ORDER BY newest.submitted_at DESC, newest.rowid DESC LIMIT 1
       )
-      WHERE m.course_id = ?
-    `).all(user.id, user.id, contentId)) {
+      WHERE COALESCE(m.course_id, q.course_id) = ? ${latestAttemptQuizFilter}
+    `).all(user.id, contentId, ...(quizId === null ? [] : [quizId]))) {
       if (attempt.id !== null) latestAttemptsByQuiz.set(attempt.quiz_id, attempt);
-      if (attempt.any_passed) passedQuizIds.add(attempt.quiz_id);
     }
   }
 
@@ -357,14 +470,35 @@ export function getCoursePayload(course, user, { includeAnswers = false, storage
         id: quiz.id,
         title: quiz.title,
         passMark: quiz.pass_mark,
-        questions: questionsByQuiz.get(quiz.id) ?? [],
+        questionsPerAttempt: quiz.questions_per_attempt,
+        requiredForCompletion: Boolean(quiz.required_for_completion),
+        isCourseFinalExam: false,
+        questions: includeQuizQuestions ? questionsByQuiz.get(quiz.id) ?? [] : [],
         latestAttempt: latestAttempt ? { id: latestAttempt.id, score: latestAttempt.score, passed: Boolean(latestAttempt.passed), submittedAt: latestAttempt.submitted_at } : null,
         passed: versionProgress.passedQuizIds.has(quiz.id),
       };
     }
     return { id: module.id, title: module.title, position: module.position, lessons, quiz: quizData };
   });
-  return { ...resultSummary, modules };
+  const finalExam = db.prepare('SELECT * FROM quizzes WHERE course_id = ?').get(contentId);
+  let finalExamData = null;
+  if (finalExam) {
+    const latestAttempt = latestAttemptsByQuiz.get(finalExam.id);
+    const questionCount = db.prepare('SELECT COUNT(*) AS count FROM quiz_questions WHERE quiz_id = ?').get(finalExam.id).count;
+    finalExamData = {
+      id: finalExam.id,
+      title: finalExam.title,
+      passMark: finalExam.pass_mark,
+      questionsPerAttempt: finalExam.questions_per_attempt,
+      requiredForCompletion: Boolean(finalExam.required_for_completion),
+      isCourseFinalExam: true,
+      questionCount,
+      questions: [],
+      latestAttempt: latestAttempt ? { id: latestAttempt.id, score: latestAttempt.score, passed: Boolean(latestAttempt.passed), submittedAt: latestAttempt.submitted_at } : null,
+      passed: versionProgress.passedQuizIds.has(finalExam.id),
+    };
+  }
+  return { ...resultSummary, finalExam: finalExamData, modules };
 }
 
 export function canLearnerAccess(course, user) {
@@ -373,9 +507,11 @@ export function canLearnerAccess(course, user) {
 
 export function enrollLearner(courseId, userId) {
   const logicalId = db.prepare('SELECT logical_course_id FROM courses WHERE id = ?').get(courseId)?.logical_course_id || courseId;
-  db.prepare('INSERT OR IGNORE INTO enrollments (id, course_id, user_id) VALUES (?, ?, ?)')
+  const insertion = db.prepare('INSERT OR IGNORE INTO enrollments (id, course_id, user_id) VALUES (?, ?, ?)')
     .run(randomUUID(), logicalId, userId);
   ensureCourseLearningState(logicalId, userId);
+  // Callers can distinguish creation from a retry without a separate enrollment lookup.
+  return insertion.changes > 0;
 }
 
 export function ensureCourseLearningStateWithStatus(courseId, userId, now = new Date()) {
@@ -392,9 +528,7 @@ export function ensureCourseLearningStateWithStatus(courseId, userId, now = new 
   }
   const version = publishedVersion(logicalId);
   const deadlineDays = course.completion_window_days;
-  const deadlineAt = Number.isInteger(deadlineDays) && deadlineDays > 0
-    ? new Date(now.getTime() + deadlineDays * 24 * 60 * 60 * 1000).toISOString()
-    : null;
+  const deadlineAt = courseLearningDeadlineAt(deadlineDays, now);
   const insert = db.prepare(`INSERT OR IGNORE INTO course_learning_state
       (user_id, course_id, target_version_id, deadline_at, deadline_window_days, started_at)
     VALUES (?, ?, ?, ?, ?, ?)`)
@@ -405,6 +539,12 @@ export function ensureCourseLearningStateWithStatus(courseId, userId, now = new 
 
 export function ensureCourseLearningState(courseId, userId, now = new Date()) {
   return ensureCourseLearningStateWithStatus(courseId, userId, now).state;
+}
+
+export function courseLearningDeadlineAt(deadlineDays, now = new Date()) {
+  return Number.isInteger(deadlineDays) && deadlineDays > 0
+    ? new Date(now.getTime() + deadlineDays * 24 * 60 * 60 * 1000).toISOString()
+    : null;
 }
 
 export function assertPublishable(courseId) {
@@ -440,13 +580,32 @@ export function assertPublishable(courseId) {
     LEFT JOIN quiz_stats ON quiz_stats.id = quiz.id
     ORDER BY m.position
   `).all(courseId);
-  if (!modules.length) fail(400, 'Add at least one module before publishing.', 'course_incomplete');
+  const finalExam = db.prepare('SELECT id, required_for_completion, questions_per_attempt FROM quizzes WHERE course_id = ?').get(courseId);
+  if (!modules.length && !finalExam) fail(400, 'Add at least one module or a final exam before publishing.', 'course_incomplete');
+  if (!modules.length && finalExam && !finalExam.required_for_completion) {
+    fail(400, 'A course with only a final exam must require a passing score to complete the course.', 'course_incomplete');
+  }
   for (const module of modules) {
     if (!module.lesson_count) fail(400, `Add a lesson to “${module.title}” before publishing.`, 'course_incomplete');
     if (module.missing_media_count) fail(400, `Upload a video for every lesson in “${module.title}” before publishing.`, 'course_incomplete');
     if (module.quiz_id && !module.question_count) fail(400, `Add at least one question to the quiz in “${module.title}” before publishing.`, 'course_incomplete');
     if (module.invalid_question_count) {
       fail(400, 'Each quiz question needs at least two choices and exactly one correct answer.', 'quiz_incomplete');
+    }
+  }
+  if (finalExam) {
+    const stats = db.prepare(`SELECT COUNT(*) AS question_count,
+        SUM(CASE WHEN choices.choice_count < 2 OR choices.correct_count != 1 THEN 1 ELSE 0 END) AS invalid_question_count
+      FROM quiz_questions question
+      LEFT JOIN (
+        SELECT question_id, COUNT(*) AS choice_count, SUM(is_correct) AS correct_count
+        FROM quiz_choices GROUP BY question_id
+      ) choices ON choices.question_id = question.id
+      WHERE question.quiz_id = ?`).get(finalExam.id);
+    if (!stats.question_count) fail(400, 'Add at least one question to the final exam before publishing.', 'course_incomplete');
+    if (stats.invalid_question_count) fail(400, 'Each final exam question needs at least two choices and exactly one correct answer.', 'quiz_incomplete');
+    if (finalExam.questions_per_attempt > stats.question_count) {
+      fail(400, 'Add enough final exam questions to match the selected number of questions per attempt.', 'quiz_incomplete');
     }
   }
 }
@@ -491,5 +650,8 @@ export function moduleCourse(moduleId) {
 }
 
 export function quizCourse(quizId) {
-  return db.prepare(`SELECT c.*, q.id AS quiz_id, q.module_id FROM quizzes q JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = m.course_id WHERE q.id = ?`).get(quizId);
+  return db.prepare(`SELECT c.*, q.id AS quiz_id, q.module_id, q.course_id AS quiz_course_id,
+      q.pass_mark, q.questions_per_attempt, q.required_for_completion
+    FROM quizzes q LEFT JOIN course_modules m ON m.id = q.module_id
+    JOIN courses c ON c.id = COALESCE(m.course_id, q.course_id) WHERE q.id = ?`).get(quizId);
 }

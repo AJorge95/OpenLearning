@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 const maximumMetadataBytes = 128 * 1024 * 1024;
 const maximumFragmentBytes = 16 * 1024 * 1024;
 const maximumTopLevelBoxes = 200_000;
+const topLevelHeaderReadAheadBytes = 4 * 1024;
 const maximumDurationSeconds = 24 * 60 * 60;
 
 async function readAt(handle, length, position) {
@@ -11,31 +12,42 @@ async function readAt(handle, length, position) {
   return bytesRead === length ? buffer : null;
 }
 
-function durationFromMovieHeader(movie) {
-  const marker = Buffer.from('mvhd');
-  let markerOffset = movie.indexOf(marker);
-  while (markerOffset >= 4) {
-    const boxOffset = markerOffset - 4;
-    const boxSize = movie.readUInt32BE(boxOffset);
-    if (boxSize >= 28 && boxOffset + boxSize <= movie.length) {
-      const headerBytes = boxSize === 1 ? 16 : 8;
-      const payload = boxOffset + headerBytes;
-      const version = movie[payload];
-      let timeScale;
-      let duration;
-      if (version === 0 && boxSize >= headerBytes + 20) {
-        timeScale = movie.readUInt32BE(payload + 12);
-        duration = movie.readUInt32BE(payload + 16);
-      } else if (version === 1 && boxSize >= headerBytes + 32) {
-        timeScale = movie.readUInt32BE(payload + 20);
-        duration = Number(movie.readBigUInt64BE(payload + 24));
-      }
-      const seconds = timeScale && duration ? duration / timeScale : 0;
-      if (Number.isFinite(seconds) && seconds > 0 && seconds <= maximumDurationSeconds) return seconds;
+function createTopLevelHeaderReader(handle, fileSize) {
+  let bufferedStart = -1;
+  let bufferedHeaders = null;
+  return async (position) => {
+    if (!bufferedHeaders || position < bufferedStart || position + 16 > bufferedStart + bufferedHeaders.length) {
+      // Read ahead through small boxes without pulling large chunks of video payload.
+      bufferedStart = position;
+      const length = Math.min(topLevelHeaderReadAheadBytes, fileSize - position);
+      bufferedHeaders = await readAt(handle, length, position);
+      if (!bufferedHeaders) return null;
     }
-    markerOffset = movie.indexOf(marker, markerOffset + marker.length);
+    const offset = position - bufferedStart;
+    if (offset + 16 > bufferedHeaders.length) return null;
+    return bufferedHeaders.subarray(offset, offset + 16);
+  };
+}
+
+function durationFromMovieHeader(movie) {
+  // Reuse the bounded box reader so normal and 64-bit extended headers share the same size checks.
+  const movieHeader = boxesIn(movie)?.find((box) => box.type === 'mvhd');
+  if (!movieHeader) return null;
+
+  const { payload, end } = movieHeader;
+  const version = movie[payload];
+  let timeScale;
+  let duration;
+  if (version === 0 && payload + 20 <= end) {
+    timeScale = movie.readUInt32BE(payload + 12);
+    duration = movie.readUInt32BE(payload + 16);
+  } else if (version === 1 && payload + 32 <= end) {
+    timeScale = movie.readUInt32BE(payload + 20);
+    duration = Number(movie.readBigUInt64BE(payload + 24));
   }
-  return null;
+
+  const seconds = timeScale && duration ? duration / timeScale : 0;
+  return Number.isFinite(seconds) && seconds > 0 && seconds <= maximumDurationSeconds ? seconds : null;
 }
 
 function boxesIn(buffer, start = 0, end = buffer.length) {
@@ -219,11 +231,12 @@ export async function readMp4Duration(filePath) {
   const handle = await fs.open(filePath, 'r');
   try {
     const { size } = await handle.stat();
+    const readTopLevelHeader = createTopLevelHeaderReader(handle, size);
     let offset = 0;
     let topLevelBoxCount = 0;
     let fragmentedMovie = null;
     while (offset + 8 <= size && topLevelBoxCount < maximumTopLevelBoxes) {
-      const header = await readAt(handle, 16, offset);
+      const header = await readTopLevelHeader(offset);
       if (!header) break;
       const size32 = header.readUInt32BE(0);
       const type = header.toString('ascii', 4, 8);

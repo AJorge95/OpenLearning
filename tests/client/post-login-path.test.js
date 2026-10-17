@@ -18,7 +18,7 @@ test('post-login navigation falls back for missing or external destinations', ()
 });
 
 test('post-login navigation avoids returning to authentication routes', () => {
-  for (const value of ['/login', '/login?next=/admin', '/register', '/setup']) {
+  for (const value of ['/', '/?from=bookmark', '/courses/', '/courses/?from=bookmark', '/login', '/login?next=/admin', '/register', '/setup']) {
     assert.equal(getPostLoginPath(value), '/courses');
   }
 });
@@ -52,5 +52,5 @@ test('login guidance is associated with the autofocus username field', () => {
   const authSource = fs.readFileSync(path.join(sourceDirectory, 'pages-auth.tsx'), 'utf8');
 
   assert.match(authSource, /<p id="login-description" className="auth-description">/);
-  assert.match(authSource, /<input aria-describedby="login-description" required maxLength=\{32\} autoComplete="username" autoFocus/);
+  assert.match(authSource, /<input name="username" aria-describedby=\{error \? `login-description \$\{loginErrorId\}` : 'login-description'\} required maxLength=\{32\} autoComplete="username" autoCapitalize="none" spellCheck=\{false\} autoFocus/);
 });

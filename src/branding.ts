@@ -10,10 +10,16 @@ export const BRAND_PALETTES = [
 
 export type BrandingPalette = (typeof BRAND_PALETTES)[number]['id'];
 export type ConnectionProtocol = 'http' | 'https';
+// Share the setup and settings choices so their selectors keep one stable option reference.
+export const CONNECTION_PROTOCOL_OPTIONS: { value: ConnectionProtocol; label: string }[] = [
+  { value: 'http', label: 'HTTP' },
+  { value: 'https', label: 'HTTPS' },
+];
 
 export interface PlatformAccessSettings {
   connectionProtocol: ConnectionProtocol;
   registrationEnabled: boolean;
+  registrationApprovalRequired: boolean;
   registrationAvailable: boolean;
   userLimit: number;
 }
@@ -22,6 +28,7 @@ export interface PlatformConfiguration extends PlatformAccessSettings {
   platformName: string;
   platformIcon: string | null;
   themePalette: BrandingPalette;
+  maxUploadBytes: number;
 }
 
 export function isBrandingPalette(value: unknown): value is BrandingPalette {

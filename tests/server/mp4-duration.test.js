@@ -28,12 +28,12 @@ function movieHeaderV0(timeScale, duration) {
   return makeBox('mvhd', payload);
 }
 
-function movieHeaderV1(timeScale, duration) {
+function movieHeaderV1(timeScale, duration, extended = false) {
   const payload = Buffer.alloc(32);
   payload[0] = 1;
   payload.writeUInt32BE(timeScale, 20);
   payload.writeBigUInt64BE(BigInt(duration), 24);
-  return makeBox('mvhd', payload);
+  return makeBox('mvhd', payload, extended);
 }
 
 function fragmentedMovieMetadata(timeScale, defaultSampleDuration = 0) {
@@ -121,6 +121,29 @@ test('reads version-one duration from an extended-size movie box', async () => {
   ]);
 
   assert.equal(duration, 90.25);
+});
+
+test('reads duration from an extended-size movie-header box', async () => {
+  const duration = await readFixture('extended-movie-header.mp4', [
+    makeBox('moov', movieHeaderV1(90_000, 8_122_500, true)),
+  ]);
+
+  assert.equal(duration, 90.25);
+});
+
+test('reads an extended-size top-level header across a buffered read boundary', async () => {
+  const boxReadAheadBytes = 4 * 1024;
+  const fillerBox = makeBox('free', Buffer.alloc(0));
+  const prefix = Buffer.alloc(boxReadAheadBytes - fillerBox.length);
+  for (let offset = 0; offset < prefix.length; offset += fillerBox.length) fillerBox.copy(prefix, offset);
+
+  const duration = await readFixture('header-read-boundary.mp4', [
+    prefix,
+    makeBox('free', Buffer.alloc(8), true),
+    makeBox('moov', movieHeaderV0(1_000, 4_250)),
+  ]);
+
+  assert.equal(duration, 4.25);
 });
 
 test('returns no duration for missing or malformed movie metadata', async () => {

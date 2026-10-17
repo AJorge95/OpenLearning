@@ -59,6 +59,19 @@ const compoundOfficeExtensions = new Set(['.doc', '.ppt', '.xls']);
 const zipOfficeExtensions = new Set(['.docx', '.pptx', '.xlsx', '.odt', '.odp', '.ods']);
 const encryptedOpenXmlExtensions = new Set(['.docx', '.pptx', '.xlsx']);
 
+function streamProtectedMediaFile(filePath, response, next, notFoundMessage, options) {
+  return streamFileToResponse(filePath, response, (error) => {
+    // The preceding stat and the stream open are separate operations; media may disappear between them.
+    if (error?.code === 'ENOENT' && !response.headersSent) {
+      for (const header of ['Accept-Ranges', 'Content-Disposition', 'Content-Length', 'Content-Range', 'Content-Type']) {
+        response.removeHeader(header);
+      }
+      return next(new ApiError(404, notFoundMessage, 'not_found'));
+    }
+    next(error);
+  }, options);
+}
+
 function fileMatchesKind(file, kind) {
   const ext = originalExtension(file.originalname);
   if (kind === 'video') return ext === '.mp4' && file.mimetype === 'video/mp4';
@@ -170,6 +183,7 @@ async function readJpegCourseCoverDimensions(fileHandle, size) {
 async function fileSignatureMatchesKind(file, kind) {
   const ext = originalExtension(file.originalname);
   if (kind === 'caption') {
+    let validationError;
     try {
       const size = (await fs.promises.stat(file.path)).size;
       if (size < 6 || size > maxCaptionFileBytes) return false;
@@ -177,14 +191,25 @@ async function fileSignatureMatchesKind(file, kind) {
       const text = contents.toString('utf8');
       if (!Buffer.from(text, 'utf8').equals(contents) || text.includes('\0')) return false;
       return hasValidWebVttCueTimings(text);
-    } catch {
-      return false;
+    } catch (error) {
+      validationError = error;
+    }
+    if (validationError) {
+      // A caption read failure is operational, not evidence of malformed WebVTT content.
+      writeSystemLog('error', 'media', 'Upload signature validation failed', {
+        kind,
+        errorName: String(validationError?.name || 'Error').slice(0, 100),
+        errorCode: typeof validationError?.code === 'string' ? validationError.code.slice(0, 100) : undefined,
+      });
+      await cleanupTemporaryUpload(file, 'Temporary upload cleanup failed after signature validation error', { kind });
+      throw new ApiError(500, 'The uploaded file could not be checked. Please try again.', 'media_validation_unavailable');
     }
   }
   if (kind === 'document' && ext !== '.pdf' && ext !== '.rtf'
     && !compoundOfficeExtensions.has(ext) && !zipOfficeExtensions.has(ext)) return true;
   if (kind !== 'cover' && kind !== 'video' && kind !== 'document') return true;
   let fileHandle;
+  let validationError;
   try {
     fileHandle = await fs.promises.open(file.path, 'r');
     const size = (await fileHandle.stat()).size;
@@ -264,20 +289,32 @@ async function fileSignatureMatchesKind(file, kind) {
       return Boolean(dimensions);
     }
     return false;
-  } catch {
-    return false;
+  } catch (error) {
+    validationError = error;
   } finally {
     if (fileHandle) {
+      // Preserve the signature decision if best-effort handle cleanup fails.
       try { await fileHandle.close(); } catch {}
     }
   }
+  if (validationError) {
+    // A read failure is operational, not evidence that the uploaded format is invalid.
+    writeSystemLog('error', 'media', 'Upload signature validation failed', {
+      kind,
+      errorName: String(validationError?.name || 'Error').slice(0, 100),
+      errorCode: typeof validationError?.code === 'string' ? validationError.code.slice(0, 100) : undefined,
+    });
+    await cleanupTemporaryUpload(file, 'Temporary upload cleanup failed after signature validation error', { kind });
+    throw new ApiError(500, 'The uploaded file could not be checked. Please try again.', 'media_validation_unavailable');
+  }
+  return false;
 }
 
 function uploadTypeMessage(kind) {
   if (kind === 'video') return 'Upload an MP4 video file.';
   if (kind === 'cover') return `Upload a JPG, PNG, or WebP course cover no larger than ${maxCourseCoverDimension} × ${maxCourseCoverDimension} pixels.`;
   if (kind === 'caption') return 'Upload a valid WebVTT (.vtt) captions file.';
-  return 'Upload a PDF, text, Word, PowerPoint, Excel, CSV, TSV, or OpenDocument file.';
+  return 'Upload a PDF, TXT, Markdown, RTF, Word, PowerPoint, Excel, CSV, TSV, or OpenDocument file.';
 }
 
 function storedFilename(originalName) {
@@ -669,7 +706,7 @@ protectedMediaRouter.get('/captions/:captionId', requireAuth, (req, res, next) =
     res.setHeader('Content-Disposition', 'inline');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (req.method === 'HEAD') return res.end();
-    streamFileToResponse(filePath, res, next);
+    streamProtectedMediaFile(filePath, res, next, 'Caption track not found.');
   });
 });
 
@@ -698,7 +735,7 @@ protectedMediaRouter.get('/resources/:resourceId', requireAuth, (req, res, next)
     res.setHeader('Content-Length', stats.size);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (req.method === 'HEAD') return res.end();
-    streamFileToResponse(filePath, res, next);
+    streamProtectedMediaFile(filePath, res, next, 'Document not found.');
   });
 });
 
@@ -740,7 +777,7 @@ protectedMediaRouter.get('/:mediaId', requireAuth, (req, res, next) => {
       res.status(200);
       res.setHeader('Content-Length', stats.size);
       if (req.method === 'HEAD') return res.end();
-      return streamFileToResponse(filePath, res, next);
+      return streamProtectedMediaFile(filePath, res, next, 'Media not found.');
     }
     let start = match[1] ? Number(match[1]) : null;
     let end = match[2] ? Number(match[2]) : null;
@@ -759,6 +796,6 @@ protectedMediaRouter.get('/:mediaId', requireAuth, (req, res, next) => {
     res.setHeader('Content-Range', `bytes ${start}-${end}/${stats.size}`);
     res.setHeader('Content-Length', end - start + 1);
     if (req.method === 'HEAD') return res.end();
-    return streamFileToResponse(filePath, res, next, { start, end });
+    return streamProtectedMediaFile(filePath, res, next, 'Media not found.', { start, end });
   });
 });

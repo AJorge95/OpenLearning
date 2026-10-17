@@ -18,3 +18,11 @@ test('enrolled learner list has a heading beneath the assignment panel heading',
   assert.match(pageSource, /<h3>Assign a learner<\/h3>[\s\S]*?<h4 className="path-assigned-heading">Enrollments on this page<\/h4>/);
   assert.match(styles, /\.path-assigned-heading\s*\{[^}]*font-size:\s*11px;[^}]*font-weight:\s*650;/);
 });
+
+test('learning-path course deadlines use the shared safe formatter', () => {
+  const pageSource = fs.readFileSync(path.join(sourceDirectory, 'pages-programs.tsx'), 'utf8');
+
+  assert.match(pageSource, /import \{ formatLearningDeadlineDay \} from '\.\/learning-deadline';/);
+  assert.match(pageSource, /formatLearningDeadlineDay\(course\.deadlineAt\)/);
+  assert.doesNotMatch(pageSource, /pathCourseDeadlineFormatter/);
+});

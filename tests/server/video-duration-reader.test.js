@@ -19,6 +19,24 @@ test('shares in-flight duration reads for the same media file', async () => {
   assert.deepEqual(await Promise.all([firstRequest, secondRequest]), [42, 42]);
 });
 
+test('caches verified durations in a bounded least-recently-used set', async () => {
+  let reads = 0;
+  const readVideoDuration = createVideoDurationReader(async () => {
+    reads += 1;
+    return reads * 10;
+  }, { durationEntryLimit: 2 });
+
+  assert.equal(await readVideoDuration('media-a', 'video-a.mp4'), 10);
+  assert.equal(await readVideoDuration('media-b', 'video-b.mp4'), 20);
+  assert.equal(await readVideoDuration('media-a', 'video-a.mp4'), 10);
+  assert.equal(await readVideoDuration('media-c', 'video-c.mp4'), 30);
+  assert.equal(await readVideoDuration('media-a', 'video-a.mp4'), 10);
+  assert.equal(reads, 3);
+
+  assert.equal(await readVideoDuration('media-b', 'video-b.mp4'), 40);
+  assert.equal(reads, 4);
+});
+
 test('caches unavailable durations until expiry', async () => {
   let currentTime = 1_000;
   let reads = 0;

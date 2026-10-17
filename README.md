@@ -1,132 +1,168 @@
 # OpenLearning
 
-OpenLearning is a lightweight, self-hosted learning platform for a single organization. It provides a searchable course catalog, video lessons, module quizzes, learning paths, competencies, learner progress, course access grants, and role-based course management.
+OpenLearning is a self-hosted learning platform with courses, video lessons, quizzes, learning paths, learner progress, and administrator and moderator tools. It stores application data in SQLite and serves the web client, API, and media from one Node.js process.
 
 If OpenLearning is useful for your team, please [star the repository](https://github.com/AJorge95/OpenLearning) to help others discover it.
 
-## Features
+## Install on Linux
 
-- Username-and-password sign-in, email addresses for new accounts, configurable learner registration fields and account limits, and a one-time setup wizard for the initial administrator.
-- Administrator, moderator, and learner roles.
-- Public courses for signed-in learners, plus private courses available through an individual grant or an unlocked step in an assigned learning path.
-- Guided learning paths that order courses, optionally require earlier courses to be completed, and can be assigned by staff. Learner self-enrollment is available for paths made only of public courses.
-- Course competency mappings and learner progress toward an organization’s competency map.
-- Versioned course publication with review workflows, restoration of earlier versions, and optional completion windows.
-- A learner calendar for course deadlines and completion status.
-- Courses organized into ordered modules, described video lessons with optional text transcripts and WebVTT caption tracks, lesson links and documents, and optional single-answer quizzes.
-- Lesson-level likes, dislikes, and learner comments, with reactions limited to one per learner per lesson.
-- Verified video watch progress before lesson completion, saved quiz attempts, unlimited retries, course completion tracking, and learner-specific certificates.
-- SQLite application data and local course media stored in a separate directory for each course.
-- Optional platform icon and selectable violet, ocean, forest, rose, and amber color palettes.
-- MP4 video upload with browser upload progress and authenticated byte-range delivery for seeking.
-- Administrator-only audit and system logs with search, filters, and pagination.
-- Native Node deployment: one Express process serves the API and production web client. Docker is not required.
-
-## Requirements
-
-- Node.js 24 LTS
-- npm
-
-## Install and run
+The one-command installer supports Ubuntu 22.04 or newer, or RHEL 9 or newer compatible systems with systemd. Run it as root:
 
 ```sh
-git clone <repository-url> openlearning
-cd openlearning
-npm install
+curl -fsSL https://raw.githubusercontent.com/AJorge95/OpenLearning/main/scripts/install.sh | sudo bash
+```
+
+It installs Node.js 24, builds the application, creates the `openlearning` service, and checks the page, assets, and health endpoint. On first install it creates a private configuration at `/etc/openlearning/.env`, stores data under `/var/lib/openlearning`, and prints a one-time setup token. Enter that token in the setup wizard, then remove `SETUP_TOKEN` from the environment file and restart the service:
+
+```sh
+sudo systemctl restart openlearning
+```
+
+Run the same command again to update. It backs up the database and course media before replacing an existing installation and restores the previous release and data if readiness checks fail. To install an exact revision, pass its full commit SHA:
+
+```sh
+OPENLEARNING_COMMIT="$(git rev-parse HEAD)"
+curl -fsSL https://raw.githubusercontent.com/AJorge95/OpenLearning/main/scripts/install.sh | sudo env OPENLEARNING_COMMIT="$OPENLEARNING_COMMIT" bash
+```
+
+The service listens on port `5173` by default. To choose another port, pass `OPENLEARNING_PORT` to `sudo env`, for example: `curl -fsSL https://raw.githubusercontent.com/AJorge95/OpenLearning/main/scripts/install.sh | sudo env OPENLEARNING_PORT=5173 bash`. The installer opens the port in an active local UFW or firewalld configuration and prints the IPv4 address selected by the host's default route; that address may be private. It does not enable a firewall or change cloud firewalls, NAT, TLS, or reverse-proxy settings. Set `TRUST_PROXY=true` only behind a trusted proxy that supplies forwarding headers. The one-time setup token and session secret are private credentials; do not share `/etc/openlearning/.env`.
+
+## Docker Compose
+
+Compose uses the published GHCR image by default. Create persistent data and backup directories and secret files readable by the container's `node` user (UID 1000):
+
+```sh
+sudo install -d -o 1000 -g 1000 -m 0750 /srv/openlearning/data /srv/openlearning/backups
+umask 077
+openssl rand -hex 32 > /srv/openlearning/session_secret
+openssl rand -hex 32 > /srv/openlearning/setup_token
+sudo chown 1000:1000 /srv/openlearning/session_secret /srv/openlearning/setup_token
+sudo chmod 0440 /srv/openlearning/session_secret /srv/openlearning/setup_token
+export OPENLEARNING_DATA_PATH=/srv/openlearning/data
+export OPENLEARNING_BACKUP_PATH=/srv/openlearning/backups
+export SESSION_SECRET_FILE=/srv/openlearning/session_secret
+export SETUP_TOKEN_FILE=/srv/openlearning/setup_token
+```
+
+Start first-run setup, enter the displayed token in the wizard at `http://<server>:5173`, then deploy without the setup override:
+
+```sh
+docker compose -f compose.yaml -f compose.initial-setup.yaml up -d --pull always --no-build
+cat /srv/openlearning/setup_token
+docker compose -f compose.yaml up -d --pull always --no-build
+rm /srv/openlearning/setup_token
+```
+
+Compose defaults to `ghcr.io/ajorge95/openlearning:latest`. To pin a deployment, set `OPENLEARNING_IMAGE` to `ghcr.io/ajorge95/openlearning:sha-<full-commit-sha>`. Set `OPENLEARNING_PORT` to change the host port. For a local build, use `docker compose up -d --build --pull never`. The data and backup directories remain on the host when the service is removed.
+
+## Docker Swarm
+
+Swarm runs one replica because SQLite, sessions, media, and the backup scheduler use local application storage. Create the bind-mount directories on the storage node and label that node:
+
+```sh
+sudo install -d -o 1000 -g 1000 -m 0750 /srv/openlearning/data /srv/openlearning/backups
+export OPENLEARNING_NODE=worker-1
+export OPENLEARNING_DATA_PATH=/srv/openlearning/data
+export OPENLEARNING_BACKUP_PATH=/srv/openlearning/backups
+docker node update --label-add openlearning-data=true "$OPENLEARNING_NODE"
+```
+
+On a Swarm manager, create the external secrets and deploy with the first-run override:
+
+```sh
+umask 077
+openssl rand -hex 32 > ./openlearning_session_secret
+openssl rand -hex 32 > ./openlearning_setup_token
+docker secret create openlearning_session_secret ./openlearning_session_secret
+docker secret create openlearning_setup_token ./openlearning_setup_token
+export OPENLEARNING_IMAGE=ghcr.io/ajorge95/openlearning:latest
+docker stack deploy -c docker-stack.yml -c docker-stack.initial-setup.yml openlearning
+cat ./openlearning_setup_token
+```
+
+Complete setup at `http://<storage-node>:5173`, then redeploy without the setup override:
+
+```sh
+docker stack deploy -c docker-stack.yml openlearning
+```
+
+Wait for `docker stack services openlearning` to show the service updated before deleting its setup secret. Swarm will not remove a secret still used by a service:
+
+```sh
+docker secret rm openlearning_setup_token
+rm ./openlearning_setup_token ./openlearning_session_secret
+```
+
+The stack publishes port `5173` in host mode and requires `OPENLEARNING_IMAGE`, `OPENLEARNING_DATA_PATH`, and `OPENLEARNING_BACKUP_PATH` in the manager environment; `docker stack deploy` does not load a Compose `.env` file. Keep the service on one node with access to those paths. On SELinux-enforcing hosts such as RHEL, give the bind-mounted data and backup directories a container-accessible context such as `container_file_t`; Swarm ignores `:z` and `:Z` relabel options. Before an update, create and verify a backup. Swarm can roll back a failed image update, but it does not restore data or undo database migrations.
+
+## Move a systemd installation to Docker
+
+Create and verify a full backup in **Settings → Backups**, stop the service, and restore the database and media into the Docker data directory. Keep the original data and configuration until the container is verified. Do not run systemd and Docker against the same SQLite files at once. Changing the session secret signs users out.
+
+## Run from source
+
+Requires Node.js 24 or newer. The checkout uses one `.env` file for both commands:
+
+```sh
+npm ci
 cp .env.example .env
 ```
 
-For deployment, set `NODE_ENV=production` and replace `SESSION_SECRET` in `.env` with a random value. You can generate one with Node:
+Set `SESSION_SECRET` and `SETUP_TOKEN` to separate random values of at least 32 characters before first use. Build and start the production server with `npm run build` and `npm start`. For development with live reload, use `npm run dev`. Both commands use port `5173` by default and the same `.env` file.
+
+## Configuration
+
+Set values in `.env` or the process environment.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `5173` | HTTP port for the web client, API, and media. |
+| `DATA_DIR` | `./data` | Base directory for the database and media. |
+| `DB_PATH` | `DATA_DIR/openlearning.sqlite` | Optional database path override. |
+| `MEDIA_ROOT` | `DATA_DIR/course-media` | Optional course-media path override. |
+| `BACKUP_DIR` | `./backup` | Default location for application backups. |
+| `SESSION_SECRET` / `SESSION_SECRET_FILE` | — | Session signing secret, provided directly or by a mounted file. Set one. |
+| `SETUP_TOKEN` / `SETUP_TOKEN_FILE` | — | First-run setup credential, provided directly or by a mounted file. Set one; remove it after setup. |
+| `TRUST_PROXY` | `false` | Set `true` only behind a trusted reverse proxy. |
+| `MAX_UPLOAD_BYTES` | `2147483648` | Maximum size of one uploaded file, in bytes. |
+| `REQUEST_TIMEOUT_MS` | `300000` | Maximum time to receive one HTTP request, in milliseconds. |
+
+The installer and Docker examples configure persistent paths and secrets for their deployment method. `/healthz` checks that the HTTP process responds; `/readyz` reports whether initial setup is complete and the app can serve users.
+
+## Back up and restore
+
+Administrators can schedule daily or weekly database, course-media, or full backups in **Settings → Backups**, with per-job destinations and retention policies. Missed runs wait until the next scheduled time. `npm run backup` creates a verified, timestamped full backup using the same `DATA_DIR`, `DB_PATH`, and `MEDIA_ROOT` settings as the app; it reads `.env` and writes under `./backup` by default. Set `BACKUP_DIR` to choose another destination. Pause course edits and uploads while media is copied. The command checks the SQLite snapshot and media copies, rejects a destination inside the media root, and removes incomplete output after a failure.
 
 ```sh
-node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+npm run backup
 ```
 
-Before first-run setup, set `SETUP_TOKEN` in `.env` to a separate random value of at least 32 characters (the same Node command can generate one). Keep it private and enter it in the setup wizard over localhost or HTTPS. After setup succeeds, remove the token from `.env` and restart the server; setup is then permanently closed by the database's configured state.
+To restore in the UI, open **Settings → Backups** and choose **Restore** beside a retained, verified full backup. Confirm the replacement after reviewing the selected run. OpenLearning is temporarily unavailable to users while it pauses changes and scheduled backups, validates the database and every media file, applies pending database migrations, and creates a verified full backup of the current installation before replacing its data. All sessions are cleared, so sign in again with an account and password from the restored backup. Database-only and media-only backups cannot be restored from the UI.
 
-The example secret is rejected in production. If HTTPS is terminated by a reverse proxy, set `TRUST_PROXY=true` so secure session cookies work through that proxy. Then build and start the application:
+For offline recovery, stop the application and run the command below from the OpenLearning installation directory, replacing the path with the full backup directory. The CLI uses the same validation and migration checks and preserves the previous files if the switch fails. Keep the application stopped until restoration completes; use the same service account that normally runs OpenLearning.
 
 ```sh
-npm run build
-npm start
+npm run restore -- "/var/backups/openlearning/<full-backup-directory>"
 ```
 
-Open `http://localhost:3000`. On the first launch, the two-step setup wizard asks for the bootstrap token, platform name, optional icon and color palette, initial administrator credentials, public connection protocol, and registration policy. Setup can only be completed once. When registration is enabled, new accounts receive the learner role. Administrators can update branding, protocol, registration access, and the account cap from **Settings**. A limit of `0` means unlimited accounts; a positive limit counts all accounts, including administrators and moderators.
+The CLI restore stages and verifies both data components before switching them into place. If the switch fails, it puts the previous database and media directory back. When a verified pre-restore backup was available, it preserves the previous installation there after a successful restore; otherwise, the command prints the paths where it kept the original files.
 
-Service monitors can use `/healthz` to check that the HTTP process is responding. `/readyz` reports ready only when SQLite has a schema-migration version, setup is complete (`setup_complete = '1'`), and at least one enabled administrator account exists. It returns HTTP 503 when any readiness check fails or while the server is draining during shutdown.
-
-For local development, run the Vite client and API together:
+For Docker Compose, run the command in a one-off container with the service stopped so it uses the same data and backup mounts:
 
 ```sh
-npm run dev
+docker compose stop openlearning
+docker compose run --rm --no-deps openlearning npm run restore -- "/var/backups/openlearning/<full-backup-directory>"
+docker compose up -d openlearning
 ```
 
-The development client is available at `http://127.0.0.1:5173` and proxies API and media requests to the Express server on port 3000.
+Scheduled backup jobs default to retaining 14 successful backup artifacts; missed schedules are not replayed after downtime.
 
-## Checks
-
-Run the automated server utility and persistence checks, then type-check the client source:
+Run the automated checks with:
 
 ```sh
 npm test
 npm run typecheck
+npm run build
 ```
 
-The suite uses Node's built-in test runner, in-memory and isolated temporary SQLite databases, and temporary filesystem fixtures. It does not start the application server or use the configured application data directory. `npm run build` runs the strict TypeScript check before creating the production client bundle.
-
-## Roles and permissions
-
-- **Administrator:** Create and manage accounts, roles, passwords, and course activity; manage settings, courses, learning paths, competencies, learner assignments, and access grants.
-- **Moderator:** Create and manage courses and learning paths, assign learners, map course competencies, and review course dashboards. Moderators cannot manage accounts, roles, or platform settings.
-- **Learner:** Browse and learn from published public courses, plus private courses available through an individual grant or an unlocked step in an assigned learning path.
-
-All course and lesson viewing requires sign-in. Video lessons must be watched through verified playback in the learning player before they can be marked complete. Learners encounter prior-lesson locks; administrators and moderators can open later lessons to review them. Course assignments and learning-path enrollments place eligible courses in a learner's My learning list. Assigned paths can provide access to private courses one step at a time as prerequisites are completed. Revoking a course or path assignment takes effect on the next API or media request. Completion windows appear in the learner calendar and do not block course access.
-
-Administrators can manually create learner, moderator, or administrator accounts, change roles or account status, and reset passwords. New accounts require a unique email address; sign-in still uses the username and password. Account details show the last successful login, and failed sign-in attempts do not update it. From **Settings** → **Registration fields**, administrators can add up to 30 text, date, select-list, or checkbox fields to public signup and choose which are required. Saved learner answers remain on the account if a field is later changed or removed, and administrators can review them on the account-details page. The account list and course-assignment list can search by username or email.
-
-Course dashboards are available to administrators and moderators and show completion rates, lesson completion, quiz participation and scores, plus per-learner progress and attempt details.
-
-## Logs
-
-Administrators can open **Audit log** and **System log** from the management area. The audit log records sign-ins, account and platform changes, course and curriculum edits, moderated learner-comment removals, media uploads, learner assignments, and private-course access grants. The system log records server startup and shutdown, failed sign-ins, authentication rate limits, and unhandled request errors. Log records are stored in SQLite and retained up to 10,000 audit entries and 5,000 system entries; the oldest entries are removed as new records arrive. Log tables are included in the regular database backup.
-
-## Configuration
-
-Environment variables can be set in `.env` or in the process environment:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `NODE_ENV` | `development` | Accepted values are `development`, `test`, and `production`. Set to `production` for deployment cookies and production security headers. |
-| `PORT` | `3000` | HTTP TCP port from 1 to 65535. Invalid values stop startup. |
-| `DATA_DIR` | `./data` | Parent directory used to derive database and media paths when their overrides are unset. |
-| `DB_PATH` | `./data/openlearning.sqlite` | SQLite database file path. If unset, defaults to `openlearning.sqlite` inside `DATA_DIR`. |
-| `MEDIA_ROOT` | `./data/course-media` | Root directory for course media; if unset, defaults to `course-media` inside `DATA_DIR`. Each course gets its own subdirectory. |
-| `MAX_UPLOAD_BYTES` | `2147483648` | Maximum size for a single uploaded video, cover, or lesson document, as a positive whole number of bytes. Invalid values stop startup. |
-| `REQUEST_TIMEOUT_MS` | `300000` | Maximum time in milliseconds for Node to receive an entire HTTP request, from 1 to 2147483647. Set a larger value for slower large uploads; invalid values stop startup. |
-| `SESSION_SECRET` | Development-only value | Session signing secret. Production requires at least 32 characters; use a random secret and keep it private. |
-| `SETUP_TOKEN` | Unset | Private, random first-run administrator bootstrap credential, required only until initial setup succeeds. When set, it must contain 32 to 256 characters. |
-| `TRUST_PROXY` | `false` | Accepts `true` or `false` (case-insensitive). Set `true` only behind a trusted reverse proxy that sets forwarding headers; other non-empty values stop startup. |
-
-`DB_PATH` and `MEDIA_ROOT` are independent overrides. The example leaves them unset so changing `DATA_DIR` moves the database and media together. Set either override explicitly when you need to store it elsewhere.
-
-The media upload accepts MP4 video, JPG, PNG, or WebP course covers, and WebVTT caption tracks up to 5 MB each. A lesson can have one caption track per language; learners can select tracks in the video controls. Lessons can also include HTTP(S) links and downloadable PDF, text, Markdown, RTF, Office, CSV/TSV, or OpenDocument attachments. Caption tracks and lesson documents are stored in that course's media folder and served only to users who can access the course. Videos are stored as uploaded; the server does not transcode them. Use MP4 with codecs supported by the browsers your learners use. Select the public connection protocol in setup or **Settings**. Selecting HTTPS enables secure session cookies; it does not provision a TLS certificate. Terminate TLS on Node or a reverse proxy, and set `TRUST_PROXY=true` when a reverse proxy handles HTTPS.
-
-## Back up and restore
-
-Back up both the SQLite database and the complete media root. Platform identity, connection, and registration settings and the optional icon are stored in SQLite, so they are included in the database backup. SQLite uses write-ahead logging, so use SQLite's online backup command or stop the application and include any `-wal` and `-shm` files when making a raw file copy.
-
-Example online backup while the app is running:
-
-```sh
-mkdir -p ./backup
-sqlite3 ./data/openlearning.sqlite ".backup './backup/openlearning.sqlite'"
-cp -a ./data/course-media ./backup/course-media
-```
-
-Pause course edits and uploads while copying the media tree so the database backup and media files describe the same point in time. The `sqlite3` command is the SQLite CLI; the app itself uses its bundled Node SQLite driver.
-
-To restore, stop OpenLearning, restore the database to `DB_PATH` and the media tree to `MEDIA_ROOT`, then start the app again. Keep the directory layout and course folders intact. Restoring only one of the database or media tree can leave course records without their uploaded files, or files without their course records.
-
-## License
-
-OpenLearning is distributed under the MIT License. See [LICENSE](LICENSE).
+See [LICENSE](LICENSE) for the MIT license.

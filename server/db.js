@@ -3,8 +3,9 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { config } from './config.js';
 import { unicodeContains } from './sql.js';
+import { sessionUserIdFromJson } from './session-data.js';
 
-const latestSchemaVersion = 33;
+const latestSchemaVersion = 42;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -294,14 +295,7 @@ export function migrateDatabase(database = db) {
         const rows = rowsAfter.all(lastRowId, 500);
         if (!rows.length) break;
         for (const row of rows) {
-          let userId = null;
-          try {
-            const sessionData = JSON.parse(row.session_data);
-            if (sessionData && typeof sessionData === 'object' && !Array.isArray(sessionData) && typeof sessionData.userId === 'string') {
-              userId = sessionData.userId;
-            }
-          } catch {}
-          saveUserId.run(userId, row.row_id);
+          saveUserId.run(sessionUserIdFromJson(row.session_data), row.row_id);
           lastRowId = row.row_id;
         }
       }
@@ -822,6 +816,305 @@ export function migrateDatabase(database = db) {
     });
     migration();
   }
+
+  if (current < 34) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        ALTER TABLE users ADD COLUMN registration_status TEXT NOT NULL DEFAULT 'approved'
+          CHECK (registration_status IN ('pending', 'approved'));
+        CREATE INDEX users_registration_status_created ON users(registration_status, created_at, id);
+        INSERT OR IGNORE INTO app_settings (key, value) VALUES ('registration_approval_required', '0');
+        INSERT INTO schema_migrations (version) VALUES (34);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 35) {
+    const migration = database.transaction(() => {
+      // Include the username tie-break so pending account pages need no temporary sort.
+      database.exec(`
+        DROP INDEX IF EXISTS users_registration_status_created;
+        CREATE INDEX users_registration_status_created
+          ON users(registration_status, created_at, username COLLATE NOCASE);
+        INSERT INTO schema_migrations (version) VALUES (35);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 36) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE backup_jobs (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          scope TEXT NOT NULL CHECK (scope IN ('full', 'database', 'media')),
+          frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly')),
+          weekday INTEGER CHECK (weekday BETWEEN 0 AND 6),
+          run_time_utc TEXT NOT NULL,
+          destination_path TEXT NOT NULL,
+          retention_count INTEGER NOT NULL CHECK (retention_count BETWEEN 1 AND 365),
+          enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CHECK ((frequency = 'daily' AND weekday IS NULL) OR (frequency = 'weekly' AND weekday IS NOT NULL))
+        );
+        CREATE INDEX backup_jobs_enabled ON backup_jobs(enabled, frequency, run_time_utc);
+        CREATE TABLE backup_runs (
+          id TEXT PRIMARY KEY,
+          job_id TEXT NOT NULL,
+          job_name TEXT NOT NULL,
+          scope TEXT NOT NULL CHECK (scope IN ('full', 'database', 'media')),
+          destination_path TEXT NOT NULL,
+          trigger_type TEXT NOT NULL CHECK (trigger_type IN ('scheduled', 'manual')),
+          triggered_by TEXT,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'success', 'failed')),
+          scheduled_for TEXT,
+          started_at TEXT,
+          finished_at TEXT,
+          backup_path TEXT,
+          artifact_deleted_at TEXT,
+          error_message TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX backup_runs_created ON backup_runs(created_at DESC, id DESC);
+        CREATE INDEX backup_runs_job_status ON backup_runs(job_id, status, created_at DESC);
+        INSERT INTO schema_migrations (version) VALUES (36);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 37) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        -- The backup dashboard resolves each job's newest run by job and creation time.
+        CREATE INDEX backup_runs_job_created ON backup_runs(job_id, created_at DESC, id DESC);
+        INSERT INTO schema_migrations (version) VALUES (37);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 38) {
+    const migration = database.transaction(() => {
+      // Course publication and restoration resolve learner state by course first.
+      // Keep narrow historical fixtures migratable when they omit unrelated tables.
+      const hasCourseLearningState = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'course_learning_state'").get();
+      if (hasCourseLearningState) database.exec('CREATE INDEX IF NOT EXISTS course_learning_state_course_user ON course_learning_state(course_id, user_id)');
+      database.prepare('INSERT INTO schema_migrations (version) VALUES (38)').run();
+    });
+    migration();
+  }
+
+  if (current < 39) {
+    const migration = database.transaction(() => {
+      // Approved-account views filter by registration status before grouping roles.
+      // Keep narrow historical fixtures migratable when account fields are absent.
+      const usersColumns = new Set(database.prepare('PRAGMA table_info(users)').all().map(({ name }) => name));
+      if (usersColumns.has('registration_status') && usersColumns.has('role') && usersColumns.has('username')) {
+        database.exec(`
+          CREATE INDEX users_registration_management_order ON users(
+            registration_status,
+            CASE role WHEN 'admin' THEN 1 WHEN 'moderator' THEN 2 ELSE 3 END,
+            username COLLATE NOCASE
+          );
+        `);
+      }
+      database.prepare('INSERT INTO schema_migrations (version) VALUES (39)').run();
+    });
+    migration();
+  }
+
+  if (current < 40) {
+    const migration = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE course_groups (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE UNIQUE INDEX course_groups_name ON course_groups(name COLLATE NOCASE);
+        CREATE INDEX course_groups_created ON course_groups(created_at, id);
+        CREATE TABLE course_group_courses (
+          group_id TEXT NOT NULL REFERENCES course_groups(id) ON DELETE CASCADE,
+          course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+          added_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+          added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (group_id, course_id)
+        );
+        CREATE INDEX course_group_courses_course ON course_group_courses(course_id, group_id);
+        INSERT INTO schema_migrations (version) VALUES (40);
+      `);
+    });
+    migration();
+  }
+
+  if (current < 41) {
+    const foreignKeysWereEnabled = Boolean(database.pragma('foreign_keys', { simple: true }));
+    if (foreignKeysWereEnabled) database.pragma('foreign_keys = OFF');
+    try {
+      const migration = database.transaction(() => {
+        const quizTable = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'quizzes'").get();
+        const quizColumns = new Set(quizTable ? database.prepare('PRAGMA table_info(quizzes)').all().map(({ name }) => name) : []);
+        // Some historical fixtures intentionally omit unrelated quiz data. Only rewrite the complete
+        // pre-41 schema; a real version-40 database has these columns from the earlier migrations.
+        const canMigrateQuizOwnership = ['module_id', 'title', 'pass_mark', 'created_at', 'updated_at', 'stable_id']
+          .every((column) => quizColumns.has(column));
+        if (!canMigrateQuizOwnership) {
+          database.prepare('INSERT INTO schema_migrations (version) VALUES (41)').run();
+          return;
+        }
+        database.exec(`
+          CREATE TABLE quizzes_v41 (
+            id TEXT PRIMARY KEY,
+            module_id TEXT REFERENCES course_modules(id) ON DELETE CASCADE,
+            course_id TEXT REFERENCES courses(id) ON DELETE CASCADE,
+            title TEXT NOT NULL DEFAULT 'Module quiz',
+            pass_mark INTEGER NOT NULL DEFAULT 70 CHECK (pass_mark BETWEEN 1 AND 100),
+            questions_per_attempt INTEGER NOT NULL DEFAULT 0 CHECK (questions_per_attempt >= 0),
+            required_for_completion INTEGER NOT NULL DEFAULT 1 CHECK (required_for_completion IN (0, 1)),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            stable_id TEXT,
+            CHECK ((module_id IS NOT NULL AND course_id IS NULL) OR (module_id IS NULL AND course_id IS NOT NULL))
+          );
+          INSERT INTO quizzes_v41
+            (id, module_id, course_id, title, pass_mark, questions_per_attempt, required_for_completion, created_at, updated_at, stable_id)
+          SELECT id, module_id, NULL, title, pass_mark, 0, 1, created_at, updated_at, stable_id FROM quizzes;
+          DROP TABLE quizzes;
+          ALTER TABLE quizzes_v41 RENAME TO quizzes;
+          CREATE UNIQUE INDEX quizzes_module_unique ON quizzes(module_id) WHERE module_id IS NOT NULL;
+          CREATE UNIQUE INDEX quizzes_course_unique ON quizzes(course_id) WHERE course_id IS NOT NULL;
+          CREATE INDEX quizzes_course_id ON quizzes(course_id) WHERE course_id IS NOT NULL;
+
+          CREATE TABLE quiz_attempt_sessions (
+            id TEXT PRIMARY KEY,
+            quiz_id TEXT NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            question_snapshot_json TEXT NOT NULL,
+            started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            completed_at TEXT
+          );
+          CREATE UNIQUE INDEX quiz_attempt_sessions_active_user_quiz
+            ON quiz_attempt_sessions(user_id, quiz_id) WHERE completed_at IS NULL;
+          CREATE INDEX quiz_attempt_sessions_quiz_user ON quiz_attempt_sessions(quiz_id, user_id, started_at DESC);
+        `);
+        const violations = database.pragma('foreign_key_check');
+        if (violations.length) throw new Error(`Quiz ownership migration found ${violations.length} foreign-key violation(s).`);
+        database.prepare('INSERT INTO schema_migrations (version) VALUES (41)').run();
+      });
+      migration.immediate();
+    } finally {
+      if (foreignKeysWereEnabled) database.pragma('foreign_keys = ON');
+    }
+  }
+
+  if (current < 42) {
+    const migration = database.transaction(() => {
+      const tables = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(({ name }) => name));
+      const courseGroupsExist = tables.has('course_groups');
+      const courseGroupColumns = courseGroupsExist
+        ? new Set(database.prepare('PRAGMA table_info(course_groups)').all().map(({ name }) => name))
+        : new Set();
+
+      if (courseGroupColumns.has('course_id')) {
+        const legacyGroups = database.prepare(`
+          SELECT id, name, description, course_id, created_by, created_at
+          FROM course_groups ORDER BY created_at, id
+        `).all();
+        const groupsByName = new Map();
+
+        for (const legacyGroup of legacyGroups) {
+          // Match SQLite's built-in NOCASE behavior when coalescing old per-course groups.
+          const key = legacyGroup.name.replace(/[A-Z]/g, (character) => character.toLowerCase());
+          let group = groupsByName.get(key);
+          if (!group) {
+            group = {
+              id: legacyGroup.id,
+              name: legacyGroup.name,
+              descriptions: [],
+              created_by: legacyGroup.created_by,
+              created_at: legacyGroup.created_at,
+              courses: [],
+            };
+            groupsByName.set(key, group);
+          }
+          if (legacyGroup.description && !group.descriptions.includes(legacyGroup.description)) {
+            group.descriptions.push(legacyGroup.description);
+          }
+          group.courses.push({
+            id: legacyGroup.course_id,
+            added_by: legacyGroup.created_by,
+            added_at: legacyGroup.created_at,
+          });
+        }
+
+        database.exec(`
+          ALTER TABLE course_groups RENAME TO course_groups_legacy_v42;
+          CREATE TABLE course_groups (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE TABLE IF NOT EXISTS course_group_courses (
+            group_id TEXT NOT NULL REFERENCES course_groups(id) ON DELETE CASCADE,
+            course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+            added_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+            added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, course_id)
+          );
+        `);
+
+        const insertGroup = database.prepare(`
+          INSERT INTO course_groups (id, name, description, created_by, created_at)
+          VALUES (?, ?, ?, ?, ?)
+        `);
+        const insertCourse = database.prepare(`
+          INSERT OR IGNORE INTO course_group_courses (group_id, course_id, added_by, added_at)
+          VALUES (?, ?, ?, ?)
+        `);
+        for (const group of groupsByName.values()) {
+          insertGroup.run(group.id, group.name, group.descriptions.join('\n\n'), group.created_by, group.created_at);
+          for (const course of group.courses) {
+            insertCourse.run(group.id, course.id, course.added_by, course.added_at);
+          }
+        }
+        database.exec('DROP TABLE course_groups_legacy_v42');
+      } else {
+        database.exec(`
+          CREATE TABLE IF NOT EXISTS course_groups (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE TABLE IF NOT EXISTS course_group_courses (
+            group_id TEXT NOT NULL REFERENCES course_groups(id) ON DELETE CASCADE,
+            course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+            added_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+            added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, course_id)
+          );
+        `);
+      }
+
+      database.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS course_groups_name ON course_groups(name COLLATE NOCASE);
+        CREATE INDEX IF NOT EXISTS course_groups_created ON course_groups(created_at, id);
+        CREATE INDEX IF NOT EXISTS course_group_courses_course ON course_group_courses(course_id, group_id);
+      `);
+      database.prepare('INSERT INTO schema_migrations (version) VALUES (42)').run();
+    });
+    migration();
+  }
+
 }
 
 export function setting(key) {

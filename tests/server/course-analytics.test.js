@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import express from 'express';
 import { after, before, test } from 'node:test';
 import { MAX_LEARNING_PATH_COURSES } from '../../shared/learning-path-limits.js';
-import { COMPETENCY_PROGRESS_PAGE_SIZE } from '../../shared/competency-progress.js';
+import { COMPETENCY_ACHIEVEMENT_BATCH_SIZE, COMPETENCY_PROGRESS_PAGE_SIZE } from '../../shared/competency-progress.js';
 
 const isolatedConfig = {
   NODE_ENV: 'test',
@@ -36,6 +36,8 @@ let readCourseById;
 let requireCourseManagerForTests;
 let logicalCourseId;
 let publishedVersionForLogicalCourse;
+let trackCloneContentReads = false;
+let cloneContentReadExecutions = new Map();
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -159,6 +161,21 @@ function userHeaders(userId) {
   return { 'x-test-user': userId, connection: 'close' };
 }
 
+function mp4Box(type, payload) {
+  const box = Buffer.alloc(8 + payload.length);
+  box.writeUInt32BE(box.length, 0);
+  box.write(type, 4, 4, 'ascii');
+  payload.copy(box, 8);
+  return box;
+}
+
+function mp4WithDurationSeconds(seconds) {
+  const movieHeader = Buffer.alloc(20);
+  movieHeader.writeUInt32BE(1_000, 12);
+  movieHeader.writeUInt32BE(seconds * 1_000, 16);
+  return mp4Box('moov', mp4Box('mvhd', movieHeader));
+}
+
 function insertCourseVersionHistory(courseId, versionCount) {
   const insertHistory = database.transaction(() => {
     database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
@@ -250,6 +267,33 @@ test('course version history keeps twenty prior versions on a single page', asyn
   }
 });
 
+test('course review history shows the submitter separately from the revision author', async () => {
+  const courseId = 'course-review-submitter-display';
+  const submitterId = 'course-review-submitter-user';
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
+    VALUES (?, 'review_submitter', 'review.submitter@example.invalid', 'not-used', 'moderator', 0)`)
+    .run(submitterId);
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Review submitter display', 'published', 'admin-1', 'admin-1')`).run(courseId);
+  database.prepare(`INSERT INTO course_revisions
+    (course_id, revision_course_id, author_id, review_status, submitted_by, submitted_at)
+    VALUES (?, ?, 'admin-1', 'in_review', ?, CURRENT_TIMESTAMP)`).run(courseId, courseId, submitterId);
+
+  try {
+    const response = await fetch(apiUrl(`/manage/courses/${courseId}/versions`), {
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(response.status, 200);
+    const { revision } = await response.json();
+    assert.equal(revision.author, 'admin');
+    assert.equal(revision.submittedBy, submitterId);
+    assert.equal(revision.submittedByName, 'review_submitter');
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+    database.prepare('DELETE FROM users WHERE id = ?').run(submitterId);
+  }
+});
+
 test('editing a versioned course clones caption references to shared media files', () => {
   const courseId = 'course-caption-version';
   try {
@@ -278,6 +322,125 @@ test('editing a versioned course clones caption references to shared media files
     assert.notEqual(clonedCaption.id, 'caption-version-source');
     assert.ok(database.prepare('SELECT 1 FROM course_revisions WHERE course_id = ? AND revision_course_id = ?').get(courseId, revision.id));
   } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
+test('editing a versioned course batches nested content reads and preserves the copied order', () => {
+  const courseId = 'course-content-clone-batch';
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('${courseId}', 'Nested content clone fixture', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+      VALUES ('version-content-clone-batch', '${courseId}', '${courseId}', 1, 'admin-1');
+  `);
+  const insertModule = database.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, ?)');
+  const insertLesson = database.prepare('INSERT INTO lessons (id, module_id, title, position) VALUES (?, ?, ?, ?)');
+  const insertResource = database.prepare(`INSERT INTO lesson_resources (id, lesson_id, resource_type, title, href, position)
+    VALUES (?, ?, 'link', ?, ?, ?)`);
+  const insertCaption = database.prepare(`INSERT INTO lesson_captions (id, lesson_id, language, label, file_name, original_name, byte_size)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  const insertQuiz = database.prepare('INSERT INTO quizzes (id, module_id, title, pass_mark) VALUES (?, ?, ?, ?)');
+  const insertQuestion = database.prepare(`INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position)
+    VALUES (?, ?, ?, ?, ?)`);
+  const insertChoice = database.prepare(`INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position)
+    VALUES (?, ?, ?, ?, ?)`);
+  for (let moduleIndex = 0; moduleIndex < 3; moduleIndex += 1) {
+    const moduleId = `module-content-clone-${moduleIndex + 1}`;
+    const quizId = `quiz-content-clone-${moduleIndex + 1}`;
+    insertModule.run(moduleId, courseId, `Module ${moduleIndex + 1}`, moduleIndex);
+    for (let lessonIndex = 0; lessonIndex < 2; lessonIndex += 1) {
+      const lessonId = `lesson-content-clone-${moduleIndex + 1}-${lessonIndex + 1}`;
+      insertLesson.run(lessonId, moduleId, `Lesson ${moduleIndex + 1}.${lessonIndex + 1}`, lessonIndex);
+      for (let resourceIndex = 0; resourceIndex < 2; resourceIndex += 1) {
+        insertResource.run(`resource-content-clone-${moduleIndex + 1}-${lessonIndex + 1}-${resourceIndex + 1}`, lessonId,
+          `Resource ${moduleIndex + 1}.${lessonIndex + 1}.${resourceIndex + 1}`,
+          `https://example.test/resource-${moduleIndex + 1}-${lessonIndex + 1}-${resourceIndex + 1}`, resourceIndex);
+      }
+      for (let captionIndex = 0; captionIndex < 2; captionIndex += 1) {
+        insertCaption.run(`caption-content-clone-${moduleIndex + 1}-${lessonIndex + 1}-${captionIndex + 1}`, lessonId,
+          `en-${moduleIndex + 1}-${lessonIndex + 1}-${captionIndex + 1}`, `English ${captionIndex + 1}`,
+          `caption-${moduleIndex + 1}-${lessonIndex + 1}-${captionIndex + 1}.vtt`,
+          `caption-${moduleIndex + 1}-${lessonIndex + 1}-${captionIndex + 1}.vtt`, 20);
+      }
+    }
+    insertQuiz.run(quizId, moduleId, `Quiz ${moduleIndex + 1}`, 70);
+    for (let questionIndex = 0; questionIndex < 3; questionIndex += 1) {
+      const questionId = `question-content-clone-${moduleIndex + 1}-${questionIndex + 1}`;
+      insertQuestion.run(questionId, quizId, `Question ${moduleIndex + 1}.${questionIndex + 1}?`, '', questionIndex);
+      for (let choiceIndex = 0; choiceIndex < 3; choiceIndex += 1) {
+        insertChoice.run(`choice-content-clone-${moduleIndex + 1}-${questionIndex + 1}-${choiceIndex + 1}`, questionId,
+          `Answer ${choiceIndex + 1}`, choiceIndex === 1 ? 1 : 0, choiceIndex);
+      }
+    }
+  }
+
+  const trackedTables = ['lessons', 'lesson_resources', 'lesson_captions', 'quizzes', 'quiz_questions', 'quiz_choices'];
+  const readAliases = { lessons: 'l', lesson_resources: 'lr', lesson_captions: 'lc', quizzes: 'q', quiz_questions: 'qq', quiz_choices: 'qc' };
+  const originalPrepare = database.prepare;
+  try {
+    database.prepare = (sql) => {
+      const statement = originalPrepare.call(database, sql);
+      if (!/^\s*SELECT\b/i.test(sql)) return statement;
+      const table = trackedTables.find((name) => new RegExp(
+        `^\\s*SELECT\\s+(?:${readAliases[name]}\\.\\*|\\*)\\s+FROM\\s+${name}(?:\\s+${readAliases[name]})?\\b`, 'i',
+      ).test(sql));
+      if (!table) return statement;
+      return new Proxy(statement, {
+        get(target, property) {
+          const value = Reflect.get(target, property, target);
+          if (property === 'all' || property === 'get') {
+            return (...parameters) => {
+              if (trackCloneContentReads) cloneContentReadExecutions.set(table, (cloneContentReadExecutions.get(table) ?? 0) + 1);
+              return value.apply(target, parameters);
+            };
+          }
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    };
+
+    cloneContentReadExecutions = new Map();
+    trackCloneContentReads = true;
+    const revision = editableCourse(courseId, { id: 'admin-1' });
+    trackCloneContentReads = false;
+
+    assert.ok(revision?.id);
+    assert.deepEqual(Object.fromEntries(cloneContentReadExecutions), Object.fromEntries(trackedTables.map((table) => [table, 1])));
+    const clonedLessons = database.prepare(`SELECT m.position AS module_position, l.position AS lesson_position, l.title
+      FROM course_modules m JOIN lessons l ON l.module_id = m.id
+      WHERE m.course_id = ? ORDER BY m.position, l.position`).all(revision.id);
+    assert.deepEqual(clonedLessons.map((row) => [row.module_position, row.lesson_position, row.title]),
+      Array.from({ length: 3 }, (_, moduleIndex) => Array.from({ length: 2 }, (_, lessonIndex) => [
+        moduleIndex, lessonIndex, `Lesson ${moduleIndex + 1}.${lessonIndex + 1}`,
+      ])).flat());
+    const clonedResources = database.prepare(`SELECT m.position AS module_position, l.position AS lesson_position,
+        lr.position AS resource_position, lr.title
+      FROM course_modules m JOIN lessons l ON l.module_id = m.id JOIN lesson_resources lr ON lr.lesson_id = l.id
+      WHERE m.course_id = ? ORDER BY m.position, l.position, lr.position`).all(revision.id);
+    assert.deepEqual(clonedResources.map((row) => [row.module_position, row.lesson_position, row.resource_position, row.title]),
+      Array.from({ length: 3 }, (_, moduleIndex) => Array.from({ length: 2 }, (_, lessonIndex) =>
+        Array.from({ length: 2 }, (_, resourceIndex) => [moduleIndex, lessonIndex, resourceIndex,
+          `Resource ${moduleIndex + 1}.${lessonIndex + 1}.${resourceIndex + 1}`])).flat()).flat());
+    const clonedCaptions = database.prepare(`SELECT m.position AS module_position, l.position AS lesson_position, lc.language
+      FROM course_modules m JOIN lessons l ON l.module_id = m.id JOIN lesson_captions lc ON lc.lesson_id = l.id
+      WHERE m.course_id = ? ORDER BY m.position, l.position, lc.rowid`).all(revision.id);
+    assert.deepEqual(clonedCaptions.map((row) => [row.module_position, row.lesson_position, row.language]),
+      Array.from({ length: 3 }, (_, moduleIndex) => Array.from({ length: 2 }, (_, lessonIndex) =>
+        Array.from({ length: 2 }, (_, captionIndex) => [moduleIndex, lessonIndex,
+          `en-${moduleIndex + 1}-${lessonIndex + 1}-${captionIndex + 1}`])).flat()).flat());
+    const clonedQuestions = database.prepare(`SELECT qq.prompt, qc.choice_text, qc.is_correct, qc.position
+      FROM quiz_questions qq JOIN quiz_choices qc ON qc.question_id = qq.id
+      JOIN quizzes q ON q.id = qq.quiz_id JOIN course_modules m ON m.id = q.module_id
+      WHERE m.course_id = ? ORDER BY m.position, qq.position, qc.position`).all(revision.id);
+    assert.deepEqual(clonedQuestions.map((row) => [row.prompt, row.choice_text, row.is_correct, row.position]),
+      Array.from({ length: 3 }, (_, moduleIndex) => Array.from({ length: 3 }, (_, questionIndex) =>
+        Array.from({ length: 3 }, (_, choiceIndex) => [
+          `Question ${moduleIndex + 1}.${questionIndex + 1}?`, `Answer ${choiceIndex + 1}`, choiceIndex === 1 ? 1 : 0, choiceIndex,
+        ])).flat()).flat());
+  } finally {
+    trackCloneContentReads = false;
+    database.prepare = originalPrepare;
     database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
   }
 });
@@ -356,6 +519,7 @@ test('analytics count each eligible learner once and report course-wide completi
     title: 'Analytics quiz',
     moduleTitle: 'Analytics module',
     passMark: 70,
+    requiredForCompletion: true,
     attempts: 3,
     learnersAttempted: 2,
     learnersPassed: 1,
@@ -367,19 +531,80 @@ test('analytics count each eligible learner once and report course-wide completi
   const active = result.learners.find((learner) => learner.id === 'learner-active');
   assert.equal(active.progress, 100);
   assert.equal(active.completed, true);
-  assert.equal(active.lessonProgress[0].completedAt, '2026-10-01 10:00:00');
-  assert.equal(active.quizProgress[0].attempts, 2);
-  assert.equal(active.quizProgress[0].highestScore, 100);
-  assert.equal(active.quizProgress[0].latestScore, 100);
+  assert.equal('lessonProgress' in active, false, 'summary pages omit collapsed lesson details');
+  assert.equal('quizProgress' in active, false, 'summary pages omit collapsed quiz details');
   assert.equal(active.lastActivityAt, '2026-10-02 12:00:00');
+
+  const activeDetailsResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics/learners/learner-active'), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(activeDetailsResponse.status, 200);
+  const activeDetails = await activeDetailsResponse.json();
+  assert.equal(activeDetails.lessonProgress[0].completedAt, '2026-10-01 10:00:00');
+  assert.equal(activeDetails.quizProgress[0].attempts, 2);
+  assert.equal(activeDetails.quizProgress[0].highestScore, 100);
+  assert.equal(activeDetails.quizProgress[0].latestScore, 100);
 
   const disabled = result.learners.find((learner) => learner.id === 'learner-disabled');
   assert.equal(disabled.disabled, true);
   assert.equal(disabled.progress, 0);
   assert.equal(disabled.started, true);
-  assert.equal(disabled.quizProgress[0].passed, false);
   assert.equal(disabled.lastActivityAt, '2026-10-03 12:00:00');
   assert.equal(result.learners.some((learner) => learner.id === 'learner-unassigned'), false);
+
+  const disabledDetailsResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics/learners/learner-disabled'), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(disabledDetailsResponse.status, 200, 'staff can inspect an assigned disabled learner');
+  assert.equal((await disabledDetailsResponse.json()).quizProgress[0].passed, false);
+
+  const unassignedDetailsResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics/learners/learner-unassigned'), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(unassignedDetailsResponse.status, 404, 'details are limited to course members');
+});
+
+test('learner-only analytics pages skip course-wide aggregate queries', async () => {
+  const fullResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics?page=1'), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(fullResponse.status, 200);
+  const fullPage = await fullResponse.json();
+
+  let aggregateQueryCount = 0;
+  const originalPrepare = database.prepare;
+  database.prepare = (sql) => {
+    if (sql.includes('learner_progress AS (')
+      || sql.includes('COUNT(lp.user_id) AS completed_count')
+      || sql.includes('learner_quiz AS (')) aggregateQueryCount += 1;
+    return originalPrepare.call(database, sql);
+  };
+  let response;
+  try {
+    response = await fetch(apiUrl('/manage/courses/course-analytics/analytics?page=1&learnersOnly=1'), {
+      headers: userHeaders('admin-1'),
+    });
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.equal(response.status, 200);
+  const learnerPage = await response.json();
+  assert.deepEqual(learnerPage.learners, fullPage.learners);
+  assert.equal(learnerPage.page, fullPage.page);
+  assert.equal(learnerPage.pageSize, fullPage.pageSize);
+  assert.equal(learnerPage.learnerCount, fullPage.summary.learnerCount);
+  assert.equal(learnerPage.disabledLearnerCount, fullPage.summary.disabledLearnerCount);
+  assert.equal('summary' in learnerPage, false);
+  assert.equal('lessonMetrics' in learnerPage, false);
+  assert.equal('quizMetrics' in learnerPage, false);
+  assert.equal(aggregateQueryCount, 0);
+
+  const invalidModeResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics?learnersOnly=true'), {
+    headers: userHeaders('admin-1'),
+  });
+  assert.equal(invalidModeResponse.status, 400);
+  assert.equal((await invalidModeResponse.json()).code, 'validation_error');
 });
 
 test('lesson order is enforced for learners while course managers can preview later lessons', () => {
@@ -427,6 +652,104 @@ test('course managers must verify video watch before completing lessons in the p
   }
 });
 
+test('watch progress remains available when verified video duration cannot be cached', async () => {
+  const mediaId = 'media-duration-cache-failure';
+  const fileName = 'duration-cache-failure.mp4';
+  const courseDirectory = path.join(process.env.MEDIA_ROOT, 'course-analytics');
+  const filePath = path.join(courseDirectory, fileName);
+  const video = mp4WithDurationSeconds(12.5);
+  fs.mkdirSync(courseDirectory, { recursive: true });
+  fs.writeFileSync(filePath, video);
+  database.prepare(`INSERT INTO media_files
+    (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+    VALUES (?, 'course-analytics', ?, ?, 'video/mp4', ?, 'video')`)
+    .run(mediaId, fileName, fileName, video.length);
+  database.prepare('UPDATE lessons SET media_id = ? WHERE id = ?').run(mediaId, 'lesson-analytics');
+  database.exec(`CREATE TRIGGER fail_video_duration_cache
+    BEFORE UPDATE OF duration_seconds ON media_files
+    WHEN OLD.id = '${mediaId}' AND OLD.duration_seconds IS NULL
+    BEGIN SELECT RAISE(ABORT, 'injected duration cache failure'); END;`);
+
+  try {
+    const response = await fetch(apiUrl('/lessons/lesson-analytics/watch-progress'), {
+      headers: userHeaders('learner-active'),
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).durationSeconds, 12.5);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM lesson_watch_progress WHERE user_id = ? AND lesson_id = ?')
+      .get('learner-active', 'lesson-analytics').count, 0, 'GET should not create a watch-progress record');
+    assert.equal(database.prepare('SELECT duration_seconds FROM media_files WHERE id = ?').get(mediaId).duration_seconds, null);
+
+    const startResponse = await fetch(apiUrl('/lessons/lesson-analytics/watch-progress/start'), {
+      method: 'POST', headers: userHeaders('learner-active'),
+    });
+    assert.equal(startResponse.status, 200);
+    assert.equal((await startResponse.json()).durationSeconds, 12.5);
+    assert.equal(database.prepare('SELECT duration_seconds FROM lesson_watch_progress WHERE user_id = ? AND lesson_id = ?')
+      .get('learner-active', 'lesson-analytics').duration_seconds, 12.5);
+    assert.ok(database.prepare(`SELECT id FROM system_logs
+      WHERE source = 'video-duration' AND message = 'Verified video duration could not be cached' LIMIT 1`).get());
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS fail_video_duration_cache');
+    database.prepare('UPDATE lessons SET media_id = NULL WHERE id = ?').run('lesson-analytics');
+    database.prepare('DELETE FROM lesson_watch_telemetry WHERE user_id = ? AND lesson_id = ?')
+      .run('learner-active', 'lesson-analytics');
+    database.prepare('DELETE FROM lesson_watch_progress WHERE user_id = ? AND lesson_id = ?')
+      .run('learner-active', 'lesson-analytics');
+    database.prepare('DELETE FROM media_files WHERE id = ?').run(mediaId);
+    database.prepare(`DELETE FROM system_logs
+      WHERE source = 'video-duration' AND message = 'Verified video duration could not be cached'`).run();
+    fs.rmSync(filePath, { force: true });
+  }
+});
+
+test('watch progress distinguishes video read failures from invalid duration metadata', async () => {
+  const unreadableMediaId = 'media-watch-duration-read-failure';
+  const malformedMediaId = 'media-watch-duration-malformed';
+  const malformedFileName = 'malformed-duration.mp4';
+  const malformedPath = path.join(process.env.MEDIA_ROOT, 'course-analytics', malformedFileName);
+  fs.mkdirSync(path.dirname(malformedPath), { recursive: true });
+  fs.writeFileSync(malformedPath, Buffer.from('not-an-mp4'));
+  database.prepare(`INSERT INTO media_files
+    (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+    VALUES (?, 'course-analytics', 'missing.mp4', 'missing-duration.mp4', 'video/mp4', 32, 'video')`).run(unreadableMediaId);
+  database.prepare(`INSERT INTO media_files
+    (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+    VALUES (?, 'course-analytics', ?, ?, 'video/mp4', 10, 'video')`).run(malformedMediaId, malformedFileName, malformedFileName);
+
+  try {
+    database.prepare('UPDATE lessons SET media_id = ? WHERE id = ?').run(unreadableMediaId, 'lesson-analytics');
+    const unreadableResponse = await fetch(apiUrl('/lessons/lesson-analytics/watch-progress'), {
+      headers: userHeaders('learner-active'),
+    });
+    assert.equal(unreadableResponse.status, 503);
+    assert.deepEqual(await unreadableResponse.json(), {
+      error: 'The video file could not be read. Retry, or contact your course administrator if the problem continues.',
+      code: 'video_duration_read_unavailable',
+    });
+    const readFailureLog = database.prepare(`SELECT details_json FROM system_logs
+      WHERE source = 'video-duration' AND message = 'Video duration could not be read' ORDER BY id DESC LIMIT 1`).get();
+    assert.deepEqual(JSON.parse(readFailureLog.details_json), {
+      mediaId: unreadableMediaId, errorName: 'Error', errorCode: 'ENOENT',
+    });
+
+    database.prepare('UPDATE lessons SET media_id = ? WHERE id = ?').run(malformedMediaId, 'lesson-analytics');
+    const malformedResponse = await fetch(apiUrl('/lessons/lesson-analytics/watch-progress'), {
+      headers: userHeaders('learner-active'),
+    });
+    assert.equal(malformedResponse.status, 422);
+    assert.equal((await malformedResponse.json()).code, 'video_duration_unavailable');
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM system_logs
+      WHERE source = 'video-duration' AND message = 'Video duration could not be read'`).get().count, 1);
+  } finally {
+    database.prepare('UPDATE lessons SET media_id = NULL WHERE id = ?').run('lesson-analytics');
+    database.prepare('DELETE FROM media_files WHERE id IN (?, ?)').run(unreadableMediaId, malformedMediaId);
+    database.prepare(`DELETE FROM system_logs
+      WHERE source = 'video-duration' AND message = 'Video duration could not be read'`).run();
+    fs.rmSync(malformedPath, { force: true });
+  }
+});
+
 test('course analytics use published version content without creating an edit revision', async () => {
   const courseId = 'course-analytics-current-version';
   const storageCourseId = 'course-analytics-current-storage';
@@ -442,6 +765,8 @@ test('course analytics use published version content without creating an edit re
       VALUES ('lesson-analytics-current-version', 'module-analytics-current-version', 'Published lesson', 0)`).run();
     database.prepare(`INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
       VALUES ('version-analytics-current-version', ?, ?, 1, 'admin-1')`).run(courseId, storageCourseId);
+    database.prepare(`INSERT INTO enrollments (id, course_id, user_id, enrolled_at)
+      VALUES ('enrollment-analytics-current-version', ?, 'learner-active', '2026-10-01 09:00:00')`).run(courseId);
 
     const response = await fetch(apiUrl(`/manage/courses/${courseId}/analytics`), { headers: userHeaders('admin-1') });
     assert.equal(response.status, 200);
@@ -450,6 +775,12 @@ test('course analytics use published version content without creating an edit re
     assert.equal(result.course.title, 'Versioned analytics course');
     assert.deepEqual(result.lessonMetrics.map((lesson) => lesson.id), ['lesson-analytics-current-version']);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_revisions WHERE course_id = ?').get(courseId).count, 0);
+
+    const detailsResponse = await fetch(apiUrl(`/manage/courses/${courseId}/analytics/learners/learner-active`), {
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(detailsResponse.status, 200);
+    assert.deepEqual((await detailsResponse.json()).lessonProgress.map((lesson) => lesson.id), ['lesson-analytics-current-version']);
   } finally {
     database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
   }
@@ -729,6 +1060,11 @@ test('course analytics remain restricted to staff', async () => {
     headers: userHeaders('learner-active'),
   });
   assert.equal(response.status, 403);
+
+  const detailsResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics/learners/learner-active'), {
+    headers: userHeaders('learner-active'),
+  });
+  assert.equal(detailsResponse.status, 403);
 });
 
 test('course details resolve learner progress before version history exists', async () => {
@@ -790,6 +1126,50 @@ test('first version requiring recompletion resets legacy progress without deleti
   }
 });
 
+test('course details preserve a prior quiz pass without presenting it as a current-version attempt', async () => {
+  const courseId = 'course-carried-quiz-pass';
+  const versionCourseId = `${courseId}-v2`;
+  database.exec(`
+    INSERT INTO courses (id, title, status, visibility, created_by, updated_by, logical_course_id) VALUES
+      ('${courseId}', 'Carried quiz pass', 'published', 'public', 'admin-1', 'admin-1', NULL),
+      ('${versionCourseId}', 'Carried quiz pass', 'published', 'public', 'admin-1', 'admin-1', '${courseId}');
+    INSERT INTO course_modules (id, course_id, title, position, stable_id) VALUES
+      ('${courseId}-module', '${courseId}', 'Module', 0, 'carried-quiz-pass-module'),
+      ('${versionCourseId}-module', '${versionCourseId}', 'Module', 0, 'carried-quiz-pass-module');
+    INSERT INTO quizzes (id, module_id, title, pass_mark, stable_id) VALUES
+      ('${courseId}-quiz', '${courseId}-module', 'Quiz', 70, 'carried-quiz-pass-stable'),
+      ('${versionCourseId}-quiz', '${versionCourseId}-module', 'Quiz', 70, 'carried-quiz-pass-stable');
+    INSERT INTO quiz_questions (id, quiz_id, prompt, position) VALUES
+      ('${courseId}-question', '${courseId}-quiz', 'Earlier question?', 0),
+      ('${versionCourseId}-question', '${versionCourseId}-quiz', 'Current question?', 0);
+    INSERT INTO quiz_choices (id, question_id, choice_text, is_correct, position) VALUES
+      ('${courseId}-choice-1', '${courseId}-question', 'Earlier correct answer', 1, 0),
+      ('${courseId}-choice-2', '${courseId}-question', 'Earlier other answer', 0, 1),
+      ('${versionCourseId}-choice-1', '${versionCourseId}-question', 'Current correct answer', 1, 0),
+      ('${versionCourseId}-choice-2', '${versionCourseId}-question', 'Current other answer', 0, 1);
+    INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by, requires_recompletion) VALUES
+      ('${courseId}-version-1', '${courseId}', '${courseId}', 1, 'admin-1', 0),
+      ('${courseId}-version-2', '${courseId}', '${versionCourseId}', 2, 'admin-1', 0);
+    INSERT INTO enrollments (id, course_id, user_id)
+      VALUES ('${courseId}-enrollment', '${courseId}', 'learner-active');
+    INSERT INTO quiz_attempts (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json, submitted_at)
+      VALUES ('${courseId}-attempt', '${courseId}-quiz', 'learner-active', 100, 1, '{}', '[]', '2026-10-01 12:00:00');
+  `);
+
+  try {
+    const response = await fetch(apiUrl(`/courses/${courseId}`), { headers: userHeaders('learner-active') });
+    assert.equal(response.status, 200);
+    const { course } = await response.json();
+    assert.equal(course.versionNumber, 2);
+    assert.equal(course.modules[0].quiz.id, `${versionCourseId}-quiz`);
+    assert.equal(course.modules[0].quiz.passed, true);
+    assert.equal(course.modules[0].quiz.latestAttempt, null);
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(versionCourseId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('course and learning-path detail GETs are read-only while protected actions initialize learner state', async () => {
   database.exec(`
     INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
@@ -845,10 +1225,160 @@ test('course and learning-path detail GETs are read-only while protected actions
     assert.equal(enrollmentResponse.status, 201);
     assert.equal(courseEnrollmentCount(), 1);
     assert.equal(courseStateCount(), 1);
+    database.prepare('DELETE FROM course_learning_state WHERE course_id = ? AND user_id = ?')
+      .run('course-read-only-detail', 'learner-unassigned');
+    assert.equal(courseStateCount(), 0);
+
+    const retryEnrollmentResponse = await fetch(apiUrl('/courses/course-read-only-detail/enroll'), {
+      method: 'POST',
+      headers: userHeaders('learner-unassigned'),
+    });
+    assert.equal(retryEnrollmentResponse.status, 200);
+    assert.equal(courseEnrollmentCount(), 1);
+    assert.equal(courseStateCount(), 1);
   } finally {
     database.prepare('DELETE FROM learning_paths WHERE id = ?').run('path-read-only-detail');
     database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run('course-read-only-detail', 'course-path-sync-target');
     database.prepare('DELETE FROM users WHERE id = ?').run('learner-read-only-path');
+  }
+});
+
+test('path edits batch shared course metadata and learner progress for enrolled learners', async () => {
+  const pathId = 'path-summary-preload';
+  const addedCourseId = 'course-path-summary-preload';
+  const firstCourseId = 'course-path-summary-preload-first';
+  const moduleId = 'module-path-summary-preload-first';
+  const lessonId = 'lesson-path-summary-preload-first';
+  const quizId = 'quiz-path-summary-preload-first';
+  const attemptId = 'attempt-path-summary-preload-first';
+  const learners = Array.from({ length: 12 }, (_, index) => `learner-path-preload-${index + 1}`);
+  const learnerRows = learners.map((learner, index) =>
+    `('${learner}', 'path_preload_${index + 1}', 'path.preload.${index + 1}@example.invalid', 'not-used', 'learner', 0)`).join(',\n');
+  const enrollmentRows = learners.map((learner, index) =>
+    `('path-summary-preload-enrollment-${index + 1}', '${pathId}', '${learner}', 'assigned')`).join(',\n');
+  const originalPrepare = database.prepare;
+  const sharedReadCounts = new Map([
+    ['versions', 'SELECT v.course_id, v.id'],
+    ['counts', 'AS module_count,'],
+    ['lessons', 'SELECT m.course_id, l.id'],
+    ['quizzes', 'SELECT COALESCE(m.course_id, q.course_id) AS course_id'],
+  ].map(([name, fragment]) => [name, { fragment, count: 0 }]));
+  const learnerProgressReadCounts = new Map([
+    ['states', 'FROM course_learning_state\n    WHERE user_id IN'],
+    ['lessons', 'FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id'],
+    ['quizzes', 'FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id'],
+  ].map(([name, fragment]) => [name, { fragment, count: 0 }]));
+  let stateInsertRuns = 0;
+  const stateInsertParameterCounts = [];
+  database.exec(`
+    INSERT INTO users (id, username, email, password_hash, role, disabled) VALUES ${learnerRows};
+    INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
+      ('${firstCourseId}', 'First path course', 'published', 'admin-1', 'admin-1'),
+      ('${addedCourseId}', 'Path summary preload', 'published', 'admin-1', 'admin-1');
+    INSERT INTO course_modules (id, course_id, title, position)
+      VALUES ('${moduleId}', '${firstCourseId}', 'First module', 0);
+    INSERT INTO lessons (id, module_id, title, position)
+      VALUES ('${lessonId}', '${moduleId}', 'First lesson', 0);
+    INSERT INTO quizzes (id, module_id, title, pass_mark)
+      VALUES ('${quizId}', '${moduleId}', 'First quiz', 70);
+    INSERT INTO lesson_progress (user_id, lesson_id, completed_at)
+      VALUES ('${learners[0]}', '${lessonId}', '2026-10-01 10:00:00');
+    INSERT INTO quiz_attempts
+      (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json, submitted_at)
+      VALUES ('${attemptId}', '${quizId}', '${learners[0]}', 100, 1, '{}', '[]', '2026-10-01 11:00:00');
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('${pathId}', 'Path summary preload', 'published', 0, 'admin-1', 'admin-1');
+    INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+      VALUES ('path-summary-preload-step', '${pathId}', '${firstCourseId}', 0, 0);
+    INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source) VALUES ${enrollmentRows};
+  `);
+  database.prepare = function countSharedSummaryReads(sql, ...parameters) {
+    if (typeof sql === 'string') {
+      for (const query of sharedReadCounts.values()) {
+        if (sql.includes(query.fragment)) query.count += 1;
+      }
+      for (const query of learnerProgressReadCounts.values()) {
+        if (sql.includes(query.fragment)) query.count += 1;
+      }
+      if (sql.includes('INSERT OR IGNORE INTO course_learning_state')) {
+        stateInsertParameterCounts.push((sql.match(/\?/g) ?? []).length);
+        const insertStatement = originalPrepare.call(this, sql, ...parameters);
+        const originalRun = insertStatement.run.bind(insertStatement);
+        insertStatement.run = (...values) => {
+          stateInsertRuns += 1;
+          return originalRun(...values);
+        };
+        return insertStatement;
+      }
+    }
+    return originalPrepare.call(this, sql, ...parameters);
+  };
+
+  try {
+    const response = await fetch(apiUrl(`/manage/learning-paths/${pathId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ courses: [
+        { courseId: firstCourseId, requiresPrevious: false },
+        { courseId: addedCourseId, requiresPrevious: true },
+      ] }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual([...sharedReadCounts.values()].map(({ count }) => count), [2, 2, 2, 2]);
+    assert.deepEqual([...learnerProgressReadCounts.values()].map(({ count }) => count), [2, 2, 2]);
+    assert.equal(stateInsertRuns, 2);
+    assert.deepEqual(stateInsertParameterCounts, [66, 12]);
+    for (const learner of learners) {
+      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE user_id = ? AND course_id = ?')
+        .get(learner, firstCourseId).count, 1);
+      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE user_id = ? AND course_id = ?')
+        .get(learner, addedCourseId).count, learner === learners[0] ? 1 : 0);
+    }
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run(pathId);
+    database.prepare('DELETE FROM lesson_progress WHERE lesson_id = ?').run(lessonId);
+    database.prepare('DELETE FROM quiz_attempts WHERE id = ?').run(attemptId);
+    database.prepare('DELETE FROM quizzes WHERE id = ?').run(quizId);
+    database.prepare('DELETE FROM course_modules WHERE id = ?').run(moduleId);
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(firstCourseId, addedCourseId);
+    for (const learner of learners) database.prepare('DELETE FROM users WHERE id = ?').run(learner);
+  }
+});
+
+test('course enrollment rejects staff roles without creating learner activity', async () => {
+  const courseId = 'course-enrollment-staff-boundary';
+  database.exec(`
+    INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES ('${courseId}', 'Staff enrollment boundary', 'published', 'admin-1', 'admin-1');
+    INSERT INTO users (id, username, email, password_hash, role, disabled)
+      VALUES ('moderator-enrollment-boundary', 'moderator_enrollment_boundary', 'moderator-enrollment@example.invalid', 'not-used', 'moderator', 0);
+  `);
+
+  const countEnrollment = (userId) => database.prepare('SELECT COUNT(*) AS count FROM enrollments WHERE course_id = ? AND user_id = ?')
+    .get(courseId, userId).count;
+  const countLearningState = (userId) => database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE course_id = ? AND user_id = ?')
+    .get(courseId, userId).count;
+
+  try {
+    for (const staffId of ['admin-1', 'moderator-enrollment-boundary']) {
+      const response = await fetch(apiUrl(`/courses/${courseId}/enroll`), {
+        method: 'POST',
+        headers: userHeaders(staffId),
+      });
+
+      assert.equal(response.status, 403, staffId);
+      assert.deepEqual(await response.json(), {
+        error: 'Only learners can enroll in courses.',
+        code: 'forbidden',
+      });
+      assert.equal(countEnrollment(staffId), 0);
+      assert.equal(countLearningState(staffId), 0);
+    }
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+    database.prepare('DELETE FROM users WHERE id = ?').run('moderator-enrollment-boundary');
   }
 });
 
@@ -951,7 +1481,7 @@ test('course summaries batch database reads and preserve progress across version
   assert.equal(resetSummary.completed, false);
 });
 
-test('learning-path state synchronization reuses completed course summaries for existing states', () => {
+test('learning-path state synchronization reuses loaded course states', () => {
   const pathId = 'path-sync-summary-batch';
   const secondPathId = `${pathId}-second`;
   const courseIds = [1, 2, 3].map((number) => `${pathId}-course-${number}`);
@@ -1007,8 +1537,65 @@ test('learning-path state synchronization reuses completed course summaries for 
   }
 
   assert.equal(singleCourseSummaryReads, 0);
-  assert.equal(existingStateJoinQueries, courseIds.length);
+  assert.equal(existingStateJoinQueries, 0);
   assert.equal(repeatedStateInitializationQueries, 0);
+});
+
+test('learning-path state synchronization batches state writes below SQLite parameter limits', () => {
+  const pathId = 'path-sync-batched-state-inserts';
+  const courseIds = Array.from({ length: MAX_LEARNING_PATH_COURSES }, (_, index) => `${pathId}-course-${index + 1}`);
+  const originalPrepare = database.prepare;
+  let stateInsertPreparations = 0;
+  let stateInsertRuns = 0;
+  const stateInsertParameterCounts = [];
+  let perCourseStateLookups = 0;
+  database.exec(`
+    INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+      VALUES ('${pathId}', 'Batched state inserts', 'published', 0, 'admin-1', 'admin-1');
+  `);
+  const addCourse = database.prepare(`INSERT INTO courses
+    (id, title, status, created_by, updated_by, completion_window_days)
+    VALUES (?, ?, 'published', 'admin-1', 'admin-1', 7)`);
+  const addPathCourse = database.prepare(`INSERT INTO learning_path_courses
+    (id, path_id, course_id, position, requires_previous) VALUES (?, ?, ?, ?, 0)`);
+  for (const [index, courseId] of courseIds.entries()) {
+    addCourse.run(courseId, `Newly unlocked course ${index + 1}`);
+    addPathCourse.run(`${pathId}-step-${index + 1}`, pathId, courseId, index);
+  }
+
+  database.prepare = (sql) => {
+    const insertStatement = originalPrepare.call(database, sql);
+    if (sql.includes('INSERT OR IGNORE INTO course_learning_state')) {
+      stateInsertPreparations += 1;
+      stateInsertParameterCounts.push((sql.match(/\?/g) ?? []).length);
+      // Count statement executions too, so the test catches a return to one write per course.
+      const originalRun = insertStatement.run.bind(insertStatement);
+      insertStatement.run = (...parameters) => {
+        stateInsertRuns += 1;
+        return originalRun(...parameters);
+      };
+    }
+    if (sql.includes('FROM courses c LEFT JOIN course_learning_state s')) perCourseStateLookups += 1;
+    return insertStatement;
+  };
+  let states = [];
+  try {
+    syncPathStates([pathId], 'learner-active');
+    states = database.prepare(`SELECT course_id, deadline_at, deadline_window_days, started_at
+      FROM course_learning_state WHERE user_id = ? AND course_id IN (${courseIds.map(() => '?').join(', ')})`)
+      .all('learner-active', ...courseIds);
+  } finally {
+    delete database.prepare;
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run(pathId);
+    database.prepare(`DELETE FROM courses WHERE id IN (${courseIds.map(() => '?').join(', ')})`).run(...courseIds);
+  }
+
+  assert.equal(stateInsertPreparations, 2);
+  assert.equal(stateInsertRuns, 2);
+  assert.deepEqual(stateInsertParameterCounts, [600, 600]);
+  assert.equal(perCourseStateLookups, 0);
+  assert.equal(states.length, courseIds.length);
+  assert.ok(states.every((state) => state.deadline_at && state.deadline_window_days === 7 && state.started_at));
 });
 
 test('learning-path synchronization refreshes progress when a new state requires recompletion', () => {
@@ -1139,15 +1726,15 @@ test('My learning streams indexed user memberships into bounded stable pages', a
   const addFixtures = database.transaction(() => {
     database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
       VALUES (?, 'my_learning_pager', 'my-learning-pager@example.invalid', 'not-used', 'learner', 0)`).run(userId);
-    const addCourse = database.prepare(`INSERT INTO courses (id, title, status, visibility, created_by, updated_by)
-      VALUES (?, ?, 'published', 'public', 'admin-1', 'admin-1')`);
+    const addCourse = database.prepare(`INSERT INTO courses (id, title, description, status, visibility, created_by, updated_by)
+      VALUES (?, ?, ?, 'published', 'public', 'admin-1', 'admin-1')`);
     const addEnrollment = database.prepare(`INSERT INTO enrollments (id, course_id, user_id, enrolled_at)
       VALUES (?, ?, ?, ?)`);
     const addGrant = database.prepare(`INSERT INTO course_grants (id, course_id, user_id, granted_by, granted_at)
       VALUES (?, ?, ?, 'admin-1', ?)`);
     for (let position = 1; position <= count; position += 1) {
       const courseId = `${coursePrefix}${String(position).padStart(2, '0')}`;
-      addCourse.run(courseId, `My learning page course ${position}`);
+      addCourse.run(courseId, `My learning page course ${position}`, `My learning description ${position}`);
       addEnrollment.run(`my-learning-pager-enrollment-${position}`, courseId, userId,
         `2026-10-11 00:${String(position).padStart(2, '0')}:00`);
     }
@@ -1197,6 +1784,10 @@ test('My learning streams indexed user memberships into bounded stable pages', a
     assert.equal(firstPage.hasMore, true);
     assert.deepEqual(firstPage.courses.map((course) => course.id),
       Array.from({ length: pageSize }, (_, index) => `${coursePrefix}${String(count - index).padStart(2, '0')}`));
+    assert.equal(firstPage.courses[0].description, `My learning description ${count}`,
+      'the selected page should still include full course display data');
+    assert.match(candidateSql, /SELECT c\.id, c\.logical_course_id, c\.status, c\.visibility FROM activity_by_course/);
+    assert.doesNotMatch(candidateSql, /SELECT\s+c\.\*/i, 'the membership scan should not load display columns');
     assert.equal(candidateIterateCount, 1, 'the membership query should be consumed incrementally');
     assert.equal(candidateAllCount, 0, 'the membership query should not materialize every candidate row');
 
@@ -1533,6 +2124,66 @@ test('learning-path lists paginate staff and learner results with stable boundar
   }
 });
 
+test('learning-path search matches titles and descriptions within each role visibility boundary', async () => {
+  const paths = [
+    { id: 'path-search-title-draft', title: 'Regional support path', description: 'Support curriculum', status: 'draft' },
+    { id: 'path-search-description-draft', title: 'Guided sequence', description: 'Regional literacy sequence', status: 'draft' },
+    { id: 'path-search-published', title: 'Regional published path', description: '', status: 'published' },
+    { id: 'path-search-archived', title: 'Regional archived path', description: '', status: 'archived' },
+    { id: 'path-search-percent', title: 'Progress 50% path', description: '', status: 'draft' },
+    { id: 'path-search-wildcard-decoy', title: 'Progress 50X path', description: '', status: 'draft' },
+  ];
+  const insertPath = database.prepare(`INSERT INTO learning_paths (id, title, description, status, self_enrollment, created_by, updated_by)
+    VALUES (?, ?, ?, ?, ?, 'admin-1', 'admin-1')`);
+  for (const path of paths) insertPath.run(path.id, path.title, path.description, path.status, path.id === 'path-search-published' ? 1 : 0);
+  database.prepare(`INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous)
+    VALUES ('path-search-public-course', 'path-search-published', 'course-empty', 0, 0)`).run();
+
+  const searchPaths = async (params, userId = 'admin-1') => {
+    const query = new URLSearchParams(params);
+    return fetch(apiUrl(`/learning-paths?${query}`), { headers: userHeaders(userId) });
+  };
+
+  try {
+    const titleAndStatusResponse = await searchPaths({ q: 'regional', status: 'draft', page: '99' });
+    assert.equal(titleAndStatusResponse.status, 200);
+    const titleAndStatus = await titleAndStatusResponse.json();
+    assert.equal(titleAndStatus.total, 2);
+    assert.equal(titleAndStatus.page, 1);
+    assert.equal(titleAndStatus.hasMore, false);
+    assert.deepEqual(new Set(titleAndStatus.paths.map((path) => path.id)), new Set([
+      'path-search-title-draft', 'path-search-description-draft',
+    ]));
+
+    const descriptionResponse = await searchPaths({ q: 'literacy', status: 'all' });
+    assert.equal(descriptionResponse.status, 200);
+    const descriptionMatches = await descriptionResponse.json();
+    assert.deepEqual(descriptionMatches.paths.map((path) => path.id), ['path-search-description-draft']);
+
+    const activeStatusResponse = await searchPaths({ q: 'regional', status: 'all' });
+    assert.equal(activeStatusResponse.status, 200);
+    const activeStatusMatches = await activeStatusResponse.json();
+    assert.equal(activeStatusMatches.total, 3);
+    assert.equal(activeStatusMatches.paths.some((path) => path.id === 'path-search-archived'), false);
+
+    const wildcardResponse = await searchPaths({ q: '50%', status: 'all' });
+    assert.equal(wildcardResponse.status, 200);
+    const wildcardMatches = await wildcardResponse.json();
+    assert.deepEqual(wildcardMatches.paths.map((path) => path.id), ['path-search-percent']);
+
+    const learnerResponse = await searchPaths({ q: 'regional' }, 'learner-active');
+    assert.equal(learnerResponse.status, 200);
+    const learnerMatches = await learnerResponse.json();
+    assert.deepEqual(learnerMatches.paths.map((path) => path.id), ['path-search-published']);
+
+    const overlongResponse = await searchPaths({ q: 'x'.repeat(121), status: 'all' });
+    assert.equal(overlongResponse.status, 400);
+    assert.equal((await overlongResponse.json()).code, 'validation_error');
+  } finally {
+    database.prepare(`DELETE FROM learning_paths WHERE id IN (${paths.map(() => '?').join(', ')})`).run(...paths.map((path) => path.id));
+  }
+});
+
 test('staff learning-path page queries use indexes for their update ordering', () => {
   function queryPlan(sql, params = []) {
     return database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params).map((row) => row.detail).join('\n');
@@ -1542,6 +2193,12 @@ test('staff learning-path page queries use indexes for their update ordering', (
     ORDER BY updated_at DESC, id LIMIT ? OFFSET ?`, [20, 0]);
   assert.match(activePlan, /learning_paths_active_updated/);
   assert.doesNotMatch(activePlan, /USE TEMP B-TREE FOR ORDER BY/);
+
+  const searchedActivePlan = queryPlan(`SELECT p.* FROM learning_paths p WHERE status != 'archived'
+    AND (p.title LIKE ? ESCAPE '!' OR p.description LIKE ? ESCAPE '!')
+    ORDER BY p.updated_at DESC, p.id LIMIT ? OFFSET ?`, ['%path%', '%path%', 20, 0]);
+  assert.match(searchedActivePlan, /learning_paths_active_updated/);
+  assert.doesNotMatch(searchedActivePlan, /USE TEMP B-TREE FOR ORDER BY/);
 
   for (const status of ['published', 'archived']) {
     const statusPlan = queryPlan(`SELECT * FROM learning_paths WHERE status = ?
@@ -1923,6 +2580,79 @@ test('competency progress pages course details while retaining an overall achiev
   }
 });
 
+test('competency achievement candidates are processed in bounded pages', async () => {
+  const baselineResponse = await fetch(apiUrl('/competencies?page=1'), { headers: userHeaders('learner-active') });
+  assert.equal(baselineResponse.status, 200);
+  const baseline = await baselineResponse.json();
+  const candidateCount = 201;
+  const competencyId = 'competency-achievement-batch';
+  const courseIds = Array.from({ length: candidateCount }, (_, index) => `achievement-batch-course-${String(index).padStart(3, '0')}`);
+  const insertCourse = database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, ?, 'published', 'admin-1', 'admin-1')`);
+  const insertModule = database.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, 0)');
+  const insertLesson = database.prepare('INSERT INTO lessons (id, module_id, title, position) VALUES (?, ?, ?, 0)');
+  const insertMapping = database.prepare('INSERT INTO course_competencies (course_id, competency_id, created_by) VALUES (?, ?, ?)');
+  const insertProgress = database.prepare('INSERT INTO lesson_progress (user_id, lesson_id) VALUES (?, ?)');
+
+  database.prepare(`INSERT INTO competencies (id, title, description, active, created_by)
+    VALUES (?, 'ZZ batched achievements', '', 1, 'admin-1')`).run(competencyId);
+  const addCandidates = database.transaction(() => {
+    courseIds.forEach((courseId, index) => {
+      const moduleId = `${courseId}-module`;
+      const lessonId = `${courseId}-lesson`;
+      insertCourse.run(courseId, `Achievement batch course ${index}`);
+      insertModule.run(moduleId, courseId, 'Module');
+      insertLesson.run(lessonId, moduleId, 'Lesson');
+      insertMapping.run(courseId, competencyId, 'admin-1');
+      insertProgress.run('learner-active', lessonId);
+    });
+  });
+
+  try {
+    addCandidates();
+    const candidateBatchSizes = [];
+    const candidateSql = [];
+    const originalPrepare = database.prepare;
+    database.prepare = (sql) => {
+      const statement = originalPrepare.call(database, sql);
+      if (!sql.includes('course_competencies') || !sql.includes('lesson_progress') || !sql.includes('quiz_attempts')) return statement;
+      candidateSql.push(sql);
+      return new Proxy(statement, {
+        get(target, property) {
+          const value = Reflect.get(target, property, target);
+          if (property === 'all') return (...args) => {
+            const rows = value.apply(target, args);
+            candidateBatchSizes.push(rows.length);
+            return rows;
+          };
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    };
+
+    let response;
+    try {
+      response = await fetch(apiUrl('/competencies?page=1'), { headers: userHeaders('learner-active') });
+    } finally {
+      database.prepare = originalPrepare;
+    }
+
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.achievedTotal, baseline.achievedTotal + 1);
+    assert.equal(candidateSql.length, 1, 'the keyset query should be prepared once and reused');
+    assert.ok(candidateBatchSizes.length >= 3, `Expected multiple bounded candidate batches, got ${candidateBatchSizes.join(', ')}`);
+    assert.equal(candidateBatchSizes.at(-1), 0, 'the final keyset page should prove there are no more candidates');
+    assert.ok(candidateBatchSizes.slice(0, -1).every((size) => size > 0 && size <= COMPETENCY_ACHIEVEMENT_BATCH_SIZE), candidateBatchSizes.join(', '));
+    assert.match(candidateSql[0], /c\.id > \?/);
+    assert.match(candidateSql[0], /ORDER BY c\.id ASC LIMIT \?/);
+  } finally {
+    database.prepare('DELETE FROM course_competencies WHERE competency_id = ?').run(competencyId);
+    database.prepare('DELETE FROM competencies WHERE id = ?').run(competencyId);
+    database.prepare(`DELETE FROM courses WHERE id IN (${courseIds.map(() => '?').join(', ')})`).run(...courseIds);
+  }
+});
+
 test('competency course lists order duplicate course titles by course ID', async () => {
   database.exec(`
     INSERT INTO competencies (id, title, description, active, created_by)
@@ -2052,6 +2782,74 @@ test('admin competency pages are bounded, stable, clamped, and include the creat
     database.prepare(`DELETE FROM audit_logs WHERE action = 'competency.updated' AND entity_id IN (${fixtureIds.map(() => '?').join(', ')})`).run(...fixtureIds);
     database.prepare(`DELETE FROM competencies WHERE id IN (${fixtureIds.map(() => '?').join(', ')})`).run(...fixtureIds);
     if (createdId) database.prepare('DELETE FROM competencies WHERE id = ?').run(createdId);
+  }
+});
+
+test('admin competency search filters titles and descriptions before pagination', async () => {
+  const pageSize = 25;
+  const cohortIds = Array.from({ length: pageSize + 2 }, (_, index) => `competency-search-${String(index).padStart(2, '0')}`);
+  const extraIds = ['competency-search-description', 'competency-search-literal', 'competency-search-near'];
+  const fixtureIds = [...cohortIds, ...extraIds];
+  const insert = database.prepare(`INSERT INTO competencies (id, title, description, active, created_by)
+    VALUES (?, ?, ?, ?, 'admin-1')`);
+  try {
+    database.transaction(() => {
+      cohortIds.forEach((id, index) => insert.run(id, `Search cohort ${String(index).padStart(2, '0')}`, 'Large skill catalog', index % 2));
+      insert.run(extraIds[0], 'Accessibility standards', 'Compliance matrix for learning', 1);
+      insert.run(extraIds[1], 'Literal %_! marker', '', 1);
+      insert.run(extraIds[2], 'Literal xx! marker', '', 1);
+    }).immediate();
+
+    const searchUrl = (query, page = 1) => {
+      const params = new URLSearchParams({ q: query, page: String(page) });
+      return apiUrl(`/admin/competencies?${params}`);
+    };
+    const firstPageResponse = await fetch(searchUrl('SEARCH COHORT'), { headers: userHeaders('admin-1') });
+    assert.equal(firstPageResponse.status, 200);
+    const firstPage = await firstPageResponse.json();
+    assert.equal(firstPage.total, cohortIds.length);
+    assert.equal(firstPage.page, 1);
+    assert.equal(firstPage.competencies.length, pageSize);
+    assert.equal(firstPage.hasMore, true);
+    assert.ok(firstPage.competencies.every((competency) => competency.title.startsWith('Search cohort')));
+
+    const secondPageResponse = await fetch(searchUrl('SEARCH COHORT', 2), { headers: userHeaders('admin-1') });
+    const secondPage = await secondPageResponse.json();
+    assert.equal(secondPage.total, cohortIds.length);
+    assert.equal(secondPage.page, 2);
+    assert.equal(secondPage.competencies.length, 2);
+    assert.equal(secondPage.hasMore, false);
+
+    const toggleResponse = await fetch(apiUrl(`/admin/competencies/${cohortIds[24]}?q=SEARCH%20COHORT`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ active: true }),
+    });
+    assert.equal(toggleResponse.status, 200);
+    const toggleResult = await toggleResponse.json();
+    assert.equal(toggleResult.page, 1, 'the returned page should account for the filtered rank after activation');
+    const afterToggleResponse = await fetch(searchUrl('SEARCH COHORT', toggleResult.page), { headers: userHeaders('admin-1') });
+    const afterTogglePage = await afterToggleResponse.json();
+    assert.equal(afterTogglePage.total, cohortIds.length);
+    assert.equal(afterTogglePage.page, 1);
+    assert.ok(afterTogglePage.competencies.some((competency) => competency.id === cohortIds[24]));
+
+    const descriptionResponse = await fetch(searchUrl('COMPLIANCE MATRIX'), { headers: userHeaders('admin-1') });
+    const descriptionResults = await descriptionResponse.json();
+    assert.equal(descriptionResults.total, 1);
+    assert.equal(descriptionResults.competencies[0].id, extraIds[0]);
+
+    const literalResponse = await fetch(searchUrl('%_!'), { headers: userHeaders('admin-1') });
+    const literalResults = await literalResponse.json();
+    assert.equal(literalResults.total, 1);
+    assert.equal(literalResults.competencies[0].id, extraIds[1]);
+
+    const repeatedQueryResponse = await fetch(`${apiUrl('/admin/competencies')}?q=first&q=second`, { headers: userHeaders('admin-1') });
+    assert.equal(repeatedQueryResponse.status, 400);
+    assert.equal((await repeatedQueryResponse.json()).code, 'validation_error');
+  } finally {
+    database.prepare(`DELETE FROM audit_logs WHERE action = 'competency.updated' AND entity_id IN (${fixtureIds.map(() => '?').join(', ')})`).run(...fixtureIds);
+    database.prepare(`DELETE FROM competencies WHERE id IN (${fixtureIds.map(() => '?').join(', ')})`).run(...fixtureIds);
   }
 });
 
@@ -2265,6 +3063,47 @@ test('learning-path course selection rejects requests over the shared limit', as
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_paths WHERE title = ?').get(title).count, 0);
 });
 
+test('learning-path course identity validation uses one batch lookup for its maximum selection', async () => {
+  const title = 'Batched path identity validation';
+  const originalPrepare = database.prepare;
+  let identityLookupExecutions = 0;
+  database.prepare = (sql) => {
+    const statement = originalPrepare.call(database, sql);
+    if (!/^\s*WITH requested\(id\) AS \(VALUES/i.test(sql)) return statement;
+    return new Proxy(statement, {
+      get(target, property) {
+        const value = Reflect.get(target, property, target);
+        if (property === 'all') {
+          return (...parameters) => {
+            identityLookupExecutions += 1;
+            return value.apply(target, parameters);
+          };
+        }
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+  };
+
+  try {
+    const response = await fetch(apiUrl('/manage/learning-paths'), {
+      method: 'POST',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        courses: Array.from({ length: MAX_LEARNING_PATH_COURSES }, (_, index) => ({ courseId: `missing-path-course-${index}` })),
+      }),
+    });
+
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'invalid_path_course');
+    assert.equal(identityLookupExecutions, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM learning_paths WHERE title = ?').get(title).count, 0);
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM learning_paths WHERE title = ?').run(title);
+  }
+});
+
 test('learning-path creation rejects falsey non-array course lists', async () => {
   const invalidCourseLists = [null, false, 0, ''];
 
@@ -2435,6 +3274,51 @@ test('learning-path patches reject arrays and skip no-op writes and audit events
   }
 });
 
+test('learning-path course edits load shared course rows once for all enrolled learners', async () => {
+  const pathId = 'path-sync-shared-course-rows';
+  const courseIds = [`${pathId}-course-1`, `${pathId}-course-2`];
+  database.prepare(`INSERT INTO learning_paths (id, title, status, self_enrollment, created_by, updated_by)
+    VALUES (?, 'Shared row sync', 'published', 0, 'admin-1', 'admin-1')`).run(pathId);
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by) VALUES
+    (?, 'Shared row course one', 'published', 'admin-1', 'admin-1'),
+    (?, 'Shared row course two', 'published', 'admin-1', 'admin-1')`).run(...courseIds);
+  database.prepare(`INSERT INTO learning_path_courses (id, path_id, course_id, position, requires_previous) VALUES
+    (?, ?, ?, 0, 0), (?, ?, ?, 1, 1)`).run(`${pathId}-step-1`, pathId, courseIds[0], `${pathId}-step-2`, pathId, courseIds[1]);
+  database.prepare(`INSERT INTO learning_path_enrollments (id, path_id, user_id, enrollment_source, assigned_by) VALUES
+    (?, ?, 'learner-active', 'assigned', 'admin-1'), (?, ?, 'learner-unassigned', 'assigned', 'admin-1')`)
+    .run(`${pathId}-enrollment-1`, pathId, `${pathId}-enrollment-2`, pathId);
+
+  const expectedPathRowsQuery = 'SELECT pc.id AS path_course_id, pc.path_id, pc.course_id, pc.position, pc.requires_previous, c.* FROM learning_path_courses pc JOIN courses c ON c.id = pc.course_id WHERE pc.path_id = ? ORDER BY pc.position';
+  const originalPrepare = database.prepare;
+  let pathRowsReadCount = 0;
+  database.prepare = (sql) => {
+    if (sql.replace(/\s+/g, ' ').trim() === expectedPathRowsQuery) pathRowsReadCount += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    const response = await fetch(apiUrl(`/manage/learning-paths/${pathId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ courses: [
+        { courseId: courseIds[0], requiresPrevious: false },
+        { courseId: courseIds[1], requiresPrevious: false },
+      ] }),
+    });
+
+    assert.equal(response.status, 200);
+    const { path } = await response.json();
+    assert.deepEqual(path.courses.map((course) => course.requiresPrevious), [false, false]);
+    assert.equal(pathRowsReadCount, 1, 'shared path course rows should be fetched once for both enrolled learners');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_learning_state WHERE course_id IN (?, ?) AND user_id IN (?, ?)')
+      .get(...courseIds, 'learner-active', 'learner-unassigned').count, 4);
+  } finally {
+    database.prepare = originalPrepare;
+    database.prepare('DELETE FROM learning_paths WHERE id = ?').run(pathId);
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(...courseIds);
+  }
+});
+
 test('learning-path updates roll back when the response cannot be read', async () => {
   const pathId = 'path-update-payload-read';
   const originalDescription = 'Before response failure';
@@ -2554,6 +3438,115 @@ test('calendar date ranges reject impossible and overwide dates while accepting 
   });
   assert.equal(validLeapDay.status, 200);
   assert.deepEqual((await validLeapDay.json()).items, []);
+});
+
+test('calendar normalizes mixed timestamp formats before ordering deadlines', async () => {
+  const previousTimezone = process.env.TZ;
+  const sqliteCourseId = 'calendar-space-timestamp';
+  const isoCourseId = 'calendar-iso-timestamp';
+  const deadlineDate = '2099-01-01';
+  const sqliteDeadline = `${deadlineDate} 09:00:00`;
+  const earlierIsoDeadline = `${deadlineDate}T08:00:00.000Z`;
+  const insertCourse = database.prepare(`INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+    VALUES (?, ?, 'public', 'published', 'admin-1', 'admin-1')`);
+  insertCourse.run(sqliteCourseId, 'Later SQLite timestamp deadline');
+  insertCourse.run(isoCourseId, 'Earlier ISO timestamp deadline');
+  const insertDeadline = database.prepare('INSERT INTO course_learning_state (user_id, course_id, deadline_at) VALUES (?, ?, ?)');
+  insertDeadline.run('learner-active', sqliteCourseId, sqliteDeadline);
+  insertDeadline.run('learner-active', isoCourseId, earlierIsoDeadline);
+
+  try {
+    process.env.TZ = 'Pacific/Kiritimati';
+    const response = await fetch(apiUrl(`/calendar?from=${deadlineDate}&to=${deadlineDate}`), {
+      headers: userHeaders('learner-active'),
+    });
+
+    assert.equal(response.status, 200);
+    const items = (await response.json()).items;
+    assert.deepEqual(items.map((item) => item.courseId), [isoCourseId, sqliteCourseId]);
+    assert.deepEqual(items.map((item) => item.dueAt), [earlierIsoDeadline, `${deadlineDate}T09:00:00.000Z`]);
+    assert.ok(items.every((item) => item.status === 'upcoming'));
+  } finally {
+    if (previousTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTimezone;
+    database.prepare('DELETE FROM course_learning_state WHERE user_id = ? AND course_id IN (?, ?)')
+      .run('learner-active', sqliteCourseId, isoCourseId);
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(sqliteCourseId, isoCourseId);
+  }
+});
+
+test('calendar omits malformed stored deadlines without failing valid results', async () => {
+  const validCourseId = 'calendar-valid-deadline-after-malformed';
+  const malformedCourseId = 'calendar-malformed-deadline';
+  const warningMessage = 'Malformed course deadlines were omitted from the calendar response.';
+  database.prepare(`INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+    VALUES (?, ?, 'public', 'published', 'admin-1', 'admin-1')`).run(validCourseId, 'Valid calendar deadline');
+  database.prepare(`INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+    VALUES (?, ?, 'public', 'published', 'admin-1', 'admin-1')`).run(malformedCourseId, 'Malformed calendar deadline');
+  const insertDeadline = database.prepare('INSERT INTO course_learning_state (user_id, course_id, deadline_at) VALUES (?, ?, ?)');
+  insertDeadline.run('learner-active', validCourseId, '2099-01-01T12:00:00.000Z');
+  insertDeadline.run('learner-active', malformedCourseId, '2099-01-01 not-a-date');
+
+  try {
+    const response = await fetch(apiUrl('/calendar?from=2099-01-01&to=2099-01-01'), {
+      headers: userHeaders('learner-active'),
+    });
+
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.hasInvalidDeadlines, true);
+    assert.deepEqual(body.items.map((item) => item.courseId), [validCourseId]);
+
+    const warning = database.prepare(`SELECT level, details_json FROM system_logs
+      WHERE source = 'calendar' AND message = ? ORDER BY id DESC LIMIT 1`).get(warningMessage);
+    assert.equal(warning.level, 'warn');
+    assert.deepEqual(JSON.parse(warning.details_json), {
+      invalidDeadlineCount: 1,
+      courseIds: [malformedCourseId],
+    });
+  } finally {
+    database.prepare('DELETE FROM system_logs WHERE source = ? AND message = ?').run('calendar', warningMessage);
+    database.prepare('DELETE FROM course_learning_state WHERE user_id = ? AND course_id IN (?, ?)')
+      .run('learner-active', validCourseId, malformedCourseId);
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(validCourseId, malformedCourseId);
+  }
+});
+
+test('calendar omits impossible stored dates that JavaScript would normalize', async () => {
+  const validCourseId = 'calendar-valid-overflow-deadline';
+  const overflowCourseId = 'calendar-overflow-deadline';
+  const warningMessage = 'Malformed course deadlines were omitted from the calendar response.';
+  database.prepare(`INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+    VALUES (?, ?, 'public', 'published', 'admin-1', 'admin-1')`).run(validCourseId, 'Valid February deadline');
+  database.prepare(`INSERT INTO courses (id, title, visibility, status, created_by, updated_by)
+    VALUES (?, ?, 'public', 'published', 'admin-1', 'admin-1')`).run(overflowCourseId, 'Impossible February deadline');
+  const insertDeadline = database.prepare('INSERT INTO course_learning_state (user_id, course_id, deadline_at) VALUES (?, ?, ?)');
+  insertDeadline.run('learner-active', validCourseId, '2099-02-15T12:00:00.000Z');
+  insertDeadline.run('learner-active', overflowCourseId, '2099-02-31T12:00:00.000Z');
+
+  try {
+    const response = await fetch(apiUrl('/calendar?from=2099-02-01&to=2099-03-01'), {
+      headers: userHeaders('learner-active'),
+    });
+
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.hasInvalidDeadlines, true);
+    assert.deepEqual(body.items.map((item) => item.courseId), [validCourseId]);
+
+    const warning = database.prepare(`SELECT level, details_json FROM system_logs
+      WHERE source = 'calendar' AND message = ? ORDER BY id DESC LIMIT 1`).get(warningMessage);
+    assert.equal(warning.level, 'warn');
+    assert.deepEqual(JSON.parse(warning.details_json), {
+      invalidDeadlineCount: 1,
+      courseIds: [overflowCourseId],
+    });
+  } finally {
+    database.prepare('DELETE FROM system_logs WHERE source = ? AND message = ?').run('calendar', warningMessage);
+    database.prepare('DELETE FROM course_learning_state WHERE user_id = ? AND course_id IN (?, ?)')
+      .run('learner-active', validCourseId, overflowCourseId);
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(validCourseId, overflowCourseId);
+  }
 });
 
 test('calendar deadline results use version-aware course completion and batched summaries', async () => {
@@ -2783,6 +3776,34 @@ test('course access learner search matches email and remains limited to learners
   assert.equal(result.total, 1);
   assert.deepEqual(result.users.map((learner) => learner.id), ['learner-unassigned']);
   assert.equal(result.users[0].granted, false);
+});
+
+test('staff can revoke an existing course grant while a learner account is disabled', async () => {
+  const courseId = 'course-analytics';
+  const learnerId = 'learner-disabled';
+  const grantId = 'grant-disabled-learner-revocation';
+  database.prepare('INSERT INTO course_grants (id, course_id, user_id, granted_by) VALUES (?, ?, ?, ?)')
+    .run(grantId, courseId, learnerId, 'admin-1');
+
+  try {
+    const listResponse = await fetch(apiUrl(`/manage/courses/${courseId}/access?q=${encodeURIComponent('disabled@example.invalid')}`), {
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(listResponse.status, 200);
+    const list = await listResponse.json();
+    assert.equal(list.total, 1);
+    assert.deepEqual(list.users.map((user) => [user.id, user.disabled, user.granted]), [[learnerId, true, true]]);
+
+    const revokeResponse = await fetch(apiUrl(`/manage/courses/${courseId}/access/${learnerId}`), {
+      method: 'DELETE',
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(revokeResponse.status, 204);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_grants WHERE id = ?').get(grantId).count, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM enrollments WHERE course_id = ? AND user_id = ?').get(courseId, learnerId).count, 1);
+  } finally {
+    database.prepare('DELETE FROM course_grants WHERE id = ?').run(grantId);
+  }
 });
 
 test('private course grants and revocations roll back when audit persistence fails', async () => {
@@ -3168,6 +4189,51 @@ test('quiz-save validation rejects malformed questions without replacing saved q
   }
 });
 
+test('quiz saves prepare question and choice insert statements once per batch', async () => {
+  const courseId = 'course-quiz-prepared-inserts';
+  const moduleId = 'module-quiz-prepared-inserts';
+  const originalPrepare = database.prepare;
+  let questionInsertPreparations = 0;
+  let choiceInsertPreparations = 0;
+  database.prepare = (sql) => {
+    const normalizedSql = sql.replace(/\s+/g, ' ').trim();
+    if (normalizedSql.startsWith('INSERT INTO quiz_questions ')) questionInsertPreparations += 1;
+    if (normalizedSql.startsWith('INSERT INTO quiz_choices ')) choiceInsertPreparations += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    originalPrepare.call(database, `INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES (?, 'Quiz insert preparation fixture', 'draft', 'admin-1', 'admin-1')`).run(courseId);
+    originalPrepare.call(database, 'INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, 0)')
+      .run(moduleId, courseId, 'Preparation module');
+    const questions = Array.from({ length: 3 }, (_, questionIndex) => ({
+      prompt: `Question ${questionIndex + 1}?`,
+      explanation: '',
+      choices: Array.from({ length: 6 }, (_, choiceIndex) => ({
+        text: `Answer ${choiceIndex + 1}`,
+        isCorrect: choiceIndex === 0,
+      })),
+    }));
+    const response = await fetch(apiUrl(`/manage/modules/${moduleId}/quiz`), {
+      method: 'PUT',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Prepared inserts quiz', passMark: 70, questions }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(questionInsertPreparations, 1);
+    assert.equal(choiceInsertPreparations, 1);
+    const quizId = originalPrepare.call(database, 'SELECT id FROM quizzes WHERE module_id = ?').get(moduleId).id;
+    assert.equal(originalPrepare.call(database, 'SELECT COUNT(*) AS count FROM quiz_questions WHERE quiz_id = ?').get(quizId).count, 3);
+    assert.equal(originalPrepare.call(database, `SELECT COUNT(*) AS count FROM quiz_choices qc
+      JOIN quiz_questions qq ON qq.id = qc.question_id WHERE qq.quiz_id = ?`).get(quizId).count, 18);
+  } finally {
+    database.prepare = originalPrepare;
+    originalPrepare.call(database, 'DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('quiz saves roll back when their audit entry cannot be saved', async () => {
   const originalQuiz = database.prepare("SELECT id, title, pass_mark FROM quizzes WHERE module_id = 'module-analytics'").get();
   const initialQuestionCount = database.prepare('SELECT COUNT(*) AS count FROM quiz_questions WHERE quiz_id = ?').get(originalQuiz.id).count;
@@ -3485,7 +4551,7 @@ test('course publication rolls back when the published editor response cannot be
   let payloadReadFailed = false;
 
   database.prepare = (sql) => {
-    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT l.*, mf.original_name, mf.mime_type FROM lessons l JOIN course_modules m ON m.id = l.module_id LEFT JOIN media_files mf ON mf.id = l.media_id WHERE m.course_id = ? ORDER BY m.position, m.id, l.position, l.id') {
+    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT l.id, l.module_id, l.title, l.description, l.transcript, l.position, l.media_id, mf.original_name FROM lessons l JOIN course_modules m ON m.id = l.module_id LEFT JOIN media_files mf ON mf.id = l.media_id WHERE m.course_id = ? ORDER BY m.position, m.id, l.position, l.id') {
       payloadReadFailed = true;
       throw new Error('Injected published course payload read failure');
     }
@@ -3770,6 +4836,50 @@ test('module deletion preserves its content and files when its audit entry canno
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.module_deleted' AND entity_id = 'module-delete-audit'").get().count, 1);
 });
 
+test('module deletion prepares its media-row cleanup statement once for multiple videos', async () => {
+  const courseId = 'course-module-media-batch';
+  const moduleId = 'module-media-batch';
+  const mediaIds = Array.from({ length: 3 }, (_, index) => `media-module-batch-${index + 1}`);
+  const fileNames = mediaIds.map((_id, index) => `module-video-${index + 1}.mp4`);
+  const mediaDirectory = path.join(fixtureDirectory, 'course-media', courseId);
+  const originalPrepare = database.prepare;
+  let mediaDeletePreparations = 0;
+  database.prepare = (sql) => {
+    if (sql.trim() === 'DELETE FROM media_files WHERE id = ?') mediaDeletePreparations += 1;
+    return originalPrepare.call(database, sql);
+  };
+
+  try {
+    originalPrepare.call(database, `INSERT INTO courses (id, title, status, created_by, updated_by)
+      VALUES (?, 'Module media batch fixture', 'draft', 'admin-1', 'admin-1')`).run(courseId);
+    originalPrepare.call(database, 'INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, 0)')
+      .run(moduleId, courseId, 'Media batch module');
+    const insertMedia = originalPrepare.call(database, `INSERT INTO media_files
+      (id, course_id, original_name, file_name, mime_type, byte_size, media_kind)
+      VALUES (?, ?, ?, ?, 'video/mp4', 12, 'video')`);
+    const insertLesson = originalPrepare.call(database, 'INSERT INTO lessons (id, module_id, title, media_id, position) VALUES (?, ?, ?, ?, ?)');
+    fs.mkdirSync(mediaDirectory, { recursive: true });
+    mediaIds.forEach((mediaId, index) => {
+      insertMedia.run(mediaId, courseId, fileNames[index], fileNames[index]);
+      insertLesson.run(`lesson-module-batch-${index + 1}`, moduleId, `Video ${index + 1}`, mediaId, index);
+      fs.writeFileSync(path.join(mediaDirectory, fileNames[index]), 'fixture video');
+    });
+
+    const response = await fetch(apiUrl(`/manage/modules/${moduleId}`), {
+      method: 'DELETE',
+      headers: userHeaders('admin-1'),
+    });
+
+    assert.equal(response.status, 204);
+    assert.equal(mediaDeletePreparations, 1);
+    assert.equal(originalPrepare.call(database, 'SELECT COUNT(*) AS count FROM media_files WHERE id IN (?, ?, ?)').get(...mediaIds).count, 0);
+    assert.ok(fileNames.every((fileName) => !fs.existsSync(path.join(mediaDirectory, fileName))));
+  } finally {
+    database.prepare = originalPrepare;
+    originalPrepare.call(database, 'DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('lesson deletion preserves its content and files when its audit entry cannot be saved', async () => {
   database.exec(`
     INSERT INTO courses (id, title, status, created_by, updated_by)
@@ -3947,7 +5057,8 @@ test('resource link creation rolls back when its audit entry cannot be saved', a
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.resource_link_added' AND entity_id = 'lesson-resource-link-audit'").get().count, initialAuditCount + 1);
 });
 
-test('publication notes over the stored version-history limit are rejected before publishing', async () => {
+test('publication and review note boundaries reject invalid values without state changes', async () => {
+  const reviewAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.review_changes_requested' AND entity_id = 'course-empty'").get().count;
   const publishResponse = await fetch(apiUrl('/manage/courses/course-empty'), {
     method: 'PATCH',
     headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
@@ -3963,6 +5074,20 @@ test('publication notes over the stored version-history limit are rejected befor
   database.prepare(`INSERT INTO course_revisions (course_id, revision_course_id, author_id, review_status, submitted_by, submitted_at)
     VALUES ('course-empty', 'course-empty', 'admin-1', 'in_review', 'admin-1', CURRENT_TIMESTAMP)`).run();
   try {
+    for (const note of [undefined, '', ' \t\n ']) {
+      const missingNoteResponse = await fetch(apiUrl('/manage/courses/course-empty/review/decision'), {
+        method: 'POST',
+        headers: { ...userHeaders('reviewer-note-limit'), 'content-type': 'application/json' },
+        body: JSON.stringify({ decision: 'changes_requested', note }),
+      });
+      assert.equal(missingNoteResponse.status, 400);
+      assert.equal((await missingNoteResponse.json()).error, 'Review note is required.');
+      assert.deepEqual(database.prepare('SELECT review_status, review_note FROM course_revisions WHERE course_id = ?').get('course-empty'), {
+        review_status: 'in_review', review_note: '',
+      });
+      assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.review_changes_requested' AND entity_id = 'course-empty'").get().count, reviewAuditCount);
+    }
+
     const reviewResponse = await fetch(apiUrl('/manage/courses/course-empty/review/decision'), {
       method: 'POST',
       headers: { ...userHeaders('reviewer-note-limit'), 'content-type': 'application/json' },
@@ -3971,6 +5096,19 @@ test('publication notes over the stored version-history limit are rejected befor
     assert.equal(reviewResponse.status, 400);
     assert.equal((await reviewResponse.json()).error, 'Publication note must be 500 characters or fewer.');
     assert.equal(database.prepare("SELECT review_status FROM course_revisions WHERE course_id = 'course-empty'").get().review_status, 'in_review');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM course_versions WHERE course_id = 'course-empty'").get().count, 0);
+
+    const changeRequestResponse = await fetch(apiUrl('/manage/courses/course-empty/review/decision'), {
+      method: 'POST',
+      headers: { ...userHeaders('reviewer-note-limit'), 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'changes_requested', note: 'n'.repeat(1001) }),
+    });
+    assert.equal(changeRequestResponse.status, 400);
+    assert.equal((await changeRequestResponse.json()).error, 'Review note must be 1000 characters or fewer.');
+    assert.deepEqual(database.prepare('SELECT review_status, review_note FROM course_revisions WHERE course_id = ?').get('course-empty'), {
+      review_status: 'in_review', review_note: '',
+    });
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.review_changes_requested' AND entity_id = 'course-empty'").get().count, reviewAuditCount);
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM course_versions WHERE course_id = 'course-empty'").get().count, 0);
   } finally {
     database.prepare("DELETE FROM course_revisions WHERE course_id = 'course-empty'").run();
@@ -4131,8 +5269,12 @@ test('repeated self-enrollment requests create one enrollment and one audit even
       method: 'POST',
       headers: userHeaders('learner-unassigned'),
     });
-    assert.equal(response.status, 201);
-    assert.equal((await response.json()).path.enrolled, true);
+    assert.equal(response.status, attempt === 0 ? 201 : 200);
+    const { path } = await response.json();
+    assert.equal(path.enrolled, true);
+    assert.equal(path.courseCount, 1);
+    assert.equal(path.courses[0].id, 'course-analytics');
+    assert.equal(path.courses[0].unlocked, true);
   }
 
   assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM learning_path_enrollments
@@ -4278,6 +5420,36 @@ test('logical course ID resolution reuses its prepared course and content lookup
   }
 
   assert.equal(lookupPreparations, 0, 'course identity lookups should be prepared once when the module loads');
+});
+
+test('batched course identity lookup maps direct and nested IDs to logical courses', async () => {
+  const rootId = 'logical-identity-batch-root';
+  const snapshotId = 'logical-identity-batch-snapshot';
+  const moduleId = 'logical-identity-batch-module';
+  const lessonId = 'logical-identity-batch-lesson';
+  const quizId = 'logical-identity-batch-quiz';
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Batched identity root', 'published', 'admin-1', 'admin-1')`).run(rootId);
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by, logical_course_id)
+    VALUES (?, 'Batched identity snapshot', 'published', 'admin-1', 'admin-1', ?)`).run(snapshotId, rootId);
+  database.prepare(`INSERT INTO course_modules (id, course_id, title, position)
+    VALUES (?, ?, 'Batched identity module', 0)`).run(moduleId, rootId);
+  database.prepare(`INSERT INTO lessons (id, module_id, title, position)
+    VALUES (?, ?, 'Batched identity lesson', 0)`).run(lessonId, moduleId);
+  database.prepare(`INSERT INTO quizzes (id, module_id, title, pass_mark)
+    VALUES (?, ?, 'Batched identity quiz', 70)`).run(quizId, moduleId);
+
+  try {
+    const { logicalCourseIds: resolveLogicalCourseIds } = await import('../../server/course-versioning.js');
+    const resolved = resolveLogicalCourseIds([rootId, snapshotId, moduleId, lessonId, quizId, 'missing-batch-course', '']);
+    assert.equal(resolved.size, 5);
+    for (const id of [rootId, snapshotId, moduleId, lessonId, quizId]) assert.equal(resolved.get(id), rootId);
+    assert.equal(resolved.has('missing-batch-course'), false);
+    assert.equal(resolved.has(''), false);
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(snapshotId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(rootId);
+  }
 });
 
 test('published version lookup reuses its statement while reading the latest live version', () => {
@@ -4527,9 +5699,9 @@ test('course access reuses prerequisite-completion statements across courses', (
     'SELECT v.id, v.storage_course_id FROM course_versions v WHERE v.course_id = ? ORDER BY v.version_number DESC LIMIT 1',
     'SELECT target_version_id FROM course_learning_state WHERE user_id = ? AND course_id = ?',
     'SELECT l.id, l.stable_id FROM lessons l JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?',
-    'SELECT q.id, q.stable_id FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?',
+    'SELECT q.id, q.stable_id FROM quizzes q LEFT JOIN course_modules m ON m.id = q.module_id WHERE COALESCE(m.course_id, q.course_id) = ? AND q.required_for_completion = 1',
     'SELECT l.id, l.stable_id FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE p.user_id = ? AND (c.id = ? OR c.logical_course_id = ?)',
-    'SELECT DISTINCT q.id, q.stable_id FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = m.course_id WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)',
+    'SELECT DISTINCT q.id, q.stable_id FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id LEFT JOIN course_modules m ON m.id = q.module_id JOIN courses c ON c.id = COALESCE(m.course_id, q.course_id) WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)',
   ].map((query) => [query, 0]));
   database.exec(`
     INSERT INTO courses (id, title, status, visibility, created_by, updated_by) VALUES

@@ -48,6 +48,31 @@ test('admin user search results show the matched account email under its usernam
   assert.ok(emailIsSecondaryText, 'the matching email should appear as secondary text in the result row');
 });
 
+test('admin user identities are row headers in the accounts table', () => {
+  const sourcePath = path.join(sourceRoot, 'pages-manage.tsx');
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let identityRowHeader;
+
+  function visit(node) {
+    if (ts.isJsxElement(node) && ts.isIdentifier(node.openingElement.tagName)
+      && node.openingElement.tagName.text === 'th'
+      && stringAttribute(node.openingElement, 'scope') === 'row'
+      && node.getText(sourceFile).includes('className="owner-cell user-detail-link"')) {
+      identityRowHeader = node;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  assert.ok(identityRowHeader, 'each account identity should label its row for table navigation');
+
+  const styles = fs.readFileSync(path.resolve(sourceRoot, 'styles.css'), 'utf8');
+  assert.match(styles, /\.user-table tbody th\s*\{[^}]*height:\s*78px;[^}]*padding:\s*10px 16px;[^}]*background:\s*transparent;[^}]*text-align:\s*left;/);
+  assert.match(styles, /@media \(max-width: 940px\) \{[\s\S]*?\.user-table tbody th, \.user-table td \{[^}]*padding-right:\s*11px;[^}]*padding-left:\s*11px;/);
+});
+
 test('admin user-list emails are visually capped and truncated', () => {
   const css = fs.readFileSync(path.resolve(sourceRoot, 'styles.css'), 'utf8');
   assert.match(css, /\.user-detail-link-copy small\s*\{[^}]*max-width:\s*220px;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;/);

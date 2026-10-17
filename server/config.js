@@ -1,7 +1,11 @@
 import 'dotenv/config';
+import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const baseDir = process.cwd();
+// Locate built frontend assets beside the server source, even when a service starts from another working directory.
+const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = path.resolve(baseDir, process.env.DATA_DIR || './data');
 const nodeEnv = process.env.NODE_ENV?.trim() || 'development';
 if (!['development', 'test', 'production'].includes(nodeEnv)) {
@@ -12,7 +16,7 @@ if (rawTrustProxy && !['true', 'false'].includes(rawTrustProxy)) {
   throw new Error('TRUST_PROXY must be true or false.');
 }
 const rawPort = process.env.PORT?.trim() || '';
-const port = rawPort ? Number(rawPort) : 3000;
+const port = rawPort ? Number(rawPort) : 5173;
 if (rawPort && (!/^\d+$/.test(rawPort) || !Number.isSafeInteger(port) || port < 1 || port > 65_535)) {
   throw new Error('PORT must be a whole-number TCP port between 1 and 65535.');
 }
@@ -28,14 +32,36 @@ if (rawRequestTimeout && (!/^\d+$/.test(rawRequestTimeout) || !Number.isSafeInte
 }
 const defaultSessionSecret = 'development-only-change-this-session-secret';
 const exampleSessionSecret = 'change-this-to-a-random-secret-of-at-least-32-characters';
-const sessionSecret = process.env.SESSION_SECRET?.trim() || defaultSessionSecret;
-const setupToken = process.env.SETUP_TOKEN?.trim() || '';
+
+function readSecret(name) {
+  const environmentValue = process.env[name]?.trim() || '';
+  const filePath = process.env[`${name}_FILE`]?.trim() || '';
+  if (environmentValue && filePath) {
+    throw new Error(`Set either ${name} or ${name}_FILE, not both.`);
+  }
+  if (!filePath) return environmentValue;
+  let value;
+  try {
+    value = fs.readFileSync(filePath, 'utf8').trim();
+  } catch {
+    throw new Error(`${name}_FILE must point to a readable UTF-8 secret file.`);
+  }
+  if (!value) throw new Error(`${name}_FILE must point to a non-empty secret file.`);
+  return value;
+}
+
+const sessionSecret = readSecret('SESSION_SECRET') || defaultSessionSecret;
+const setupToken = readSecret('SETUP_TOKEN');
 if (setupToken && (setupToken.length < 32 || setupToken.length > 256)) {
   throw new Error('SETUP_TOKEN must be between 32 and 256 characters when configured.');
 }
 
 export const config = {
   nodeEnv,
+  projectDir,
+  // Production must accept connections addressed to the server's network IP.
+  // Local development and tests remain bound to loopback.
+  host: nodeEnv === 'production' ? '0.0.0.0' : '127.0.0.1',
   port,
   dataDir,
   dbPath: path.resolve(baseDir, process.env.DB_PATH || path.join(dataDir, 'openlearning.sqlite')),
@@ -45,7 +71,7 @@ export const config = {
   sessionSecret,
   setupToken,
   trustProxy: rawTrustProxy === 'true',
-  clientDir: path.resolve(baseDir, 'dist/client'),
+  clientDir: path.join(projectDir, 'dist', 'client'),
 };
 
 if (config.nodeEnv === 'production' && ([defaultSessionSecret, exampleSessionSecret].includes(sessionSecret) || sessionSecret.length < 32)) {

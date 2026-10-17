@@ -423,6 +423,43 @@ test('platform setting changes roll back when their required audit entry cannot 
     WHERE action = 'platform.settings_updated'`).get().count, originalAuditCount + 1);
 });
 
+test('platform settings reject a whitespace-only name without changing the saved platform identity', async () => {
+  const originalName = database.prepare('SELECT value FROM app_settings WHERE key = ?').get('platform_name')?.value ?? null;
+  const response = await fetch(apiUrl('/admin/settings'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ platformName: '   ' }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: 'Platform name must be between 2 and 80 characters.',
+    code: 'invalid_platform_name',
+  });
+  assert.equal(database.prepare('SELECT value FROM app_settings WHERE key = ?').get('platform_name')?.value ?? null, originalName);
+});
+
+test('platform settings validate registration approval before attempting database writes', async () => {
+  const originalName = database.prepare('SELECT value FROM app_settings WHERE key = ?').get('platform_name')?.value ?? null;
+  database.exec(`CREATE TRIGGER reject_invalid_policy_write
+    BEFORE UPDATE ON app_settings
+    WHEN OLD.key = 'platform_name'
+    BEGIN SELECT RAISE(ABORT, 'settings write should not run for invalid input'); END`);
+
+  try {
+    const response = await fetch(apiUrl('/admin/settings'), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ platformName: 'Rejected settings update', registrationApprovalRequired: 'yes' }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'invalid_registration_approval_setting');
+    assert.equal(database.prepare('SELECT value FROM app_settings WHERE key = ?').get('platform_name')?.value ?? null, originalName);
+  } finally {
+    database.exec('DROP TRIGGER reject_invalid_policy_write');
+  }
+});
+
 test('platform settings roll back when their response count cannot be read', async () => {
   const currentSetting = (key) => database.prepare('SELECT value FROM app_settings WHERE key = ?').get(key)?.value ?? null;
   setSetting('platform_name', 'Before count failure');
@@ -764,10 +801,65 @@ test('an administrator can be disabled while another active administrator remain
   }
 });
 
+test('administrator email changes validate addresses, reject case-insensitive duplicates, and record the change', async () => {
+  const userId = 'registration-fields-email-target';
+  const courseId = 'registration-fields-email-course';
+  const oldEmail = 'email-target@example.invalid';
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role)
+    VALUES (?, ?, ?, ?, 'learner')`).run(userId, 'registration_fields_email_target', oldEmail, 'not-used');
+  database.prepare(`INSERT INTO courses (id, title, created_by, updated_by)
+    VALUES (?, 'Email Snapshot', 'registration-fields-admin', 'registration-fields-admin')`).run(courseId);
+  database.prepare(`INSERT INTO course_certificates
+    (id, certificate_code, user_id, course_id, recipient_name, recipient_email, course_title, platform_name)
+    VALUES (?, ?, ?, ?, 'Email Snapshot Learner', ?, 'Email Snapshot', 'OpenLearning')`)
+    .run('registration-fields-email-certificate', 'REG-FIELDS-EMAIL-SNAPSHOT', userId, courseId, oldEmail);
+  const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action = 'account.updated' AND entity_id = ?`).get(userId).count;
+
+  try {
+    const invalidResponse = await fetch(apiUrl(`/admin/users/${userId}`), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ email: 'not-an-email' }),
+    });
+    assert.equal(invalidResponse.status, 400);
+    assert.equal((await invalidResponse.json()).code, 'invalid_email');
+
+    const duplicateResponse = await fetch(apiUrl(`/admin/users/${userId}`), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ email: 'ADMIN.registration@EXAMPLE.invalid' }),
+    });
+    assert.equal(duplicateResponse.status, 409);
+    assert.equal((await duplicateResponse.json()).code, 'email_taken');
+    assert.equal(database.prepare('SELECT email FROM users WHERE id = ?').get(userId).email, oldEmail);
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+      WHERE action = 'account.updated' AND entity_id = ?`).get(userId).count, originalAuditCount);
+
+    const savedResponse = await fetch(apiUrl(`/admin/users/${userId}`), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({ email: '  new.address@example.invalid  ' }),
+    });
+    assert.equal(savedResponse.status, 200);
+    assert.equal((await savedResponse.json()).user.email, 'new.address@example.invalid');
+    assert.equal(database.prepare('SELECT email FROM users WHERE id = ?').get(userId).email, 'new.address@example.invalid');
+    assert.equal(database.prepare('SELECT recipient_email FROM course_certificates WHERE id = ?')
+      .get('registration-fields-email-certificate').recipient_email, oldEmail);
+    const audit = database.prepare(`SELECT details_json FROM audit_logs
+      WHERE action = 'account.updated' AND entity_id = ? ORDER BY id DESC LIMIT 1`).get(userId);
+    assert.deepEqual(JSON.parse(audit.details_json).email, { from: oldEmail, to: 'new.address@example.invalid' });
+  } finally {
+    database.prepare("DELETE FROM audit_logs WHERE action = 'account.updated' AND entity_id = ?").run(userId);
+    database.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('account changes and session revocations roll back when their required audit entry cannot be written', async () => {
   database.prepare(`INSERT INTO sessions (sid, session_data, expires_at, user_id) VALUES (?, ?, ?, ?)`)
     .run('account-update-session', JSON.stringify({ userId: 'registration-fields-role-target' }), Date.now() + 60_000, 'registration-fields-role-target');
-  const originalUser = database.prepare('SELECT role, disabled, updated_at FROM users WHERE id = ?')
+  const originalUser = database.prepare('SELECT role, disabled, email, updated_at FROM users WHERE id = ?')
     .get('registration-fields-role-target');
   const originalAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
     WHERE action = 'account.updated' AND entity_id = 'registration-fields-role-target'`).get().count;
@@ -780,11 +872,11 @@ test('account changes and session revocations roll back when their required audi
     const response = await fetch(apiUrl('/admin/users/registration-fields-role-target'), {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', connection: 'close' },
-      body: JSON.stringify({ disabled: true }),
+      body: JSON.stringify({ disabled: true, email: 'changed@example.invalid' }),
     });
     assert.equal(response.status, 500);
     assert.equal((await response.json()).code, 'audit_unavailable');
-    assert.deepEqual(database.prepare('SELECT role, disabled, updated_at FROM users WHERE id = ?')
+    assert.deepEqual(database.prepare('SELECT role, disabled, email, updated_at FROM users WHERE id = ?')
       .get('registration-fields-role-target'), originalUser);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get('account-update-session').count, 1);
     assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
@@ -989,6 +1081,31 @@ test('administrator password reset route throttles requests per admin before tar
   }
 });
 
+test('administrator account creation rejects whitespace-only names before creating an account', async () => {
+  const username = 'account_invalid_name';
+  const email = 'invalid-name-account@example.invalid';
+  const response = await fetch(apiUrl('/admin/users'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({
+      username,
+      email,
+      firstName: '   ',
+      lastName: 'Account',
+      password: 'InvalidNameAccountPassphrase-2026',
+      confirmPassword: 'InvalidNameAccountPassphrase-2026',
+      role: 'learner',
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: 'First name must be between 1 and 80 characters.',
+    code: 'invalid_name',
+  });
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get(username).count, 0);
+});
+
 test('administrator account creation rolls back when its required audit entry cannot be written', async () => {
   const username = 'audit_failure_account';
   const email = 'audit-failure-account@example.invalid';
@@ -1040,6 +1157,46 @@ test('administrator account creation rolls back when its required audit entry ca
   assert.equal(createdUser.firstName, 'Admin');
   assert.equal(createdUser.lastName, 'Created');
   assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.created'`).get().count, originalAuditCount + 1);
+});
+
+test('administrator account creation rejects case-insensitive duplicates before writes', async () => {
+  const originalPrepare = database.prepare;
+  let caseInsensitivePreflightRan = false;
+  let insertAttemptedBeforePreflight = false;
+  database.prepare = function prepareWithDuplicateGuard(sql, ...args) {
+    if (sql === 'SELECT 1 FROM users WHERE username = ? COLLATE NOCASE') caseInsensitivePreflightRan = true;
+    if (sql.startsWith('INSERT INTO users') && !caseInsensitivePreflightRan) {
+      insertAttemptedBeforePreflight = true;
+      throw new Error('Duplicate username reached the write before the case-insensitive preflight.');
+    }
+    return originalPrepare.call(this, sql, ...args);
+  };
+
+  try {
+    const response = await fetch(apiUrl('/admin/users'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        username: 'REGISTRATION_FIELDS_ADMIN',
+        email: 'duplicate-username@example.invalid',
+        firstName: 'Duplicate',
+        lastName: 'Account',
+        password: 'DuplicateUsernamePassphrase-2026',
+        confirmPassword: 'DuplicateUsernamePassphrase-2026',
+        role: 'learner',
+      }),
+    });
+
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), {
+      error: 'That username is already in use.',
+      code: 'username_taken',
+    });
+    assert.equal(caseInsensitivePreflightRan, true);
+    assert.equal(insertAttemptedBeforePreflight, false);
+  } finally {
+    database.prepare = originalPrepare;
+  }
 });
 
 test('account profiles require valid first and last names and return the saved profile', async () => {

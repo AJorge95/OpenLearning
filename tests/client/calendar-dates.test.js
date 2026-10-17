@@ -1,7 +1,26 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { calendarMonthRequestRange, groupCalendarDeadlines, shouldShowCalendarEmptyState } from '../../src/calendar-dates.ts';
+import { calendarMonthRequestRange, currentCalendarMonth, getCalendarDeadlineRefreshDelay, groupCalendarDeadlines, isSameCalendarMonth, markCalendarDeadlinesOverdue, shouldShowCalendarEmptyState } from '../../src/calendar-dates.ts';
+
+const deadline = (dueAt, status = 'upcoming', completed = false) => ({
+  courseId: 'course-1', title: 'Course', category: '', dueAt, status, completed, url: '/courses/course-1',
+});
+
+test('current-month navigation returns to the first day of the local month', () => {
+  const month = currentCalendarMonth(new Date(2026, 9, 11, 14, 30));
+
+  assert.equal(month.getFullYear(), 2026);
+  assert.equal(month.getMonth(), 9);
+  assert.equal(month.getDate(), 1);
+  assert.equal(month.getHours(), 0);
+});
+
+test('calendar month navigation recognizes the same local month across different days', () => {
+  assert.equal(isSameCalendarMonth(new Date(2026, 9, 1), new Date(2026, 9, 12)), true);
+  assert.equal(isSameCalendarMonth(new Date(2026, 9, 1), new Date(2026, 10, 1)), false);
+  assert.equal(isSameCalendarMonth(new Date(2025, 9, 1), new Date(2026, 9, 1)), false);
+});
 
 test('calendar ranges include UTC dates whose deadlines belong to an adjacent local month', () => {
   const previousTimezone = process.env.TZ;
@@ -39,11 +58,83 @@ test('calendar empty state appears only after a successful empty response', () =
   assert.equal(shouldShowCalendarEmptyState(true, '', 0), false);
   assert.equal(shouldShowCalendarEmptyState(false, 'Calendar could not be loaded.', 0), false);
   assert.equal(shouldShowCalendarEmptyState(false, '', 0), true);
+  assert.equal(shouldShowCalendarEmptyState(false, '', 0, true), false);
   assert.equal(shouldShowCalendarEmptyState(false, '', 1), false);
+});
+
+test('calendar schedules the earliest upcoming deadline and ignores completed or invalid dates', () => {
+  const now = Date.parse('2026-10-12T10:00:00.000Z');
+  const items = [
+    deadline('2026-10-12T10:00:01.000Z'),
+    deadline('2026-10-12T11:00:00.000Z'),
+    deadline('2026-10-12T10:00:00.000Z', 'completed', true),
+    deadline('not-a-date'),
+  ];
+
+  assert.equal(getCalendarDeadlineRefreshDelay(items, now), 1001);
+  assert.equal(getCalendarDeadlineRefreshDelay([deadline('2026-10-12T09:00:00.000Z', 'overdue')], now), null);
+  assert.equal(getCalendarDeadlineRefreshDelay([deadline('2026-10-12T09:00:00.000Z')], now), 0);
+});
+
+test('calendar changes only passed upcoming deadlines to overdue', () => {
+  const now = Date.parse('2026-10-12T10:00:00.000Z');
+  const passed = deadline('2026-10-12T09:59:59.000Z');
+  const future = deadline('2026-10-12T10:00:01.000Z');
+  const completed = deadline('2026-10-12T09:00:00.000Z', 'completed', true);
+  const overdue = deadline('2026-10-12T09:00:00.000Z', 'overdue');
+  const items = [passed, future, completed, overdue];
+  const next = markCalendarDeadlinesOverdue(items, now);
+
+  assert.equal(next[0].status, 'overdue');
+  assert.equal(next[1], future);
+  assert.equal(next[2], completed);
+  assert.equal(next[3], overdue);
+  const unchangedItems = [future];
+  assert.equal(markCalendarDeadlinesOverdue(unchangedItems, now), unchangedItems);
+});
+
+test('calendar page schedules and clears its deadline status timer', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
+  const componentStart = pageSource.indexOf('export function CalendarPage()');
+  const componentEnd = pageSource.indexOf('export function CompetenciesPage()', componentStart);
+  const componentSource = pageSource.slice(componentStart, componentEnd);
+
+  assert.match(componentSource, /getCalendarDeadlineRefreshDelay\(monthItems\)/);
+  assert.match(componentSource, /setItems\(\(currentItems\) => markCalendarDeadlinesOverdue\(currentItems, now\)\)/);
+  assert.match(componentSource, /return \(\) => window\.clearTimeout\(timer\)/);
+  assert.match(componentSource, /\[monthItems, deadlineTimerRevision\]/);
 });
 
 test('calendar page uses the successful-empty-state guard', () => {
   const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
 
-  assert.match(pageSource, /shouldShowCalendarEmptyState\(loading, error, monthItems\.length\)/);
+  assert.match(pageSource, /shouldShowCalendarEmptyState\(loading, error, monthItems\.length, hasInvalidDeadlines\)/);
+  assert.match(pageSource, /setHasInvalidDeadlines\(Boolean\(result\.hasInvalidDeadlines\)\)/);
+  assert.match(pageSource, /Some course deadlines could not be displayed\. An administrator can check the system log\./);
+  assert.match(pageSource, /function navigateToMonth\(requestedMonth: Date\) \{\s*\/\/ Keep the loaded deadlines when the current-month control targets the displayed month\.\s*if \(isSameCalendarMonth\(month, requestedMonth\)\) return;\s*setLoading\(true\);\s*setError\(''\);\s*setItems\(\[\]\);\s*setHasInvalidDeadlines\(false\);\s*setMonth\(currentCalendarMonth\(requestedMonth\)\);\s*\}/);
+  assert.match(pageSource, /aria-label="Previous month" onClick=\{\(\) => navigateToMonth\(new Date\(year, monthIndex - 1, 1\)\)\}/);
+  assert.match(pageSource, /aria-label="Next month" onClick=\{\(\) => navigateToMonth\(new Date\(year, monthIndex \+ 1, 1\)\)\}/);
+  assert.match(pageSource, /className="calendar-current-month" onClick=\{\(\) => navigateToMonth\(currentCalendarMonth\(\)\)\}>This month<\/Button>/);
+});
+
+test('calendar weekday headers keep short visual labels and expose full names to assistive tech', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
+
+  assert.match(pageSource, /<th scope="col" key=\{day\}><span aria-hidden="true">\{day\.slice\(0, 3\)\}<\/span><span className="sr-only">\{day\}<\/span><\/th>/);
+});
+
+test('calendar reuses month and day formatters outside the component render path', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
+  const componentStart = pageSource.indexOf('export function CalendarPage()');
+  const componentEnd = pageSource.indexOf('export function CompetenciesPage()', componentStart);
+  const componentSource = pageSource.slice(componentStart, componentEnd);
+  const monthFormatterIndex = pageSource.indexOf('const calendarMonthFormatter = new Intl.DateTimeFormat');
+  const dayFormatterIndex = pageSource.indexOf('const calendarFullDateFormatter = new Intl.DateTimeFormat');
+
+  assert.ok(componentStart >= 0, 'expected to find CalendarPage');
+  assert.ok(monthFormatterIndex >= 0 && monthFormatterIndex < componentStart);
+  assert.ok(dayFormatterIndex >= 0 && dayFormatterIndex < componentStart);
+  assert.match(componentSource, /calendarMonthFormatter\.format\(month\)/);
+  assert.match(componentSource, /calendarFullDateFormatter\.format\(date\)/);
+  assert.doesNotMatch(componentSource, /new Intl\.DateTimeFormat/);
 });

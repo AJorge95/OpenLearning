@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { syncBuiltinESMExports } from 'node:module';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import express from 'express';
@@ -21,6 +23,9 @@ const isolatedConfig = {
   MAX_UPLOAD_BYTES: '2147483648',
   REQUEST_TIMEOUT_MS: '300000',
 };
+const lastLoginAdminUsername = 'admin_last_login';
+const lastLoginAdminPassword = 'LastLoginPassphrase-2026';
+const expectedLatestMigrationVersion = 42;
 const previousConfig = new Map(Object.keys(isolatedConfig).map((key) => [key, process.env[key]]));
 let fixtureDirectory;
 let database;
@@ -29,6 +34,7 @@ let migrateDatabase;
 let server;
 let sessionStore;
 let httpErrorHandler;
+let scryptCalls = 0;
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -63,8 +69,22 @@ before(async () => {
 
   ({ config: serverConfig } = await import('../../server/config.js'));
   ({ db: database, migrateDatabase } = await import('../../server/db.js'));
-  const { authRouter } = await import('../../server/routes-auth.js');
-  const { adminRouter } = await import('../../server/routes-admin.js');
+  // Instrument the auth module's scrypt import so duplicate-identifier tests can guard its early exit.
+  const originalScrypt = crypto.scrypt;
+  crypto.scrypt = function countScryptCalls(...args) {
+    scryptCalls += 1;
+    return originalScrypt.apply(this, args);
+  };
+  syncBuiltinESMExports();
+  let authRouter;
+  let adminRouter;
+  try {
+    ({ authRouter } = await import('../../server/routes-auth.js'));
+    ({ adminRouter } = await import('../../server/routes-admin.js'));
+  } finally {
+    crypto.scrypt = originalScrypt;
+    syncBuiltinESMExports();
+  }
   ({ errorHandler: httpErrorHandler } = await import('../../server/http.js'));
 
   const app = express();
@@ -73,7 +93,7 @@ before(async () => {
   app.use(session({ secret: isolatedConfig.SESSION_SECRET, resave: false, saveUninitialized: false, store: sessionStore }));
   app.use((req, _res, next) => {
     req.currentUser = database.prepare('SELECT id, username, role, disabled FROM users WHERE username = ?')
-      .get('admin_last_login');
+      .get(lastLoginAdminUsername);
     next();
   });
   app.use('/api', authRouter);
@@ -110,6 +130,19 @@ function storedSessionIds() {
     if (error) reject(error);
     else resolve(Object.keys(sessions || {}).sort());
   }));
+}
+
+async function ensureLastLoginAdmin() {
+  const existingAdmin = database.prepare('SELECT id, password_hash FROM users WHERE username = ?')
+    .get(lastLoginAdminUsername);
+  if (existingAdmin) return existingAdmin;
+
+  // Isolated login and password tests need the same operator their middleware and requests expect.
+  const { hashPassword } = await import('../../server/auth.js');
+  const admin = { id: 'isolated-last-login-admin', password_hash: await hashPassword(lastLoginAdminPassword) };
+  database.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)')
+    .run(admin.id, lastLoginAdminUsername, admin.password_hash, 'admin');
+  return admin;
 }
 
 test('request body parser failures return structured client errors', async () => {
@@ -213,14 +246,16 @@ test('unhandled API errors still return a response when system logging fails', a
   }
 });
 
-test('migrations 16 to 33 preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
+test('historical migrations preserve account history, course versions, captions, certificates, and lesson watch progress', () => {
   const migrationDb = new Database(':memory:');
   try {
     migrationDb.pragma('foreign_keys = ON');
     migrationDb.exec(`
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       INSERT INTO schema_migrations (version) VALUES (15);
-      CREATE TABLE users (id TEXT PRIMARY KEY);
+      CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      INSERT INTO app_settings (key, value) VALUES ('setup_complete', '1'), ('platform_name', 'Learning Space');
+      CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL COLLATE NOCASE DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE audit_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -302,8 +337,21 @@ test('migrations 16 to 33 preserve account history, course versions, captions, c
     `);
 
     migrateDatabase(migrationDb);
-    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 33);
+    assert.equal(migrationDb.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, expectedLatestMigrationVersion);
     assert.ok(migrationDb.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'competencies_admin_order'`).get());
+    assert.ok(migrationDb.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'users_registration_status_created'`).get());
+    const pendingUserListPlan = migrationDb.prepare(`EXPLAIN QUERY PLAN
+      SELECT id, username, created_at FROM users
+      WHERE registration_status = ?
+      ORDER BY created_at ASC, username COLLATE NOCASE LIMIT ? OFFSET ?`).all('pending', 50, 0);
+    assert.ok(pendingUserListPlan.some((row) => row.detail.includes('users_registration_status_created')), JSON.stringify(pendingUserListPlan));
+    assert.ok(!pendingUserListPlan.some((row) => row.detail.includes('TEMP B-TREE')), JSON.stringify(pendingUserListPlan));
+    assert.deepEqual(migrationDb.prepare('SELECT id, registration_status FROM users ORDER BY id').all(), [
+      { id: 'user-history', registration_status: 'approved' },
+      { id: 'user-never-signed-in', registration_status: 'approved' },
+      { id: 'user-registration', registration_status: 'approved' },
+    ]);
+    assert.equal(migrationDb.prepare("SELECT value FROM app_settings WHERE key = 'registration_approval_required'").get().value, '0');
     assert.deepEqual(migrationDb.prepare('SELECT id, last_login_at FROM users ORDER BY id').all(), [
       { id: 'user-history', last_login_at: '2026-10-02 09:00:00' },
       { id: 'user-never-signed-in', last_login_at: null },
@@ -333,6 +381,7 @@ test('migrations 16 to 33 preserve account history, course versions, captions, c
 
     migrateDatabase(migrationDb);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 16').get().count, 1);
+    assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 34').get().count, 1);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 17').get().count, 1);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 18').get().count, 1);
     assert.equal(migrationDb.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 19').get().count, 1);
@@ -382,6 +431,8 @@ test('migration 31 backfills watch telemetry and can be rerun safely', () => {
     migrationDb.exec(`
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       INSERT INTO schema_migrations (version) VALUES (30);
+      CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL COLLATE NOCASE DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE learning_path_courses (path_id TEXT NOT NULL, course_id TEXT NOT NULL);
       CREATE TABLE competencies (id TEXT PRIMARY KEY, title TEXT NOT NULL COLLATE NOCASE, active INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE lesson_watch_progress (
@@ -420,6 +471,8 @@ test('migration 31 preserves telemetry already present in a version-30 database'
     migrationDb.exec(`
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       INSERT INTO schema_migrations (version) VALUES (30);
+      CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL COLLATE NOCASE DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE learning_path_courses (path_id TEXT NOT NULL, course_id TEXT NOT NULL);
       CREATE TABLE competencies (id TEXT PRIMARY KEY, title TEXT NOT NULL COLLATE NOCASE, active INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE lesson_watch_progress (
@@ -602,23 +655,98 @@ test('initial setup rolls back when its success payload cannot be read', async (
   }
 });
 
-test('setup, registration, and successful sign-in record last login for admin details', async () => {
-  const setupResponse = await fetch(apiUrl('/setup'), {
+test('initial setup reports duplicate usernames and emails without opening a transaction', async () => {
+  const { hashPassword } = await import('../../server/auth.js');
+  const existingLearnerId = 'setup-identifier-conflict-learner';
+  const existingLearnerHash = await hashPassword('ExistingLearnerPassphrase-2026');
+  database.prepare(`INSERT INTO users (id, username, email, first_name, last_name, password_hash, role)
+    VALUES (?, ?, ?, ?, ?, ?, 'learner')`).run(
+    existingLearnerId,
+    'setup_existing_learner',
+    'setup.existing@example.invalid',
+    'Existing',
+    'Learner',
+    existingLearnerHash,
+  );
+
+  const originalTransaction = database.transaction;
+  let transactionsStarted = 0;
+  database.transaction = function countSetupTransactions(...args) {
+    transactionsStarted += 1;
+    return originalTransaction.apply(this, args);
+  };
+
+  const requestSetup = (username, email) => fetch(apiUrl('/setup'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify({
       setupToken: isolatedConfig.SETUP_TOKEN,
-      platformName: 'Last Login Test',
-      username: 'admin_last_login',
-      email: 'admin.last-login@example.invalid',
-      firstName: 'Last',
-      lastName: 'Login',
-      password: 'LastLoginPassphrase-2026',
-      confirmPassword: 'LastLoginPassphrase-2026',
+      platformName: 'Identifier Conflict Test',
+      username,
+      email,
+      firstName: 'Setup',
+      lastName: 'Admin',
+      password: 'SetupConflictPassphrase-2026',
+      confirmPassword: 'SetupConflictPassphrase-2026',
     }),
   });
+
+  try {
+    scryptCalls = 0;
+    const duplicateUsernameResponse = await requestSetup('SETUP_EXISTING_LEARNER', 'new.setup@example.invalid');
+    assert.equal(duplicateUsernameResponse.status, 409);
+    assert.deepEqual(await duplicateUsernameResponse.json(), {
+      error: 'That username is already in use.',
+      code: 'username_taken',
+    });
+
+    const duplicateEmailResponse = await requestSetup('new_setup_admin', 'SETUP.EXISTING@EXAMPLE.INVALID');
+    assert.equal(duplicateEmailResponse.status, 409);
+    assert.deepEqual(await duplicateEmailResponse.json(), {
+      error: 'That email address is already in use.',
+      code: 'email_taken',
+    });
+
+    assert.equal(transactionsStarted, 0, 'known duplicate identifiers should be rejected before the write transaction');
+    assert.equal(scryptCalls, 0, 'known duplicate identifiers should be rejected before password hashing');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, 1);
+    assert.notEqual(database.prepare("SELECT value FROM app_settings WHERE key = 'setup_complete'").get()?.value, '1');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'platform.setup'").get().count, 0);
+  } finally {
+    database.transaction = originalTransaction;
+    database.prepare('DELETE FROM users WHERE id = ?').run(existingLearnerId);
+  }
+});
+
+test('setup, registration, and successful sign-in record last login for admin details', async () => {
+  const originalPrepareForSetup = database.prepare;
+  let setupRegisteredUserCountReads = 0;
+  database.prepare = function countSetupUserQueries(sql, ...parameters) {
+    if (sql === 'SELECT COUNT(*) AS count FROM users') setupRegisteredUserCountReads += 1;
+    return originalPrepareForSetup.call(this, sql, ...parameters);
+  };
+  let setupResponse;
+  try {
+    setupResponse = await fetch(apiUrl('/setup'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        setupToken: isolatedConfig.SETUP_TOKEN,
+        platformName: 'Last Login Test',
+        username: lastLoginAdminUsername,
+        email: 'admin.last-login@example.invalid',
+        firstName: 'Last',
+        lastName: 'Login',
+        password: lastLoginAdminPassword,
+        confirmPassword: lastLoginAdminPassword,
+      }),
+    });
+  } finally {
+    database.prepare = originalPrepareForSetup;
+  }
   assert.equal(setupResponse.status, 201);
   const setup = await setupResponse.json();
+  assert.equal(setupRegisteredUserCountReads, 0, 'unlimited initial setup should not count all users');
   assert.equal(setup.platformName, 'Last Login Test');
   assert.equal(setup.registrationAvailable, true);
   const adminId = setup.user.id;
@@ -642,12 +770,26 @@ test('setup, registration, and successful sign-in record last login for admin de
     return response.json();
   };
   const userCountBeforeCollisions = database.prepare('SELECT COUNT(*) AS count FROM users').get().count;
-  const usernameCollision = await registrationCollision({ username: 'ADMIN_LAST_LOGIN', email: 'unused.username@example.invalid' });
-  const emailCollision = await registrationCollision({ username: 'unused_email', email: 'ADMIN.LAST-LOGIN@EXAMPLE.INVALID' });
-  const bothCollisions = await registrationCollision({ username: 'admin_last_login', email: 'admin.last-login@example.invalid' });
+  const originalTransaction = database.transaction;
+  let collisionTransactionsStarted = 0;
+  database.transaction = function (...args) {
+    collisionTransactionsStarted += 1;
+    return originalTransaction.apply(this, args);
+  };
+  let usernameCollision;
+  let emailCollision;
+  let bothCollisions;
+  try {
+    usernameCollision = await registrationCollision({ username: 'ADMIN_LAST_LOGIN', email: 'unused.username@example.invalid' });
+    emailCollision = await registrationCollision({ username: 'unused_email', email: 'ADMIN.LAST-LOGIN@EXAMPLE.INVALID' });
+    bothCollisions = await registrationCollision({ username: lastLoginAdminUsername, email: 'admin.last-login@example.invalid' });
+  } finally {
+    database.transaction = originalTransaction;
+  }
   assert.deepEqual(usernameCollision, { error: 'An account with those details could not be registered.', code: 'registration_conflict' });
   assert.deepEqual(emailCollision, usernameCollision);
   assert.deepEqual(bothCollisions, usernameCollision);
+  assert.equal(collisionTransactionsStarted, 0, 'known conflicts should be rejected before the write transaction');
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, userCountBeforeCollisions);
 
   const registrationResponse = await fetch(apiUrl('/auth/register'), {
@@ -680,7 +822,7 @@ test('setup, registration, and successful sign-in record last login for admin de
   const rejectedResponse = await fetch(apiUrl('/auth/login'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' },
-    body: JSON.stringify({ username: 'admin_last_login', password: 'IncorrectPassphrase-2026' }),
+    body: JSON.stringify({ username: lastLoginAdminUsername, password: 'IncorrectPassphrase-2026' }),
   });
   assert.equal(rejectedResponse.status, 401);
   assert.equal(database.prepare('SELECT last_login_at FROM users WHERE id = ?').get(adminId).last_login_at, priorLoginAt);
@@ -688,7 +830,7 @@ test('setup, registration, and successful sign-in record last login for admin de
   const response = await fetch(apiUrl('/auth/login'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' },
-    body: JSON.stringify({ username: 'admin_last_login', password: 'LastLoginPassphrase-2026' }),
+    body: JSON.stringify({ username: lastLoginAdminUsername, password: lastLoginAdminPassword }),
   });
   assert.equal(response.status, 200);
 
@@ -753,9 +895,13 @@ test('admin user list returns the final page and clamps requests beyond the sear
     id: `admin-user-pagination-${index}`,
     username: `${usernamePrefix}${String(index).padStart(3, '0')}`,
   }));
-  const passwordHash = database.prepare("SELECT password_hash FROM users WHERE username = 'admin_last_login'").get().password_hash;
+  const existingAdmin = database.prepare('SELECT id, password_hash FROM users WHERE username = ?').get(lastLoginAdminUsername);
+  const adminId = existingAdmin?.id ?? 'admin-user-pagination-admin';
+  const passwordHash = existingAdmin?.password_hash ?? 'pagination-test-admin-hash';
   const insertUser = database.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)');
   const seedUsers = database.transaction(() => {
+    // The admin middleware resolves its operator by username, including in this isolated test.
+    if (!existingAdmin) insertUser.run(adminId, lastLoginAdminUsername, passwordHash, 'admin');
     fixtureUsers.forEach(({ id, username }) => insertUser.run(id, username, passwordHash, 'learner'));
   });
   seedUsers();
@@ -790,12 +936,35 @@ test('admin user list returns the final page and clamps requests beyond the sear
     assert.deepEqual(clampedPage.users, finalPage.users);
   } finally {
     const deleteUser = database.prepare('DELETE FROM users WHERE id = ?');
-    database.transaction(() => fixtureUsers.forEach(({ id }) => deleteUser.run(id)))();
+    database.transaction(() => {
+      fixtureUsers.forEach(({ id }) => deleteUser.run(id));
+      if (!existingAdmin) deleteUser.run(adminId);
+    })();
+  }
+});
+
+test('admin user list rejects unknown and repeated role and approval filters', async () => {
+  await ensureLastLoginAdmin();
+  const invalidFilters = [
+    { query: 'role=owner', error: 'Choose a valid role.' },
+    { query: 'role=admin&role=learner', error: 'Choose a valid role.' },
+    { query: 'registrationStatus=archived', error: 'Choose a valid registration status.' },
+    { query: 'registrationStatus=pending&registrationStatus=approved', error: 'Choose a valid registration status.' },
+  ];
+
+  for (const filter of invalidFilters) {
+    const response = await fetch(apiUrl(`/admin/users?${filter.query}`), { headers: { connection: 'close' } });
+    assert.equal(response.status, 400, filter.query);
+    assert.deepEqual(await response.json(), {
+      error: filter.error,
+      code: 'validation_error',
+    }, filter.query);
   }
 });
 
 test('admin account course activity includes published paths and deduplicates overlapping access', async () => {
-  const adminId = database.prepare("SELECT id FROM users WHERE username = 'admin_last_login'").get().id;
+  const admin = await ensureLastLoginAdmin();
+  const adminId = admin.id;
   const courseIds = ['account-activity-enrolled', 'account-activity-overlap', 'account-activity-granted',
     'account-activity-path', 'account-activity-draft-path'];
   const pathIds = ['account-activity-published-path', 'account-activity-draft'];
@@ -864,8 +1033,42 @@ test('admin account course activity includes published paths and deduplicates ov
   }
 });
 
+test('admin account course activity counts quizzes from the published course version', async () => {
+  const admin = await ensureLastLoginAdmin();
+  const courseId = 'account-activity-versioned-quizzes';
+  const versionId = `${courseId}-v2`;
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by, logical_course_id)
+    VALUES (?, 'Versioned activity', 'published', ?, ?, NULL), (?, 'Versioned activity v2', 'published', ?, ?, ?)`)
+    .run(courseId, admin.id, admin.id, versionId, admin.id, admin.id, courseId);
+  database.prepare(`INSERT INTO course_modules (id, course_id, title, position)
+    VALUES (?, ?, 'Original module', 0), (?, ?, 'Current module one', 0), (?, ?, 'Current module two', 1)`)
+    .run(`${courseId}-module`, courseId, `${versionId}-module-one`, versionId, `${versionId}-module-two`, versionId);
+  database.prepare('INSERT INTO quizzes (id, module_id, title) VALUES (?, ?, ?), (?, ?, ?), (?, ?, ?)')
+    .run(`${courseId}-quiz`, `${courseId}-module`, 'Original quiz',
+      `${versionId}-quiz-one`, `${versionId}-module-one`, 'Current quiz one',
+      `${versionId}-quiz-two`, `${versionId}-module-two`, 'Current quiz two');
+  database.prepare(`INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+    VALUES (?, ?, ?, 1, ?), (?, ?, ?, 2, ?)`)
+    .run(`${courseId}-publication-one`, courseId, courseId, admin.id,
+      `${courseId}-publication-two`, courseId, versionId, admin.id);
+  database.prepare('INSERT INTO enrollments (id, course_id, user_id) VALUES (?, ?, ?)')
+    .run(`${courseId}-enrollment`, courseId, admin.id);
+
+  try {
+    const response = await fetch(apiUrl(`/admin/users/${admin.id}`), { headers: { connection: 'close' } });
+    assert.equal(response.status, 200);
+    const details = await response.json();
+    const course = details.courses.find((entry) => entry.id === courseId);
+    assert.ok(course);
+    assert.equal(course.versionNumber, 2);
+    assert.equal(course.quizCount, 2);
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?)').run(courseId, versionId);
+  }
+});
+
 test('sign-in rolls back last-login history and session when its audit entry cannot be written', async () => {
-  const user = database.prepare("SELECT id FROM users WHERE username = 'admin_last_login'").get();
+  const user = await ensureLastLoginAdmin();
   const originalLoginAt = '2001-01-01 00:00:00';
   database.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(originalLoginAt, user.id);
   const originalAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'auth.signed_in' AND entity_id = ?").get(user.id).count;
@@ -881,7 +1084,7 @@ test('sign-in rolls back last-login history and session when its audit entry can
     const request = () => fetch(apiUrl('/auth/login'), {
       method: 'POST',
       headers: { 'content-type': 'application/json', connection: 'close' },
-      body: JSON.stringify({ username: 'admin_last_login', password: 'LastLoginPassphrase-2026' }),
+      body: JSON.stringify({ username: lastLoginAdminUsername, password: lastLoginAdminPassword }),
     });
 
     const failedResponse = await request();
@@ -903,7 +1106,7 @@ test('sign-in rolls back last-login history and session when its audit entry can
 });
 
 test('self-service password changes roll back when their audit event cannot be saved', async () => {
-  const user = database.prepare("SELECT id, password_hash FROM users WHERE username = 'admin_last_login'").get();
+  const user = await ensureLastLoginAdmin();
   const nextPassword = 'UpdatedLastLoginPassphrase-2026';
   const otherSessionId = 'self-password-change-other-session';
   database.prepare('INSERT INTO sessions (sid, session_data, expires_at, user_id) VALUES (?, ?, ?, ?)')
@@ -919,7 +1122,7 @@ test('self-service password changes roll back when their audit event cannot be s
       method: 'PUT',
       headers: { 'content-type': 'application/json', connection: 'close' },
       body: JSON.stringify({
-        currentPassword: 'LastLoginPassphrase-2026',
+        currentPassword: lastLoginAdminPassword,
         password: nextPassword,
         confirmPassword: nextPassword,
       }),
@@ -938,7 +1141,7 @@ test('self-service password changes roll back when their audit event cannot be s
     method: 'PUT',
     headers: { 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify({
-      currentPassword: 'LastLoginPassphrase-2026',
+      currentPassword: lastLoginAdminPassword,
       password: nextPassword,
       confirmPassword: nextPassword,
     }),
@@ -947,7 +1150,7 @@ test('self-service password changes roll back when their audit event cannot be s
   const updatedPasswordHash = database.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id).password_hash;
   const { verifyPassword } = await import('../../server/auth.js');
   assert.equal(await verifyPassword(nextPassword, updatedPasswordHash), true);
-  assert.equal(await verifyPassword('LastLoginPassphrase-2026', updatedPasswordHash), false);
+  assert.equal(await verifyPassword(lastLoginAdminPassword, updatedPasswordHash), false);
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get(otherSessionId).count, 0);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.password_changed' AND entity_id = ?").get(user.id).count, initialAuditCount + 1);
 });
@@ -997,4 +1200,141 @@ test('registration explains how to sign in when the account is saved but session
     body: JSON.stringify({ username: 'session_recovery_learner', password: 'SessionRecoveryPassphrase-2026' }),
   });
   assert.equal(signInResponse.status, 200);
+});
+
+test('registration approval blocks sign-in and rolls back if its audit record fails', async () => {
+  const initialPendingCountResponse = await fetch(apiUrl('/admin/users/pending-count'), { headers: { connection: 'close' } });
+  assert.equal(initialPendingCountResponse.status, 200);
+  const initialPendingCount = (await initialPendingCountResponse.json()).count;
+  assert.ok(Number.isSafeInteger(initialPendingCount) && initialPendingCount >= 0);
+
+  const settingsResponse = await fetch(apiUrl('/admin/settings'), { headers: { connection: 'close' } });
+  assert.equal(settingsResponse.status, 200);
+  const settings = await settingsResponse.json();
+  const invalidSettingResponse = await fetch(apiUrl('/admin/settings'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ platformName: settings.platformName, registrationApprovalRequired: 'yes' }),
+  });
+  assert.equal(invalidSettingResponse.status, 400);
+  assert.equal((await invalidSettingResponse.json()).code, 'invalid_registration_approval_setting');
+
+  const settingResponse = await fetch(apiUrl('/admin/settings'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ platformName: settings.platformName, registrationApprovalRequired: true }),
+  });
+  assert.equal(settingResponse.status, 200);
+  assert.equal((await settingResponse.json()).registrationApprovalRequired, true);
+
+  const initialSessionIds = await storedSessionIds();
+  const registrationResponse = await fetch(apiUrl('/auth/register'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({
+      username: 'approval_gate_learner',
+      email: 'approval.gate@example.invalid',
+      firstName: 'Approval',
+      lastName: 'Gate',
+      password: 'ApprovalGatePassphrase-2026',
+      confirmPassword: 'ApprovalGatePassphrase-2026',
+    }),
+  });
+  assert.equal(registrationResponse.status, 201);
+  const registration = await registrationResponse.json();
+  assert.equal(registration.approvalRequired, true);
+  assert.equal(database.prepare('SELECT registration_status, last_login_at FROM users WHERE id = ?').get(registration.user.id)
+    .registration_status, 'pending');
+  assert.equal(database.prepare('SELECT last_login_at FROM users WHERE id = ?').get(registration.user.id).last_login_at, null);
+  assert.deepEqual(await storedSessionIds(), initialSessionIds, 'pending registration must not create a sign-in session');
+  const pendingCountResponse = await fetch(apiUrl('/admin/users/pending-count'), { headers: { connection: 'close' } });
+  assert.equal((await pendingCountResponse.json()).count, initialPendingCount + 1);
+
+  const pendingAccountsResponse = await fetch(apiUrl('/admin/users?registrationStatus=pending&q=approval.gate'), { headers: { connection: 'close' } });
+  assert.equal(pendingAccountsResponse.status, 200);
+  const pendingAccounts = await pendingAccountsResponse.json();
+  assert.equal(pendingAccounts.total, 1);
+  assert.equal(pendingAccounts.users[0].id, registration.user.id);
+  assert.equal(pendingAccounts.users[0].registrationStatus, 'pending');
+
+  const blockedSignInResponse = await fetch(apiUrl('/auth/login'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ username: 'approval_gate_learner', password: 'ApprovalGatePassphrase-2026' }),
+  });
+  assert.equal(blockedSignInResponse.status, 403);
+  assert.equal((await blockedSignInResponse.json()).code, 'registration_pending');
+  assert.deepEqual(await storedSessionIds(), initialSessionIds, 'a blocked sign-in must not create a session');
+
+  const staleSessionId = 'registration-approval-audit-rollback';
+  database.prepare('INSERT INTO sessions (sid, session_data, expires_at, user_id) VALUES (?, ?, ?, ?)')
+    .run(staleSessionId, JSON.stringify({ userId: registration.user.id }), Date.now() + 60_000, registration.user.id);
+  database.exec(`CREATE TRIGGER reject_registration_approval_audit BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'account.registration_approved' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`);
+
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  let failedApprovalResponse;
+  try {
+    failedApprovalResponse = await fetch(apiUrl(`/admin/users/${registration.user.id}/approval`), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({}),
+    });
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS reject_registration_approval_audit');
+    console.error = originalConsoleError;
+  }
+  assert.equal(failedApprovalResponse.status, 500);
+  assert.equal((await failedApprovalResponse.json()).code, 'audit_unavailable');
+  assert.equal(database.prepare('SELECT registration_status FROM users WHERE id = ?').get(registration.user.id).registration_status, 'pending');
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get(staleSessionId).count, 1);
+  const rolledBackPendingCountResponse = await fetch(apiUrl('/admin/users/pending-count'), { headers: { connection: 'close' } });
+  assert.equal((await rolledBackPendingCountResponse.json()).count, initialPendingCount + 1);
+
+  const approveUrl = apiUrl(`/admin/users/${registration.user.id}/approval`);
+  const approvalResponse = await fetch(approveUrl, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({}),
+  });
+  assert.equal(approvalResponse.status, 200);
+  const approval = await approvalResponse.json();
+  assert.equal(approval.user.registrationStatus, 'approved');
+  const approvedCountResponse = await fetch(apiUrl('/admin/users/pending-count'), { headers: { connection: 'close' } });
+  assert.equal((await approvedCountResponse.json()).count, initialPendingCount);
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM sessions WHERE sid = ?').get(staleSessionId).count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.registration_approved' AND entity_id = ?")
+    .get(registration.user.id).count, 1);
+
+  const repeatedApprovalResponse = await fetch(approveUrl, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({}),
+  });
+  assert.equal(repeatedApprovalResponse.status, 200);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.registration_approved' AND entity_id = ?")
+    .get(registration.user.id).count, 1, 'repeated approval must not add another audit event');
+
+  const approvedAccountsResponse = await fetch(apiUrl('/admin/users?registrationStatus=approved&q=approval.gate'), { headers: { connection: 'close' } });
+  assert.equal(approvedAccountsResponse.status, 200);
+  const approvedAccounts = await approvedAccountsResponse.json();
+  assert.equal(approvedAccounts.total, 1);
+  assert.equal(approvedAccounts.users[0].id, registration.user.id);
+
+  const signInResponse = await fetch(apiUrl('/auth/login'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify({ username: 'approval_gate_learner', password: 'ApprovalGatePassphrase-2026' }),
+  });
+  assert.equal(signInResponse.status, 200);
+  const signedIn = await signInResponse.json();
+  assert.equal(signedIn.user.id, registration.user.id);
+  assert.equal(signedIn.registrationApprovalRequired, true);
+
+  database.prepare("UPDATE app_settings SET value = '0' WHERE key = 'registration_approval_required'").run();
+  database.prepare("DELETE FROM audit_logs WHERE entity_id = ? AND action IN ('account.registered', 'account.registration_approved', 'auth.signed_in')")
+    .run(registration.user.id);
+  database.prepare('DELETE FROM sessions WHERE user_id = ?').run(registration.user.id);
+  database.prepare('DELETE FROM users WHERE id = ?').run(registration.user.id);
 });

@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { once } from 'node:events';
-import { createServer } from 'node:http';
+import { createServer, request as createRequest } from 'node:http';
 import express from 'express';
 import { after, before, test } from 'node:test';
 
@@ -23,6 +25,7 @@ let fixtureDirectory;
 let database;
 let server;
 let captionPath;
+let errorHandler;
 const captionDownloadContents = Buffer.from('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nWelcome to the lesson.\n');
 const rangeMediaContents = Buffer.from('0123456789');
 const documentDownloadContents = Buffer.from('Course handout content');
@@ -42,10 +45,11 @@ before(async () => {
   });
 
   ({ db: database } = await import('../../server/db.js'));
-  const [{ mediaUploadRouter, protectedMediaRouter }, { errorHandler }] = await Promise.all([
+  const [{ mediaUploadRouter, protectedMediaRouter }, httpHandlers] = await Promise.all([
     import('../../server/routes-media.js'),
     import('../../server/http.js'),
   ]);
+  errorHandler = httpHandlers.errorHandler;
   database.exec(`
     INSERT INTO users (id, username, email, password_hash, role, disabled)
       VALUES ('admin-media', 'media_admin', 'media-admin@example.invalid', 'not-used', 'admin', 0);
@@ -219,6 +223,109 @@ async function uploadCourseCover(filename, contents, mimeType) {
   });
 }
 
+async function waitForPartialUpload(directory, originalFiles) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    for (const filename of await fs.readdir(directory)) {
+      if (originalFiles.has(filename)) continue;
+      const filePath = path.join(directory, filename);
+      try {
+        if ((await fs.stat(filePath)).size > 0) return filePath;
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return null;
+}
+
+async function waitForUploadCleanup(directory, originalFiles) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const currentFiles = (await fs.readdir(directory)).sort();
+    if (currentFiles.length === originalFiles.length
+      && currentFiles.every((filename, index) => filename === originalFiles[index])) return true;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return false;
+}
+
+test('aborted multipart uploads remove partial files without logging a server error', async () => {
+  const courseMediaDirectory = path.dirname(captionPath);
+  const originalFiles = (await fs.readdir(courseMediaDirectory)).sort();
+  const originalFileSet = new Set(originalFiles);
+  const originalAbortLogCount = database.prepare(`SELECT COUNT(*) AS count FROM system_logs
+    WHERE source = 'http' AND message IN ('Request aborted', 'Request closed')`).get().count;
+  const boundary = `openlearning-abort-${Date.now()}`;
+  const prefix = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="kind"\r\n\r\ncover\r\n--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="interrupted-cover.png"\r\nContent-Type: image/png\r\n\r\n`);
+  const partialContents = Buffer.alloc(4 * 1024 * 1024, 0x41);
+  const suffix = Buffer.from(`\r\n--${boundary}--\r\n`);
+  const request = createRequest(new URL(apiUrl('/manage/courses/course-caption-audit/media')), {
+    method: 'POST',
+    headers: {
+      'x-test-user': 'admin-media',
+      'content-type': `multipart/form-data; boundary=${boundary}`,
+      'content-length': String(prefix.length + partialContents.length * 2 + suffix.length),
+    },
+  });
+  request.on('error', () => {});
+
+  let partialFilePath;
+  try {
+    // Wait until Multer has written real file bytes, then disconnect before the file part or body ends.
+    request.write(prefix);
+    request.write(partialContents);
+    partialFilePath = await waitForPartialUpload(courseMediaDirectory, originalFileSet);
+    assert.ok(partialFilePath, 'expected the upload middleware to create a partial file before aborting');
+  } finally {
+    request.destroy();
+  }
+
+  assert.equal(await waitForUploadCleanup(courseMediaDirectory, originalFiles), true);
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM system_logs
+    WHERE source = 'http' AND message IN ('Request aborted', 'Request closed')`).get().count, originalAbortLogCount);
+});
+
+test('destroyed requests that close during upload do not reach the generic error logger', () => {
+  const originalAbortLogCount = database.prepare(`SELECT COUNT(*) AS count FROM system_logs
+    WHERE source = 'http' AND message = 'Request closed'`).get().count;
+  const response = {
+    headersSent: false,
+    status() { assert.fail('A destroyed response should not be written.'); },
+    json() { assert.fail('A destroyed response should not be written.'); },
+  };
+  let nextCalled = false;
+
+  errorHandler(new Error('Request closed'), {
+    aborted: false,
+    destroyed: true,
+    method: 'POST',
+    originalUrl: '/api/manage/courses/course-caption-audit/media',
+  }, response, () => { nextCalled = true; });
+
+  assert.equal(nextCalled, false);
+  assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM system_logs
+    WHERE source = 'http' AND message = 'Request closed'`).get().count, originalAbortLogCount);
+});
+
+test('unsupported document uploads list the supported document formats', async () => {
+  const form = new FormData();
+  form.set('lessonId', 'lesson-caption-audit');
+  form.set('file', new File(['unsupported'], 'unsupported.gif', { type: 'image/gif' }));
+
+  const response = await fetch(apiUrl('/manage/courses/course-caption-audit/lesson-documents'), {
+    method: 'POST',
+    headers: { 'x-test-user': 'admin-media', connection: 'close' },
+    body: form,
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.code, 'invalid_media_type');
+  assert.equal(payload.error, 'Upload a PDF, TXT, Markdown, RTF, Word, PowerPoint, Excel, CSV, TSV, or OpenDocument file.');
+});
+
 test('rejects a truncated PNG cover and removes the temporary upload', async () => {
   const courseMediaDirectory = path.dirname(captionPath);
   const originalFiles = (await fs.readdir(courseMediaDirectory)).sort();
@@ -241,6 +348,70 @@ test('rejects a truncated PNG cover and removes the temporary upload', async () 
   assert.equal(database.prepare("SELECT cover_media_id FROM courses WHERE id = 'course-caption-audit'").get().cover_media_id, null);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.cover_uploaded'").get().count, originalAuditCount);
   assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
+});
+
+test('reports a signature-read failure as retryable and removes the temporary upload', async () => {
+  const courseMediaDirectory = path.dirname(captionPath);
+  const originalFiles = (await fs.readdir(courseMediaDirectory)).sort();
+  const originalMediaCount = database.prepare('SELECT COUNT(*) AS count FROM media_files').get().count;
+  const originalOpen = fsSync.promises.open;
+  fsSync.promises.open = async () => {
+    throw Object.assign(new Error('Injected upload read failure.'), { code: 'EIO' });
+  };
+
+  try {
+    const response = await uploadCourseCover('valid-cover.png', pngCoverHeader(1, 1), 'image/png');
+    const payload = await response.json();
+    assert.equal(response.status, 500);
+    assert.equal(payload.code, 'media_validation_unavailable');
+    assert.equal(payload.error, 'The uploaded file could not be checked. Please try again.');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM media_files').get().count, originalMediaCount);
+    assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
+
+    const log = database.prepare(`SELECT level, details_json FROM system_logs
+      WHERE source = 'media' AND message = 'Upload signature validation failed' ORDER BY id DESC LIMIT 1`).get();
+    assert.equal(log?.level, 'error');
+    assert.deepEqual(JSON.parse(log.details_json), { kind: 'cover', errorName: 'Error', errorCode: 'EIO' });
+  } finally {
+    fsSync.promises.open = originalOpen;
+  }
+});
+
+test('reports a caption-read failure as retryable and removes the temporary upload', async () => {
+  const courseMediaDirectory = path.dirname(captionPath);
+  const originalFiles = (await fs.readdir(courseMediaDirectory)).sort();
+  const originalCaptionCount = database.prepare('SELECT COUNT(*) AS count FROM lesson_captions').get().count;
+  const originalReadFile = fsSync.promises.readFile;
+  fsSync.promises.readFile = async () => {
+    throw Object.assign(new Error('Injected caption read failure.'), { code: 'EIO' });
+  };
+
+  try {
+    const form = new FormData();
+    form.set('lessonId', 'lesson-caption-audit');
+    form.set('language', 'es');
+    form.set('label', 'Spanish');
+    form.set('file', new File(['WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHola.\n'], 'captions.vtt', { type: 'text/vtt' }));
+
+    const response = await fetch(apiUrl('/manage/courses/course-caption-audit/lesson-captions'), {
+      method: 'POST',
+      headers: { 'x-test-user': 'admin-media', connection: 'close' },
+      body: form,
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 500);
+    assert.equal(payload.code, 'media_validation_unavailable');
+    assert.equal(payload.error, 'The uploaded file could not be checked. Please try again.');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM lesson_captions').get().count, originalCaptionCount);
+    assert.deepEqual((await fs.readdir(courseMediaDirectory)).sort(), originalFiles);
+
+    const log = database.prepare(`SELECT level, details_json FROM system_logs
+      WHERE source = 'media' AND message = 'Upload signature validation failed' ORDER BY id DESC LIMIT 1`).get();
+    assert.equal(log?.level, 'error');
+    assert.deepEqual(JSON.parse(log.details_json), { kind: 'caption', errorName: 'Error', errorCode: 'EIO' });
+  } finally {
+    fsSync.promises.readFile = originalReadFile;
+  }
 });
 
 test('streams protected video byte ranges and rejects unsatisfiable ranges', async () => {
@@ -274,6 +445,29 @@ test('streams protected video byte ranges and rejects unsatisfiable ranges', asy
   assert.equal(fullResponse.status, 200);
   assert.equal(fullResponse.headers.get('content-length'), '10');
   assert.deepEqual(Buffer.from(await fullResponse.arrayBuffer()), rangeMediaContents);
+});
+
+test('returns a not-found response if protected media disappears before the stream opens', async () => {
+  const originalCreateReadStream = fsSync.createReadStream;
+  fsSync.createReadStream = () => {
+    const stream = new Readable({ read() {} });
+    process.nextTick(() => stream.destroy(Object.assign(new Error('Media file disappeared.'), { code: 'ENOENT' })));
+    return stream;
+  };
+
+  try {
+    const response = await fetch(mediaUrl('/media-range-tests'), {
+      headers: { 'x-test-user': 'admin-media', range: 'bytes=2-5', connection: 'close' },
+    });
+
+    assert.equal(response.status, 404);
+    assert.match(response.headers.get('content-type') || '', /^application\/json/);
+    assert.equal(response.headers.get('content-range'), null);
+    assert.equal(response.headers.get('accept-ranges'), null);
+    assert.deepEqual(await response.json(), { error: 'Media not found.', code: 'not_found' });
+  } finally {
+    fsSync.createReadStream = originalCreateReadStream;
+  }
 });
 
 test('falls back to full protected video responses for unsupported ranges and ranged HEAD requests', async () => {

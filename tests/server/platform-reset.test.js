@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -157,7 +158,73 @@ test('reset preparation drains active requests and blocks new API and media requ
   }
 });
 
+test('reset preparation rejects same-size corruption in its copied media backup', async () => {
+  const originalStat = fs.promises.stat;
+  const backupRoot = path.join(fixtureDirectory, 'backups');
+  const backupsBefore = fs.existsSync(backupRoot) ? await fs.promises.readdir(backupRoot) : [];
+  let corruptionInjected = false;
+  fs.promises.stat = async (filePath, ...options) => {
+    const result = await originalStat.call(fs.promises, filePath, ...options);
+    const backupRelativePath = path.relative(
+      path.join(fixtureDirectory, 'backups'),
+      path.resolve(String(filePath)),
+    );
+    const backupParts = backupRelativePath.split(path.sep);
+    if (!corruptionInjected
+      && backupParts.length === 3
+      && backupParts[0].startsWith('platform-reset-')
+      && backupParts[1] === 'course-media'
+      && backupParts[2] === 'lesson-video.mp4') {
+      // Keep the byte count unchanged so the content digest must catch the damage.
+      await fs.promises.writeFile(filePath, 'corrupt-media');
+      corruptionInjected = true;
+      fs.promises.stat = originalStat;
+    }
+    return result;
+  };
+
+  try {
+    await assert.rejects(reset.preparePlatformReset(actor), /Media file verification failed for lesson-video\.mp4\./);
+  } finally {
+    fs.promises.stat = originalStat;
+  }
+
+  assert.equal(corruptionInjected, true);
+  assert.equal(reset.isPlatformResetActive(), false);
+  const backupsAfter = await fs.promises.readdir(backupRoot);
+  assert.deepEqual(backupsAfter.sort(), backupsBefore.sort(), 'Failed reset verification must not leave a new backup behind.');
+});
+
+test('reset preparation rejects an empty SQLite quick_check result', async () => {
+  const backupRoot = path.join(fixtureDirectory, 'backups');
+  const backupsBefore = await fs.promises.readdir(backupRoot);
+  const originalPragma = Database.prototype.pragma;
+  let verificationAttempted = false;
+  Database.prototype.pragma = function pragma(statement, ...options) {
+    if (statement === 'quick_check') {
+      verificationAttempted = true;
+      return [];
+    }
+    return originalPragma.call(this, statement, ...options);
+  };
+
+  try {
+    await assert.rejects(reset.preparePlatformReset(actor), /SQLite backup verification failed\./);
+  } finally {
+    Database.prototype.pragma = originalPragma;
+  }
+
+  assert.equal(verificationAttempted, true);
+  assert.equal(reset.isPlatformResetActive(), false);
+  const backupsAfter = await fs.promises.readdir(backupRoot);
+  assert.deepEqual(backupsAfter.sort(), backupsBefore.sort(), 'Failed reset verification must not leave a new backup behind.');
+});
+
 test('reset preparation verifies a restorable backup and cancellation preserves platform data', async () => {
+  const nestedMedia = Buffer.from('nested fixture media');
+  await fs.promises.mkdir(path.join(process.env.MEDIA_ROOT, 'module'), { recursive: true });
+  await fs.promises.writeFile(path.join(process.env.MEDIA_ROOT, 'module', 'notes.txt'), nestedMedia);
+
   const prepared = await reset.preparePlatformReset(actor);
   assert.equal(prepared.pending, true);
   assert.equal(prepared.phase, 'ready');
@@ -166,9 +233,23 @@ test('reset preparation verifies a restorable backup and cancellation preserves 
 
   const backupDirectory = path.join(fixtureDirectory, prepared.backupLocation);
   const manifest = JSON.parse(await fs.promises.readFile(path.join(backupDirectory, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.mediaFileCount, 1);
-  assert.equal(manifest.mediaBytes, Buffer.byteLength('fixture-media'));
+  const fixtureMedia = Buffer.from('fixture-media');
+  assert.equal(manifest.mediaFileCount, 2);
+  assert.equal(manifest.mediaBytes, fixtureMedia.length + nestedMedia.length);
+  assert.deepEqual(manifest.mediaFiles, [
+    {
+      path: 'lesson-video.mp4',
+      bytes: fixtureMedia.length,
+      sha256: createHash('sha256').update(fixtureMedia).digest('hex'),
+    },
+    {
+      path: 'module/notes.txt',
+      bytes: nestedMedia.length,
+      sha256: createHash('sha256').update(nestedMedia).digest('hex'),
+    },
+  ]);
   assert.equal(await fs.promises.readFile(path.join(backupDirectory, 'course-media', 'lesson-video.mp4'), 'utf8'), 'fixture-media');
+  assert.deepEqual(await fs.promises.readFile(path.join(backupDirectory, 'course-media', 'module', 'notes.txt')), nestedMedia);
   const backupDatabase = new Database(path.join(backupDirectory, 'openlearning.sqlite'), { readonly: true, fileMustExist: true });
   try {
     assert.ok(backupDatabase.pragma('quick_check').every((row) => row.quick_check === 'ok'));
@@ -261,6 +342,62 @@ test('a reset transaction failure restores the original media and leaves databas
   assert.equal(await fs.promises.readFile(path.join(process.env.MEDIA_ROOT, 'lesson-video.mp4'), 'utf8'), 'fixture-media');
   assert.equal(reset.isPlatformResetActive(), false);
   assert.equal(fs.existsSync(path.join(fixtureDirectory, prepared.backupLocation, 'manifest.json')), true);
+});
+
+test('a failed media restore is logged without replacing the original reset error', async () => {
+  const prepared = await reset.preparePlatformReset(actor);
+  const mediaRoot = process.env.MEDIA_ROOT;
+  const originalRename = fs.promises.rename;
+  let quarantinedMediaPath;
+  fs.promises.rename = async (source, destination, ...options) => {
+    const sourcePath = String(source);
+    if (path.dirname(sourcePath) === path.dirname(mediaRoot)
+      && path.basename(sourcePath).startsWith('.course-media-reset-')
+      && path.resolve(String(destination)) === path.resolve(mediaRoot)) {
+      quarantinedMediaPath = sourcePath;
+      const error = new Error('fixture restore failure');
+      error.code = 'EIO';
+      throw error;
+    }
+    return originalRename.call(fs.promises, source, destination, ...options);
+  };
+  database.exec(`CREATE TRIGGER fail_platform_reset_audit BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'platform.reset' BEGIN SELECT RAISE(ABORT, 'fixture failure'); END;`);
+  const originalConsoleError = console.error;
+  console.error = (message, ...details) => {
+    if (message === 'Unable to persist audit entry:' && details[0] === 'fixture failure') return;
+    originalConsoleError(message, ...details);
+  };
+
+  try {
+    await assert.rejects(
+      reset.confirmPlatformReset(actor, prepared.confirmationId, 'RESET'),
+      (error) => error instanceof ApiError
+        && error.status === 500
+        && error.code === 'platform_reset_recovery_required'
+        && error.message.includes('Check the System log for the recovery path'),
+    );
+  } finally {
+    console.error = originalConsoleError;
+    fs.promises.rename = originalRename;
+    database.exec('DROP TRIGGER IF EXISTS fail_platform_reset_audit;');
+    if (quarantinedMediaPath && fs.existsSync(quarantinedMediaPath)) {
+      await fs.promises.rm(mediaRoot, { recursive: true, force: true });
+      await originalRename.call(fs.promises, quarantinedMediaPath, mediaRoot);
+    }
+  }
+
+  const cleanupLog = database.prepare(`SELECT details_json FROM system_logs
+    WHERE source = 'platform-reset' AND message = 'Media restore failed after platform reset rollback' ORDER BY id DESC LIMIT 1`).get();
+  const cleanupDetails = JSON.parse(cleanupLog.details_json);
+  assert.equal(cleanupDetails.errorName, 'Error');
+  assert.equal(cleanupDetails.errorCode, 'EIO');
+  assert.equal(cleanupDetails.mediaRoot, mediaRoot);
+  assert.equal(cleanupDetails.quarantinePath, quarantinedMediaPath);
+  assert.equal(cleanupDetails.operationErrorCode, 'audit_unavailable');
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, 2);
+  assert.equal(await fs.promises.readFile(path.join(mediaRoot, 'lesson-video.mp4'), 'utf8'), 'fixture-media');
+  assert.equal(reset.isPlatformResetActive(), false);
 });
 
 test('backup path checks resolve a symlinked media root before checking overlap', async (t) => {

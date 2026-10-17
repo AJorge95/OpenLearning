@@ -70,7 +70,7 @@ test('current-user requests reuse the query while observing current account acce
   const originalPrepare = database.prepare;
   let currentUserPreparations = 0;
   database.prepare = (sql) => {
-    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?') {
+    if (sql.replace(/\s+/g, ' ').trim() === 'SELECT id, username, email, first_name, last_name, role, disabled, registration_status FROM users WHERE id = ?') {
       currentUserPreparations += 1;
     }
     return originalPrepare.call(database, sql);
@@ -95,4 +95,22 @@ test('current-user requests reuse the query while observing current account acce
   }
 
   assert.equal(currentUserPreparations, 0);
+});
+
+test('current-user middleware destroys sessions for registrations awaiting approval', () => {
+  const userId = 'current-user-pending-registration';
+  database.prepare(`INSERT INTO users (id, username, password_hash, role, registration_status)
+    VALUES (?, 'pending-registration', 'hash', 'learner', 'pending')`).run(userId);
+  let destroyed = false;
+  const request = { session: { userId, destroy: (callback) => { destroyed = true; callback(null); } } };
+  const nextCalls = [];
+
+  try {
+    loadCurrentUser(request, null, (error) => nextCalls.push(error));
+    assert.deepEqual(nextCalls, [undefined]);
+    assert.equal(request.currentUser, null);
+    assert.equal(destroyed, true);
+  } finally {
+    database.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  }
 });

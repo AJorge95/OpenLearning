@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { ApiError, api, getMe, getSetupStatus } from './api';
 import { BRAND_PALETTES, DEFAULT_PALETTE } from './branding';
 import type { BrandingPalette, ConnectionProtocol, PlatformConfiguration } from './branding';
+import { DEFAULT_MAX_UPLOAD_BYTES } from './upload-size-validation';
 import { isRegistrationAvailabilityError } from './registration-availability';
 import type { RegistrationFieldValues, Role, User } from './types';
 
@@ -12,8 +13,10 @@ interface AuthContextValue {
   themePalette: BrandingPalette;
   connectionProtocol: ConnectionProtocol;
   registrationEnabled: boolean;
+  registrationApprovalRequired: boolean;
   registrationAvailable: boolean;
   userLimit: number;
+  maxUploadBytes: number;
   configured: boolean;
   setupAvailable: boolean;
   loading: boolean;
@@ -21,14 +24,20 @@ interface AuthContextValue {
   retryStartup: () => Promise<void>;
   refresh: () => Promise<void>;
   signIn: (username: string, password: string) => Promise<void>;
-  signUp: (email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => Promise<void>;
+  signUp: (email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => Promise<{ approvalRequired: boolean }>;
   completeSetup: (platformName: string, email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, setupToken: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => Promise<void>;
   signOut: () => Promise<void>;
   setBranding: (name: string, themePalette: BrandingPalette, platformIcon: string | null) => void;
-  setPlatformAccessSettings: (connectionProtocol: ConnectionProtocol, registrationEnabled: boolean, registrationAvailable: boolean, userLimit: number) => void;
+  setPlatformAccessSettings: (connectionProtocol: ConnectionProtocol, registrationEnabled: boolean, registrationApprovalRequired: boolean, registrationAvailable: boolean, userLimit: number) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const STARTUP_REQUEST_TIMEOUT_MS = 20_000;
+const STARTUP_RETRY_DELAYS_MS = [250, 750] as const;
+
+function isTransientStartupError(cause: unknown) {
+  return cause instanceof ApiError && (cause.status === 0 || cause.status >= 500);
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -37,22 +46,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [themePalette, setThemePaletteState] = useState<BrandingPalette>(DEFAULT_PALETTE);
   const [connectionProtocol, setConnectionProtocolState] = useState<ConnectionProtocol>('http');
   const [registrationEnabled, setRegistrationEnabledState] = useState(true);
+  const [registrationApprovalRequired, setRegistrationApprovalRequiredState] = useState(false);
   const [registrationAvailable, setRegistrationAvailableState] = useState(true);
   const [userLimit, setUserLimitState] = useState(0);
+  const [maxUploadBytes, setMaxUploadBytesState] = useState(DEFAULT_MAX_UPLOAD_BYTES);
   const [configured, setConfigured] = useState(false);
   const [setupAvailable, setSetupAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [startupError, setStartupError] = useState<string | null>(null);
   const startupRequestId = useRef(0);
+  const startupController = useRef<AbortController | null>(null);
   const authStateRevision = useRef(0);
   const refreshRequestId = useRef(0);
   const lastBrandTitle = useRef('OpenLearning');
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options: Pick<RequestInit, 'signal'> = {}) => {
     const requestId = ++refreshRequestId.current;
     const stateRevision = authStateRevision.current;
-    const [setup, me] = await Promise.all([getSetupStatus(), getMe()]);
-    await api.refreshCsrf();
+    // Startup reads are independent, so load them together instead of adding a network round trip.
+    const [setup, me] = await Promise.all([
+      getSetupStatus(options),
+      getMe(options),
+      api.refreshCsrf(options),
+    ]);
     if (requestId !== refreshRequestId.current || stateRevision !== authStateRevision.current) return;
     authStateRevision.current += 1;
     setConfigured(setup.configured);
@@ -62,23 +78,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setThemePaletteState(me.themePalette || setup.themePalette || DEFAULT_PALETTE);
     setConnectionProtocolState(me.connectionProtocol || setup.connectionProtocol || 'http');
     setRegistrationEnabledState(me.registrationEnabled ?? setup.registrationEnabled ?? true);
+    setRegistrationApprovalRequiredState(me.registrationApprovalRequired ?? setup.registrationApprovalRequired ?? false);
     setRegistrationAvailableState(me.registrationAvailable ?? setup.registrationAvailable ?? true);
     setUserLimitState(me.userLimit ?? setup.userLimit ?? 0);
+    setMaxUploadBytesState(me.maxUploadBytes ?? setup.maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES);
     setUser(me.user);
   }, []);
 
   const retryStartup = useCallback(async () => {
     const requestId = ++startupRequestId.current;
+    startupController.current?.abort();
+    const controller = new AbortController();
+    startupController.current = controller;
+    let timedOut = false;
+    // Bound startup reads so a stalled connection can reach the existing retry screen.
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, STARTUP_REQUEST_TIMEOUT_MS);
     setLoading(true);
     setStartupError(null);
     try {
-      await refresh();
+      let retryAttempt = 0;
+      while (true) {
+        try {
+          await refresh({ signal: controller.signal });
+          break;
+        } catch (cause) {
+          // A client can load before the API has finished starting, so give transient
+          // transport and server failures a short, bounded recovery window.
+          if (!isTransientStartupError(cause) || retryAttempt >= STARTUP_RETRY_DELAYS_MS.length) throw cause;
+          await new Promise<void>((resolve) => { window.setTimeout(resolve, STARTUP_RETRY_DELAYS_MS[retryAttempt]); });
+          retryAttempt += 1;
+        }
+      }
       if (requestId === startupRequestId.current) setStartupError(null);
     } catch (cause) {
       if (requestId === startupRequestId.current) {
-        setStartupError(cause instanceof ApiError ? cause.message : 'Could not reach the learning platform. Check your connection and try again.');
+        const error = timedOut
+          ? new ApiError(0, 'The learning platform took too long to respond. Check your connection and try again.', 'request_timeout')
+          : cause instanceof ApiError
+            ? cause
+            : new ApiError(0, 'Could not reach the learning platform. Check your connection and try again.', 'network_error');
+        setStartupError(error.message);
       }
     } finally {
+      window.clearTimeout(timeoutId);
+      if (startupController.current === controller) startupController.current = null;
       if (requestId === startupRequestId.current) setLoading(false);
     }
   }, [refresh]);
@@ -105,6 +151,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void retryStartup();
+    return () => {
+      startupRequestId.current += 1;
+      startupController.current?.abort();
+    };
   }, [retryStartup]);
 
   const signIn = useCallback(async (username: string, password: string) => {
@@ -117,24 +167,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setThemePaletteState(result.themePalette || DEFAULT_PALETTE);
     setConnectionProtocolState(result.connectionProtocol || 'http');
     setRegistrationEnabledState(result.registrationEnabled ?? true);
+    setRegistrationApprovalRequiredState(result.registrationApprovalRequired ?? false);
     setRegistrationAvailableState(result.registrationAvailable ?? true);
     setUserLimitState(result.userLimit ?? 0);
+    setMaxUploadBytesState(result.maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES);
   }, []);
 
   const signUp = useCallback(async (email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => {
-    let result: { user: User; registrationAvailable: boolean };
+    let result: { user: User; registrationAvailable: boolean; approvalRequired?: boolean };
     try {
-      result = await api.post<{ user: User; registrationAvailable: boolean }>('/api/auth/register', { email, firstName, lastName, username, password, confirmPassword, registrationFieldValues });
+      result = await api.post<{ user: User; registrationAvailable: boolean; approvalRequired?: boolean }>('/api/auth/register', { email, firstName, lastName, username, password, confirmPassword, registrationFieldValues });
     } catch (cause) {
       if (isRegistrationAvailabilityError(cause)) {
         try { await refresh(); } catch { /* Keep the original registration error visible if status refresh fails. */ }
       }
       throw cause;
     }
-    authStateRevision.current += 1;
-    api.clearCsrf();
-    setUser(result.user);
     setRegistrationAvailableState(result.registrationAvailable);
+    const approvalRequired = result.approvalRequired === true;
+    if (!approvalRequired) {
+      authStateRevision.current += 1;
+      api.clearCsrf();
+      setUser(result.user);
+    }
+    return { approvalRequired };
   }, [refresh]);
 
   const completeSetup = useCallback(async (name: string, email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, setupToken: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => {
@@ -151,8 +207,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setThemePaletteState(result.themePalette || DEFAULT_PALETTE);
     setConnectionProtocolState(result.connectionProtocol || 'http');
     setRegistrationEnabledState(result.registrationEnabled ?? true);
+    setRegistrationApprovalRequiredState(result.registrationApprovalRequired ?? false);
     setRegistrationAvailableState(result.registrationAvailable ?? true);
     setUserLimitState(result.userLimit ?? 0);
+    setMaxUploadBytesState(result.maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES);
   }, []);
 
   const setBranding = useCallback((name: string, palette: BrandingPalette, icon: string | null) => {
@@ -162,10 +220,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPlatformIconState(icon);
   }, []);
 
-  const setPlatformAccessSettings = useCallback((protocol: ConnectionProtocol, allowRegistration: boolean, isRegistrationAvailable: boolean, limit: number) => {
+  const setPlatformAccessSettings = useCallback((protocol: ConnectionProtocol, allowRegistration: boolean, approvalRequired: boolean, isRegistrationAvailable: boolean, limit: number) => {
     authStateRevision.current += 1;
     setConnectionProtocolState(protocol);
     setRegistrationEnabledState(allowRegistration);
+    setRegistrationApprovalRequiredState(approvalRequired);
     setRegistrationAvailableState(isRegistrationAvailable);
     setUserLimitState(limit);
   }, []);
@@ -182,8 +241,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
-    user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationAvailable, userLimit, configured, setupAvailable, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings,
-  }), [user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationAvailable, userLimit, configured, setupAvailable, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings]);
+    user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, registrationAvailable, userLimit, maxUploadBytes, configured, setupAvailable, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings,
+  }), [user, platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, registrationAvailable, userLimit, maxUploadBytes, configured, setupAvailable, loading, startupError, retryStartup, refresh, signIn, signUp, completeSetup, signOut, setBranding, setPlatformAccessSettings]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

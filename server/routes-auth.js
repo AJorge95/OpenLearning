@@ -3,13 +3,14 @@ import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { inflateSync } from 'node:zlib';
 import { config } from './config.js';
 import { db, setSetting, setting, setupComplete } from './db.js';
-import { createUser, hashPassword, normalizeEmail, normalizeUsername, publicUser, regenerateSession, validateCredentials, validateEmail, validatePassword, verifyLoginPassword, verifyPassword } from './auth.js';
+import { hashPassword, normalizeEmail, normalizeUsername, publicUser, regenerateSession, validateCredentials, validateEmail, validatePassword, verifyLoginPassword, verifyPassword } from './auth.js';
 import { ApiError, fail, newCsrfToken, requireAuth, requireAdmin } from './http.js';
 import { invalidateUserSessions } from './session-store.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
 import { passwordChangeLimiter } from './rate-limits.js';
 import { getRegistrationFields, normalizeRegistrationFieldValues, saveUserRegistrationFieldValues } from './registration-fields.js';
 import { accountNames } from './account-names.js';
+import { normalizePlatformName, platformNameValidationError } from '../src/platform-name-validation.ts';
 import { issueCompletedCertificatesForUser } from './certificate-service.js';
 
 export const authRouter = Router();
@@ -78,22 +79,19 @@ function getPlatformConfiguration(registeredCount) {
   const protocol = setting('connection_protocol');
   return {
     ...getBranding(),
+    maxUploadBytes: config.maxUploadBytes,
     connectionProtocol: protocol === 'http' || protocol === 'https' ? protocol : defaultConnectionProtocol(),
     registrationEnabled: setting('registration_enabled') !== '0',
+    registrationApprovalRequired: setting('registration_approval_required') === '1',
     registrationAvailable: registrationAvailable(registeredCount),
     userLimit: getUserLimit(),
   };
 }
 
 function parsePlatformName(value) {
-  if (typeof value !== 'string') {
-    fail(400, 'Platform name must be between 2 and 80 characters.', 'invalid_platform_name');
-  }
-  const name = value.trim();
-  if (name.length < 2 || name.length > 80) {
-    fail(400, 'Platform name must be between 2 and 80 characters.', 'invalid_platform_name');
-  }
-  return name;
+  const error = platformNameValidationError(value);
+  if (error) fail(400, error, 'invalid_platform_name');
+  return normalizePlatformName(value);
 }
 
 function registeredUserCount() {
@@ -132,6 +130,11 @@ function parseConnectionProtocol(value) {
 
 function parseRegistrationEnabled(value) {
   if (typeof value !== 'boolean') fail(400, 'Choose whether new registrations are enabled.', 'invalid_registration_setting');
+  return value;
+}
+
+function parseRegistrationApprovalRequired(value) {
+  if (typeof value !== 'boolean') fail(400, 'Choose whether new registrations need administrator approval.', 'invalid_registration_approval_setting');
   return value;
 }
 
@@ -510,6 +513,16 @@ function isUserIdentifierUniqueConstraint(error) {
     && /users\.(?:username|email)/i.test(String(error.message || ''));
 }
 
+function assertSetupIdentifiersAvailable(username, email) {
+  // Keep duplicate errors field-specific so the setup form can focus the value that needs changing.
+  if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) {
+    fail(409, 'That username is already in use.', 'username_taken');
+  }
+  if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) {
+    fail(409, 'That email address is already in use.', 'email_taken');
+  }
+}
+
 authRouter.post('/setup', async (req, res) => {
   if (setupComplete()) fail(409, 'This platform is already configured.', 'already_configured');
   if (!config.setupToken) fail(503, 'Initial setup is unavailable because no bootstrap credential is configured.', 'setup_credential_unavailable');
@@ -523,11 +536,14 @@ authRouter.post('/setup', async (req, res) => {
   if (password !== confirmPassword) fail(400, 'Passwords do not match.', 'password_mismatch');
   const credentialError = validateCredentials(username, password);
   if (credentialError) fail(400, credentialError, 'invalid_credentials');
+  const normalizedUsername = normalizeUsername(username);
   const themePalette = req.body?.themePalette === undefined ? defaultPalette : parsePalette(req.body.themePalette);
   const platformIcon = parsePlatformIcon(req.body?.platformIcon ?? null);
   const connectionProtocol = req.body?.connectionProtocol === undefined ? defaultConnectionProtocol() : parseConnectionProtocol(req.body.connectionProtocol);
   const registrationEnabled = req.body?.registrationEnabled === undefined ? true : parseRegistrationEnabled(req.body.registrationEnabled);
   const userLimit = req.body?.userLimit === undefined ? 0 : parseUserLimit(req.body.userLimit);
+  // Reject known collisions before scrypt, then repeat under the write lock for concurrent setup attempts.
+  assertSetupIdentifiersAvailable(normalizedUsername, email);
   const passwordHash = await hashPassword(password);
   const userId = randomUUID();
   const configure = db.transaction(() => {
@@ -535,15 +551,14 @@ authRouter.post('/setup', async (req, res) => {
     if (db.prepare("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").get()) {
       throw new ApiError(409, 'An administrator already exists. Use the sign-in page.', 'already_configured');
     }
-    if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) {
-      fail(409, 'That email address is already in use.', 'email_taken');
-    }
+    assertSetupIdentifiersAvailable(normalizedUsername, email);
     db.prepare('INSERT INTO users (id, username, email, first_name, last_name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(userId, normalizeUsername(username), email, firstName, lastName, passwordHash, 'admin');
+      .run(userId, normalizedUsername, email, firstName, lastName, passwordHash, 'admin');
     setSetting('platform_name', name);
     setSetting('theme_palette', themePalette);
     setSetting('connection_protocol', connectionProtocol);
     setSetting('registration_enabled', registrationEnabled ? '1' : '0');
+    setSetting('registration_approval_required', '0');
     setSetting('user_limit', userLimit);
     if (platformIcon) {
       setSetting('platform_icon', platformIcon);
@@ -551,12 +566,12 @@ authRouter.post('/setup', async (req, res) => {
     }
     setSetting('setup_complete', '1');
     recordLastLogin(userId);
-    const auditId = writeAuditLog({ actor: { id: userId, username: normalizeUsername(username) }, action: 'platform.setup', entityType: 'platform',
-      summary: 'Initial platform setup completed', details: { platformName: name, themePalette, connectionProtocol, registrationEnabled, userLimit } });
+    const auditId = writeAuditLog({ actor: { id: userId, username: normalizedUsername }, action: 'platform.setup', entityType: 'platform',
+      summary: 'Initial platform setup completed', details: { platformName: name, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired: false, userLimit } });
     if (!auditId) fail(500, 'Platform setup could not be completed because the audit log is unavailable.', 'audit_unavailable');
     // Read the complete success payload before commit so a response-read failure rolls setup back.
     const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(userId);
-    return { user: publicUser(user), ...getPlatformConfiguration(registeredUserCount()) };
+    return { user: publicUser(user), ...getPlatformConfiguration() };
   });
   const response = configure.immediate();
   await establishCreatedAccountSession(req, userId, {
@@ -582,6 +597,10 @@ authRouter.post('/auth/register', async (req, res) => {
   const normalized = normalizeUsername(username);
   const submittedRegistrationFieldValues = req.body?.registrationFieldValues;
   normalizeRegistrationFieldValues(submittedRegistrationFieldValues, getRegistrationFields());
+  // Reject known identifier collisions before scrypt, then recheck under the write lock for races.
+  if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE LIMIT 1').get(normalized, email)) {
+    registrationConflict();
+  }
   const passwordHash = await hashPassword(password);
   let registrationResult;
   try {
@@ -592,24 +611,34 @@ authRouter.post('/auth/register', async (req, res) => {
       }
       const fields = getRegistrationFields();
       const answers = normalizeRegistrationFieldValues(submittedRegistrationFieldValues, fields);
-      const createdUser = createUser({ username: normalized, email, firstName, lastName, passwordHash, role: 'learner' });
+      const approvalRequired = setting('registration_approval_required') === '1';
+      const registrationStatus = approvalRequired ? 'pending' : 'approved';
+      const createdUserId = randomUUID();
+      db.prepare(`INSERT INTO users (id, username, email, first_name, last_name, password_hash, role, registration_status)
+        VALUES (?, ?, ?, ?, ?, ?, 'learner', ?)`)
+        .run(createdUserId, normalized, email, firstName, lastName, passwordHash, registrationStatus);
+      const createdUser = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?').get(createdUserId);
       saveUserRegistrationFieldValues(createdUser.id, answers);
-      recordLastLogin(createdUser.id);
       const auditId = writeAuditLog({ actor: createdUser, action: 'account.registered', entityType: 'user', entityId: createdUser.id,
-        summary: `Learner account created: ${createdUser.username}` });
+        summary: approvalRequired ? `Learner registration awaiting approval: ${createdUser.username}` : `Learner account created: ${createdUser.username}`,
+        details: { registrationStatus } });
       if (!auditId) fail(500, 'Account could not be created because the audit log is unavailable.', 'audit_unavailable');
-      // Registration availability includes the newly inserted learner and is part of the success response.
-      return { user: publicUser(createdUser), registrationAvailable: registrationAvailable(registeredUserCount()) };
+      if (!approvalRequired) recordLastLogin(createdUser.id);
+      // Recheck after insertion so finite-cap availability includes the new learner.
+      return { user: publicUser(createdUser), registrationAvailable: registrationAvailable(), approvalRequired };
     }).immediate();
   } catch (error) {
     if (isUserIdentifierUniqueConstraint(error)) registrationConflict();
     throw error;
   }
-  await establishCreatedAccountSession(req, registrationResult.user.id, {
-    event: 'Account registration completed, but learner sign-in could not be established',
-    code: 'registration_session_unavailable',
-    message: 'Your account was created, but automatic sign-in failed. Go to the sign-in page and use the credentials you just registered.',
-  });
+  // Pending learners are persisted without a session until an administrator approves them.
+  if (!registrationResult.approvalRequired) {
+    await establishCreatedAccountSession(req, registrationResult.user.id, {
+      event: 'Account registration completed, but learner sign-in could not be established',
+      code: 'registration_session_unavailable',
+      message: 'Your account was created, but automatic sign-in failed. Go to the sign-in page and use the credentials you just registered.',
+    });
+  }
   res.status(201).json(registrationResult);
 });
 
@@ -617,16 +646,22 @@ authRouter.post('/auth/login', async (req, res) => {
   const username = normalizeUsername(req.body?.username);
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
   if (username.length > 32 || password.length > 256) fail(400, 'Enter a valid username and password.', 'invalid_credentials');
-  const user = db.prepare('SELECT id, username, email, first_name, last_name, password_hash, role, disabled FROM users WHERE username = ? COLLATE NOCASE').get(username);
+  const user = db.prepare('SELECT id, username, email, first_name, last_name, password_hash, role, disabled, registration_status FROM users WHERE username = ? COLLATE NOCASE').get(username);
   const valid = await verifyLoginPassword(password, user);
   if (!valid) {
     writeSystemLog('warn', 'auth', 'Sign-in attempt failed');
     fail(401, 'The username or password is incorrect.', 'login_failed');
   }
+  if (user.registration_status !== 'approved') {
+    fail(403, 'Your registration is awaiting administrator approval. You can sign in after it is approved.', 'registration_pending');
+  }
   await regenerateSession(req, user.id);
   const completeSignIn = db.transaction(() => {
-    const currentUser = db.prepare('SELECT id, username, email, first_name, last_name, password_hash, role, disabled FROM users WHERE id = ?').get(user.id);
+    const currentUser = db.prepare('SELECT id, username, email, first_name, last_name, password_hash, role, disabled, registration_status FROM users WHERE id = ?').get(user.id);
     if (!currentUser || currentUser.disabled || currentUser.password_hash !== user.password_hash) return null;
+    if (currentUser.registration_status !== 'approved') {
+      throw new ApiError(403, 'Your registration is awaiting administrator approval. You can sign in after it is approved.', 'registration_pending');
+    }
     recordLastLogin(currentUser.id);
     const auditId = writeAuditLog({ actor: currentUser, action: 'auth.signed_in', entityType: 'user', entityId: currentUser.id, summary: `${currentUser.username} signed in` });
     if (!auditId) fail(500, 'Sign-in could not be completed because the audit log is unavailable.', 'audit_unavailable');
@@ -726,6 +761,10 @@ authRouter.put('/admin/settings', requireAdmin, (req, res) => {
   const registrationEnabled = req.body?.registrationEnabled === undefined
     ? setting('registration_enabled') !== '0'
     : parseRegistrationEnabled(req.body.registrationEnabled);
+  // Validate the full payload before opening the write transaction so invalid policies never enter the settings write path.
+  const registrationApprovalRequired = req.body?.registrationApprovalRequired === undefined
+    ? setting('registration_approval_required') === '1'
+    : parseRegistrationApprovalRequired(req.body.registrationApprovalRequired);
   const userLimit = req.body?.userLimit === undefined ? getUserLimit() : parseUserLimit(req.body.userLimit);
   const platformIcon = Object.hasOwn(req.body || {}, 'platformIcon') ? parsePlatformIcon(req.body.platformIcon) : undefined;
   const update = db.transaction(() => {
@@ -739,6 +778,7 @@ authRouter.put('/admin/settings', requireAdmin, (req, res) => {
     updateSetting('theme_palette', themePalette, 'themePalette');
     updateSetting('connection_protocol', connectionProtocol, 'connectionProtocol');
     updateSetting('registration_enabled', registrationEnabled ? '1' : '0', 'registrationEnabled');
+    updateSetting('registration_approval_required', registrationApprovalRequired ? '1' : '0', 'registrationApprovalRequired');
     updateSetting('user_limit', userLimit, 'userLimit');
     if (platformIcon !== undefined && setting('platform_icon') !== platformIcon) {
       changedFields.push('platformIcon');
@@ -751,7 +791,7 @@ authRouter.put('/admin/settings', requireAdmin, (req, res) => {
     }
     if (changedFields.length) {
       const auditId = writeAuditLog({ actor: req.currentUser, action: 'platform.settings_updated', entityType: 'platform', summary: 'Platform settings updated',
-        details: { changedFields, platformName, themePalette, connectionProtocol, registrationEnabled, userLimit, platformIconChanged: changedFields.includes('platformIcon') } });
+        details: { changedFields, platformName, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, userLimit, platformIconChanged: changedFields.includes('platformIcon') } });
       if (!auditId) fail(500, 'Platform settings could not be saved because the audit log is unavailable.', 'audit_unavailable');
     }
     const userCount = registeredUserCount();

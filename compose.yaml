@@ -1,0 +1,52 @@
+services:
+  openlearning:
+    image: ${OPENLEARNING_IMAGE:-ghcr.io/ajorge95/openlearning:latest}
+    pull_policy: always
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 40s
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    ports:
+      - "${OPENLEARNING_PORT:-5173}:5173"
+    environment:
+      PORT: "5173"
+      DATA_DIR: /var/lib/openlearning
+      BACKUP_DIR: /var/backups/openlearning
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      SESSION_SECRET_FILE: /run/secrets/session_secret
+    secrets:
+      - session_secret
+    volumes:
+      - type: bind
+        source: ${OPENLEARNING_DATA_PATH:?Set OPENLEARNING_DATA_PATH to an absolute host directory}
+        target: /var/lib/openlearning
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OPENLEARNING_BACKUP_PATH:?Set OPENLEARNING_BACKUP_PATH to an absolute host directory}
+        target: /var/backups/openlearning
+        bind:
+          create_host_path: false
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5173/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+secrets:
+  session_secret:
+    file: ${SESSION_SECRET_FILE:?Set SESSION_SECRET_FILE to a protected host file}

@@ -54,15 +54,15 @@ function apiUrl(pathname) {
   return `http://127.0.0.1:${address.port}/api${pathname}`;
 }
 
-function registrationRequest(username) {
+function registrationRequest(username, email = `${username}@example.invalid`, firstName = 'Limit', lastName = 'Check') {
   return fetch(apiUrl('/auth/register'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify({
       username,
-      email: `${username}@example.invalid`,
-      firstName: 'Limit',
-      lastName: 'Check',
+      email,
+      firstName,
+      lastName,
       password: 'RegistrationLimitPassphrase-2026',
       confirmPassword: 'RegistrationLimitPassphrase-2026',
     }),
@@ -103,6 +103,26 @@ before(async () => {
   await once(server, 'listening');
 });
 
+test('registration rejects a host-only email domain before creating an account', async () => {
+  const response = await registrationRequest('registration_local_email', 'learner@localhost');
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: 'Enter a valid email address (up to 254 characters).',
+    code: 'invalid_email',
+  });
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get('registration_local_email').count, 0);
+});
+
+test('registration rejects a whitespace-only account name before creating an account', async () => {
+  const response = await registrationRequest('registration_empty_name', 'empty.name@example.invalid', '   ');
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: 'First name must be between 1 and 80 characters.',
+    code: 'invalid_name',
+  });
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users WHERE username = ?').get('registration_empty_name').count, 0);
+});
+
 after(async () => {
   if (server?.listening) {
     const closed = once(server, 'close');
@@ -127,8 +147,10 @@ test('concurrent registrations cannot exceed the account limit', async () => {
     platformName: '',
     platformIcon: null,
     themePalette: 'violet',
+    maxUploadBytes: 2 * 1024 ** 3,
     connectionProtocol: 'http',
     registrationEnabled: true,
+    registrationApprovalRequired: false,
     registrationAvailable: true,
     userLimit: 2,
   });
@@ -147,6 +169,7 @@ test('concurrent registrations cannot exceed the account limit', async () => {
     error: 'The platform has reached its registered-user limit.',
     code: 'user_limit_reached',
   });
+  assert.equal(outcomes.find(({ status }) => status === 201)?.body.registrationAvailable, false);
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, 2);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.registered'").get().count, 1);
 
@@ -176,4 +199,26 @@ test('disabled registration reports unavailable and creates no account', async (
   });
   assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, userCount);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'account.registered'").get().count, registrationAuditCount);
+});
+
+test('unlimited registration does not count all users for its success response', async () => {
+  setSetting('user_limit', 0);
+  setSetting('registration_enabled', '1');
+  const originalPrepare = database.prepare;
+  let registeredUserCountReads = 0;
+  database.prepare = function countRegisteredUserQueries(sql, ...parameters) {
+    if (sql === 'SELECT COUNT(*) AS count FROM users') registeredUserCountReads += 1;
+    return originalPrepare.call(this, sql, ...parameters);
+  };
+
+  let response;
+  try {
+    response = await registrationRequest('registration_unlimited_count');
+  } finally {
+    database.prepare = originalPrepare;
+  }
+
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).registrationAvailable, true);
+  assert.equal(registeredUserCountReads, 0);
 });

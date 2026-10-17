@@ -2,22 +2,35 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArrowDown, ArrowUp, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Plus, RotateCcw, Search, UsersRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from './api';
-import { calendarMonthRequestRange, groupCalendarDeadlines, localDateKey, shouldShowCalendarEmptyState } from './calendar-dates';
+import { calendarMonthRequestRange, currentCalendarMonth, getCalendarDeadlineRefreshDelay, groupCalendarDeadlines, isSameCalendarMonth, localDateKey, markCalendarDeadlinesOverdue, shouldShowCalendarEmptyState } from './calendar-dates';
 import { pathAssignmentRemovalConfirmation } from './path-assignment-confirmation';
-import { AppSelect, Button, EmptyState, PageHeading, ProgressBar } from './components';
+import { pathArchiveConfirmation } from './path-archive-confirmation';
+import { AppSelect, Button, ConfirmationDialog, EmptyState, PageHeading, ProgressBar } from './components';
+import type { AppSelectOption } from './components';
 import type { Competency, Course, CourseDeadline, LearningPath } from './types';
 import { appendPublishedCourseOptions, hasMorePublishedCourseOptions, publishedCourseOptionsPageUrl, type PublishedCoursePage } from './path-course-options';
 import { canAssignLearningPathLearners } from './path-assignment-availability';
+import { appendUnchangedCompetencyPage } from './competency-progress';
+import { formatLearningDeadlineDay } from './learning-deadline';
 import { MAX_LEARNING_PATH_COURSES } from '../shared/learning-path-limits.js';
 import { isPathCourseCheckboxDisabled, togglePathCourseSelection } from './path-course-selection';
 import { useAuth } from './auth-context';
 import { acquireSubmissionLock, releaseSubmissionLock } from './submission-lock';
+import { hasUnsavedPathChanges, type PathEditorValue } from './path-editor-dirty';
 
 function requestMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
 }
 
 type PathLearner = { id: string; username: string; email: string | null; enrolled: boolean; source: 'assigned' | 'self' | null };
+type PendingAssignmentRemoval = { pathId: string; pathTitle: string; learnerId: string; learnerUsername: string };
+type PendingPathArchive = { id: string; title: string; discardEditorChanges: boolean };
+
+// PathEditor rerenders as authors edit text and course selections; reuse these fixed options.
+const PATH_AVAILABILITY_OPTIONS: AppSelectOption<'draft' | 'published'>[] = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'published', label: 'Published' },
+];
 type PathLearnerPage = { learners: PathLearner[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type LearningPathListPage = { paths: LearningPath[]; total: number; page: number; pageSize: number; hasMore: boolean };
 type CompetencyAdminPage = { competencies: Competency[]; total: number; page: number; pageSize: number; hasMore: boolean };
@@ -29,12 +42,16 @@ const learningPathStatusFilters: Array<{ label: string; value: LearningPathStatu
 ];
 const calendarTimeFormatter = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
 const calendarDateTimeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
+// Reuse locale-aware calendar formatters across month navigation and deadline updates.
+const calendarMonthFormatter = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
+const calendarFullDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'full' });
 
-function PathEditor({ existing, busy, onSave, onCancel }: {
+function PathEditor({ existing, busy, onSave, onCancel, onDirtyChange }: {
   existing: LearningPath | null;
   busy: boolean;
-  onSave: (path: { title: string; description: string; status: 'draft' | 'published'; selfEnrollment: boolean; courses: Array<{ courseId: string; requiresPrevious: boolean }> }) => void;
+  onSave: (path: { title: string; description: string; status: 'draft' | 'published'; selfEnrollment: boolean; courses: Array<{ courseId: string; requiresPrevious: boolean }> }) => Promise<boolean>;
   onCancel: () => void;
+  onDirtyChange: (hasChanges: boolean) => void;
 }) {
   const [title, setTitle] = useState(existing?.title || '');
   const [description, setDescription] = useState(existing?.description || '');
@@ -50,8 +67,23 @@ function PathEditor({ existing, busy, onSave, onCancel }: {
   const [courseLoading, setCourseLoading] = useState(true);
   const [courseLoadError, setCourseLoadError] = useState('');
   const [failedCoursePage, setFailedCoursePage] = useState<number | null>(null);
+  const initialValueRef = useRef<PathEditorValue>({
+    title: existing?.title || '',
+    description: existing?.description || '',
+    status: existing?.status === 'published' ? 'published' : 'draft',
+    selfEnrollment: Boolean(existing?.selfEnrollment),
+    courses: existing?.courses.map((course) => ({ courseId: course.id, requiresPrevious: course.requiresPrevious })) || [],
+  });
+  const pathTitleInputRef = useRef<HTMLInputElement>(null);
   const courseRequestSequenceRef = useRef(0);
   const courseRequestControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (!existing) return;
+    // The editor appears above the selected card, so move keyboard focus into it.
+    pathTitleInputRef.current?.focus();
+  }, [existing]);
+  const hasUnsavedChanges = hasUnsavedPathChanges({ title, description, status, selfEnrollment, courses: selected }, initialValueRef.current);
+  useEffect(() => onDirtyChange(hasUnsavedChanges), [hasUnsavedChanges, onDirtyChange]);
   const loadCoursePage = useCallback(async (requestedPage: number, replace = false) => {
     if (courseRequestControllerRef.current) return;
     const controller = new AbortController();
@@ -109,21 +141,28 @@ function PathEditor({ existing, busy, onSave, onCancel }: {
       return next;
     });
   }
-  return <form className="program-editor-card" onSubmit={(event) => {
+  return <form className="program-editor-card" onSubmit={async (event) => {
     event.preventDefault();
     if (busy) return;
-    onSave({ title: title.trim(), description: description.trim(), status, selfEnrollment,
+    const saved = await onSave({ title: title.trim(), description: description.trim(), status, selfEnrollment,
       courses: selected.map((item, index) => ({ ...item, requiresPrevious: index > 0 && item.requiresPrevious })) });
+    if (!saved || existing) return;
+    // A new path starts from a clean form after a successful create.
+    setTitle(''); setDescription(''); setStatus('draft'); setSelfEnrollment(false); setSelected([]);
+    onDirtyChange(false);
+    pathTitleInputRef.current?.focus();
   }} aria-busy={busy}>
-    <div className="program-card-heading"><div><span className="program-icon"><BookOpen size={18} /></span><div><h2>{existing ? 'Edit learning path' : 'Create a learning path'}</h2><p>Arrange published courses into a guided sequence.</p></div></div>{existing && <Button variant="quiet" onClick={onCancel} disabled={busy}>Cancel</Button>}</div>
+    <div className="program-card-heading"><div><span className="program-icon" aria-hidden="true"><BookOpen size={18} /></span><div><h2>{existing ? 'Edit learning path' : 'Create a learning path'}</h2><p>Arrange published courses into a guided sequence.</p></div></div>{existing && <Button variant="quiet" onClick={onCancel} disabled={busy}>Cancel</Button>}</div>
     <div className="program-form-grid">
-      <label>Path name<input required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy} /></label>
-      <div className="app-select-field"><span>Availability</span><AppSelect ariaLabel="Path availability" value={status} onChange={setStatus} options={[{ value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }]} disabled={busy} /></div>
-      <label className="program-full-field">Description<textarea rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={busy} /></label>
+      {/* Keep the required program identity field visually consistent with the other editors. */}
+      <label><span className="form-label-row"><span>Path name</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={pathTitleInputRef} required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy} /></label>
+      <div className="app-select-field"><span>Availability</span><AppSelect ariaLabel="Path availability" value={status} onChange={setStatus} options={PATH_AVAILABILITY_OPTIONS} disabled={busy} /></div>
+      <label className="program-full-field">Description<textarea id="learning-path-description" aria-describedby="learning-path-description-count" rows={3} maxLength={6000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={busy} /><small id="learning-path-description-count" className="field-character-count">{description.length} / 6,000 characters</small></label>
     </div>
     <label className="program-toggle"><input type="checkbox" checked={selfEnrollment} onChange={(event) => setSelfEnrollment(event.target.checked)} disabled={busy} /><span><strong>Allow learner self-enrollment</strong><small>Only public courses can be included in an open path.</small></span></label>
     <fieldset className="path-course-selector" disabled={busy}><legend>Courses in this path</legend>
-      <p className={`path-course-selection-count${selectionOverLimit ? ' over-limit' : selectionAtLimit ? ' at-limit' : ''}`} role={selectionAtLimit ? 'status' : undefined} aria-live={selectionAtLimit ? 'polite' : undefined} aria-atomic={selectionAtLimit || undefined}>
+      {/* Announce every selection change so assistive-technology users can track the visible count. */}
+      <p className={`path-course-selection-count${selectionOverLimit ? ' over-limit' : selectionAtLimit ? ' at-limit' : ''}`} role="status" aria-live="polite" aria-atomic="true">
         {selectionOverLimit
           ? `This path has ${selected.length} courses. Remove ${selected.length - MAX_LEARNING_PATH_COURSES} before saving.`
           : selectionAtLimit
@@ -145,7 +184,7 @@ function PathEditor({ existing, busy, onSave, onCancel }: {
     {hasUnavailableSelection && <p className="path-selection-warning" role="status">Remove private or unpublished courses before saving this path with its current availability.</p>}
     {selected.length > 0 && <ol className="path-course-order">{selected.map((item, index) => {
       const course = courseById.get(item.courseId);
-      return <li key={item.courseId}><span className="path-course-number">{index + 1}</span><div><strong>{course?.title || 'Course'}</strong>{index > 0 && <label className="path-prerequisite"><input type="checkbox" checked={item.requiresPrevious} onChange={(event) => setSelected((current) => current.map((step) => step.courseId === item.courseId ? { ...step, requiresPrevious: event.target.checked } : step))} disabled={busy} />Require all earlier courses first</label>}</div><div className="path-reorder-buttons"><button type="button" aria-label={`Move ${course?.title} earlier`} disabled={busy || index === 0} onClick={() => move(index, -1)}><ArrowUp size={16} /></button><button type="button" aria-label={`Move ${course?.title} later`} disabled={busy || index === selected.length - 1} onClick={() => move(index, 1)}><ArrowDown size={16} /></button></div></li>;
+      return <li key={item.courseId}><span className="path-course-number">{index + 1}</span><div><strong>{course?.title || 'Course'}</strong>{index > 0 && <label className="path-prerequisite"><input type="checkbox" checked={item.requiresPrevious} onChange={(event) => setSelected((current) => current.map((step) => step.courseId === item.courseId ? { ...step, requiresPrevious: event.target.checked } : step))} disabled={busy} />Require all earlier courses first</label>}</div><div className="path-reorder-buttons"><button type="button" aria-label={`Move ${course?.title} earlier`} disabled={busy || index === 0} onClick={() => move(index, -1)}><ArrowUp size={16} aria-hidden="true" /></button><button type="button" aria-label={`Move ${course?.title} later`} disabled={busy || index === selected.length - 1} onClick={() => move(index, 1)}><ArrowDown size={16} aria-hidden="true" /></button></div></li>;
     })}</ol>}
     {status === 'published' && selected.length === 0 && <p className="path-selection-warning" role="status">Add at least one published course before making this path available.</p>}
     <div className="program-form-actions"><Button type="submit" disabled={busy || !title.trim() || hasUnavailableSelection || selectionOverLimit || (status === 'published' && selected.length === 0)}>{busy ? 'Saving…' : existing ? 'Save path' : 'Create path'}</Button></div>
@@ -161,9 +200,15 @@ export function LearningPathsPage() {
   const [pathTotal, setPathTotal] = useState(0);
   const [pathHasMore, setPathHasMore] = useState(false);
   const [pathStatus, setPathStatus] = useState<LearningPathStatusFilter>('all');
+  const [pathSearch, setPathSearch] = useState('');
+  const [appliedPathSearch, setAppliedPathSearch] = useState('');
+  const pathSearchInputRef = useRef<HTMLInputElement>(null);
   const pathStatusFilterButtonsRef = useRef<Partial<Record<LearningPathStatusFilter, HTMLButtonElement>>>({});
   const pendingPathStatusFocusRef = useRef<LearningPathStatusFilter | null>(null);
+  const pathEditorReturnFocusRef = useRef<HTMLButtonElement | null>(null);
+  const pathEditorDirtyRef = useRef(false);
   const [editing, setEditing] = useState<LearningPath | null>(null);
+  const [pendingPathEdit, setPendingPathEdit] = useState<LearningPath | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -178,6 +223,7 @@ export function LearningPathsPage() {
   const [selectedLearner, setSelectedLearner] = useState('');
   const [assignmentSearch, setAssignmentSearch] = useState('');
   const [assignmentAppliedSearch, setAssignmentAppliedSearch] = useState('');
+  const assignmentSearchInputRef = useRef<HTMLInputElement>(null);
   const [assignmentPage, setAssignmentPage] = useState(1);
   const [assignmentPageSize, setAssignmentPageSize] = useState(50);
   const [assignmentTotal, setAssignmentTotal] = useState(0);
@@ -186,6 +232,8 @@ export function LearningPathsPage() {
   const [assignmentLoadError, setAssignmentLoadError] = useState(false);
   const [assignmentAction, setAssignmentAction] = useState<'assign' | 'remove' | null>(null);
   const [removingLearnerId, setRemovingLearnerId] = useState('');
+  const [pendingAssignmentRemoval, setPendingAssignmentRemoval] = useState<PendingAssignmentRemoval | null>(null);
+  const [pendingPathArchive, setPendingPathArchive] = useState<PendingPathArchive | null>(null);
   const assignmentBusy = assignmentAction !== null;
   const assignmentRequestSequenceRef = useRef(0);
   const assignmentRequestControllerRef = useRef<AbortController | null>(null);
@@ -195,6 +243,48 @@ export function LearningPathsPage() {
   const pathsRequestControllerRef = useRef<AbortController | null>(null);
   const requestedPathPageRef = useRef(1);
 
+  const updatePathEditorDirty = useCallback((hasChanges: boolean) => {
+    pathEditorDirtyRef.current = hasChanges;
+  }, []);
+
+  function requestPathEdit(path: LearningPath, trigger: HTMLButtonElement) {
+    if (editing?.id === path.id) return;
+    pathEditorReturnFocusRef.current = trigger;
+    if (pathEditorDirtyRef.current) {
+      // Switching the keyed editor would discard local form values without saving.
+      setPendingPathEdit(path);
+      return;
+    }
+    setEditing(path);
+  }
+
+  function confirmPathEdit() {
+    const path = pendingPathEdit;
+    setPendingPathEdit(null);
+    if (!path) return;
+    pathEditorDirtyRef.current = false;
+    setEditing(path);
+  }
+
+  function cancelPathEdit() {
+    const trigger = pathEditorReturnFocusRef.current;
+    pathEditorReturnFocusRef.current = null;
+    pathEditorDirtyRef.current = false;
+    setEditing(null);
+    if (trigger?.isConnected) trigger.focus();
+    else pathStatusFilterButtonsRef.current.all?.focus();
+  }
+
+  function restorePathEditorFocus() {
+    const trigger = pathEditorReturnFocusRef.current;
+    pathEditorReturnFocusRef.current = null;
+    if (!trigger) return;
+    window.requestAnimationFrame(() => {
+      if (trigger.isConnected) trigger.focus();
+      else pathStatusFilterButtonsRef.current.all?.focus();
+    });
+  }
+
   useEffect(() => {
     if (loading || saving || !pendingPathStatusFocusRef.current) return;
     const status = pendingPathStatusFocusRef.current;
@@ -202,7 +292,7 @@ export function LearningPathsPage() {
     pathStatusFilterButtonsRef.current[status]?.focus();
   }, [loading, saving]);
 
-  async function load(requestedPage = pathPage, requestedStatus = pathStatus) {
+  async function load(requestedPage = pathPage, requestedStatus = pathStatus, requestedSearch = appliedPathSearch) {
     if (!pathsPageActiveRef.current) return;
     pathsRequestControllerRef.current?.abort();
     const requestController = new AbortController();
@@ -214,6 +304,7 @@ export function LearningPathsPage() {
     try {
       const params = new URLSearchParams({ page: String(requestedPage) });
       if (staff) params.set('status', requestedStatus);
+      if (requestedSearch) params.set('q', requestedSearch);
       const result = await api.get<LearningPathListPage>(`/api/learning-paths?${params}`, { signal: requestController.signal });
       if (!isCurrentRequest()) return;
       setPaths(result.paths);
@@ -246,32 +337,65 @@ export function LearningPathsPage() {
     };
   }, [staff]);
 
+  function submitPathSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (loading || saving || assignmentBusy) return;
+    const nextSearch = pathSearch.trim();
+    setPathSearch(nextSearch);
+    setAppliedPathSearch(nextSearch);
+    setPendingPathArchive(null);
+    clearAssignmentPanel();
+    setPaths([]);
+    setPathPage(1);
+    setPathTotal(0);
+    setPathHasMore(false);
+    void load(1, pathStatus, nextSearch);
+  }
+
+  function clearPathSearch() {
+    setPathSearch('');
+    setAppliedPathSearch('');
+    setPathPage(1);
+    setPendingPathArchive(null);
+    clearAssignmentPanel();
+    void load(1, pathStatus, '');
+    // The empty-result action disappears after clearing, so return focus to the persistent search field.
+    pathSearchInputRef.current?.focus();
+  }
+
   function changePathPage(page: number) {
     if (loading || assignmentBusy || page < 1) return;
+    setPendingPathArchive(null);
     clearAssignmentPanel();
     void load(page);
   }
 
   function changePathStatus(status: LearningPathStatusFilter) {
     if (loading || saving || assignmentBusy || status === pathStatus) return;
+    const nextSearch = pathSearch.trim();
+    setPathSearch(nextSearch);
+    setAppliedPathSearch(nextSearch);
+    setPendingPathArchive(null);
     clearAssignmentPanel();
     setPaths([]);
     setPathPage(1);
     setPathTotal(0);
     setPathHasMore(false);
     setPathStatus(status);
-    void load(1, status);
+    void load(1, status, nextSearch);
   }
 
-  async function savePath(value: Parameters<NonNullable<React.ComponentProps<typeof PathEditor>['onSave']>>[0]) {
-    if (!acquireSubmissionLock(savePathSubmissionInFlightRef)) return;
+  async function savePath(value: Parameters<NonNullable<React.ComponentProps<typeof PathEditor>['onSave']>>[0]): Promise<boolean> {
+    if (!acquireSubmissionLock(savePathSubmissionInFlightRef)) return false;
     setSaving(true); setError(''); setNotice('');
     try {
       if (editing) await api.patch(`/api/manage/learning-paths/${editing.id}`, value);
       else await api.post('/api/manage/learning-paths', value);
       if (editing && !canAssignLearningPathLearners(value.status) && assignmentPathRef.current === editing.id) clearAssignmentPanel();
-      setEditing(null); setPathStatus('all'); setNotice(editing ? 'Learning path updated.' : 'Learning path created.'); await load(1, 'all');
-    } catch (cause) { setError(requestMessage(cause, 'Learning path could not be saved.')); }
+      setEditing(null); setPathSearch(''); setAppliedPathSearch(''); setPathStatus('all'); setNotice(editing ? 'Learning path updated.' : 'Learning path created.'); await load(1, 'all', '');
+      restorePathEditorFocus();
+      return true;
+    } catch (cause) { setError(requestMessage(cause, 'Learning path could not be saved.')); return false; }
     finally {
       releaseSubmissionLock(savePathSubmissionInFlightRef);
       setSaving(false);
@@ -283,23 +407,40 @@ export function LearningPathsPage() {
     assignmentRequestControllerRef.current?.abort();
     assignmentRequestControllerRef.current = null;
     assignmentPathRef.current = null;
+    setPendingAssignmentRemoval(null);
     setAssignmentPath(null); setLearners([]); setSelectedLearner(''); setAssignmentSearch(''); setAssignmentAppliedSearch('');
     setAssignmentPage(1); setAssignmentTotal(0); setAssignmentHasMore(false); setAssignmentLoading(false); setAssignmentLoadError(false);
   }
 
   async function archivePath(path: LearningPath) {
     if (saving || assignmentBusy || path.status === 'archived') return;
-    const confirmed = window.confirm(`Archive “${path.title}”? It will be removed from active learning path lists. Existing learner enrollments and course progress will be kept.`);
-    if (!confirmed) return;
     if (assignmentPathRef.current === path.id) clearAssignmentPanel();
     setSaving(true); setChangingPathStatusId(path.id); setError(''); setNotice('');
     try {
       await api.patch(`/api/manage/learning-paths/${path.id}`, { status: 'archived' });
+      if (editing?.id === path.id) {
+        // The editor only supports draft and published states, so close it after archive succeeds.
+        pathEditorDirtyRef.current = false;
+        setEditing(null);
+      }
       setNotice(`Learning path “${path.title}” archived. Existing enrollments and course progress were kept.`);
       pendingPathStatusFocusRef.current = 'archived';
       setPathStatus('archived'); await load(1, 'archived');
     } catch (cause) { setError(requestMessage(cause, 'Learning path could not be archived.')); }
     finally { setChangingPathStatusId(null); setSaving(false); }
+  }
+
+  function requestPathArchive(path: LearningPath) {
+    if (saving || assignmentBusy || path.status === 'archived') return;
+    setPendingPathArchive({ id: path.id, title: path.title, discardEditorChanges: editing?.id === path.id && pathEditorDirtyRef.current });
+  }
+
+  function confirmPathArchive() {
+    const pending = pendingPathArchive;
+    setPendingPathArchive(null);
+    if (!pending || saving || assignmentBusy) return;
+    const path = paths.find((item) => item.id === pending.id && item.title === pending.title && item.status !== 'archived');
+    if (path) void archivePath(path);
   }
 
   async function restorePath(path: LearningPath) {
@@ -314,18 +455,33 @@ export function LearningPathsPage() {
     finally { setChangingPathStatusId(null); setSaving(false); }
   }
 
-  async function selfEnroll(path: LearningPath) {
+  async function selfEnroll(path: LearningPath, trigger: HTMLButtonElement) {
     if (joiningPathRef.current) return;
     joiningPathRef.current = true;
     setJoiningPathId(path.id);
     setError(''); setNotice('');
-    try { await api.post(`/api/learning-paths/${path.id}/enroll`); setNotice(`You joined “${path.title}”.`); await load(); }
+    try {
+      const { path: enrolledPath } = await api.post<{ path: LearningPath }>(`/api/learning-paths/${path.id}/enroll`);
+      // Apply this path immediately, then refresh because its new course states can affect other paths.
+      setPaths((currentPaths) => currentPaths.map((currentPath) => currentPath.id === enrolledPath.id ? enrolledPath : currentPath));
+      setNotice(`You joined “${path.title}”.`);
+      await load();
+    }
     catch (cause) { setError(requestMessage(cause, 'You could not join this learning path.')); }
-    finally { joiningPathRef.current = false; setJoiningPathId(null); }
+    finally {
+      joiningPathRef.current = false;
+      setJoiningPathId(null);
+      window.requestAnimationFrame(() => {
+        if (!pathsPageActiveRef.current) return;
+        if (trigger.isConnected) trigger.focus();
+        else document.getElementById(`learning-path-title-${path.id}`)?.focus();
+      });
+    }
   }
 
   async function loadPathLearners(pathId: string, query: string, page: number) {
     assignmentRequestControllerRef.current?.abort();
+    setPendingAssignmentRemoval(null);
     const requestController = new AbortController();
     assignmentRequestControllerRef.current = requestController;
     const requestSequence = ++assignmentRequestSequenceRef.current;
@@ -359,6 +515,7 @@ export function LearningPathsPage() {
       assignmentRequestControllerRef.current?.abort();
       assignmentRequestControllerRef.current = null;
       assignmentPathRef.current = null;
+      setPendingAssignmentRemoval(null);
       setAssignmentPath(null); setLearners([]); setSelectedLearner(''); setAssignmentSearch(''); setAssignmentAppliedSearch('');
       setAssignmentPage(1); setAssignmentTotal(0); setAssignmentHasMore(false); setAssignmentLoading(false); setAssignmentLoadError(false);
       return;
@@ -375,6 +532,14 @@ export function LearningPathsPage() {
     const query = assignmentSearch.trim();
     setAssignmentAppliedSearch(query); setAssignmentPage(1); setSelectedLearner('');
     void loadPathLearners(pathId, query, 1);
+  }
+
+  function clearPathLearnerSearch(pathId: string) {
+    if (assignmentBusy || assignmentPathRef.current !== pathId) return;
+    setAssignmentSearch(''); setAssignmentAppliedSearch(''); setAssignmentPage(1); setSelectedLearner('');
+    // Keep keyboard focus in the persistent search field when this empty-state action disappears.
+    assignmentSearchInputRef.current?.focus();
+    void loadPathLearners(pathId, '', 1);
   }
 
   function changeAssignmentPage(pathId: string, page: number) {
@@ -401,71 +566,101 @@ export function LearningPathsPage() {
     }
   }
 
-  async function removeAssignment(pathId: string, learnerId: string, learnerUsername: string, pathTitle: string) {
+  function requestAssignmentRemoval(path: LearningPath, learner: PathLearner) {
+    if (assignmentBusy || assignmentLoading || assignmentPathRef.current !== path.id || !canAssignLearningPathLearners(path.status) || !learner.enrolled || learner.source !== 'assigned') return;
+    setPendingAssignmentRemoval({ pathId: path.id, pathTitle: path.title, learnerId: learner.id, learnerUsername: learner.username });
+  }
+
+  async function confirmAssignmentRemoval() {
+    const pending = pendingAssignmentRemoval;
+    if (!pending) return;
     const requestSequence = assignmentRequestSequenceRef.current;
-    if (assignmentBusy || assignmentLoading || assignmentPathRef.current !== pathId) return;
-    if (!window.confirm(pathAssignmentRemovalConfirmation(learnerUsername, pathTitle))) return;
-    setAssignmentAction('remove'); setRemovingLearnerId(learnerId); setError(''); setNotice('');
+    const path = paths.find((item) => item.id === pending.pathId && item.title === pending.pathTitle && canAssignLearningPathLearners(item.status));
+    const learner = learners.find((item) => item.id === pending.learnerId && item.username === pending.learnerUsername && item.enrolled && item.source === 'assigned');
+    setPendingAssignmentRemoval(null);
+    if (assignmentBusy || assignmentLoading || assignmentPathRef.current !== pending.pathId || !path || !learner) return;
+    setAssignmentAction('remove'); setRemovingLearnerId(learner.id); setError(''); setNotice('');
     try {
-      await api.delete(`/api/manage/learning-paths/${pathId}/assignments/${learnerId}`);
-      if (requestSequence !== assignmentRequestSequenceRef.current || assignmentPathRef.current !== pathId) return;
-      setLearners((current) => current.map((learner) => learner.id === learnerId ? { ...learner, enrolled: false, source: null } : learner));
-      await loadPathLearners(pathId, assignmentAppliedSearch, assignmentPage);
+      await api.delete(`/api/manage/learning-paths/${pending.pathId}/assignments/${learner.id}`);
+      if (requestSequence !== assignmentRequestSequenceRef.current || assignmentPathRef.current !== pending.pathId) return;
+      // Removing an assignment changes path access while preserving the learner's course progress.
+      setNotice(`${learner.username} is no longer assigned to “${path.title}”. Course progress was kept.`);
+      setLearners((current) => current.map((item) => item.id === learner.id ? { ...item, enrolled: false, source: null } : item));
+      await loadPathLearners(pending.pathId, assignmentAppliedSearch, assignmentPage);
     } catch (cause) {
-      if (requestSequence === assignmentRequestSequenceRef.current && assignmentPathRef.current === pathId) setError(requestMessage(cause, 'Path assignment could not be removed.'));
+      if (requestSequence === assignmentRequestSequenceRef.current && assignmentPathRef.current === pending.pathId) setError(requestMessage(cause, 'Path assignment could not be removed.'));
     } finally {
-      if (assignmentPathRef.current === pathId) {
+      if (assignmentPathRef.current === pending.pathId) {
         setAssignmentAction(null); setRemovingLearnerId('');
       }
     }
   }
 
-  const assignableLearners = learners.filter((learner) => !learner.enrolled);
-  const enrolledLearners = learners.filter((learner) => learner.enrolled);
-  const emptyPathState = staff
-    ? pathStatus === 'all'
-      ? { title: 'No learning paths yet', detail: 'Create a path from published courses to give learners a guided route.' }
-      : { title: `No ${pathStatus} learning paths`, detail: pathStatus === 'archived' ? 'Archived paths are kept here and can be restored as drafts.' : 'Try another status filter or create a learning path.' }
-    : { title: 'No learning paths available', detail: 'When a path is published or assigned to you, it will appear here.' };
+  const assignableLearners = useMemo(() => learners.filter((learner) => !learner.enrolled), [learners]);
+  const enrolledLearners = useMemo(() => learners.filter((learner) => learner.enrolled), [learners]);
+  // Keep the potentially 50-row selector stable during unrelated path and assignment state updates.
+  const assignmentOptions = useMemo(() => [
+    { value: '', label: assignmentTotal === 0 ? 'No learners found' : assignableLearners.length ? 'Choose a learner' : 'No unassigned learners on this page', disabled: true },
+    ...assignableLearners.map((learner) => ({ value: learner.id, label: learner.email ? `${learner.username} · ${learner.email}` : learner.username })),
+  ], [assignableLearners, assignmentTotal]);
+  const emptyPathState = appliedPathSearch
+    ? { title: 'No matching learning paths', detail: 'Try another name or description, or clear the search.' }
+    : staff
+      ? pathStatus === 'all'
+        ? { title: 'No learning paths yet', detail: 'Create a path from published courses to give learners a guided route.' }
+        : { title: `No ${pathStatus} learning paths`, detail: pathStatus === 'archived' ? 'Archived paths are kept here and can be restored as drafts.' : 'Try another status filter or create a learning path.' }
+      : { title: 'No learning paths available', detail: 'When a path is published or assigned to you, it will appear here.' };
+  const emptyPathAction = appliedPathSearch
+    ? <Button type="button" variant="secondary" onClick={clearPathSearch}>Clear search</Button>
+    : undefined;
   const hasEmptyPathResult = !loading && !loadFailed && !error && paths.length === 0;
+  // The visible empty state already names the initial empty collection. Announce only
+  // search or status-filter results, where the content changed without moving focus.
+  const shouldAnnounceEmptyPathResult = hasEmptyPathResult && (Boolean(appliedPathSearch) || (staff && pathStatus !== 'all'));
+  const pendingRemovalPath = pendingAssignmentRemoval && paths.find((path) => path.id === pendingAssignmentRemoval.pathId && path.title === pendingAssignmentRemoval.pathTitle && canAssignLearningPathLearners(path.status));
+  const pendingRemovalLearner = pendingAssignmentRemoval && learners.find((learner) => learner.id === pendingAssignmentRemoval.learnerId && learner.username === pendingAssignmentRemoval.learnerUsername && learner.enrolled && learner.source === 'assigned');
 
   return <div className="management-page programs-page">
     <PageHeading title="Learning paths" subtitle={staff ? 'Guide learners through a course sequence and assign paths.' : 'Follow a guided sequence of courses and track your progress.'} />
     {error && (loadFailed ? <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => void load(requestedPathPageRef.current)}>Try again</Button></div> : <div className="inline-notice" role="alert">{error}</div>)}{notice && <div className="inline-notice inline-notice-success" role="status">{notice}</div>}
-    {hasEmptyPathResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyPathState.title}. {emptyPathState.detail}</p>}
-    {staff && <PathEditor key={editing?.id || 'new'} existing={editing} busy={saving} onSave={savePath} onCancel={() => setEditing(null)} />}
+    {shouldAnnounceEmptyPathResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyPathState.title}. {emptyPathState.detail}</p>}
+    {staff && <PathEditor key={editing?.id || 'new'} existing={editing} busy={saving} onSave={savePath} onCancel={cancelPathEdit} onDirtyChange={updatePathEditorDirty} />}
     {staff && <div className="management-tabs" role="group" aria-label="Filter learning paths by status">{learningPathStatusFilters.map((filter) => <button type="button" key={filter.value} ref={(button) => { if (button) pathStatusFilterButtonsRef.current[filter.value] = button; else delete pathStatusFilterButtonsRef.current[filter.value]; }} aria-pressed={pathStatus === filter.value} className={pathStatus === filter.value ? 'active' : ''} disabled={loading || saving || assignmentBusy} onClick={() => changePathStatus(filter.value)}>{filter.label}</button>)}</div>}
+    <form role="search" aria-label="Search learning paths" className="management-search" onSubmit={submitPathSearch}><Search size={19} aria-hidden="true" /><input ref={pathSearchInputRef} type="search" value={pathSearch} onChange={(event) => setPathSearch(event.target.value)} placeholder="Search by name or description" aria-label="Search learning paths" maxLength={120} /><button type="submit" disabled={loading || saving || assignmentBusy}>Search</button></form>
     {loading && !paths.length ? <div className="page-loading" role="status">Loading learning paths…</div> : paths.length ? <>
       {loading && <div className="log-loading" role="status">Loading learning paths…</div>}
       <div className="program-list" aria-busy={loading}>
       {paths.map((path) => <article className="program-card learning-path-card" key={path.id}>
-        <div className="program-card-heading"><div><span className="program-icon"><BookOpen size={18} /></span><div><h2>{path.title}</h2><p>{path.description || `${path.courseCount} courses in this path`}</p></div></div><span className={`program-status ${path.status}`}>{path.status}</span></div>
+        <div className="program-card-heading"><div><span className="program-icon" aria-hidden="true"><BookOpen size={18} /></span><div><h2 id={`learning-path-title-${path.id}`} tabIndex={-1}>{path.title}</h2><p>{path.description || `${path.courseCount} courses in this path`}</p></div></div><span className={`program-status ${path.status}`}>{path.status}</span></div>
+        {/* Course status and action labels provide the meaning; these glyphs stay decorative. */}
         {path.courseCount > 0 && <>
           <div className="program-progress-line"><span>{staff ? 'Your progress: ' : ''}{path.completedCourses} of {path.courseCount} courses complete</span><strong>{Math.round(path.completedCourses / path.courseCount * 100)}%</strong></div>
           <ProgressBar value={Math.round(path.completedCourses / path.courseCount * 100)} label={`${staff ? 'Your progress in' : 'Progress in'} ${path.title}`} />
         </>}
-        <ol className="path-course-list">{path.courses.map((course) => <li key={course.id} className={!course.unlocked && !staff ? 'locked' : ''}>
-          <span className="path-course-number">{course.completed ? <Check size={14} /> : course.position + 1}</span>
-          <div><strong>{course.title}</strong><small>{course.category}{course.deadlineAt ? ` · Due ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(course.deadlineAt))}` : ''}</small></div>
+        {path.courses.length > 0 ? <ol className="path-course-list">{path.courses.map((course) => <li key={course.id} className={!course.unlocked && !staff ? 'locked' : ''}>
+          <span className="path-course-number">{course.completed ? <Check size={14} aria-hidden="true" /> : course.position + 1}</span>
+          <div><strong>{course.title}</strong><small>{course.category}{course.deadlineAt ? ` · Due ${formatLearningDeadlineDay(course.deadlineAt)}` : ''}</small></div>
           {!staff && course.unlocked ? <Link className="text-action" to={`/courses/${course.id}`} aria-label={`${course.completed ? 'Review course' : 'Start course'}: ${course.title}`}>{course.completed ? 'Review course' : 'Start course'}</Link> : !staff ? <span className="muted">Complete earlier courses to unlock</span> : <Link className="text-action" to={`/manage/courses/${course.id}/edit`} aria-label={`Edit course: ${course.title}`}>Edit course</Link>}
-        </li>)}</ol>
+        </li>)}</ol> : <p className="path-course-list-empty muted">No courses are currently included in this path.</p>}
         <div className="program-card-footer">
-          {staff ? path.status === 'archived' ? <Button variant="secondary" aria-label={`Restore ${path.title} as draft`} disabled={saving || assignmentBusy} aria-busy={changingPathStatusId === path.id} onClick={() => void restorePath(path)}><RotateCcw size={15} />{changingPathStatusId === path.id ? 'Restoring…' : 'Restore as draft'}</Button> : <><Button variant="secondary" aria-label={`Edit path: ${path.title}`} onClick={() => setEditing(path)} disabled={saving || assignmentBusy}>Edit path</Button>
+          {staff ? path.status === 'archived' ? <Button variant="secondary" aria-label={`Restore ${path.title} as draft`} disabled={saving || assignmentBusy} aria-busy={changingPathStatusId === path.id} onClick={() => void restorePath(path)}><RotateCcw size={15} aria-hidden="true" />{changingPathStatusId === path.id ? 'Restoring…' : 'Restore as draft'}</Button> : <><Button variant="secondary" aria-label={`Edit path: ${path.title}`} onClick={(event) => requestPathEdit(path, event.currentTarget)} disabled={saving || assignmentBusy}>Edit path</Button>
             {canAssignLearningPathLearners(path.status)
-              ? <Button variant="secondary" aria-label={assignmentPath === path.id ? `Close assignments for ${path.title}` : `Assign learners to ${path.title}`} aria-expanded={assignmentPath === path.id} aria-controls={assignmentPath === path.id ? `path-assignments-${path.id}` : undefined} disabled={saving || assignmentBusy} onClick={() => void toggleAssignments(path)}><UsersRound size={15} />{assignmentPath === path.id ? 'Close assignments' : 'Assign learners'}</Button>
+              ? <Button variant="secondary" aria-label={assignmentPath === path.id ? `Close assignments for ${path.title}` : `Assign learners to ${path.title}`} aria-expanded={assignmentPath === path.id} aria-controls={assignmentPath === path.id ? `path-assignments-${path.id}` : undefined} disabled={saving || assignmentBusy} onClick={() => void toggleAssignments(path)}><UsersRound size={15} aria-hidden="true" />{assignmentPath === path.id ? 'Close assignments' : 'Assign learners'}</Button>
               : <span className="muted">Publish this path to assign learners.</span>}
-            <Button variant="secondary" aria-label={`Archive ${path.title}`} disabled={saving || assignmentBusy} aria-busy={changingPathStatusId === path.id} onClick={() => void archivePath(path)}><Archive size={15} />{changingPathStatusId === path.id ? 'Archiving…' : 'Archive'}</Button></>
-            : !path.enrolled && path.selfEnrollment ? <Button aria-label={joiningPathId === path.id ? `Joining ${path.title}` : `Join path: ${path.title}`} disabled={joiningPathId !== null} aria-busy={joiningPathId === path.id} onClick={() => void selfEnroll(path)}>{joiningPathId === path.id ? 'Joining…' : 'Join path'}</Button> : path.enrolled ? <span className="program-enrolled"><Check size={15} />Enrolled</span> : null}
+            <Button variant="secondary" aria-label={`Archive ${path.title}`} disabled={saving || assignmentBusy} aria-busy={changingPathStatusId === path.id} onClick={() => requestPathArchive(path)}><Archive size={15} aria-hidden="true" />{changingPathStatusId === path.id ? 'Archiving…' : 'Archive'}</Button></>
+            : !path.enrolled && path.selfEnrollment ? <Button aria-label={joiningPathId === path.id ? `Joining ${path.title}` : `Join path: ${path.title}`} disabled={joiningPathId !== null} aria-busy={joiningPathId === path.id} onClick={(event) => void selfEnroll(path, event.currentTarget)}>{joiningPathId === path.id ? 'Joining…' : 'Join path'}</Button> : path.enrolled ? <span className="program-enrolled"><Check size={15} aria-hidden="true" />Enrolled</span> : null}
         </div>
         {staff && canAssignLearningPathLearners(path.status) && assignmentPath === path.id && <div id={`path-assignments-${path.id}`} className="path-assignment-panel" aria-busy={assignmentLoading || assignmentBusy}><h3>Assign a learner</h3>
-          <form className="management-search path-assignment-search" onSubmit={(event) => searchPathLearners(event, path.id)}><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search learners by name or email" maxLength={100} placeholder="Search learners by name or email" value={assignmentSearch} disabled={assignmentBusy} onChange={(event) => setAssignmentSearch(event.target.value)} /><Button type="submit" variant="quiet" disabled={assignmentBusy}>Search</Button></form>
-          <div className="path-assignment-controls"><AppSelect ariaLabel="Select a learner" value={selectedLearner} disabled={assignmentLoading || assignmentBusy || assignmentLoadError || assignableLearners.length === 0} onChange={setSelectedLearner} options={[{ value: '', label: assignmentTotal === 0 ? 'No learners found' : assignableLearners.length ? 'Choose a learner' : 'No unassigned learners on this page', disabled: true }, ...assignableLearners.map((learner) => ({ value: learner.id, label: learner.email ? `${learner.username} · ${learner.email}` : learner.username }))]} /><Button disabled={!selectedLearner || assignmentLoading || assignmentBusy || assignmentLoadError} onClick={() => void assignLearner(path.id)}>{assignmentAction === 'assign' ? 'Assigning…' : 'Assign'}</Button></div>
+          <form role="search" aria-label="Search learners" className="management-search path-assignment-search" onSubmit={(event) => searchPathLearners(event, path.id)}><Search size={16} aria-hidden="true" /><input ref={assignmentSearchInputRef} type="search" aria-label="Search learners by name or email" maxLength={100} placeholder="Search learners by name or email" value={assignmentSearch} disabled={assignmentBusy} onChange={(event) => setAssignmentSearch(event.target.value)} /><Button type="submit" variant="quiet" disabled={assignmentBusy}>Search</Button></form>
+          <div className="path-assignment-controls"><AppSelect ariaLabel="Select a learner" value={selectedLearner} disabled={assignmentLoading || assignmentBusy || assignmentLoadError || assignableLearners.length === 0} onChange={setSelectedLearner} options={assignmentOptions} /><Button disabled={!selectedLearner || assignmentLoading || assignmentBusy || assignmentLoadError} onClick={() => void assignLearner(path.id)}>{assignmentAction === 'assign' ? 'Assigning…' : 'Assign'}</Button></div>
           {assignmentLoading && <p className="path-assignment-status" role="status">Loading learners…</p>}
           {assignmentLoadError && <Button type="button" variant="secondary" onClick={() => void loadPathLearners(path.id, assignmentAppliedSearch, assignmentPage)}>Try loading learners again</Button>}
-          {!assignmentLoading && !assignmentLoadError && assignmentTotal === 0 && <p className="path-assignment-status" role="status">{assignmentAppliedSearch ? 'No active learners match this search.' : 'There are no active learner accounts yet.'}</p>}
+          {!assignmentLoading && !assignmentLoadError && assignmentTotal === 0 && (assignmentAppliedSearch
+            ? <div className="path-assignment-empty"><p className="path-assignment-status" role="status">No active learners match this search.</p><Button type="button" variant="quiet" disabled={assignmentBusy} onClick={() => clearPathLearnerSearch(path.id)}>Clear search</Button></div>
+            : <p className="path-assignment-status" role="status">There are no active learner accounts yet.</p>)}
           {!assignmentLoading && !assignmentLoadError && assignmentTotal > 0 && assignableLearners.length === 0 && <p className="path-assignment-status" role="status">All learners on this page are already enrolled. Search or move to another page to find someone else.</p>}
-          {!assignmentLoading && !assignmentLoadError && assignmentTotal > 0 && <div className="log-pagination path-learner-pagination"><p role="status" aria-live="polite" aria-atomic="true">Showing {(assignmentPage - 1) * assignmentPageSize + 1}–{Math.min(assignmentPage * assignmentPageSize, assignmentTotal)} of {assignmentTotal} learners</p><div><Button variant="secondary" disabled={assignmentPage <= 1 || assignmentBusy} onClick={() => changeAssignmentPage(path.id, assignmentPage - 1)}>Previous</Button><span>Page {assignmentPage} of {Math.max(1, Math.ceil(assignmentTotal / assignmentPageSize))}</span><Button variant="secondary" disabled={!assignmentHasMore || assignmentBusy} onClick={() => changeAssignmentPage(path.id, assignmentPage + 1)}>Next</Button></div></div>}
-          {enrolledLearners.length > 0 && <><h4 className="path-assigned-heading">Enrollments on this page</h4><ul className="path-assigned-learners">{enrolledLearners.map((learner) => <li key={learner.id}><span>{learner.username}{learner.email && <small>{learner.email}</small>}<small>{learner.source === 'self' ? 'Self-enrolled' : 'Assigned'}</small></span>{learner.source === 'assigned' && <button type="button" className="text-action" aria-label={`${removingLearnerId === learner.id ? 'Removing assignment for' : 'Remove assignment for'} ${learner.username} from ${path.title}`} disabled={assignmentBusy || assignmentLoading} aria-busy={removingLearnerId === learner.id} onClick={() => void removeAssignment(path.id, learner.id, learner.username, path.title)}>{removingLearnerId === learner.id ? 'Removing…' : 'Remove assignment'}</button>}</li>)}</ul></>}
+          {!assignmentLoading && !assignmentLoadError && assignmentTotal > 0 && <nav className="log-pagination path-learner-pagination" aria-label={`Learner assignment pages for ${path.title}`}><p role="status" aria-live="polite" aria-atomic="true">Showing {(assignmentPage - 1) * assignmentPageSize + 1}–{Math.min(assignmentPage * assignmentPageSize, assignmentTotal)} of {assignmentTotal} learners</p><div><Button variant="secondary" disabled={assignmentPage <= 1 || assignmentBusy} onClick={() => changeAssignmentPage(path.id, assignmentPage - 1)}>Previous</Button><span>Page {assignmentPage} of {Math.max(1, Math.ceil(assignmentTotal / assignmentPageSize))}</span><Button variant="secondary" disabled={!assignmentHasMore || assignmentBusy} onClick={() => changeAssignmentPage(path.id, assignmentPage + 1)}>Next</Button></div></nav>}
+          {enrolledLearners.length > 0 && <><h4 className="path-assigned-heading">Enrollments on this page</h4><ul className="path-assigned-learners">{enrolledLearners.map((learner) => <li key={learner.id}><span>{learner.username}{learner.email && <small>{learner.email}</small>}<small>{learner.source === 'self' ? 'Self-enrolled' : 'Assigned'}</small></span>{learner.source === 'assigned' && <button type="button" className="text-action" aria-label={`${removingLearnerId === learner.id ? 'Removing assignment for' : 'Remove assignment for'} ${learner.username} from ${path.title}`} disabled={assignmentBusy || assignmentLoading} aria-busy={removingLearnerId === learner.id} onClick={() => requestAssignmentRemoval(path, learner)}>{removingLearnerId === learner.id ? 'Removing…' : 'Remove assignment'}</button>}</li>)}</ul></>}
         </div>}
       </article>)}
       </div>
@@ -475,16 +670,21 @@ export function LearningPathsPage() {
           <span>Page {pathPage} of {Math.max(1, Math.ceil(pathTotal / pathPageSize))}</span>
           <Button variant="secondary" disabled={!pathHasMore || loading || assignmentBusy} onClick={() => changePathPage(pathPage + 1)}>Next</Button></div>
       </nav>}
-    </> : loadFailed ? null : <EmptyState title={emptyPathState.title} detail={emptyPathState.detail} />}
+    </> : loadFailed ? null : <EmptyState title={emptyPathState.title} detail={emptyPathState.detail} action={emptyPathAction} />}
+    {pendingAssignmentRemoval && assignmentPath === pendingAssignmentRemoval.pathId && pendingRemovalPath && pendingRemovalLearner && <ConfirmationDialog {...pathAssignmentRemovalConfirmation(pendingAssignmentRemoval.learnerUsername, pendingAssignmentRemoval.pathTitle)} confirmLabel="Remove assignment" onCancel={() => setPendingAssignmentRemoval(null)} onConfirm={() => void confirmAssignmentRemoval()} />}
+    {pendingPathArchive && paths.some((path) => path.id === pendingPathArchive.id && path.title === pendingPathArchive.title && path.status !== 'archived') && <ConfirmationDialog {...pathArchiveConfirmation(pendingPathArchive.title, pendingPathArchive.discardEditorChanges)} confirmLabel="Archive path" onCancel={() => setPendingPathArchive(null)} onConfirm={confirmPathArchive} />}
+    {pendingPathEdit && <ConfirmationDialog title="Discard unsaved path changes?" description={`Your current path changes will be lost if you switch to editing “${pendingPathEdit.title}”.`} confirmLabel="Discard and edit" onCancel={() => setPendingPathEdit(null)} onConfirm={confirmPathEdit} />}
   </div>;
 }
 
 export function CalendarPage() {
-  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [month, setMonth] = useState(() => currentCalendarMonth());
   const [items, setItems] = useState<CourseDeadline[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [hasInvalidDeadlines, setHasInvalidDeadlines] = useState(false);
   const [reloadSequence, setReloadSequence] = useState(0);
+  const [deadlineTimerRevision, setDeadlineTimerRevision] = useState(0);
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
   const todayKey = localDateKey(new Date());
@@ -496,35 +696,60 @@ export function CalendarPage() {
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    setLoading(true); setError(''); setItems([]);
-    api.get<{ items: CourseDeadline[] }>(`/api/calendar?from=${dateFrom}&to=${dateTo}`, { signal: controller.signal })
-      .then((result) => { if (active) setItems(result.items); })
+    setLoading(true); setError(''); setItems([]); setHasInvalidDeadlines(false);
+    api.get<{ items: CourseDeadline[]; hasInvalidDeadlines?: boolean }>(`/api/calendar?from=${dateFrom}&to=${dateTo}`, { signal: controller.signal })
+      .then((result) => {
+        if (active) {
+          setItems(result.items);
+          setHasInvalidDeadlines(Boolean(result.hasInvalidDeadlines));
+        }
+      })
       .catch((cause) => { if (active) setError(requestMessage(cause, 'Calendar could not be loaded.')); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; controller.abort(); };
   }, [dateFrom, dateTo, reloadSequence]);
+  function navigateToMonth(requestedMonth: Date) {
+    // Keep the loaded deadlines when the current-month control targets the displayed month.
+    if (isSameCalendarMonth(month, requestedMonth)) return;
+    setLoading(true);
+    setError('');
+    setItems([]);
+    setHasInvalidDeadlines(false);
+    setMonth(currentCalendarMonth(requestedMonth));
+  }
   const { monthItems, itemsByLocalDay } = useMemo(
     () => groupCalendarDeadlines(items, year, monthIndex),
     [items, year, monthIndex],
   );
+  useEffect(() => {
+    const delay = getCalendarDeadlineRefreshDelay(monthItems);
+    if (delay === null) return;
+    const timer = window.setTimeout(() => {
+      const now = Date.now();
+      setItems((currentItems) => markCalendarDeadlinesOverdue(currentItems, now));
+      // Recheck long deadlines after the browser's maximum timeout interval.
+      setDeadlineTimerRevision((revision) => revision + 1);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [monthItems, deadlineTimerRevision]);
   const days = [...Array(firstDay).fill(null), ...Array.from({ length: dayCount }, (_, index) => index + 1)];
   const cells = [...days, ...Array((7 - days.length % 7) % 7).fill(null)];
-  const formatter = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
-  const fullDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'full' });
   const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   return <div className="management-page programs-page calendar-page">
-    <PageHeading title="Learning calendar" subtitle="Course completion deadlines shown in your local timezone." action={<div className="calendar-month-controls"><Button variant="secondary" aria-label="Previous month" onClick={() => { setItems([]); setMonth(new Date(year, monthIndex - 1, 1)); }}><ChevronLeft size={17} /></Button><span className="calendar-month-label" role="status" aria-live="polite" aria-atomic="true">{formatter.format(month)}</span><Button variant="secondary" aria-label="Next month" onClick={() => { setItems([]); setMonth(new Date(year, monthIndex + 1, 1)); }}><ChevronRight size={17} /></Button></div>} />
+    <PageHeading title="Learning calendar" subtitle="Course completion deadlines shown in your local timezone." action={<div className="calendar-month-controls"><Button variant="secondary" aria-label="Previous month" onClick={() => navigateToMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={17} aria-hidden="true" /></Button><span className="calendar-month-label" role="status" aria-live="polite" aria-atomic="true">{calendarMonthFormatter.format(month)}</span><Button variant="secondary" aria-label="Next month" onClick={() => navigateToMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={17} aria-hidden="true" /></Button><Button variant="secondary" className="calendar-current-month" onClick={() => navigateToMonth(currentCalendarMonth())}>This month</Button></div>} />
     {error && <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => setReloadSequence((current) => current + 1)}>Try again</Button></div>}
-    <section className="calendar-panel" aria-label={`Deadlines for ${formatter.format(month)}`} aria-busy={loading} tabIndex={0}>
-      <table className="calendar-grid"><caption className="sr-only">Calendar days and course deadlines for {formatter.format(month)}</caption>
-        <thead><tr>{weekdays.map((day) => <th scope="col" key={day}>{day.slice(0, 3)}</th>)}</tr></thead>
+    {hasInvalidDeadlines && <div className="inline-notice" role="status">Some course deadlines could not be displayed. An administrator can check the system log.</div>}
+    <section className="calendar-panel" aria-label={`Deadlines for ${calendarMonthFormatter.format(month)}`} aria-busy={loading} tabIndex={0}>
+      <p className="table-scroll-hint">Scroll horizontally to see the full month.</p>
+      <table className="calendar-grid"><caption className="sr-only">Calendar days and course deadlines for {calendarMonthFormatter.format(month)}</caption>
+        <thead><tr>{weekdays.map((day) => <th scope="col" key={day}><span aria-hidden="true">{day.slice(0, 3)}</span><span className="sr-only">{day}</span></th>)}</tr></thead>
         <tbody>{Array.from({ length: cells.length / 7 }, (_, weekIndex) => <tr key={`week-${weekIndex}`}>
           {cells.slice(weekIndex * 7, weekIndex * 7 + 7).map((day, dayIndex) => {
             if (!day) return <td className="calendar-day calendar-day-empty" key={`blank-${weekIndex}-${dayIndex}`} />;
             const key = localDateKey(new Date(year, monthIndex, day));
             const dueItems = itemsByLocalDay.get(key) || [];
             const date = new Date(year, monthIndex, day);
-            return <td className={`calendar-day ${dueItems.length ? 'has-deadline' : ''}`} key={key}><div className="calendar-day-content"><time dateTime={key} aria-label={fullDateFormatter.format(date)} aria-current={key === todayKey ? 'date' : undefined}>{day}</time>{dueItems.map((item) => {
+            return <td className={`calendar-day ${dueItems.length ? 'has-deadline' : ''}`} key={key}><div className="calendar-day-content"><time dateTime={key} aria-label={calendarFullDateFormatter.format(date)} aria-current={key === todayKey ? 'date' : undefined}>{day}</time>{dueItems.map((item) => {
               const dueAt = new Date(item.dueAt);
               const statusLabel = item.status === 'overdue' ? 'Overdue' : item.status === 'completed' ? 'Completed' : 'Upcoming';
               const dateTimeLabel = calendarDateTimeFormatter.format(dueAt);
@@ -533,9 +758,9 @@ export function CalendarPage() {
           })}
         </tr>)}</tbody>
       </table>
-      {loading ? <p className="calendar-empty-note" role="status">Loading deadlines…</p> : shouldShowCalendarEmptyState(loading, error, monthItems.length) && <p className="calendar-empty-note" role="status"><CalendarDays size={18} />No course deadlines this month.</p>}
+      {loading ? <p className="calendar-empty-note" role="status">Loading deadlines…</p> : shouldShowCalendarEmptyState(loading, error, monthItems.length, hasInvalidDeadlines) && <p className="calendar-empty-note" role="status"><CalendarDays size={18} aria-hidden="true" />No course deadlines this month.</p>}
     </section>
-    {monthItems.length > 0 && <section className="calendar-deadline-list"><h2>Deadlines this month</h2><ul>{[...monthItems].sort((a, b) => a.dueAt.localeCompare(b.dueAt)).map((item) => <li key={item.courseId}><span className={`deadline-status ${item.status}`}>{item.status}</span><Link to={item.url}><strong>{item.title}</strong><small>{calendarDateTimeFormatter.format(new Date(item.dueAt))}</small></Link></li>)}</ul></section>}
+    {monthItems.length > 0 && <section className="calendar-deadline-list"><h2>Deadlines this month</h2><ul>{monthItems.map((item) => <li key={item.courseId}><span className={`deadline-status ${item.status}`}>{item.status}</span><Link to={item.url}><strong>{item.title}</strong><small>{calendarDateTimeFormatter.format(new Date(item.dueAt))}</small></Link></li>)}</ul></section>}
   </div>;
 }
 
@@ -588,7 +813,14 @@ export function CompetenciesPage() {
     try {
       const result = await api.get<CompetencyProgressPage>(`/api/competencies?page=${nextPage}`, { signal: controller.signal });
       if (requestId !== competencyRequestRef.current || controller.signal.aborted) return;
-      setCompetencies((current) => [...current, ...result.competencies]);
+      const nextCompetencies = appendUnchangedCompetencyPage(
+        competencies, result.competencies, nextPage, result.page, competencyTotal, result.total,
+      );
+      if (!nextCompetencies) {
+        setReloadSequence((current) => current + 1);
+        return;
+      }
+      setCompetencies(nextCompetencies);
       setCompetencyTotal(result.total); setCompetencyPage(result.page); setCompetencyPageSize(result.pageSize); setHasMoreCompetencies(result.hasMore);
       if (!result.hasMore) window.requestAnimationFrame(() => competencyListStatusRef.current?.focus());
     } catch (cause) {
@@ -606,8 +838,8 @@ export function CompetenciesPage() {
     <PageHeading title="Competencies" subtitle="See the skills you have demonstrated through completed courses." />
     {error && <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => setReloadSequence((current) => current + 1)}>Try again</Button></div>}
     {loading ? <div className="page-loading" role="status">Loading competencies…</div> : error ? null : competencyTotal ? <>
-      <div className="competency-summary"><span className="program-icon"><CircleHelp size={18} /></span><div><strong>{achievedCompetencyTotal} of {competencyTotal} competencies achieved</strong><ProgressBar value={achievedCompetencyTotal / competencyTotal * 100} label="Competencies achieved" /></div></div>
-      <div className="competency-grid">{competencies.map((item) => <article className={`competency-card ${item.achieved ? 'achieved' : ''}`} key={item.id}><div className="competency-card-top"><span className="program-icon"><CircleHelp size={18} /></span><span className={`program-status ${item.achieved ? 'published' : 'draft'}`}>{item.achieved ? 'Achieved' : 'In progress'}</span></div><h2>{item.title}</h2><p>{item.description || 'Complete a mapped course to achieve this competency.'}</p><strong>{item.completedCourses} of {item.courseCount} mapped courses complete</strong>{item.courses?.length ? <ul>{item.courses.map((course) => <li key={course.id}>{course.completed ? <Check size={15} aria-hidden="true" /> : <BookOpen size={15} aria-hidden="true" />}<span>{course.title}<span className="sr-only">, {course.completed ? 'completed' : 'not completed'}</span></span></li>)}</ul> : <small>No courses are currently mapped.</small>}</article>)}</div>
+      <div className="competency-summary"><span className="program-icon" aria-hidden="true"><CircleHelp size={18} /></span><div><strong>{achievedCompetencyTotal} of {competencyTotal} competencies achieved</strong><ProgressBar value={achievedCompetencyTotal / competencyTotal * 100} label="Competencies achieved" /></div></div>
+      <div className="competency-grid">{competencies.map((item) => <article className={`competency-card ${item.achieved ? 'achieved' : ''}`} key={item.id}><div className="competency-card-top"><span className="program-icon" aria-hidden="true"><CircleHelp size={18} /></span><span className={`program-status ${item.achieved ? 'published' : 'draft'}`}>{item.achieved ? 'Achieved' : 'In progress'}</span></div><h2>{item.title}</h2><p>{item.description || 'Complete a mapped course to achieve this competency.'}</p><strong>{item.completedCourses} of {item.courseCount} mapped courses complete</strong>{item.courses?.length ? <ul>{item.courses.map((course) => <li key={course.id}>{course.completed ? <Check size={15} aria-hidden="true" /> : <BookOpen size={15} aria-hidden="true" />}<span>{course.title}<span className="sr-only">, {course.completed ? 'completed' : 'not completed'}</span></span></li>)}</ul> : <small>No courses are currently mapped.</small>}</article>)}</div>
       {competencyTotal > competencyPageSize && (
         <div className="catalog-pagination competency-progress-pagination">
           <div className="competency-progress-status">
@@ -624,10 +856,7 @@ export function CompetenciesPage() {
           </Button>}
         </div>
       )}
-    </> : <>
-      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">No competencies have been added. Your organization’s skills map will appear here when competencies are configured.</p>
-      <EmptyState title="No competencies have been added" detail="Your organization’s skills map will appear here when competencies are configured." />
-    </>}
+    </> : <EmptyState title="No competencies have been added" detail="Your organization’s skills map will appear here when competencies are configured." />}
   </div>;
 }
 
@@ -636,6 +865,8 @@ export function AdminCompetenciesPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
+  const [query, setQuery] = useState('');
+  const [appliedQuery, setAppliedQuery] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(true);
@@ -644,14 +875,19 @@ export function AdminCompetenciesPage() {
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
+  const competencyTitleInputRef = useRef<HTMLInputElement>(null);
+  const competencySearchInputRef = useRef<HTMLInputElement>(null);
   const loadControllerRef = useRef<AbortController | null>(null);
-  async function load(requestedPage = page) {
+  async function load(requestedPage = page, requestedQuery = appliedQuery) {
     loadControllerRef.current?.abort();
     const controller = new AbortController();
     loadControllerRef.current = controller;
     setLoading(true); setLoadError('');
     try {
-      const result = await api.get<CompetencyAdminPage>(`/api/admin/competencies?page=${requestedPage}`, { signal: controller.signal });
+      const params = new URLSearchParams({ page: String(requestedPage) });
+      if (requestedQuery) params.set('q', requestedQuery);
+      // Filter on the server before paging so the count and page controls match the search results.
+      const result = await api.get<CompetencyAdminPage>(`/api/admin/competencies?${params}`, { signal: controller.signal });
       if (!controller.signal.aborted) {
         setItems(result.competencies);
         setPage(result.page);
@@ -675,24 +911,49 @@ export function AdminCompetenciesPage() {
       controller?.abort();
     };
   }, []);
+  function searchCompetencies(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextQuery = query.trim();
+    setAppliedQuery(nextQuery); setPage(1);
+    void load(1, nextQuery);
+  }
+  function clearSearch() {
+    setQuery(''); setAppliedQuery(''); setPage(1);
+    void load(1, '');
+    // Keep keyboard users in the persistent search control after the clear action disappears.
+    competencySearchInputRef.current?.focus();
+  }
   async function create(event: React.FormEvent) {
     event.preventDefault(); if (loading || saving || savingId !== null || !title.trim()) return;
     setSaving(true); setError(''); setNotice('');
+    let created = false;
     try {
       const result = await api.post<{ page: number }>('/api/admin/competencies', { title: title.trim(), description: description.trim() });
-      setTitle(''); setDescription(''); setNotice('Competency added.'); setPage(result.page);
-      await load(result.page);
+      created = true;
+      setTitle(''); setDescription(''); setQuery(''); setAppliedQuery(''); setNotice('Competency added.'); setPage(result.page);
+      await load(result.page, '');
     }
     catch (cause) { setError(requestMessage(cause, 'Competency could not be added.')); }
-    finally { setSaving(false); }
+    finally {
+      setSaving(false);
+      if (created) window.requestAnimationFrame(() => {
+        const input = competencyTitleInputRef.current;
+        if (input?.isConnected) input.focus();
+      });
+    }
   }
   async function toggle(item: Competency) {
     if (loading || saving || savingId) return;
     setSavingId(item.id); setError(''); setNotice('');
     try {
-      const result = await api.patch<{ page: number }>(`/api/admin/competencies/${item.id}`, { active: !item.active });
+      const params = new URLSearchParams();
+      if (appliedQuery) params.set('q', appliedQuery);
+      // The page is computed against the current filter so the toggled row stays in view.
+      const serializedQuery = params.toString();
+      const queryString = serializedQuery ? `?${serializedQuery}` : '';
+      const result = await api.patch<{ page: number }>(`/api/admin/competencies/${item.id}${queryString}`, { active: !item.active });
       setPage(result.page);
-      await load(result.page);
+      await load(result.page, appliedQuery);
     }
     catch (cause) { setError(requestMessage(cause, 'Competency could not be updated.')); }
     finally { setSavingId(null); }
@@ -701,12 +962,17 @@ export function AdminCompetenciesPage() {
     <PageHeading title="Competency map" subtitle="Manage the organization’s competencies. Staff can map published courses to each one." />
     {error && <div className="inline-notice" role="alert">{error}</div>}{notice && <div className="inline-notice inline-notice-success" role="status">{notice}</div>}
     {loadError && <div className="error-notice-actionable" role="alert"><span>{loadError}</span><Button variant="secondary" disabled={loading || saving || savingId !== null} onClick={() => void load()}>Try again</Button></div>}
-    {!loading && !loadError && !error && items.length === 0 && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">No competencies yet. Add competencies before mapping courses to them.</p>}
-    <form className="program-editor-card competency-create-form" onSubmit={create} aria-busy={loading || saving || savingId !== null}><div className="program-card-heading"><div><span className="program-icon"><CircleHelp size={18} /></span><div><h2>Add a competency</h2><p>Course completions can demonstrate this competency.</p></div></div></div><div className="program-form-grid"><label>Name<input required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} disabled={loading || saving || savingId !== null} /></label><label className="program-full-field">Description<textarea rows={2} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={loading || saving || savingId !== null} /></label></div><div className="program-form-actions"><Button type="submit" disabled={loading || saving || savingId !== null || !title.trim()}><Plus size={16} />{saving ? 'Adding…' : 'Add competency'}</Button></div></form>
+    {!loading && !loadError && !error && items.length === 0 && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{appliedQuery ? `No competencies match ${appliedQuery}.` : 'No competencies yet. Add competencies before mapping courses to them.'}</p>}
+    <form className="program-editor-card competency-create-form" onSubmit={create} aria-busy={loading || saving || savingId !== null}><div className="program-card-heading"><div><span className="program-icon" aria-hidden="true"><CircleHelp size={18} /></span><div><h2>Add a competency</h2><p>Course completions can demonstrate this competency.</p></div></div></div><div className="program-form-grid"><label><span className="form-label-row"><span>Name</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={competencyTitleInputRef} required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} disabled={loading || saving || savingId !== null} /></label><label className="program-full-field">Description<textarea id="competency-description" aria-describedby="competency-description-count" rows={2} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={loading || saving || savingId !== null} /><small id="competency-description-count" className="field-character-count">{description.length} / 2,000 characters</small></label></div><div className="program-form-actions"><Button type="submit" disabled={loading || saving || savingId !== null || !title.trim()}><Plus size={16} aria-hidden="true" />{saving ? 'Adding…' : 'Add competency'}</Button></div></form>
+    <form role="search" className="management-search competency-search" aria-label="Search competencies" onSubmit={searchCompetencies} aria-busy={loading}>
+      <Search size={18} aria-hidden="true" />
+      <input ref={competencySearchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search competencies" aria-label="Search competency names and descriptions" maxLength={100} disabled={saving || savingId !== null} />
+      <Button type="submit" variant="quiet" disabled={saving || savingId !== null}>Search</Button>
+    </form>
     {loading ? <div className="page-loading" role="status">Loading competencies…</div> : loadError ? null : items.length ? <>
       <div className="competency-admin-list">{items.map((item) => <article key={item.id} className="competency-admin-row"><div><h2>{item.title}</h2><p>{item.description || 'No description'}</p></div><span className={`program-status ${item.active ? 'published' : 'archived'}`}>{item.active ? 'Active' : 'Inactive'}</span><Button variant="secondary" disabled={saving || savingId !== null} aria-busy={savingId === item.id} aria-label={savingId === item.id ? `Saving ${item.title}` : `${item.active ? 'Deactivate' : 'Reactivate'} ${item.title}`} onClick={() => void toggle(item)}>{savingId === item.id ? 'Saving…' : item.active ? 'Deactivate' : 'Reactivate'}</Button></article>)}</div>
       <CompetencyAdminPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => void load(nextPage)} />
-    </> : <EmptyState title="No competencies yet" detail="Add competencies before mapping courses to them." />}
+    </> : appliedQuery ? <EmptyState title="No competencies match" detail="Try a different competency name or description, or clear your search." action={<Button type="button" variant="secondary" onClick={clearSearch}>Clear search</Button>} /> : <EmptyState title="No competencies yet" detail="Add competencies before mapping courses to them." />}
   </div>;
 }
 

@@ -31,6 +31,24 @@ test('course details form is exposed as a named region', () => {
   assert.equal(jsxAttribute(sections[0], 'aria-label'), 'Course details');
 });
 
+test('the empty-course action distinguishes adding the first module', () => {
+  const source = fs.readFileSync(editorPath, 'utf8');
+  const firstModuleAction = source.match(/title="Start with a module"[\s\S]*?<Button(?<props>[\s\S]*?)><Plus[\s\S]*?Add first module<\/Button>/)?.groups?.props || '';
+
+  assert.match(source, /title="Start with a module"[\s\S]*?Add first module<\/Button>/);
+  assert.match(source, /className="curriculum-editor-actions"[\s\S]*?aria-expanded=\{addingModule\}[\s\S]*?Add module<\/Button>/);
+  assert.match(firstModuleAction, /aria-expanded=\{addingModule\}/);
+  assert.match(firstModuleAction, /aria-controls=\{addingModule \? 'add-module-form' : undefined\}/);
+});
+
+test('pending review identifies the staff member who submitted the revision', () => {
+  const source = fs.readFileSync(editorPath, 'utf8');
+
+  assert.match(source, /submittedByName: string \| null/);
+  assert.match(source, /Submitted by \{review\.submittedByName \|\| 'a staff member'\}/);
+  assert.match(source, /review\.submittedBy !== editorUser\?\.id/);
+});
+
 test('quiz editor actions include quiz and question context in accessible names', () => {
   const source = fs.readFileSync(editorPath, 'utf8');
   const sourceFile = ts.createSourceFile(editorPath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

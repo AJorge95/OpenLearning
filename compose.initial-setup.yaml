@@ -1,0 +1,10 @@
+services:
+  openlearning:
+    environment:
+      SETUP_TOKEN_FILE: /run/secrets/setup_token
+    secrets:
+      - setup_token
+
+secrets:
+  setup_token:
+    file: ${SETUP_TOKEN_FILE:?Set SETUP_TOKEN_FILE to a protected host file}

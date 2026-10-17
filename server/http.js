@@ -1,4 +1,4 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { db } from './db.js';
 import { writeSystemLog } from './log-store.js';
 import { editableCourse, logicalCourseId } from './course-versioning.js';
@@ -19,20 +19,51 @@ const requestBodyErrors = new Map([
   ['request.aborted', { status: 400, message: 'Request body was interrupted before it was complete.', code: 'request_aborted' }],
   ['parameters.too.many', { status: 413, message: 'Request body contains too many form fields.', code: 'too_many_parameters' }],
 ]);
-const currentUserStatement = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled FROM users WHERE id = ?');
+const currentUserStatement = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, registration_status FROM users WHERE id = ?');
 const courseGrantStatement = db.prepare('SELECT 1 FROM course_grants WHERE course_id = ? AND user_id = ?');
 const courseByIdStatement = db.prepare('SELECT * FROM courses WHERE id = ?');
 const canonicalCourseStatement = db.prepare('SELECT id, logical_course_id, status, visibility FROM courses WHERE id = ? AND logical_course_id IS NULL');
 const activeCourseVersionStatement = db.prepare('SELECT storage_course_id FROM course_versions WHERE course_id = ? ORDER BY version_number DESC LIMIT 1');
 const courseByModuleIdStatement = db.prepare('SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id WHERE m.id = ?');
 const courseByLessonIdStatement = db.prepare('SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN lessons l ON l.module_id = m.id WHERE l.id = ?');
-const courseByQuizIdStatement = db.prepare('SELECT c.* FROM courses c JOIN course_modules m ON m.course_id = c.id JOIN quizzes q ON q.module_id = m.id WHERE q.id = ?');
+const courseByQuizIdStatement = db.prepare(`SELECT c.* FROM quizzes q
+  LEFT JOIN course_modules m ON m.id = q.module_id
+  JOIN courses c ON c.id = COALESCE(m.course_id, q.course_id) WHERE q.id = ?`);
 const enrolledCoursePathsStatement = db.prepare(`SELECT lp.id AS path_id, lp.status, pc.position, pc.requires_previous
   FROM learning_path_enrollments e JOIN learning_paths lp ON lp.id = e.path_id
   JOIN learning_path_courses pc ON pc.path_id = lp.id
   WHERE e.user_id = ? AND pc.course_id = ? AND lp.status = 'published'`);
 const pathPrerequisiteCoursesStatement = db.prepare(`SELECT prior.course_id
   FROM learning_path_courses prior WHERE prior.path_id = ? AND prior.position < ? ORDER BY prior.position`);
+
+const anonymousCsrfTokenLifetimeMs = 12 * 60 * 60 * 1000;
+
+function createAnonymousCsrfToken() {
+  const payload = `${Date.now()}.${randomBytes(32).toString('base64url')}`;
+  const signature = createHmac('sha256', config.sessionSecret).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function isAnonymousCsrfToken(value) {
+  if (typeof value !== 'string' || value.length > 256) return false;
+  const parts = value.split('.');
+  if (parts.length !== 3) return false;
+  const [issuedAtText, nonce, signature] = parts;
+  if (!issuedAtText || !nonce || !signature || !/^\d+$/.test(issuedAtText)) return false;
+  const issuedAt = Number(issuedAtText);
+  const now = Date.now();
+  if (!Number.isSafeInteger(issuedAt) || issuedAt > now + 5_000 || now - issuedAt > anonymousCsrfTokenLifetimeMs) return false;
+  const expectedSignature = createHmac('sha256', config.sessionSecret).update(`${issuedAtText}.${nonce}`).digest('base64url');
+  const expectedBuffer = Buffer.from(expectedSignature);
+  const providedBuffer = Buffer.from(signature);
+  return expectedBuffer.length === providedBuffer.length && timingSafeEqual(expectedBuffer, providedBuffer);
+}
+
+function tokensMatch(expected, provided) {
+  const expectedBuffer = Buffer.from(expected);
+  const providedBuffer = Buffer.from(provided);
+  return expectedBuffer.length === providedBuffer.length && timingSafeEqual(expectedBuffer, providedBuffer);
+}
 
 function formatUploadLimit(bytes) {
   const units = ['bytes', 'KiB', 'MiB', 'GiB', 'TiB'];
@@ -45,7 +76,7 @@ function formatUploadLimit(bytes) {
   const size = unitIndex === 0
     ? `${value.toLocaleString('en-US')} ${value === 1 ? 'byte' : 'bytes'}`
     : `${Number.isInteger(value) ? value : value.toFixed(1)} ${units[unitIndex]}`;
-  return `${size} (${bytes.toLocaleString('en-US')} bytes)`;
+  return `${size} (${bytes.toLocaleString('en-US')} ${bytes === 1 ? 'byte' : 'bytes'})`;
 }
 
 export function fail(status, message, code) {
@@ -60,11 +91,20 @@ export function requireObjectBody(value, label = 'Request body') {
 }
 
 export function pageQuery(value, maximum = 100_000) {
-  if (value !== undefined && typeof value !== 'string') {
+  if (value === undefined) return 1;
+  if (typeof value !== 'string') {
     fail(400, 'Page must be a single value.', 'validation_error');
   }
-  const parsedPage = Number(value || 1);
-  return Number.isSafeInteger(parsedPage) && parsedPage > 0 ? Math.min(parsedPage, maximum) : 1;
+  const normalizedPage = value.trim();
+  if (!/^\d+$/.test(normalizedPage)) {
+    fail(400, 'Page must be a positive integer.', 'validation_error');
+  }
+  const parsedPage = Number(normalizedPage);
+  if (!Number.isSafeInteger(parsedPage) || parsedPage < 1) {
+    fail(400, 'Page must be a positive integer.', 'validation_error');
+  }
+  // Keep valid out-of-range requests bounded before callers calculate offsets.
+  return Math.min(parsedPage, maximum);
 }
 
 export function enumQuery(value, label, values, fallback = 'all') {
@@ -97,18 +137,22 @@ export const requireStaff = requireRole('admin', 'moderator');
 export const requireAdmin = requireRole('admin');
 
 export function newCsrfToken(req) {
-  if (!req.session.csrfToken) req.session.csrfToken = randomBytes(32).toString('base64url');
+  if (req.session?.csrfToken) return req.session.csrfToken;
+  // Anonymous bootstrap requests must not create a persistent SQLite session row.
+  if (!req.session?.userId) return createAnonymousCsrfToken();
+  req.session.csrfToken = randomBytes(32).toString('base64url');
   return req.session.csrfToken;
 }
 
 export function csrfMiddleware(req, _res, next) {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
-  const expected = req.session?.csrfToken;
   const provided = req.get('x-csrf-token');
-  if (!expected || !provided) return next(new ApiError(403, 'Refresh the page and try again.', 'csrf_missing'));
-  const expectedBuffer = Buffer.from(expected);
-  const providedBuffer = Buffer.from(provided);
-  if (expectedBuffer.length !== providedBuffer.length || !timingSafeEqual(expectedBuffer, providedBuffer)) {
+  if (!provided) return next(new ApiError(403, 'Refresh the page and try again.', 'csrf_missing'));
+  const expected = req.session?.csrfToken;
+  const valid = expected
+    ? tokensMatch(expected, provided)
+    : !req.session?.userId && isAnonymousCsrfToken(provided);
+  if (!valid) {
     return next(new ApiError(403, 'Refresh the page and try again.', 'csrf_invalid'));
   }
   next();
@@ -121,8 +165,8 @@ export function loadCurrentUser(req, _res, next) {
       return next();
     }
     const user = currentUserStatement.get(req.session.userId);
-    if (!user || user.disabled) {
-      const reason = user ? 'user_disabled' : 'user_missing';
+    if (!user || user.disabled || user.registration_status !== 'approved') {
+      const reason = !user ? 'user_missing' : user.disabled ? 'user_disabled' : 'registration_pending';
       req.session.destroy((error) => {
         if (error) writeSystemLog('warn', 'sessions', 'Invalid session cleanup failed', {
           reason,
@@ -203,14 +247,15 @@ function pathCompletionStatements(cache) {
     lessons: db.prepare(`SELECT l.id, l.stable_id FROM lessons l
       JOIN course_modules m ON m.id = l.module_id WHERE m.course_id = ?`),
     quizzes: db.prepare(`SELECT q.id, q.stable_id FROM quizzes q
-      JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = ?`),
+      LEFT JOIN course_modules m ON m.id = q.module_id
+      WHERE COALESCE(m.course_id, q.course_id) = ? AND q.required_for_completion = 1`),
     lessonHistory: db.prepare(`SELECT l.id, l.stable_id FROM lesson_progress p
       JOIN lessons l ON l.id = p.lesson_id JOIN course_modules m ON m.id = l.module_id
       JOIN courses c ON c.id = m.course_id
       WHERE p.user_id = ? AND (c.id = ? OR c.logical_course_id = ?)`),
     quizHistory: db.prepare(`SELECT DISTINCT q.id, q.stable_id FROM quiz_attempts a
-      JOIN quizzes q ON q.id = a.quiz_id JOIN course_modules m ON m.id = q.module_id
-      JOIN courses c ON c.id = m.course_id
+      JOIN quizzes q ON q.id = a.quiz_id LEFT JOIN course_modules m ON m.id = q.module_id
+      JOIN courses c ON c.id = COALESCE(m.course_id, q.course_id)
       WHERE a.user_id = ? AND a.passed = 1 AND (c.id = ? OR c.logical_course_id = ?)`),
   };
   if (cache) cache.pathCompletionStatements = statements;
@@ -295,6 +340,9 @@ function recordUnhandledError(error, req) {
 }
 
 export function errorHandler(error, req, res, next) {
+  // Multer reports an interrupted upload after the client has left; it should not appear as a server failure.
+  if ((error?.message === 'Request aborted' || error?.message === 'Request closed')
+    && (req.aborted || req.destroyed)) return;
   if (res.headersSent) {
     recordUnhandledError(error, req);
     return next(error);

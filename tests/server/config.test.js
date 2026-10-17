@@ -11,7 +11,7 @@ const configUrl = pathToFileURL(path.join(workspaceRoot, 'server/config.js')).hr
 const workingDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'openlearning-config-test-'));
 const configEnvironmentKeys = [
   'NODE_ENV', 'PORT', 'DATA_DIR', 'DB_PATH', 'MEDIA_ROOT', 'MAX_UPLOAD_BYTES', 'REQUEST_TIMEOUT_MS',
-  'SESSION_SECRET', 'SETUP_TOKEN', 'TRUST_PROXY', 'DOTENV_CONFIG_PATH', 'DOTENV_CONFIG_ENCODING',
+  'SESSION_SECRET', 'SESSION_SECRET_FILE', 'SETUP_TOKEN', 'SETUP_TOKEN_FILE', 'TRUST_PROXY', 'DOTENV_CONFIG_PATH', 'DOTENV_CONFIG_ENCODING',
   'DOTENV_CONFIG_DEBUG', 'DOTENV_CONFIG_OVERRIDE', 'DOTENV_KEY',
 ];
 
@@ -45,6 +45,7 @@ test('config defaults are stable and derived paths follow DATA_DIR', () => {
 
   assert.deepEqual({
     nodeEnv: config.nodeEnv,
+    host: config.host,
     port: config.port,
     dataDir: config.dataDir,
     dbPath: config.dbPath,
@@ -54,7 +55,8 @@ test('config defaults are stable and derived paths follow DATA_DIR', () => {
     trustProxy: config.trustProxy,
   }, {
     nodeEnv: 'development',
-    port: 3000,
+    host: '127.0.0.1',
+    port: 5173,
     dataDir: path.join(workingDirectory, 'custom-data'),
     dbPath: path.join(workingDirectory, 'custom-data', 'openlearning.sqlite'),
     mediaRoot: path.join(workingDirectory, 'custom-data', 'course-media'),
@@ -63,6 +65,13 @@ test('config defaults are stable and derived paths follow DATA_DIR', () => {
     trustProxy: false,
   });
   assert.equal(readConfig({ NODE_ENV: 'test' }).nodeEnv, 'test');
+});
+
+test('built client assets resolve from the project even when launched outside it', () => {
+  const config = readConfig();
+
+  assert.equal(config.clientDir, path.join(workspaceRoot, 'dist', 'client'));
+  assert.notEqual(config.clientDir, path.join(workingDirectory, 'dist', 'client'));
 });
 
 test('config accepts documented upper boundaries and normalizes a valid production setup', () => {
@@ -80,6 +89,7 @@ test('config accepts documented upper boundaries and normalizes a valid producti
   });
 
   assert.equal(config.nodeEnv, 'production');
+  assert.equal(config.host, '0.0.0.0');
   assert.equal(config.port, 65_535);
   assert.equal(config.dataDir, path.join(workingDirectory, 'data'));
   assert.equal(config.dbPath, path.join(workingDirectory, 'database', 'custom.sqlite'));
@@ -87,6 +97,32 @@ test('config accepts documented upper boundaries and normalizes a valid producti
   assert.equal(config.maxUploadBytes, Number.MAX_SAFE_INTEGER);
   assert.equal(config.requestTimeoutMs, 2_147_483_647);
   assert.equal(config.trustProxy, true);
+});
+
+test('config reads Docker-style secret files and keeps environment-secret compatibility', () => {
+  const sessionSecretPath = path.join(workingDirectory, 'session_secret');
+  const setupTokenPath = path.join(workingDirectory, 'setup_token');
+  fs.writeFileSync(sessionSecretPath, `${'s'.repeat(32)}\n`);
+  fs.writeFileSync(setupTokenPath, `${'t'.repeat(32)}\n`);
+
+  const config = readConfig({
+    NODE_ENV: 'production',
+    SESSION_SECRET_FILE: sessionSecretPath,
+    SETUP_TOKEN_FILE: setupTokenPath,
+  });
+
+  assert.equal(config.sessionSecret, 's'.repeat(32));
+  assert.equal(config.setupToken, 't'.repeat(32));
+  assert.equal(readConfig({ SESSION_SECRET: 'existing-environment-secret' }).sessionSecret, 'existing-environment-secret');
+});
+
+test('config rejects ambiguous, missing, and empty secret files', () => {
+  const emptySecretPath = path.join(workingDirectory, 'empty_secret');
+  fs.writeFileSync(emptySecretPath, '  \n');
+
+  expectConfigError({ SESSION_SECRET: 'environment-secret', SESSION_SECRET_FILE: emptySecretPath }, /Set either SESSION_SECRET or SESSION_SECRET_FILE, not both/);
+  expectConfigError({ SESSION_SECRET_FILE: path.join(workingDirectory, 'missing_secret') }, /SESSION_SECRET_FILE must point to a readable UTF-8 secret file/);
+  expectConfigError({ SESSION_SECRET_FILE: emptySecretPath }, /SESSION_SECRET_FILE must point to a non-empty secret file/);
 });
 
 test('config rejects unsupported environment names and proxy settings', () => {

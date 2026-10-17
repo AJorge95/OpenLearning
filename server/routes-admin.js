@@ -12,9 +12,44 @@ import { courseSummaries } from './course-service.js';
 import { normalizeRegistrationFields, readRegistrationFields, saveRegistrationFields } from './registration-fields.js';
 import { adminPasswordResetLimiter } from './rate-limits.js';
 import { cancelPlatformReset, confirmPlatformReset, finishPlatformReset, getPlatformResetStatus, preparePlatformReset } from './platform-reset.js';
+import { readBackupDashboard, readRestorableBackupRuns, removeBackupJob, runBackupNow, saveBackupJob } from './backup-scheduler.js';
+import { restoreBackupRun } from './backup-restore.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
+
+adminRouter.get('/backups', (_req, res) => {
+  res.json(readBackupDashboard());
+});
+
+adminRouter.get('/backups/restorable-runs', (_req, res) => {
+  res.json({ runs: readRestorableBackupRuns() });
+});
+
+adminRouter.post('/backups/jobs', async (req, res) => {
+  const job = await saveBackupJob(requireObjectBody(req.body, 'Backup job'), req.currentUser);
+  res.status(201).json({ job });
+});
+
+adminRouter.put('/backups/jobs/:jobId', async (req, res) => {
+  const job = await saveBackupJob(requireObjectBody(req.body, 'Backup job'), req.currentUser, req.params.jobId);
+  res.json({ job });
+});
+
+adminRouter.delete('/backups/jobs/:jobId', (req, res) => {
+  res.json(removeBackupJob(req.params.jobId, req.currentUser));
+});
+
+adminRouter.post('/backups/jobs/:jobId/run', (req, res) => {
+  const run = runBackupNow(req.params.jobId, req.currentUser);
+  res.status(202).json({ run });
+});
+
+adminRouter.post('/backups/restore', async (req, res) => {
+  const body = requireObjectBody(req.body, 'Backup restoration request');
+  const result = await restoreBackupRun(body.runId, req.currentUser);
+  res.json(result);
+});
 
 function isLastActiveAdministrator(user, activeAdminCount) {
   if (user.role !== 'admin' || Boolean(user.disabled)) return false;
@@ -169,23 +204,27 @@ adminRouter.get('/system-logs', (req, res) => {
 adminRouter.get('/users', (req, res) => {
   const query = textQuery(req.query.q, 'Search', 100);
   const role = enumQuery(req.query.role, 'role', ['all', 'admin', 'moderator', 'learner']);
+  const registrationStatus = enumQuery(req.query.registrationStatus, 'registration status', ['all', 'pending', 'approved']);
   const clauses = [];
   const params = [];
   if (role !== 'all') { clauses.push('role = ?'); params.push(role); }
+  if (registrationStatus !== 'all') { clauses.push('registration_status = ?'); params.push(registrationStatus); }
   if (query) {
     const search = textSearchPredicate(['username', 'email'], query);
     clauses.push(`(${search.sql})`);
     params.push(...search.params);
   }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-  const orderBy = role === 'all'
+  const orderBy = registrationStatus === 'pending'
+    ? 'created_at ASC, username COLLATE NOCASE'
+    : role === 'all'
     ? "CASE role WHEN 'admin' THEN 1 WHEN 'moderator' THEN 2 ELSE 3 END, username COLLATE NOCASE"
     : 'username COLLATE NOCASE';
   const total = db.prepare(`SELECT COUNT(*) AS count FROM users ${where}`).get(...params).count;
   const requestedPage = pageQuery(req.query.page);
   const pageSize = 50;
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
-  const users = db.prepare(`SELECT id, username, email, role, disabled, created_at FROM users
+  const users = db.prepare(`SELECT id, username, email, role, disabled, registration_status, created_at FROM users
     ${where}
     ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
     .all(...params, pageSize, (page - 1) * pageSize);
@@ -196,10 +235,16 @@ adminRouter.get('/users', (req, res) => {
     email: user.email,
     role: user.role,
     disabled: Boolean(user.disabled),
+    registrationStatus: user.registration_status,
     createdAt: user.created_at,
     isCurrentUser: user.id === req.currentUser.id,
     isLastActiveAdmin: isLastActiveAdministrator(user, activeAdminCount),
   })), total, page, pageSize });
+});
+
+adminRouter.get('/users/pending-count', (_req, res) => {
+  const count = db.prepare("SELECT COUNT(*) AS count FROM users WHERE registration_status = 'pending'").get().count;
+  res.json({ count });
 });
 
 adminRouter.post('/users', async (req, res) => {
@@ -215,17 +260,18 @@ adminRouter.post('/users', async (req, res) => {
   if (password !== confirmPassword) fail(400, 'Passwords do not match.', 'password_mismatch');
   if (!['admin', 'moderator', 'learner'].includes(role)) fail(400, 'Choose a valid role.', 'validation_error');
   assertAccountCapacity();
-  if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) fail(409, 'That username is already in use.', 'username_taken');
+  // Match the case-insensitive unique constraint before hashing and again under the write lock.
+  if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) fail(409, 'That username is already in use.', 'username_taken');
   if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) fail(409, 'That email address is already in use.', 'email_taken');
   const passwordHash = await hashPassword(password);
   const id = randomUUID();
   const createAccount = db.transaction(() => {
     assertAccountCapacity();
-    if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) fail(409, 'That username is already in use.', 'username_taken');
+    if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) fail(409, 'That username is already in use.', 'username_taken');
     if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE').get(email)) fail(409, 'That email address is already in use.', 'email_taken');
     db.prepare('INSERT INTO users (id, username, email, first_name, last_name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(id, username, email, firstName, lastName, passwordHash, role);
-    const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, created_at, updated_at FROM users WHERE id = ?').get(id);
+    const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, registration_status, created_at, updated_at FROM users WHERE id = ?').get(id);
     const auditId = writeAuditLog({ actor: req.currentUser, action: 'account.created', entityType: 'user', entityId: id,
       summary: `Created account for ${username}`, details: { username, role } });
     if (!auditId) fail(500, 'Account could not be created because the audit log is unavailable.', 'audit_unavailable');
@@ -244,12 +290,38 @@ adminRouter.post('/users', async (req, res) => {
   res.status(201).json({ user: {
     id: user.id, username: user.username, email: user.email,
     firstName: user.first_name, lastName: user.last_name, role: user.role,
-    disabled: Boolean(user.disabled), createdAt: user.created_at, updatedAt: user.updated_at,
+    disabled: Boolean(user.disabled), registrationStatus: user.registration_status, createdAt: user.created_at, updatedAt: user.updated_at,
+  } });
+});
+
+adminRouter.patch('/users/:userId/approval', (req, res) => {
+  // Keep approval, stale-session removal, and its audit entry atomic so an audit failure cannot partially grant access.
+  const approveRegistration = db.transaction(() => {
+    const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, registration_status, created_at, updated_at FROM users WHERE id = ?')
+      .get(req.params.userId);
+    if (!user) fail(404, 'User not found.', 'not_found');
+    if (user.registration_status === 'pending') {
+      db.prepare("UPDATE users SET registration_status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(user.id);
+      invalidateUserSessions(db, user.id);
+      const auditId = writeAuditLog({ actor: req.currentUser, action: 'account.registration_approved', entityType: 'user', entityId: user.id,
+        summary: `Approved learner registration for ${user.username}`, details: { username: user.username } });
+      if (!auditId) fail(500, 'Registration could not be approved because the audit log is unavailable.', 'audit_unavailable');
+    }
+    const updated = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, registration_status, created_at, updated_at FROM users WHERE id = ?')
+      .get(user.id);
+    return updated;
+  });
+  const user = approveRegistration.immediate();
+  res.json({ user: {
+    id: user.id, username: user.username, email: user.email,
+    firstName: user.first_name, lastName: user.last_name, role: user.role,
+    disabled: Boolean(user.disabled), registrationStatus: user.registration_status,
+    createdAt: user.created_at, updatedAt: user.updated_at,
   } });
 });
 
 adminRouter.get('/users/:userId', (req, res) => {
-  const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, created_at, updated_at, last_login_at FROM users WHERE id = ?').get(req.params.userId);
+  const user = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, registration_status, created_at, updated_at, last_login_at FROM users WHERE id = ?').get(req.params.userId);
   if (!user) fail(404, 'User not found.', 'not_found');
   const userCourseSources = `SELECT course_id, 0 AS learning_path_enrolled FROM enrollments WHERE user_id = ?
        UNION ALL SELECT course_id, 0 FROM course_grants WHERE user_id = ?
@@ -268,7 +340,6 @@ adminRouter.get('/users/:userId', (req, res) => {
       SELECT course_id, MAX(learning_path_enrolled) FROM course_sources GROUP BY course_id
     )
     SELECT c.*, uc.learning_path_enrolled,
-      (SELECT COUNT(*) FROM quizzes q JOIN course_modules m ON m.id = q.module_id WHERE m.course_id = c.id) AS quiz_count,
       (SELECT enrolled_at FROM enrollments e WHERE e.course_id = c.id AND e.user_id = ? LIMIT 1) AS enrolled_at,
       (SELECT granted_at FROM course_grants g WHERE g.course_id = c.id AND g.user_id = ? LIMIT 1) AS granted_at
     FROM user_courses uc JOIN courses c ON c.id = uc.course_id
@@ -282,13 +353,12 @@ adminRouter.get('/users/:userId', (req, res) => {
       value: field.field_type === 'checkbox' ? field.field_value === 'true' : field.field_value }));
   res.json({
     user: { id: user.id, username: user.username, email: user.email, firstName: user.first_name, lastName: user.last_name,
-      role: user.role, disabled: Boolean(user.disabled), createdAt: user.created_at, updatedAt: user.updated_at,
+      role: user.role, disabled: Boolean(user.disabled), registrationStatus: user.registration_status, createdAt: user.created_at, updatedAt: user.updated_at,
       lastLoginAt: user.last_login_at, isCurrentUser: user.id === req.currentUser.id,
       isLastActiveAdmin: isLastActiveAdministrator(user) },
     registrationFields,
     courses: courses.map((course) => ({
       ...summaries.get(course.id),
-      quizCount: course.quiz_count,
       enrolledAt: course.enrolled_at,
       grantedAt: course.granted_at,
       learningPathEnrolled: Boolean(course.learning_path_enrolled),
@@ -302,12 +372,22 @@ adminRouter.get('/users/:userId', (req, res) => {
 adminRouter.patch('/users/:userId', (req, res) => {
   const body = requireObjectBody(req.body, 'Account changes');
   const updateUser = db.transaction(() => {
-    const user = db.prepare('SELECT id, username, role, disabled, first_name, last_name FROM users WHERE id = ?').get(req.params.userId);
+    const user = db.prepare('SELECT id, username, email, role, disabled, registration_status, first_name, last_name FROM users WHERE id = ?').get(req.params.userId);
     if (!user) fail(404, 'User not found.', 'not_found');
     const nextRole = body.role === undefined ? user.role : body.role;
     const hasNameChanges = body.firstName !== undefined || body.lastName !== undefined;
     const nextFirstName = hasNameChanges ? accountName(body.firstName ?? user.first_name, 'First name') : user.first_name;
     const nextLastName = hasNameChanges ? accountName(body.lastName ?? user.last_name, 'Last name') : user.last_name;
+    let nextEmail = user.email;
+    if (body.email !== undefined) {
+      const emailError = validateEmail(body.email);
+      if (emailError) fail(400, emailError, 'invalid_email');
+      nextEmail = normalizeEmail(body.email);
+      // Check the case-insensitive unique index under the same write lock as the update.
+      if (nextEmail !== user.email && db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE AND id != ?').get(nextEmail, user.id)) {
+        fail(409, 'That email address is already in use.', 'email_taken');
+      }
+    }
     if (body.disabled !== undefined && typeof body.disabled !== 'boolean') {
       fail(400, 'Account disabled must be true or false.', 'validation_error');
     }
@@ -319,13 +399,15 @@ adminRouter.patch('/users/:userId', (req, res) => {
     }
     const profileChanged = user.first_name !== nextFirstName || user.last_name !== nextLastName;
     const accountChanged = user.role !== nextRole || Boolean(user.disabled) !== nextDisabled;
-    const changed = accountChanged || profileChanged;
+    const emailChanged = user.email !== nextEmail;
+    const changed = accountChanged || profileChanged || emailChanged;
     if (changed) {
-      db.prepare('UPDATE users SET role = ?, disabled = ?, first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run(nextRole, nextDisabled ? 1 : 0, nextFirstName, nextLastName, user.id);
+      db.prepare('UPDATE users SET email = ?, role = ?, disabled = ?, first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(nextEmail, nextRole, nextDisabled ? 1 : 0, nextFirstName, nextLastName, user.id);
       const auditId = writeAuditLog({ actor: req.currentUser, action: 'account.updated', entityType: 'user', entityId: user.id,
         summary: `Updated account for ${user.username}`, details: {
           username: user.username,
+          ...(emailChanged ? { email: { from: user.email, to: nextEmail } } : {}),
           ...(user.role !== nextRole ? { role: { from: user.role, to: nextRole } } : {}),
           ...(Boolean(user.disabled) !== nextDisabled ? { disabled: { from: Boolean(user.disabled), to: nextDisabled } } : {}),
           ...(profileChanged ? { firstName: { from: user.first_name, to: nextFirstName }, lastName: { from: user.last_name, to: nextLastName } } : {}),
@@ -333,7 +415,7 @@ adminRouter.patch('/users/:userId', (req, res) => {
       if (!auditId) fail(500, 'Account could not be updated because the audit log is unavailable.', 'audit_unavailable');
     }
     if (nextDisabled) invalidateUserSessions(db, user.id);
-    const updated = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, created_at, updated_at FROM users WHERE id = ?').get(user.id);
+    const updated = db.prepare('SELECT id, username, email, first_name, last_name, role, disabled, registration_status, created_at, updated_at FROM users WHERE id = ?').get(user.id);
     const certificatesIssued = profileChanged ? issueCompletedCertificatesForUser(updated.id).length : 0;
     return { updated, certificatesIssued, isLastActiveAdmin: isLastActiveAdministrator(updated) };
   });
@@ -341,7 +423,7 @@ adminRouter.patch('/users/:userId', (req, res) => {
   res.json({ user: {
     id: updated.id, username: updated.username, email: updated.email,
     firstName: updated.first_name, lastName: updated.last_name, role: updated.role,
-    disabled: Boolean(updated.disabled), createdAt: updated.created_at, updatedAt: updated.updated_at, isLastActiveAdmin,
+    disabled: Boolean(updated.disabled), registrationStatus: updated.registration_status, createdAt: updated.created_at, updatedAt: updated.updated_at, isLastActiveAdmin,
   }, certificatesIssued });
 });
 

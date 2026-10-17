@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  openlearning:
+    environment:
+      SETUP_TOKEN_FILE: /run/secrets/setup_token
+    secrets:
+      - setup_token
+
+secrets:
+  setup_token:
+    external: true
+    name: openlearning_setup_token

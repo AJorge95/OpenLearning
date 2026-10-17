@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
-import { readResetStatusAfterConflict } from '../../src/platform-reset-status.ts';
+import { readResetStatusAfterConflict, shouldClearResetConfirmationAfterFailure } from '../../src/platform-reset-status.ts';
 
 const sourcePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/pages-manage.tsx');
 
@@ -21,6 +21,56 @@ test('settings distinguish a verified backup from an active platform reset', () 
   assert.match(pageSource, /resetState\.pending && resetState\.phase === 'resetting' && <div className="platform-reset-pending" role="status" aria-live="polite"><strong>Platform reset in progress…<\/strong><span>Platform requests remain paused until the reset completes\.<\/span>/);
   assert.match(statusSource, /phase\?: 'preparing' \| 'ready' \| 'resetting'/);
   assert.match(pageSource, /readResetStatusAfterConflict\(cause, \(\) => api\.get<PlatformResetStatus>\('\/api\/admin\/platform-reset'\)\)/);
+  assert.match(pageSource, /shouldClearResetConfirmationAfterFailure\(cause\)/);
+  assert.match(pageSource, /window\.setInterval\(refreshOnReturn, 5_000\)/);
+  assert.match(pageSource, /window\.addEventListener\('focus', refreshOnReturn\)/);
+  assert.match(pageSource, /document\.addEventListener\('visibilitychange', refreshOnReturn\)/);
+  assert.match(pageSource, /document\.visibilityState === 'hidden'/);
+  assert.match(pageSource, /controller\?\.abort\(\)/);
+});
+
+test('settings explain when live reset status could not be refreshed', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const settingsPage = sourceFile.statements.find((statement) => ts.isFunctionDeclaration(statement)
+    && statement.name?.text === 'AdminSettingsPage');
+  assert.ok(settingsPage, 'expected to find the admin settings page');
+  assert.match(settingsPage.getText(sourceFile), /resetStatusError && <Notice>\{resetStatusError\} The displayed reset status may be out of date\.<\/Notice>/);
+});
+
+test('reset preparation stays disabled until live status is successfully loaded', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const settingsPage = sourceFile.statements.find((statement) => ts.isFunctionDeclaration(statement)
+    && statement.name?.text === 'AdminSettingsPage');
+  assert.ok(settingsPage, 'expected to find the admin settings page');
+
+  const pageSource = settingsPage.getText(sourceFile);
+  assert.match(pageSource, /setResetStatusLoaded\(false\);\s*async function refreshResetStatus\(\)/);
+  assert.match(pageSource, /setResetState\(result\); setResetStatusError\(''\); setResetStatusLoaded\(true\);/);
+  assert.match(pageSource, /setResetStatusLoaded\(false\);\s*setResetStatusError\(cause instanceof ApiError/);
+  assert.match(pageSource, /disabled=\{resetBusy \|\| !resetStatusLoaded\}/);
+});
+
+test('platform settings become read-only while a reset pauses API requests', () => {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const settingsPage = sourceFile.statements.find((statement) => ts.isFunctionDeclaration(statement)
+    && statement.name?.text === 'AdminSettingsPage');
+  assert.ok(settingsPage, 'expected to find the admin settings page');
+
+  const pageSource = settingsPage.getText(sourceFile);
+  assert.match(pageSource, /const platformSettingsDisabled = saving \|\| resetBusy \|\| resetState\.pending/);
+  assert.match(pageSource, /<fieldset className="settings-fields" aria-label="Platform settings" disabled=\{platformSettingsDisabled\}>/);
+  assert.match(pageSource, /Platform requests are paused until the administrator confirms or preparation ends\./);
+});
+
+test('failed reset attempts clear confirmations that the server invalidated', () => {
+  assert.equal(shouldClearResetConfirmationAfterFailure({ code: 'platform_reset_confirmation_invalid' }), true);
+  assert.equal(shouldClearResetConfirmationAfterFailure({ status: 500, code: 'audit_unavailable' }), true);
+  assert.equal(shouldClearResetConfirmationAfterFailure({ code: 'platform_reset_recovery_required' }), true);
+  assert.equal(shouldClearResetConfirmationAfterFailure({ status: 0, code: 'network_error' }), false);
+  assert.equal(shouldClearResetConfirmationAfterFailure({ status: 400, code: 'platform_reset_confirmation_phrase' }), false);
 });
 
 test('a reset conflict reloads another administrator’s pending status', async () => {
