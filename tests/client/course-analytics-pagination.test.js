@@ -35,5 +35,5 @@ test('course analytics fetches learner activity only when its disclosure opens',
   assert.match(activity, /Loading activity details/);
   assert.match(activity, /role="alert"[\s\S]*?Retry activity details/);
   assert.match(activity, /controller\.abort\(\)/);
-  assert.match(source, /<CourseAnalyticsLearnerActivity courseId=\{courseId\} learner=\{learner\} \/>/);
+  assert.match(source, /<CourseAnalyticsLearnerActivity key=\{`\$\{courseId\}:\$\{learner\.id\}`\} courseId=\{courseId\} learner=\{learner\} \/>/);
 });

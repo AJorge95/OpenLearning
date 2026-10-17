@@ -525,7 +525,8 @@ export function CourseAnalyticsPage() {
           <th scope="row">
             <strong>{learner.username}</strong>
             {learner.disabled && <small className="analytics-disabled-label">Disabled account</small>}
-            <CourseAnalyticsLearnerActivity courseId={courseId} learner={learner} />
+            {/* Scope the disclosure cache to the course when route params change in place. */}
+            <CourseAnalyticsLearnerActivity key={`${courseId}:${learner.id}`} courseId={courseId} learner={learner} />
           </th>
           <td><div className="analytics-rate-cell"><ProgressBar value={learner.progress} label={`Course progress for ${learner.username}`} /><Percentage value={learner.progress} /></div></td>
           <td>{learner.completedLessonCount} / {learner.lessonCount}</td>
