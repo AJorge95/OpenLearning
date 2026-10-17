@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-17 — Cycle 191: explain narrow backup-table scrolling
+
+- **Reviewed:** The live authenticated backup settings page, its restore-point and recent-run tables, shared management-table scroll cues, backup polling/refresh behavior, and the admin backup API and scheduler contracts.
+- **Improvement:** Add a context-aware “Scroll horizontally” cue to both backup tables when their 930px readable layout is wider than the containing panel. Keep each cue inside the existing keyboard-focusable region and hidden at widths where it is unnecessary.
+- **Why it helps:** Administrators on narrow screens can discover that restore locations, run details, and actions continue horizontally instead of mistaking clipped columns for missing information. The change is presentation-only and does not alter backup requests, permissions, or job behavior.
+- **Backend review:** The inspected dashboard and restore-point routes remain admin-protected, bounded, and unchanged; no backend change was indicated.
+- **Checked:** Added `tests/client/backup-table-scroll-hints.test.js` under the dedicated client-test folder. Focused backup-table coverage, the full test suite, typecheck, production build, fresh `/healthz`, `/readyz`, `/api/version`, and `/login` probes, the live backup-settings accessibility tree/screenshot, and `git diff --check` are the cycle checks; no backup action or form was submitted.
+- **Commit title:** `fix(a11y): explain narrow backup table scrolling`.
+- **Commit description:** `Show responsive scroll guidance for backup restore and run tables while preserving their existing keyboard-focusable overflow regions.`
+
 ## 2026-10-17 — Cycle 190: bounded signed-out interface and backend review — no separate change indicated
 
 - **Reviewed:** Launched `npm run dev` first and inspected the current tracker, recent commits, README guidance, the preserved `.gitignore` working-tree change, signed-out login markup, shared controls, responsive and forced-colors CSS, media/caption rendering, route loading and recovery, authentication/session/CSRF handling, pagination bounds, backup polling, and server shutdown paths.
