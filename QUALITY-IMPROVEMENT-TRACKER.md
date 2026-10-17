@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-17 — Cycle 185: bounded signed-out interface and backend review — no separate change indicated
+
+- **Reviewed:** Launched `npm run dev` first, then inspected the current tracker and recent commits, the preserved workflow/test changes, the signed-out login shell, shared form/button and password controls, responsive/focus CSS, learning-path and calendar guards, timestamp formatting, progress rendering, API/CSRF response handling, authentication startup, media/upload boundaries, pagination, authorization, and backup/shutdown contracts.
+- **Result:** No distinct, reproducible, non-duplicate improvement was evidenced. The current source already guards empty learning-path denominators and malformed progress/deadline data, gives form controls named required states and recovery feedback, bounds request and media paths, and preserves stale-request ordering and protected access checks.
+- **Why no code change:** The live signed-out shell rendered normally at the current desktop viewport, and the password action changed from “Show password” to “Hide password.” A further runtime edit would be speculative without an authenticated fixture, a narrow rendered viewport, a changed requirement, or representative workload evidence demonstrating a separate failure.
+- **Checked:** Full `npm test -- --test-reporter=dot`, `npm run typecheck`, `npm run build`, `git diff --check`, and fresh `/healthz`, `/readyz`, `/api/version`, and `/login` probes passed. Chrome rendered `/login` with one heading, named required username/password controls, a full-width sign-in action, and no blank state; the available Browser plugin is not installed and no authenticated flow was exercised.
+- **Boundary:** Tracker documentation only. The user-owned `.github/workflows/publish-container.yml` edit and untracked `tests/security/publish-container-workflow.test.js` remain preserved and unstaged. No credentials, application data, deployment, publication, remote service, or external write was performed.
+- **Commit title:** `docs(quality): record signed-out review boundary`.
+- **Commit description:** `Record the current rendered signed-out QA and interface/backend review boundary without making a speculative runtime change.`
+
 ## 2026-10-17 — Cycle 184: bounded current review — no separate change indicated
 
 - **Reviewed:** Launched the development application first, then inspected the current tracker, recent local commits, the preserved workflow/test changes, client route and error-boundary structure, responsive and focus CSS, API/CSRF response handling, authentication startup retries, media upload and range-stream boundaries, backup scheduling and shutdown coordination, pagination, access checks, progress/deadline formatting, and the current backend query contracts.
