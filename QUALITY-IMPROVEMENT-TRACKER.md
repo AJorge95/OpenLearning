@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-17 — Cycle 188: bounded signed-out interface and backend review — no separate change indicated
+
+- **Reviewed:** Launched `npm run dev` first. The pre-existing `127.0.0.1:5173` listener was preserved after the watcher reported `EADDRINUSE`; a direct development instance was started on isolated local port `5174`. Reviewed the current tracker and commits, preserved working-tree changes, the live login shell and form semantics, shared controls and progress rendering, responsive and forced-colors CSS, course and learning-path surfaces, file-upload sequencing, API/CSRF/session handling, pagination and query bounds, authorization, backup gating and scheduling, migrations, structured errors, and shutdown boundaries.
+- **Result:** No distinct, reproducible, non-duplicate improvement was evidenced. The isolated `/login` flow rendered one heading, named username/password controls, a full-width sign-in action, a registration link, and a password action; source and existing contracts already cover the reviewed interaction and malformed-data boundaries.
+- **Why no code change:** The full suite and static checks are green, while the remaining plausible improvements require authenticated fixture data, a repeatable narrow-viewport mismatch, a changed requirement, or representative workload evidence. Editing an already-covered boundary would be speculative or duplicate existing protections.
+- **Checked:** Fresh `5174` `/healthz`, `/readyz`, `/api/version`, and `/login` probes returned 200. `npm test -- --test-reporter=dot`, `npm run typecheck`, `npm run build`, and `git diff --check` passed. The Chrome accessibility tree verified the signed-out page structure without entering or submitting credentials. The user-owned `.github/workflows/publish-container.yml` edit and untracked `tests/security/publish-container-workflow.test.js` remain preserved and unstaged.
+- **Boundary:** Tracker documentation only. No credentials, application data, deployment, publication, remote service, or external write was performed. The remote push remains intentionally unresolved because this automation also prohibits external changes.
+- **Commit title:** `docs(quality): record bounded signed-out interface and backend review`.
+- **Commit description:** `Record the current rendered login QA and broad interface/backend validation boundary without making a speculative runtime change.`
+
 ## 2026-10-17 — Cycle 187: bounded signed-out UI and backend review — no separate change indicated
 
 - **Reviewed:** Launched the development application first. The requested watcher could not bind because the pre-existing `127.0.0.1:5173` listener was preserved; a direct development instance was then started on isolated local port `5174`. Reviewed the current tracker and commits, preserved working-tree changes, login markup and focus behavior, shared form/password controls, responsive and forced-colors CSS, course and learning-path surfaces, API/CSRF/session handling, pagination, upload/media validation, authorization, migrations, backup, and shutdown boundaries.
