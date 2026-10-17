@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-17 — Cycle 190: bounded signed-out interface and backend review — no separate change indicated
+
+- **Reviewed:** Launched `npm run dev` first and inspected the current tracker, recent commits, README guidance, the preserved `.gitignore` working-tree change, signed-out login markup, shared controls, responsive and forced-colors CSS, media/caption rendering, route loading and recovery, authentication/session/CSRF handling, pagination bounds, backup polling, and server shutdown paths.
+- **Result:** No distinct, reproducible, non-duplicate improvement was evidenced. The live signed-out page rendered a clear heading, named required username control, password control, sign-in action, and registration link; source and existing tests already cover the reviewed accessibility, malformed-data, request-cancellation, authorization, and error-recovery boundaries.
+- **Why no code change:** The full suite, typecheck, production build, and fresh local probes are green. Remaining plausible work requires authenticated learner/staff fixture data, a repeatable narrow-viewport mismatch, a changed requirement, or representative workload evidence; changing an already-covered boundary would be speculative or duplicate existing protections.
+- **Checked:** Fresh `5173` `/healthz`, `/readyz`, `/api/version`, and `/login` probes returned 200. `npm test -- --test-reporter=dot`, `npm run typecheck`, `npm run build`, the signed-out Chrome smoke render, and `git diff --check` passed. No credentials or forms were entered or submitted; no authenticated behavior is claimed.
+- **Boundary:** Tracker documentation only. The user-owned `.gitignore` log exclusions remain preserved and unstaged. No credentials, application data, deployment, publication, remote service, or external write was performed; the requested push remains unresolved because this automation also prohibits external changes.
+- **Commit title:** `docs(quality): record bounded signed-out interface and backend review`.
+- **Commit description:** `Record the current signed-out smoke check and broad interface/backend validation boundary without making a speculative runtime change.`
+
 ## 2026-10-17 — Cycle 189: bounded signed-out interface and backend review — no separate change indicated
 
 - **Reviewed:** Launched `npm run dev` first and inspected the current tracker, recent commits, README guidance, source structure, responsive and forced-colors CSS, signed-out login markup, custom-select keyboard semantics, route loading/error boundaries, form and password controls, media range handling, API/CSRF/session behavior, pagination bounds, backup/session cleanup, and the preserved working-tree changes.
