@@ -1,5 +1,18 @@
 # Quality Improvement Tracker
 
+## 2026-10-17 — Cycle 201: scope analytics activity cache to course route — completed
+
+- **Reviewed:** Launched `npm run dev` first and inspected the current tracker, README guidance, preserved hygiene worktree changes, course-analytics source/tests, the on-demand learner activity disclosure, its staff-only scoped API, and the current signed-out public shell. The analytics disclosure cached details while open, but the component was not keyed by course when route parameters changed in place.
+- **Improvement:** Key `CourseAnalyticsLearnerActivity` by both `courseId` and `learner.id`, with a short comment explaining the route-scoped cache boundary. Navigating directly between course dashboards now remounts the row disclosure instead of retaining lesson/quiz details fetched for the previous course.
+- **Why it helps:** Staff cannot be shown stale activity from another course when the same learner appears in both dashboards; the existing on-demand loading, abort cleanup, retry behavior, and visible disclosure target remain unchanged.
+- **Backend review:** The activity endpoint already authorizes staff and scopes returned lesson/quiz progress to the requested course and learner. No API, database, or permission change was warranted.
+- **Checked:** Added a focused client regression under `tests/client` and updated the existing analytics contract assertion. Focused analytics client/server coverage passed (131/131), the full `npm test -- --test-reporter=dot` suite passed, `npm run typecheck`, `npm run build`, fresh `/healthz`, `/readyz`, `/api/version`, `/login`, and management-shell probes returned successfully, and `git diff --check` passed. The live in-app browser rendered the login heading and named controls; toggling password visibility changed `Show password` to `Hide password` and retained focus. Authenticated analytics interaction remains unverified because no staff fixture/session is available in the current browser.
+- **Boundary:** The user-owned `.githooks/pre-commit`, `.gitignore`, `.github/workflows/repository-hygiene.yml`, `scripts/check-git-index.js`, and `tests/scripts/versioning.test.js` changes remain preserved and unstaged. No credentials, course actions, application data, deployment, publication, or remote write was performed. The requested push remains unresolved against the same automation instruction not to make external changes.
+- **Commit title:** `fix(analytics): scope learner activity by course`.
+- **Commit description:** `Remount analytics activity disclosures when the course route changes so cached learner details cannot cross course dashboards.`
+
+
+
 ## 2026-10-17 — Cycle 200: bounded course-detail and progress review — no separate change indicated
 
 - **Reviewed:** Continued with the launched development app and inspected the authenticated course-detail page at desktop and 390px, including its breadcrumb, course identity, review action, completion summary, progress indicator, module disclosures, lesson/quiz links, and narrow layout. Source review covered course navigation, progress calculation, course-card labels, empty published-course behavior, learner access, and related backend contracts.

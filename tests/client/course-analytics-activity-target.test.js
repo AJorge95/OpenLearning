@@ -15,3 +15,7 @@ test('course analytics activity disclosures keep a reliable target and visible f
   assert.match(focusRule, /outline:\s*2px solid var\(--purple\)/);
   assert.match(source, /<summary aria-label=\{`View activity details for \$\{learner\.username\}`\}>View activity details<\/summary>/);
 });
+
+test('course analytics activity caches are scoped to the current course route', () => {
+  assert.match(source, /<CourseAnalyticsLearnerActivity key=\{`\$\{courseId\}:\$\{learner\.id\}`\} courseId=\{courseId\} learner=\{learner\} \/>/);
+});
