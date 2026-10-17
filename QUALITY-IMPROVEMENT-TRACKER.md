@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-17 — Cycle 189: bounded signed-out interface and backend review — no separate change indicated
+
+- **Reviewed:** Launched `npm run dev` first and inspected the current tracker, recent commits, README guidance, source structure, responsive and forced-colors CSS, signed-out login markup, custom-select keyboard semantics, route loading/error boundaries, form and password controls, media range handling, API/CSRF/session behavior, pagination bounds, backup/session cleanup, and the preserved working-tree changes.
+- **Result:** No distinct, reproducible, non-duplicate improvement was evidenced. The in-app browser rendered the signed-out login panel with a clear heading, labeled required username/password controls, a password visibility action, a full-width sign-in action, and a registration link; source and existing tests already cover the reviewed interaction and malformed-data boundaries.
+- **Why no code change:** The full suite and static source checks are green, while the remaining plausible improvements require authenticated learner/staff fixture data, a repeatable narrow-viewport mismatch, a changed requirement, or representative workload evidence. Editing an already-covered boundary would be speculative or duplicate existing protections.
+- **Checked:** Fresh `5173` `/healthz`, `/readyz`, `/api/version`, and `/login` probes returned 200. `npm test -- --test-reporter=dot`, `npm run typecheck`, `npm run build`, the in-app browser smoke render, the CSS variable scan, and `git diff --check` passed. The Browser plugin and Playwright package are unavailable in this checkout; no credentials or authenticated behavior were exercised.
+- **Boundary:** Tracker documentation only. The user-owned `.github/workflows/publish-container.yml`, `.codex-run-logs/`, and untracked `tests/security/publish-container-workflow.test.js` remain preserved and unstaged. No credentials, application data, deployment, publication, remote service, or external write was performed; the requested push remains unresolved because the same automation prohibits external changes.
+- **Commit title:** `docs(quality): record bounded signed-out interface and backend review`.
+- **Commit description:** `Record the current rendered login smoke check and broad interface/backend validation boundary without making a speculative runtime change.`
+
 ## 2026-10-17 — Cycle 188: bounded signed-out interface and backend review — no separate change indicated
 
 - **Reviewed:** Launched `npm run dev` first. The pre-existing `127.0.0.1:5173` listener was preserved after the watcher reported `EADDRINUSE`; a direct development instance was started on isolated local port `5174`. Reviewed the current tracker and commits, preserved working-tree changes, the live login shell and form semantics, shared controls and progress rendering, responsive and forced-colors CSS, course and learning-path surfaces, file-upload sequencing, API/CSRF/session handling, pagination and query bounds, authorization, backup gating and scheduling, migrations, structured errors, and shutdown boundaries.
