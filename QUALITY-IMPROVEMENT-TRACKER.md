@@ -1,5 +1,15 @@
 # Quality Improvement Tracker
 
+## 2026-10-17 — Cycle 200: bounded course-detail and progress review — no separate change indicated
+
+- **Reviewed:** Continued with the launched development app and inspected the authenticated course-detail page at desktop and 390px, including its breadcrumb, course identity, review action, completion summary, progress indicator, module disclosures, lesson/quiz links, and narrow layout. Source review covered course navigation, progress calculation, course-card labels, empty published-course behavior, learner access, and related backend contracts.
+- **Result:** No distinct, reproducible, non-duplicate improvement was evidenced. The current course-detail surface keeps the heading and actions discoverable, preserves the course description and progress semantics, exposes module controls and activity links with useful names, and keeps the narrow layout readable without a new page-level defect.
+- **Why no code change:** The reviewed course navigation, completion, empty-state, and accessibility boundaries already have focused regression coverage. Further changes need a repeatable current-build mismatch, additional authenticated fixture data, a changed product requirement, or workload evidence rather than another speculative adjustment.
+- **Checked:** Focused course-detail, navigation, progress, and cover-accessibility tests passed (23/23); live desktop/390px accessibility and screenshot inspection completed without submitting course actions, and browser warning/error diagnostics remained empty. Cycle 199's full suite, typecheck, build, fresh probes, and `git diff --check` remain green.
+- **Boundary:** Tracker documentation only. The user-owned `.githooks/pre-commit`, `.gitignore`, `.github/workflows/repository-hygiene.yml`, `scripts/check-git-index.js`, and `tests/scripts/versioning.test.js` changes remain preserved and unstaged. No credentials, enrollment, lesson, quiz, deployment, publication, or external write was performed.
+- **Commit title:** `docs(quality): record bounded course-detail review`.
+- **Commit description:** `Record the current course-detail, progress, and responsive review with focused passing coverage and no speculative runtime change.`
+
 ## 2026-10-17 — Cycle 199: bounded current catalog and backend review — no separate change indicated
 
 - **Reviewed:** Launched `npm run dev` first and inspected the current tracker, recent watcher change, README guidance, authenticated learner catalog source/tests, shared course-card and navigation structure, responsive CSS, catalog filtering/pagination, published-course access query, request cancellation, and all existing working-tree changes. The live catalog was checked at desktop and 390px, including a non-matching search and its reset action.
