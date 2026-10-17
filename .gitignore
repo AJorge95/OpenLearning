@@ -52,4 +52,5 @@ secrets/
 *.pfx
 .codex-run-logs/dev.stderr.log
 .codex-run-logs/dev.stdout.log
-
+QUALITY-IMPROVEMENT-TRACKER.md
+SECURITY-IMPROVEMENT-TRACKER.md

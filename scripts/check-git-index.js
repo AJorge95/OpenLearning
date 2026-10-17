@@ -25,6 +25,10 @@ try {
 }
 
 const blockedPathRules = [
+  {
+    name: 'internal quality or security tracker',
+    test: (path) => /(^|\/)(?:QUALITY|SECURITY)-IMPROVEMENT-TRACKER\.md$/i.test(path),
+  },
   { name: 'local environment file', test: (path) => /(^|\/)\.env(?:$|\.)/i.test(path) && path !== '.env.example' },
   {
     name: 'local data, backup, or generated test directory',
