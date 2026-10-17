@@ -23,7 +23,6 @@ try {
   console.error('Unable to inspect the Git index for sensitive files.');
   process.exit(1);
 }
-
 const blockedPathRules = [
   {
     name: 'internal quality or security tracker',
@@ -109,4 +108,3 @@ if (blockedPaths.length || contentFindings.length || privateAuthorEmailIssue || 
   console.error('Keep local data and private information out of Git before committing.');
   process.exit(1);
 }
-
