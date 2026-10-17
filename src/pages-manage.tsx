@@ -41,6 +41,7 @@ import { lessonResourceUrlError } from './resource-validation';
 import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordConfirmationFieldProps } from './password-confirmation';
 import { validateEmail } from './email-validation';
 import { userListEmptyMessage } from './user-list-empty-state';
+import { normalizePercentage } from './percentage';
 import { buildAuditActionOptions } from './audit-log-filter';
 import { readResetStatusAfterConflict, shouldClearResetConfirmationAfterFailure } from './platform-reset-status';
 import type { PlatformResetStatus } from './platform-reset-status';
@@ -398,7 +399,7 @@ export function CourseManagementPage() {
 }
 
 function Percentage({ value }: { value: number }) {
-  return <span className="analytics-percentage">{value}%</span>;
+  return <span className="analytics-percentage">{normalizePercentage(value)}%</span>;
 }
 
 function CourseAnalyticsLearnerActivity({ courseId, learner }: { courseId: string; learner: CourseAnalyticsLearner }) {
@@ -516,7 +517,7 @@ export function CourseAnalyticsPage() {
 
       <section className="analytics-section">
         <div className="analytics-section-heading"><div><h2>Quiz performance</h2><p>Pass rates use learners who attempted each quiz; average scores use all attempts.</p></div><span>{formatCountLabel(data.summary.quizCount, 'quiz', 'quizzes')}</span></div>
-        {data.quizMetrics.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable quiz performance metrics" tabIndex={0}><p className="table-scroll-hint">Scroll horizontally to see all quiz metrics.</p><table className="analytics-table"><caption className="sr-only">Quiz performance metrics</caption><thead><tr><th scope="col">Module</th><th scope="col">Quiz</th><th scope="col">Participation</th><th scope="col">Passed</th><th scope="col">Pass rate</th><th scope="col">Average score</th><th scope="col">Attempts</th></tr></thead><tbody>{data.quizMetrics.map((quiz) => <tr key={quiz.id}><td>{quiz.moduleTitle}</td><th scope="row"><strong>{quiz.title}</strong><small>Pass mark {quiz.passMark}%</small></th><td>{formatCountLabel(quiz.learnersAttempted, 'learner', 'learners')} · {quiz.participationRate === null ? '—' : `${quiz.participationRate}%`}</td><td>{quiz.learnersPassed} / {quiz.learnersAttempted}</td><td>{quiz.passRate === null ? '—' : <Percentage value={quiz.passRate} />}</td><td>{quiz.averageScore === null ? '—' : `${quiz.averageScore}%`}</td><td>{quiz.attempts}</td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No quizzes yet" detail="Add module quizzes to see participation and score metrics." />}
+        {data.quizMetrics.length ? <div className="analytics-table-wrap" role="region" aria-label="Scrollable quiz performance metrics" tabIndex={0}><p className="table-scroll-hint">Scroll horizontally to see all quiz metrics.</p><table className="analytics-table"><caption className="sr-only">Quiz performance metrics</caption><thead><tr><th scope="col">Module</th><th scope="col">Quiz</th><th scope="col">Participation</th><th scope="col">Passed</th><th scope="col">Pass rate</th><th scope="col">Average score</th><th scope="col">Attempts</th></tr></thead><tbody>{data.quizMetrics.map((quiz) => <tr key={quiz.id}><td>{quiz.moduleTitle}</td><th scope="row"><strong>{quiz.title}</strong><small>Pass mark {quiz.passMark}%</small></th><td>{formatCountLabel(quiz.learnersAttempted, 'learner', 'learners')} · {quiz.participationRate === null ? '—' : <Percentage value={quiz.participationRate} />}</td><td>{quiz.learnersPassed} / {quiz.learnersAttempted}</td><td>{quiz.passRate === null ? '—' : <Percentage value={quiz.passRate} />}</td><td>{quiz.averageScore === null ? '—' : <Percentage value={quiz.averageScore} />}</td><td>{quiz.attempts}</td></tr>)}</tbody></table></div> : <EmptyState headingLevel={3} title="No quizzes yet" detail="Add module quizzes to see participation and score metrics." />}
       </section>
 
       <section className="analytics-section analytics-learners-section" aria-busy={learnerPageLoading}>
