@@ -592,7 +592,8 @@ export function EmptyState({ icon = <BookOpen size={24} />, title, detail, actio
 }
 
 export function ProgressBar({ value, label }: { value: number; label: string }) {
-  const progress = Math.max(0, Math.min(100, value));
+  // Keep malformed or partial API data from producing invalid CSS widths and ARIA values.
+  const progress = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
   return <div className="progress-line" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={label}><span style={{ width: `${progress}%` }} /></div>;
 }
 
