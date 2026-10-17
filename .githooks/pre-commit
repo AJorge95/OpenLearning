@@ -1,2 +1,5 @@
 #!/usr/bin/env sh
+set -eu
+node scripts/check-git-index.js
 exec node scripts/versioning.js pre-commit
+
