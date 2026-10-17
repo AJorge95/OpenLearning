@@ -5,7 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const editorSource = fs.readFileSync(path.join(repositoryRoot, 'src/pages-manage.tsx'), 'utf8');
+const editorSource = fs.readFileSync(path.join(repositoryRoot, 'src/pages-manage.tsx'), 'utf8').replace(/\r\n/g, '\n');
 const styles = fs.readFileSync(path.join(repositoryRoot, 'src/styles.css'), 'utf8');
 const editorStart = editorSource.indexOf('export function CourseEditorPage()');
 const editorEnd = editorSource.indexOf('\nexport function CourseAccessPage()', editorStart);

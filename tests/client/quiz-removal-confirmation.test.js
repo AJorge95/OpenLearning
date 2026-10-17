@@ -5,7 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const manageSource = fs.readFileSync(path.join(repositoryRoot, 'src/pages-manage.tsx'), 'utf8');
+const manageSource = fs.readFileSync(path.join(repositoryRoot, 'src/pages-manage.tsx'), 'utf8').replace(/\r\n/g, '\n');
 const quizEditorStart = manageSource.indexOf('function QuizEditor(');
 const quizEditorEnd = manageSource.indexOf('\nfunction LessonDetailsEditor(', quizEditorStart);
 const quizEditorSource = manageSource.slice(quizEditorStart, quizEditorEnd);
