@@ -24,5 +24,3 @@ jobs:
 
       - name: Reject local data and credentials
         run: node scripts/check-git-index.js --tracked
-
-

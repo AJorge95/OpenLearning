@@ -9,7 +9,7 @@ import { isCourseCreationEditorState } from '../../src/course-editor-state.ts';
 const sourcePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/pages-manage.tsx');
 
 test('course editor breadcrumb follows the create route through its draft redirect', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
   assert.match(source, /isCourseCreationEditorState\(location\.state, route\.courseId\)/);
   assert.match(source, /navigate\(`\/manage\/courses\/\$\{response\.course\.id\}\/edit`, \{ replace: true, state: \{ createdCourseId: response\.course\.id \} \}\)/);
   assert.match(source, /<span>\{isNewCourseDraft \? 'Create course' : 'Edit course'\}<\/span>/);
@@ -20,7 +20,7 @@ test('course editor breadcrumb follows the create route through its draft redire
 });
 
 test('changing course routes resets publication-only options', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
   const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const editor = sourceFile.statements.find((statement) => ts.isFunctionDeclaration(statement)
     && statement.name?.text === 'CourseEditorPage');
@@ -58,7 +58,7 @@ test('changing course routes resets publication-only options', () => {
 });
 
 test('a stale course refresh cannot abort the newly selected course request', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
   const loadStart = source.indexOf('async function load(id = courseId)');
   const loadEnd = source.indexOf('\n\n  useEffect(() => {', loadStart);
   const loadSource = source.slice(loadStart, loadEnd);
@@ -70,7 +70,7 @@ test('a stale course refresh cannot abort the newly selected course request', ()
 });
 
 test('course detail drafts are preserved only while refreshing the same course', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
   const loadStart = source.indexOf('async function load(id = courseId)');
   const loadEnd = source.indexOf('\n\n  useEffect(() => {', loadStart);
   const loadSource = source.slice(loadStart, loadEnd);
@@ -82,7 +82,7 @@ test('course detail drafts are preserved only while refreshing the same course',
 });
 
 test('same-course refreshes preserve an unsaved completion-window value', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
   const loadStart = source.indexOf('async function load(id = courseId)');
   const loadEnd = source.indexOf('\n\n  useEffect(() => {', loadStart);
   const loadSource = source.slice(loadStart, loadEnd);
@@ -95,7 +95,7 @@ test('same-course refreshes preserve an unsaved completion-window value', () => 
 });
 
 test('lesson and curriculum actions keep late refreshes and errors on their source course', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
   const handlers = [
     ['async function addLesson', '\n\n  async function addModuleQuiz'],
     ['async function deleteModule', '\n\n  function confirmPendingModuleDeletion'],
@@ -116,7 +116,7 @@ test('lesson and curriculum actions keep late refreshes and errors on their sour
 });
 
 test('course navigation clears the inline add-module draft and scopes late responses', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
   assert.match(source, /useEffect\(\(\) => \{\s*let active = true;\s*setModuleTitle\(''\); setAddingModule\(false\); addModuleInvokerRef\.current = null;/);
 
   const addStart = source.indexOf('async function addModule(event: React.FormEvent)');
@@ -131,7 +131,7 @@ test('course navigation clears the inline add-module draft and scopes late respo
 });
 
 test('course publishing keeps save failures distinct from settings refresh failures', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
   const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const saveCourseFunctions = [];
   function visit(node) {
@@ -153,7 +153,7 @@ test('course publishing keeps save failures distinct from settings refresh failu
 });
 
 test('review actions keep successful decisions visible when editor refreshes fail', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
   const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const handlers = new Map();
   function visit(node) {
@@ -178,7 +178,7 @@ test('review actions keep successful decisions visible when editor refreshes fai
 });
 
 test('blank change-request feedback is announced and associated with its textarea', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
 
   assert.match(source, /setChangeRequestNoteError\('Describe the changes the editor should make\.'\);\s*setError\(''\);\s*changeRequestNoteInputRef\.current\?\.focus\(\)/);
   assert.match(source, /<label htmlFor=\{`review-change-note-\$\{courseId\}`\}><span className="form-label-row"><span>Changes requested \(up to 1,000 characters\)<\/span><small className="form-required-indicator" aria-hidden="true">Required<\/small><\/span>/);
@@ -188,7 +188,7 @@ test('blank change-request feedback is announced and associated with its textare
 });
 
 test('review decision inputs stay fixed while the decision is saving', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
 
   assert.match(source, /checked=\{requiresRecompletion\} onChange=\{\(event\) => setRequiresRecompletion\(event\.target\.checked\)\}[^>]*disabled=\{savingReviewDecision\}/);
   assert.match(source, /<label className="version-change-note">[\s\S]*?<input[^>]*onChange=\{\(event\) => setChangeNote\(event\.target\.value\)\}[^>]*disabled=\{savingReviewDecision\}/);
@@ -196,7 +196,7 @@ test('review decision inputs stay fixed while the decision is saving', () => {
 });
 
 test('course-version restore confirmation validates its route and keeps feedback scoped to the source course', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
   const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const restoreHandlers = new Map();
   function visit(node) {
@@ -228,7 +228,7 @@ test('course-version restore confirmation validates its route and keeps feedback
 });
 
 test('course-version restore warns about draft replacement and the selected completion policy', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
 
   assert.doesNotMatch(source, /window\.confirm\(`Publish version \$\{version\.version_number\}/);
   assert.match(source, /setPendingRestoreVersion\(null\);[\s\S]*?if \(route\.courseId\)/);

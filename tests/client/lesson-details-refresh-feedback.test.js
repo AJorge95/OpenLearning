@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const sourcePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/pages-manage.tsx');
 
 test('lesson detail mutations distinguish committed changes from refresh failures', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
   const editorStart = source.indexOf('function LessonDetailsEditor');
   const editorEnd = source.indexOf('\n\nexport function CourseEditorPage', editorStart);
   const editor = source.slice(editorStart, editorEnd);
@@ -21,7 +21,7 @@ test('lesson detail mutations distinguish committed changes from refresh failure
 });
 
 test('course refresh reports whether the committed course read completed', () => {
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
   const loadStart = source.indexOf('async function load(id = courseId): Promise<boolean>');
   const loadEnd = source.indexOf('\n\n  useEffect(() => {', loadStart);
   const loadSource = source.slice(loadStart, loadEnd);
