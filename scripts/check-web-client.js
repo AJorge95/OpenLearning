@@ -35,11 +35,18 @@ export async function checkWebClient(baseUrl) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try {
-    const count = await checkWebClient(process.argv[2]);
-    console.log(`[openlearning] Web page and ${count} JavaScript/CSS assets passed HTTP checks.`);
-  } catch (error) {
-    console.error(`[openlearning] Web client check failed: ${error.message}`);
-    process.exitCode = 1;
+  const baseUrl = process.argv[2];
+  if (!baseUrl) {
+    // Fail with the command contract before URL parsing produces a misleading error.
+    console.error('[openlearning] Usage: node scripts/check-web-client.js <base-url>');
+    process.exitCode = 2;
+  } else {
+    try {
+      const count = await checkWebClient(baseUrl);
+      console.log(`[openlearning] Web page and ${count} JavaScript/CSS assets passed HTTP checks.`);
+    } catch (error) {
+      console.error(`[openlearning] Web client check failed: ${error.message}`);
+      process.exitCode = 1;
+    }
   }
 }

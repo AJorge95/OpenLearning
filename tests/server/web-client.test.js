@@ -1,15 +1,20 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
 import { createSecurityHeaders } from '../../server/security-headers.js';
 import { mountWebClient } from '../../server/web-client.js';
 import { checkWebClient } from '../../scripts/check-web-client.js';
+
+const checkWebClientScript = fileURLToPath(new URL('../../scripts/check-web-client.js', import.meta.url));
+const projectRoot = path.dirname(path.dirname(checkWebClientScript));
 
 async function fixture(t, { development = false, legacyHeaders = false } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'openlearning-web-client-'));
@@ -74,6 +79,20 @@ test('installer web checks reject the former HTTP-to-HTTPS policy and missing ch
   const current = await fixture(t);
   fs.unlinkSync(path.join(current.directory, 'assets/app.js'));
   await assert.rejects(checkWebClient(current.base), /app.js returned HTTP 404/);
+});
+
+test('web-client checker explains its required base URL', async () => {
+  const child = spawn(process.execPath, [checkWebClientScript], {
+    cwd: projectRoot,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  let stderr = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  const [code] = await once(child, 'close');
+
+  assert.equal(code, 2);
+  assert.equal(stderr.trim(), '[openlearning] Usage: node scripts/check-web-client.js <base-url>');
 });
 
 test('production startup rejects a missing built client', async () => {
