@@ -398,8 +398,12 @@ export function CourseManagementPage() {
   </div>;
 }
 
-function Percentage({ value }: { value: number }) {
-  return <span className="analytics-percentage">{normalizePercentage(value)}%</span>;
+function formatPercentage(value: number | null) {
+  return value === null ? '—' : `${normalizePercentage(value)}%`;
+}
+
+function Percentage({ value }: { value: number | null }) {
+  return <span className="analytics-percentage">{formatPercentage(value)}</span>;
 }
 
 function CourseAnalyticsLearnerActivity({ courseId, learner }: { courseId: string; learner: CourseAnalyticsLearner }) {
@@ -443,7 +447,8 @@ function CourseAnalyticsLearnerActivity({ courseId, learner }: { courseId: strin
               {details.quizProgress.map((quiz) => <li key={quiz.id}>
                 <span className={quiz.passed ? 'analytics-item-complete' : ''}>{quiz.attempts ? `${quiz.attempts} attempt${quiz.attempts === 1 ? '' : 's'}` : 'Not attempted'}</span>
                 <strong>{quiz.moduleTitle}: {quiz.title}</strong>
-                <small>{quiz.attempts ? `Latest ${quiz.latestScore}% · Best ${quiz.highestScore}% · Pass mark ${quiz.passMark}%` : `Pass mark ${quiz.passMark}%`}</small>
+                {/* Keep expanded learner details aligned with the bounded summary metrics. */}
+                <small>{quiz.attempts ? `Latest ${formatPercentage(quiz.latestScore)} · Best ${formatPercentage(quiz.highestScore)} · Pass mark ${formatPercentage(quiz.passMark)}` : `Pass mark ${formatPercentage(quiz.passMark)}`}</small>
               </li>)}
             </ul> : <p>This course has no quizzes.</p>}
           </section>
