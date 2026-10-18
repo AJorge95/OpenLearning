@@ -9,9 +9,10 @@ test('authentication startup retries only bounded transient failures', () => {
   assert.ok(retryBody, 'the auth startup callback should remain identifiable');
 
   assert.match(authContext, /const STARTUP_RETRY_DELAYS_MS = \[250, 750\] as const;/);
+  assert.match(authContext, /import \{ waitForStartupRetry \} from '\.\/startup-retry';/);
   assert.match(authContext, /function isTransientStartupError\(cause: unknown\) \{[\s\S]*?cause\.status === 0 \|\| cause\.status >= 500/);
   assert.match(retryBody, /while \(true\)/);
   assert.match(retryBody, /isTransientStartupError\(cause\)/);
   assert.match(retryBody, /retryAttempt >= STARTUP_RETRY_DELAYS_MS\.length/);
-  assert.match(retryBody, /window\.setTimeout\(resolve, STARTUP_RETRY_DELAYS_MS\[retryAttempt\]\)/);
+  assert.match(retryBody, /waitForStartupRetry\(STARTUP_RETRY_DELAYS_MS\[retryAttempt\], controller\.signal\)/);
 });

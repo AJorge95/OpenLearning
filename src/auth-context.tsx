@@ -4,6 +4,7 @@ import { BRAND_PALETTES, DEFAULT_PALETTE } from './branding';
 import type { BrandingPalette, ConnectionProtocol, PlatformConfiguration } from './branding';
 import { DEFAULT_MAX_UPLOAD_BYTES } from './upload-size-validation';
 import { isRegistrationAvailabilityError } from './registration-availability';
+import { waitForStartupRetry } from './startup-retry';
 import type { RegistrationFieldValues, Role, User } from './types';
 
 interface AuthContextValue {
@@ -108,7 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // A client can load before the API has finished starting, so give transient
           // transport and server failures a short, bounded recovery window.
           if (!isTransientStartupError(cause) || retryAttempt >= STARTUP_RETRY_DELAYS_MS.length) throw cause;
-          await new Promise<void>((resolve) => { window.setTimeout(resolve, STARTUP_RETRY_DELAYS_MS[retryAttempt]); });
+          await waitForStartupRetry(STARTUP_RETRY_DELAYS_MS[retryAttempt], controller.signal);
           retryAttempt += 1;
         }
       }
