@@ -10,6 +10,6 @@ test('backup dashboard ignores stale polling and refresh responses', () => {
   assert.match(compactSource, /const dashboardRevisionRef = useRef\(0\);/);
   assert.match(compactSource, /if \(active && requestRevision === dashboardRevisionRef\.current\) \{ setDashboard\(result\); setRestorableRuns\(restorePoints\.runs\); setError\(''\); setLoading\(false\); \}/);
   assert.match(compactSource, /if \(active && requestRevision === dashboardRevisionRef\.current && !\(cause instanceof Error && cause\.name === 'AbortError'\)\)/);
-  assert.match(compactSource, /if \(requestRevision !== dashboardRevisionRef\.current\) return; setDashboard\(result\); setRestorableRuns\(restorePoints\.runs\); setError\(''\);/);
-  assert.match(compactSource, /if \(requestRevision !== dashboardRevisionRef\.current\) return; setError\(cause instanceof ApiError/);
+  assert.match(compactSource, /if \(!dashboardMountedRef\.current \|\| requestRevision !== dashboardRevisionRef\.current\) return; setDashboard\(result\); setRestorableRuns\(restorePoints\.runs\); setError\(''\);/);
+  assert.match(compactSource, /if \(!dashboardMountedRef\.current \|\| requestRevision !== dashboardRevisionRef\.current\) return; setError\(cause instanceof ApiError/);
 });

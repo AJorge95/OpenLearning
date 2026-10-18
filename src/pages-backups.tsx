@@ -103,9 +103,11 @@ export function AdminBackupsPage() {
   const restoreActiveRef = useRef(false);
   // Polling and action-triggered refreshes can overlap; only the newest response may replace the dashboard.
   const dashboardRevisionRef = useRef(0);
+  const dashboardMountedRef = useRef(false);
 
   useEffect(() => {
     let active = true;
+    dashboardMountedRef.current = true;
     const controllers = new Set<AbortController>();
     const isVisible = () => document.visibilityState === 'visible';
     const load = async () => {
@@ -142,6 +144,9 @@ export function AdminBackupsPage() {
     document.addEventListener('visibilitychange', refreshOnVisible);
     return () => {
       active = false;
+      dashboardMountedRef.current = false;
+      // Invalidate action-triggered refreshes too; they are not part of the polling controller set.
+      dashboardRevisionRef.current += 1;
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', refreshOnVisible);
       controllers.forEach((controller) => controller.abort());
@@ -156,12 +161,12 @@ export function AdminBackupsPage() {
         api.get<Dashboard>('/api/admin/backups'),
         api.get<RestorableRunsResponse>('/api/admin/backups/restorable-runs'),
       ]);
-      if (requestRevision !== dashboardRevisionRef.current) return;
+      if (!dashboardMountedRef.current || requestRevision !== dashboardRevisionRef.current) return;
       setDashboard(result);
       setRestorableRuns(restorePoints.runs);
       setError('');
     } catch (cause) {
-      if (requestRevision !== dashboardRevisionRef.current) return;
+      if (!dashboardMountedRef.current || requestRevision !== dashboardRevisionRef.current) return;
       setError(cause instanceof ApiError ? cause.message : 'Backup status could not be refreshed.');
     }
   }
