@@ -1,5 +1,6 @@
 import type { Course, CourseAccessUser, CourseGroup, User } from './types';
 import type { PlatformConfiguration } from './branding';
+import { normalizePercentage } from './percentage.ts';
 
 let csrfToken: string | null = null;
 let csrfRefreshPromise: Promise<string> | null = null;
@@ -196,7 +197,11 @@ export const api = {
       xhr.setRequestHeader('X-CSRF-Token', token);
       options.signal?.addEventListener('abort', abortRequest, { once: true });
       xhr.upload.onprogress = (event) => {
-        if (!options.signal?.aborted && event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+        if (!options.signal?.aborted && event.lengthComputable) {
+          // Browser progress events are external input; keep every upload surface within valid percentage bounds.
+          const progress = event.total > 0 ? Math.round((event.loaded / event.total) * 100) : 0;
+          onProgress(normalizePercentage(progress));
+        }
       };
       xhr.onerror = () => {
         removeAbortListener();

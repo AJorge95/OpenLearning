@@ -439,6 +439,34 @@ test('aborts an active XHR upload and suppresses progress after cancellation', a
   assert.deepEqual(progress, [25]);
 });
 
+test('normalizes malformed XHR upload progress before updating the UI', async (t) => {
+  restoreFetch(t);
+  globalThis.fetch = async () => jsonResponse({ token: 'upload-token' });
+  const requests = installFakeXhr(t, (xhr) => {
+    queueMicrotask(() => {
+      xhr.upload.onprogress({ lengthComputable: true, loaded: 1, total: 0 });
+      xhr.upload.onprogress({ lengthComputable: true, loaded: 150, total: 100 });
+      xhr.upload.onprogress({ lengthComputable: true, loaded: 25, total: 100 });
+      xhr.status = 201;
+      xhr.responseContentType = 'application/json';
+      xhr.responseText = JSON.stringify({ media: { id: 'media-1' } });
+      xhr.onload();
+    });
+  });
+  const progress = [];
+
+  const result = await api.upload(
+    '/api/manage/courses/course-1/media',
+    { kind: 'video', lessonId: 'lesson-1' },
+    new Blob(['video bytes'], { type: 'video/mp4' }),
+    (value) => progress.push(value),
+  );
+
+  assert.deepEqual(result, { media: { id: 'media-1' } });
+  assert.equal(requests.length, 1);
+  assert.deepEqual(progress, [0, 100, 25]);
+});
+
 test('retries a multipart upload once after a CSRF rejection and resets progress', async (t) => {
   restoreFetch(t);
   let csrfRequests = 0;
