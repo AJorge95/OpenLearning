@@ -2,3 +2,8 @@
 export function normalizePercentage(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
 }
+
+/** Keep percentage labels consistent with the bounded progress indicator. */
+export function formatPercentage(value: number | null): string {
+  return value === null ? '—' : `${normalizePercentage(value)}%`;
+}

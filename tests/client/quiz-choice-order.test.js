@@ -30,7 +30,7 @@ test('learner results preserve aggregate scores without answer review and only o
   const page = fs.readFileSync(path.join(sourceDirectory, 'pages-learner.tsx'), 'utf8');
 
   assert.match(page, /hasQuizAttemptBreakdown\(currentResult\) \? `\$\{currentResult\.correctCount\} of \$\{currentResult\.questionCount\} correct` : 'Question breakdown unavailable'/);
-  assert.match(page, /\{currentResult\.score\}%/);
+  assert.match(page, /\{formatPercentage\(currentResult\.score\)\}/);
   assert.doesNotMatch(page, /Review your answers|Correct answer:|Your answer is (?:correct|incorrect)/);
   assert.match(page, /!currentResult\.passed && <Button variant="secondary" onClick=\{retryQuiz\}>Try again<\/Button>/);
   assert.match(page, /currentResult\?\.passed && !courseFinished \? nextCourseActivity/);

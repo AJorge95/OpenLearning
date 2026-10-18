@@ -21,9 +21,9 @@ test('failed attempt-detail requests preserve the saved score and only retry tra
 });
 
 test('quiz result feedback includes the score and the threshold for passing', () => {
-  assert.match(source, /Score \{currentResult\.score\}% ·/);
-  assert.match(source, /Pass mark: \$\{quiz\.passMark\}%\./);
-  assert.match(source, /You need \$\{quiz\.passMark\}% to pass\./);
+  assert.match(source, /Score \{formatPercentage\(currentResult\.score\)\} ·/);
+  assert.match(source, /Pass mark: \$\{formatPercentage\(quiz\.passMark\)\}\./);
+  assert.match(source, /You need \$\{formatPercentage\(quiz\.passMark\)\} to pass\./);
 });
 
 test('quiz submission and retry move focus into the newly displayed view', () => {

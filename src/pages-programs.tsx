@@ -12,6 +12,7 @@ import { appendPublishedCourseOptions, hasMorePublishedCourseOptions, publishedC
 import { canAssignLearningPathLearners } from './path-assignment-availability';
 import { appendUnchangedCompetencyPage } from './competency-progress';
 import { formatLearningDeadlineDay } from './learning-deadline';
+import { formatPercentage } from './percentage';
 import { MAX_LEARNING_PATH_COURSES } from '../shared/learning-path-limits.js';
 import { isPathCourseCheckboxDisabled, togglePathCourseSelection } from './path-course-selection';
 import { useAuth } from './auth-context';
@@ -634,7 +635,7 @@ export function LearningPathsPage() {
         <div className="program-card-heading"><div><span className="program-icon" aria-hidden="true"><BookOpen size={18} /></span><div><h2 id={`learning-path-title-${path.id}`} tabIndex={-1}>{path.title}</h2><p>{path.description || `${path.courseCount} courses in this path`}</p></div></div><span className={`program-status ${path.status}`}>{path.status}</span></div>
         {/* Course status and action labels provide the meaning; these glyphs stay decorative. */}
         {path.courseCount > 0 && <>
-          <div className="program-progress-line"><span>{staff ? 'Your progress: ' : ''}{path.completedCourses} of {path.courseCount} courses complete</span><strong>{Math.round(path.completedCourses / path.courseCount * 100)}%</strong></div>
+          <div className="program-progress-line"><span>{staff ? 'Your progress: ' : ''}{path.completedCourses} of {path.courseCount} courses complete</span><strong>{formatPercentage(Math.round(path.completedCourses / path.courseCount * 100))}</strong></div>
           <ProgressBar value={Math.round(path.completedCourses / path.courseCount * 100)} label={`${staff ? 'Your progress in' : 'Progress in'} ${path.title}`} />
         </>}
         {path.courses.length > 0 ? <ol className="path-course-list">{path.courses.map((course) => <li key={course.id} className={!course.unlocked && !staff ? 'locked' : ''}>

@@ -14,6 +14,7 @@ import { getAppSelectHorizontalPosition, getAppSelectVerticalPosition } from './
 import { formatCountLabel } from './count-label';
 import { courseCardActionLabel } from './course-navigation';
 import { getHorizontalRevealScrollLeft } from './navigation-scroll';
+import { formatPercentage } from './percentage';
 import type { Course, CourseModule, Lesson } from './types';
 
 export function LoadingScreen({ label = 'Loading your learning space…' }: { label?: string }) {
@@ -614,7 +615,7 @@ export function CourseCard({ course, showLearningProgress = false, coverLoading 
         <h2>{course.title}</h2>
         {description && <p className="course-description">{description}</p>}
         <p className="course-author">{course.owner || 'OpenLearning course'}</p>
-        {showLearningProgress ? <><div className="card-progress-label"><span>{course.completed ? 'Completed' : `${course.progress}% complete`}</span><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /><span className="course-card-action">{learningActionLabel}<ChevronRight size={15} aria-hidden="true" /></span></> : <div className="card-meta"><BookOpen size={17} aria-hidden="true" /><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div>}
+        {showLearningProgress ? <><div className="card-progress-label"><span>{course.completed ? 'Completed' : `${formatPercentage(course.progress)} complete`}</span><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /><span className="course-card-action">{learningActionLabel}<ChevronRight size={15} aria-hidden="true" /></span></> : <div className="card-meta"><BookOpen size={17} aria-hidden="true" /><span>{formatCountLabel(course.moduleCount, 'module', 'modules')}</span></div>}
       </div>
     </Link>
   );

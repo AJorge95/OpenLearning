@@ -10,6 +10,7 @@ import { courseCatalogCategoryOptions, courseCatalogParams, hasCourseCatalogFilt
 import { formatLearningDeadlineDate, getLearningDeadlineRefreshDelay, getLearningDeadlineStatus } from './learning-deadline';
 import { courseActivityActionLabel, nextCourseActivity, nextCourseActivityAfterLesson, shouldEnrollBeforeCourseActivity } from './course-navigation';
 import { summarizeCourseProgress } from './course-progress';
+import { formatPercentage } from './percentage';
 import { shuffleQuizChoices } from './quiz-choice-order';
 import { quizPriorPassNotice } from './quiz-prior-pass';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
@@ -601,7 +602,7 @@ export function CourseOverviewPage() {
         {hasLearningActivities || course.completed || course.progress > 0 ? (
           <div className="course-hero-actions">
             {nextActivity ? <Button onClick={startLearning} disabled={starting}>{startButtonLabel}<ArrowRight size={17} aria-hidden="true" /></Button> : null}
-            {user?.role === 'learner' && course.completed ? user.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} aria-hidden="true" />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} aria-hidden="true" />Add name for certificate</Link> : course.progress > 0 && <span className="progress-caption">{course.progress}% complete</span>}
+            {user?.role === 'learner' && course.completed ? user.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} aria-hidden="true" />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} aria-hidden="true" />Add name for certificate</Link> : course.progress > 0 && <span className="progress-caption">{formatPercentage(course.progress)} complete</span>}
           </div>
         ) : null}
       </div>
@@ -1665,7 +1666,7 @@ export function CoursePlayerPage() {
         {!feedbackLoading && visibleFeedbackError && !visibleFeedback && <ErrorNotice message={visibleFeedbackError} onRetry={() => setFeedbackRefreshVersion((version) => version + 1)} />}
       </section>}
     </div>
-    <aside id="course-content-rail" className="course-rail" aria-labelledby="course-rail-title" hidden={!railOpen}><div className="course-rail-head"><div><h2 id="course-rail-title">Course content</h2><small>{course.progress}% complete</small></div><button ref={railCloseRef} type="button" aria-label="Hide course content" onClick={() => { focusRailAfterOpenRef.current = false; setRailOpen(false); railToggleRef.current?.focus(); }}><ChevronDown size={18} aria-hidden="true" /></button></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} />
+    <aside id="course-content-rail" className="course-rail" aria-labelledby="course-rail-title" hidden={!railOpen}><div className="course-rail-head"><div><h2 id="course-rail-title">Course content</h2><small>{formatPercentage(course.progress)} complete</small></div><button ref={railCloseRef} type="button" aria-label="Hide course content" onClick={() => { focusRailAfterOpenRef.current = false; setRailOpen(false); railToggleRef.current?.focus(); }}><ChevronDown size={18} aria-hidden="true" /></button></div><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} />
       {modules.map((module) => <CurriculumModule key={module.id} module={module} selectedLessonId={lessonId} courseId={course.id} compact onOpenActivity={openCurriculumActivity} />)}
     </aside>
     {pendingCommentRemoval?.courseId === courseId && pendingCommentRemoval.lessonId === lessonId && isCourseManager
@@ -1877,7 +1878,7 @@ export function QuizPage() {
     <div className="breadcrumbs"><Link to={`/courses/${course.id}`}>{course.title}</Link><span>/</span><span>{quiz.title}</span></div>
     <div className="quiz-layout">
       <div className="quiz-main">
-        {!currentResult && <div className="quiz-topline"><span>{formatCountLabel(quiz.questions.length, 'question', 'questions')}</span><span>Pass mark {quiz.passMark}%</span></div>}
+        {!currentResult && <div className="quiz-topline"><span>{formatCountLabel(quiz.questions.length, 'question', 'questions')}</span><span>Pass mark {formatPercentage(quiz.passMark)}</span></div>}
         <h1>{quiz.title}</h1>
         {priorPassNotice && <div className="inline-notice inline-notice-success" role="status">{priorPassNotice}</div>}
         {!currentResult ? <><p className="lead-copy">Choose one answer for each question. You can retry this {examQuiz ? 'exam' : 'quiz'} if you need another attempt.</p>
@@ -1893,7 +1894,7 @@ export function QuizPage() {
           </form>
         </> : <div className="quiz-results">
           {attemptDetailsFailure && <ErrorNotice message={error} onRetry={attemptDetailsFailure === 'retryable' ? () => setCourseLoadRetryVersion((version) => version + 1) : undefined} />}
-          <div className={`score-panel ${currentResult.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{currentResult.passed ? <Check size={22} aria-hidden="true" /> : <Clock3 size={22} aria-hidden="true" />}</span><div><span className="score-label">{examQuiz ? currentResult.passed ? 'Exam passed' : 'Exam not passed' : currentResult.passed ? 'Quiz passed' : 'Quiz not passed'}</span><strong>{hasQuizAttemptBreakdown(currentResult) ? `${currentResult.correctCount} of ${currentResult.questionCount} correct` : 'Question breakdown unavailable'}</strong><small>Score {currentResult.score}% · {currentResult.passed ? `Pass mark: ${quiz.passMark}%.` : `You need ${quiz.passMark}% to pass.`}</small></div></div>
+          <div className={`score-panel ${currentResult.passed ? 'score-pass' : 'score-retry'}`} role="status"><span className="score-icon">{currentResult.passed ? <Check size={22} aria-hidden="true" /> : <Clock3 size={22} aria-hidden="true" />}</span><div><span className="score-label">{examQuiz ? currentResult.passed ? 'Exam passed' : 'Exam not passed' : currentResult.passed ? 'Quiz passed' : 'Quiz not passed'}</span><strong>{hasQuizAttemptBreakdown(currentResult) ? `${currentResult.correctCount} of ${currentResult.questionCount} correct` : 'Question breakdown unavailable'}</strong><small>Score {formatPercentage(currentResult.score)} · {currentResult.passed ? `Pass mark: ${formatPercentage(quiz.passMark)}.` : `You need ${formatPercentage(quiz.passMark)} to pass.`}</small></div></div>
           <h2 ref={resultHeadingRef} tabIndex={-1}>{examQuiz ? 'Exam result' : 'Quiz result'}</h2>
           <div className="quiz-result-actions">
             {courseFinished && (user?.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} aria-hidden="true" />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} aria-hidden="true" />Add name for certificate</Link>)}
@@ -1907,7 +1908,7 @@ export function QuizPage() {
           </div>
         </div>}
       </div>
-      <aside className="quiz-aside"><span className="quiz-aside-label">Course progress</span><strong>{course.progress}%</strong><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /><p>{examQuiz ? examQuiz.requiredForCompletion ? 'Pass this final exam to complete the course.' : 'This is a practice exam and does not affect course completion.' : 'Complete lessons and pass module quizzes to finish this course.'}</p><Link to={`/courses/${course.id}`}>View course content<ArrowRight size={16} aria-hidden="true" /></Link></aside>
+      <aside className="quiz-aside"><span className="quiz-aside-label">Course progress</span><strong>{formatPercentage(course.progress)}</strong><ProgressBar value={course.progress} label={`Course progress for ${course.title}`} /><p>{examQuiz ? examQuiz.requiredForCompletion ? 'Pass this final exam to complete the course.' : 'This is a practice exam and does not affect course completion.' : 'Complete lessons and pass module quizzes to finish this course.'}</p><Link to={`/courses/${course.id}`}>View course content<ArrowRight size={16} aria-hidden="true" /></Link></aside>
     </div>
   </div>;
 }
