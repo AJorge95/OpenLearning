@@ -9,7 +9,7 @@ function applyPolicy(middleware) {
   return { secure: request.session.cookie.secure, nextCalled };
 }
 
-test('session cookie protocol follows the saved setting on each request', () => {
+test('HTTPS settings use connection-aware Secure cookies while HTTP disables Secure', () => {
   let protocol = 'http';
   const settingReads = [];
   const middleware = createSessionCookieProtocolMiddleware((key) => {
@@ -19,21 +19,21 @@ test('session cookie protocol follows the saved setting on each request', () => 
 
   assert.deepEqual(applyPolicy(middleware), { secure: false, nextCalled: true });
   protocol = 'https';
-  assert.deepEqual(applyPolicy(middleware), { secure: true, nextCalled: true });
+  assert.deepEqual(applyPolicy(middleware), { secure: 'auto', nextCalled: true });
   protocol = 'http';
   assert.deepEqual(applyPolicy(middleware), { secure: false, nextCalled: true });
   assert.deepEqual(settingReads, ['connection_protocol', 'connection_protocol', 'connection_protocol']);
 });
 
-test('session cookie protocol falls back to the environment when unset or invalid', () => {
+test('unconfigured production cookies use connection-aware security mode', () => {
   let protocol;
   const setting = () => protocol;
   const development = createSessionCookieProtocolMiddleware(setting, 'development');
   const production = createSessionCookieProtocolMiddleware(setting, 'production');
 
   assert.equal(applyPolicy(development).secure, false);
-  assert.equal(applyPolicy(production).secure, true);
+  assert.equal(applyPolicy(production).secure, 'auto');
   protocol = 'invalid';
   assert.equal(applyPolicy(development).secure, false);
-  assert.equal(applyPolicy(production).secure, true);
+  assert.equal(applyPolicy(production).secure, 'auto');
 });
