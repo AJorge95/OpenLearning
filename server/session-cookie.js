@@ -1,14 +1,17 @@
-export function createSessionCookieProtocolMiddleware(setting, nodeEnv) {
+export const sessionCookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax',
+  // Express resolves this when creating or regenerating a session.
+  secure: 'auto',
+  maxAge: 12 * 60 * 60 * 1000,
+  path: '/',
+};
+
+export function createSessionCookieProtocolMiddleware() {
   return (req, _res, next) => {
-    const protocol = setting('connection_protocol');
-    // Match the Secure attribute to the connection Express actually sees. A
-    // static Secure cookie is discarded over HTTP, leaving the UI signed in
-    // while every authenticated API request is anonymous.
-    req.session.cookie.secure = protocol === 'http'
-      ? false
-      : protocol === 'https' || nodeEnv === 'production'
-        ? 'auto'
-        : false;
+    // Stored sessions need a boolean for the current request. Assigning 'auto'
+    // here is too late: Express treats the string as truthy and suppresses HTTP cookies.
+    req.session.cookie.secure = req.secure === true;
     next();
   };
 }

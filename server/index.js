@@ -6,9 +6,9 @@ import rateLimit from 'express-rate-limit';
 import { config } from './config.js';
 import { appVersion } from './app-version.js';
 import { versionRouter } from './routes-version.js';
-import { db, setting } from './db.js';
+import { db } from './db.js';
 import { SQLiteSessionStore } from './session-store.js';
-import { createSessionCookieProtocolMiddleware } from './session-cookie.js';
+import { createSessionCookieProtocolMiddleware, sessionCookieOptions } from './session-cookie.js';
 import { mountAuthenticationRateLimits } from './auth-rate-limit-mount.js';
 import { csrfMiddleware, errorHandler, loadCurrentUser, noStoreApiResponses } from './http.js';
 import { authRouter, authRateLimitError } from './routes-auth.js';
@@ -61,15 +61,9 @@ app.use(session({
   store: sessionStore,
   resave: false,
   saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: config.nodeEnv === 'production',
-    maxAge: 12 * 60 * 60 * 1000,
-    path: '/',
-  },
+  cookie: sessionCookieOptions,
 }));
-app.use(createSessionCookieProtocolMiddleware(setting, config.nodeEnv));
+app.use(createSessionCookieProtocolMiddleware());
 app.use(loadCurrentUser);
 app.use(platformResetGate);
 app.use(backupWriteGate);
