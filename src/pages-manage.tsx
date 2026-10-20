@@ -2426,7 +2426,10 @@ export function CourseEditorPage() {
       {governanceLoading && <p className="course-governance-load-status" role="status">Loading version history and competency settings…</p>}
       {governanceError && <div className="course-governance-load-error"><Button type="button" variant="secondary" onClick={retryGovernanceLoad}>Retry loading course settings</Button></div>}
       {course.status === 'published' && governanceReady && <div className="revision-actions">
-        {review?.status === 'in_review' && <div className="review-state"><span className="program-status draft">Awaiting review</span><p>Submitted by {review.submittedByName || 'a staff member'}{review.submittedAt ? ` · ${formatApiTimestamp(review.submittedAt, logTimestampFormatter)}` : ''}</p>{review.reviewNote && <small>{review.reviewNote}</small>}</div>}
+        {review?.status === 'in_review' && <div className="review-state"><span className="program-status draft">Awaiting review</span><p>Submitted by {review.submittedByName || 'a staff member'}{review.submittedAt ? ` · ${formatApiTimestamp(review.submittedAt, logTimestampFormatter)}` : ''}</p>{review.submittedBy === editorUser?.id && <>
+          {/* Explain why the submitter does not have review-decision controls. */}
+          <small>A different administrator or moderator must review this revision before it can be published.</small>
+        </>}{review.reviewNote && <small>{review.reviewNote}</small>}</div>}
         {review?.status !== 'in_review' && <div className="review-submit-actions">{review?.status === 'changes_requested' && <div className="review-state"><span className="program-status draft">Changes requested</span>{review.reviewNote && <small>{review.reviewNote}</small>}</div>}<Button type="button" variant="secondary" onClick={() => void submitForReview()} disabled={saving || submittingReview || savingReviewDecision} aria-busy={submittingReview}>{submittingReview ? 'Submitting revision…' : 'Submit revision for review'}</Button></div>}
         {review?.status === 'in_review' && review.submittedBy !== editorUser?.id && <>
           <div className="review-decision-actions">

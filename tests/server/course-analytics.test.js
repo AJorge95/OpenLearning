@@ -5146,6 +5146,40 @@ test('publication and review note boundaries reject invalid values without state
   }
 });
 
+test('course revision submitters cannot approve or request changes on their own work', async () => {
+  const courseId = 'course-review-self-review-guard';
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Self review guard', 'published', 'admin-1', 'admin-1')`).run(courseId);
+  database.prepare(`INSERT INTO course_revisions (course_id, revision_course_id, author_id, review_status, submitted_by, submitted_at)
+    VALUES (?, ?, 'admin-1', 'in_review', 'admin-1', CURRENT_TIMESTAMP)`).run(courseId, courseId);
+  const reviewAuditCount = database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+    WHERE action IN ('course.review_approved', 'course.review_changes_requested') AND entity_id = ?`).get(courseId).count;
+
+  try {
+    for (const decision of ['approve', 'changes_requested']) {
+      const response = await fetch(apiUrl(`/manage/courses/${courseId}/review/decision`), {
+        method: 'POST',
+        headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+        body: JSON.stringify({ decision, note: 'Review by another staff member is required.' }),
+      });
+      assert.equal(response.status, 403);
+      assert.deepEqual(await response.json(), {
+        error: 'A different administrator or moderator must review this revision.',
+        code: 'self_review_forbidden',
+      });
+      assert.deepEqual(database.prepare('SELECT review_status, submitted_by FROM course_revisions WHERE course_id = ?').get(courseId), {
+        review_status: 'in_review', submitted_by: 'admin-1',
+      });
+      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_versions WHERE course_id = ?').get(courseId).count, 0);
+    }
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM audit_logs
+      WHERE action IN ('course.review_approved', 'course.review_changes_requested') AND entity_id = ?`).get(courseId).count, reviewAuditCount);
+  } finally {
+    database.prepare('DELETE FROM course_revisions WHERE course_id = ?').run(courseId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+  }
+});
+
 test('course revision submission rejects a duplicate while review is pending', async () => {
   const courseId = 'course-review-submission-guard';
   const initialAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.revision_submitted' AND entity_id = ?").get(courseId).count;
