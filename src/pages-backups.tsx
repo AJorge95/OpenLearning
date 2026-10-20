@@ -22,7 +22,7 @@ const timestampFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medi
 const scopeLabels: Record<BackupScope, string> = { full: 'Database and media', database: 'Database only', media: 'Course media only' };
 
 function defaultJob(destinationPath: string): JobInput {
-  return { name: '', scope: 'full', frequency: 'daily', weekday: 1, runTimeUtc: '02:00', destinationPath, retentionCount: 14, enabled: true };
+  return { name: '', scope: 'full', frequency: 'daily', weekday: null, runTimeUtc: '02:00', destinationPath, retentionCount: 14, enabled: true };
 }
 
 function isJobInputDirty(value: JobInput, baseline: JobInput) {
