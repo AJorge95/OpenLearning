@@ -892,6 +892,8 @@ function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }:
 
   function updateActiveQuestion(patch: Partial<FinalExamQuestionEditor>) {
     if (!activeQuestion || !selectedQuestionKey) return;
+    // Clear the previous success message once a question has unsaved edits.
+    onNotice('');
     setQuestionDrafts((current) => ({
       ...current,
       [selectedQuestionKey]: { ...(current[selectedQuestionKey] ?? activeQuestion), ...patch },
@@ -1011,6 +1013,7 @@ function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }:
   }
 
   function addQuestion() {
+    onNotice('');
     const newDraft = makeFinalExamQuestion(`new-question-${++editorKeySequenceRef.current}`, questionCount);
     const key = finalExamQuestionKey(newDraft);
     setQuestionDrafts((current) => ({ ...current, [key]: newDraft }));
@@ -1053,10 +1056,10 @@ function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }:
     </div>
     {!exam ? <Button type="button" variant="secondary" disabled={busyAction !== null} onClick={() => void createExam()}><Plus size={16} aria-hidden="true" />{busyAction === 'create' ? 'Adding final exam…' : 'Add final exam'}</Button> : <>
       <form className="final-exam-settings" onSubmit={(event) => void saveSettings(event)}>
-        <label><span className="form-label-row"><span>Exam title</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input required maxLength={quizTitleLimit} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-        <div className="app-select-field"><span>Pass mark</span><AppSelect<number> ariaLabel="Final exam pass mark" value={passMark} onChange={setPassMark} options={QUIZ_PASS_MARK_OPTIONS} /></div>
-        <label><span>Questions per attempt</span><input type="number" min={0} step={1} value={questionsPerAttempt} onChange={(event) => setQuestionsPerAttempt(event.target.value === '' ? 0 : Number(event.target.value))} /><small>Enter 0 to draw all {formatCountLabel(questionCount, 'bank question', 'bank questions')} on each attempt.</small></label>
-        <label className="final-exam-required-toggle"><input type="checkbox" checked={requiredForCompletion} onChange={(event) => setRequiredForCompletion(event.target.checked)} /><span>Passing this exam is required to complete the course</span></label>
+        <label><span className="form-label-row"><span>Exam title</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input required maxLength={quizTitleLimit} value={title} onChange={(event) => { onNotice(''); setTitle(event.target.value); }} /></label>
+        <div className="app-select-field"><span>Pass mark</span><AppSelect<number> ariaLabel="Final exam pass mark" value={passMark} onChange={(value) => { onNotice(''); setPassMark(value); }} options={QUIZ_PASS_MARK_OPTIONS} /></div>
+        <label><span>Questions per attempt</span><input type="number" min={0} step={1} value={questionsPerAttempt} onChange={(event) => { onNotice(''); setQuestionsPerAttempt(event.target.value === '' ? 0 : Number(event.target.value)); }} /><small>Enter 0 to draw all {formatCountLabel(questionCount, 'bank question', 'bank questions')} on each attempt.</small></label>
+        <label className="final-exam-required-toggle"><input type="checkbox" checked={requiredForCompletion} onChange={(event) => { onNotice(''); setRequiredForCompletion(event.target.checked); }} /><span>Passing this exam is required to complete the course</span></label>
         {!requiredForCompletion && <p className="form-hint final-exam-practice-note">Practice exam attempts do not affect course completion or certificates. An exam-only course must make its exam required.</p>}
         {questionsPerAttempt > questionCount && <p className="form-hint final-exam-count-warning" role="status">Add at least {questionsPerAttempt - questionCount} more {questionsPerAttempt - questionCount === 1 ? 'question' : 'questions'} before publishing.</p>}
         <Button type="submit" variant="secondary" disabled={busyAction !== null}>{busyAction === 'settings' ? 'Saving settings…' : 'Save exam settings'}</Button>
