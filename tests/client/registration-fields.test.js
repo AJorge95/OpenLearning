@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { buildRegistrationFieldSelectOptions, findMissingRequiredRegistrationField, refreshRegistrationFieldValues, validateRegistrationFieldEditor } from '../../src/registration-fields.ts';
+import { buildRegistrationFieldSelectOptions, findMissingRequiredRegistrationField, hasUnsavedRegistrationFieldChanges, refreshRegistrationFieldValues, validateRegistrationFieldEditor } from '../../src/registration-fields.ts';
 
 const fields = [
   { id: 'department', label: 'Department', type: 'select', required: true, options: ['Design', 'Research'] },
@@ -15,6 +15,18 @@ test('required registration answers are found when choices or text are blank', (
   assert.equal(findMissingRequiredRegistrationField(fields, { department: '' })?.id, 'department');
   assert.equal(findMissingRequiredRegistrationField(fields, { department: 'Design', about: '  ' })?.id, 'about');
   assert.equal(findMissingRequiredRegistrationField(fields, { department: 'Design', about: 'Returning learner' })?.id, 'start-date');
+});
+
+test('registration field edits compare against the saved schema and clear when reverted', () => {
+  assert.equal(hasUnsavedRegistrationFieldChanges(fields, null), false);
+  assert.equal(hasUnsavedRegistrationFieldChanges(fields, structuredClone(fields)), false);
+  assert.equal(hasUnsavedRegistrationFieldChanges([{ ...fields[0], label: 'Team' }, ...fields.slice(1)], fields), true);
+  assert.equal(hasUnsavedRegistrationFieldChanges([{ ...fields[0], options: ['Research', 'Design'] }, ...fields.slice(1)], fields), true);
+  assert.equal(hasUnsavedRegistrationFieldChanges([...fields].reverse(), fields), true);
+  const edited = [{ ...fields[0], label: 'Team' }, ...fields.slice(1)];
+  assert.equal(hasUnsavedRegistrationFieldChanges(edited, fields), true);
+  const reverted = structuredClone(fields);
+  assert.equal(hasUnsavedRegistrationFieldChanges(reverted, fields), false, 'restoring the saved schema should clear the dirty state');
 });
 
 test('custom signup fields use a navigable heading without changing its visual size', () => {

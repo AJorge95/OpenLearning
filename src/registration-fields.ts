@@ -6,6 +6,16 @@ export type RegistrationFieldEditorIssue = {
   message: string;
 };
 
+export function hasUnsavedRegistrationFieldChanges(
+  fields: RegistrationField[],
+  savedFields: RegistrationField[] | null,
+) {
+  if (savedFields === null) return false;
+  // Keep field and option order in the comparison because both affect the signup form.
+  const schemaValues = (items: RegistrationField[]) => items.map(({ id, label, type, required, options }) => [id, label, type, required, options]);
+  return JSON.stringify(schemaValues(fields)) !== JSON.stringify(schemaValues(savedFields));
+}
+
 export function buildRegistrationFieldSelectOptions(fields: RegistrationField[]) {
   const optionsByFieldId = new Map<string, { value: string; label: string }[]>();
   for (const field of fields) {

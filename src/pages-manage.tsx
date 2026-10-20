@@ -21,7 +21,7 @@ import { isCourseCreationEditorState } from './course-editor-state';
 import { getAppSelectVerticalPosition } from './app-select-position';
 import { filterCourseCompetencies, updateCourseCompetencySelection } from './course-competency-selection';
 import type { CourseRowAction } from './course-row-action-status';
-import { validateRegistrationFieldEditor } from './registration-fields';
+import { hasUnsavedRegistrationFieldChanges, validateRegistrationFieldEditor } from './registration-fields';
 import { CONNECTION_PROTOCOL_OPTIONS } from './branding';
 import type { BrandingPalette, ConnectionProtocol } from './branding';
 import { useAuth } from './auth-context';
@@ -3838,6 +3838,7 @@ const registrationFieldTypeOptions: Array<{ value: RegistrationFieldType; label:
 
 export function AdminRegistrationFieldsPage() {
   const [fields, setFields] = useState<RegistrationField[]>([]);
+  const [savedFields, setSavedFields] = useState<RegistrationField[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -3846,6 +3847,25 @@ export function AdminRegistrationFieldsPage() {
   const [success, setSuccess] = useState('');
   const [retryVersion, setRetryVersion] = useState(0);
   const [invalidField, setInvalidField] = useState<ReturnType<typeof validateRegistrationFieldEditor>>(null);
+  const hasUnsavedChanges = hasUnsavedRegistrationFieldChanges(fields, savedFields);
+  const shouldBlockNavigation = useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => {
+    const locationChanged = currentLocation.pathname !== nextLocation.pathname
+      || currentLocation.search !== nextLocation.search
+      || currentLocation.hash !== nextLocation.hash;
+    return locationChanged && (hasUnsavedChanges || saving);
+  }, [hasUnsavedChanges, saving]);
+  const navigationBlocker = useBlocker(shouldBlockNavigation);
+  const preventUnsavedRegistrationFieldExit = useCallback((event: BeforeUnloadEvent) => {
+    if (!hasUnsavedChanges && !saving) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }, [hasUnsavedChanges, saving]);
+  useBeforeUnload(preventUnsavedRegistrationFieldExit);
+
+  useEffect(() => {
+    // If a save finishes while navigation is waiting, follow the route once the draft is persisted.
+    if (navigationBlocker.state === 'blocked' && !hasUnsavedChanges && !saving) navigationBlocker.proceed();
+  }, [navigationBlocker, hasUnsavedChanges, saving]);
 
   useEffect(() => {
     let active = true;
@@ -3853,7 +3873,7 @@ export function AdminRegistrationFieldsPage() {
     setLoading(true);
     setLoadError('');
     api.get<{ fields: RegistrationField[]; configurationValid: boolean }>('/api/admin/registration-fields', { signal: controller.signal })
-      .then((result) => { if (active) { setFields(result.fields); setConfigurationWarning(result.configurationValid ? '' : 'The saved registration form is invalid. Public signup is paused. Add replacement fields and save, or save with no fields to clear the custom questions.'); } })
+      .then((result) => { if (active) { setFields(result.fields); setSavedFields(result.fields); setConfigurationWarning(result.configurationValid ? '' : 'The saved registration form is invalid. Public signup is paused. Add replacement fields and save, or save with no fields to clear the custom questions.'); } })
       .catch((cause) => { if (active) setLoadError(cause instanceof ApiError ? cause.message : 'Registration fields could not be loaded.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; controller.abort(); };
@@ -3885,6 +3905,7 @@ export function AdminRegistrationFieldsPage() {
     try {
       const result = await api.put<{ fields: RegistrationField[] }>('/api/admin/registration-fields', { fields });
       setFields(result.fields);
+      setSavedFields(result.fields);
       setConfigurationWarning('');
       setSuccess('Registration fields saved. New and future signups will use this form.');
     } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Registration fields could not be saved.'); }
@@ -3892,6 +3913,16 @@ export function AdminRegistrationFieldsPage() {
   }
 
   return <div className="management-page settings-page"><PageHeading title="Settings" subtitle="Customize platform branding, connection security, and learner registration." /><AdminSettingsTabs />
+    {navigationBlocker.state === 'blocked' && <ConfirmationDialog
+      title={saving ? 'Registration save in progress' : 'Discard unsaved registration fields?'}
+      description={saving ? 'Wait for the current save to finish before leaving this page.' : 'Your unsaved registration field changes will be lost if you leave this page.'}
+      cancelLabel={saving ? 'Stay on page' : 'Keep editing'}
+      confirmLabel={saving ? 'Saving…' : 'Discard changes'}
+      confirmVariant={saving ? 'secondary' : 'danger'}
+      confirmDisabled={saving}
+      onCancel={() => navigationBlocker.reset()}
+      onConfirm={() => navigationBlocker.proceed()}
+    />}
     {loadError && !loading && <div className="registration-fields-page-notice"><Notice>{loadError}</Notice><Button type="button" variant="secondary" onClick={() => setRetryVersion((version) => version + 1)}>Try again</Button></div>}
     {success && <Notice kind="success">{success}</Notice>}
     {loading ? <div className="page-loading" role="status" aria-live="polite">Loading registration fields…</div> : !loadError && <form className="settings-card form-stack registration-fields-card" onSubmit={saveFields} aria-busy={saving}>
