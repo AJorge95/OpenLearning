@@ -2809,6 +2809,16 @@ export function CourseAccessPage() {
     }
   }
 
+  function submitSearch(event: React.FormEvent) {
+    event.preventDefault();
+    const search = query.trim();
+    // A new result set changes which learner the assignment confirmation describes.
+    setNotice('');
+    setAppliedQuery(search);
+    setPage(1);
+    load(search, 1);
+  }
+
   if (loading || (course && course.id !== courseId)) return <div className="page-loading" role="status" aria-live="polite">Loading course access…</div>;
   const hasEmptyAccessResult = !failedRequest && users.length === 0;
   return <div className="access-page"><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><Link to={`/manage/courses/${courseId}/edit`}>{course?.title || 'Course'}</Link><span>/</span><span>Assign learners</span></div>
@@ -2819,7 +2829,7 @@ export function CourseAccessPage() {
       ? <div className="account-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.query, failedRequest.page); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
     {notice && <div className="inline-notice inline-notice-success" role="status">{notice}</div>}
-    <form role="search" aria-label="Search course learners" className="access-search" onSubmit={(event) => { event.preventDefault(); const search = query.trim(); setAppliedQuery(search); setPage(1); load(search, 1); }}><Search size={18} aria-hidden="true" /><input type="search" placeholder="Search learners by username or email" aria-label="Search learners by username or email" maxLength={100} value={query} onChange={(event) => setQuery(event.target.value)} /><Button variant="secondary" type="submit">Search</Button></form>
+    <form role="search" aria-label="Search course learners" className="access-search" onSubmit={submitSearch}><Search size={18} aria-hidden="true" /><input type="search" placeholder="Search learners by username or email" aria-label="Search learners by username or email" maxLength={100} value={query} onChange={(event) => setQuery(event.target.value)} /><Button variant="secondary" type="submit">Search</Button></form>
     {/* Announce the empty result without moving focus or duplicating the visible recovery content. */}
     {hasEmptyAccessResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{appliedQuery ? 'No learners match that search.' : 'No learner accounts are available.'}</p>}
     <div className="access-list">
