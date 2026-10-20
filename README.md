@@ -108,7 +108,7 @@ npm ci
 cp .env.example .env
 ```
 
-Set `SESSION_SECRET` and `SETUP_TOKEN` to separate random values of at least 32 characters before first use. Build and start the production server with `npm run build` and `npm start`. For development with live reload, use `npm run dev`. Both commands use port `5173` by default and the same `.env` file.
+Set `SESSION_SECRET` and `SETUP_TOKEN` to separate random values of at least 32 characters before first use. Build and start the production server with `npm run build` and `npm start`. For development with live reload, use `npm run dev`. Both commands use port `5173` by default and the same `.env` file. When `PORT` is unset and `5173` is occupied, `npm run dev` selects the next free loopback port; set `PORT` in `.env` or the process environment to pin a port.
 
 ## Configuration
 

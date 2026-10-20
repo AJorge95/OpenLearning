@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
+import dotenv from 'dotenv';
 import { chooseDevPort } from '../../scripts/dev-port.js';
 
 test('dev port selection preserves an explicitly configured port', async () => {
@@ -32,4 +34,10 @@ test('dev port selection explains when its search range is exhausted', async () 
     () => chooseDevPort(undefined, { startPort: 5173, maxPort: 5174, isAvailable: async () => false }),
     /No development port is available between 5173 and 5174\. Set PORT to choose a specific port\./,
   );
+});
+
+test('example environment leaves PORT unset so development can use its occupied-port fallback', () => {
+  const sampleEnvironment = dotenv.parse(fs.readFileSync(new URL('../../.env.example', import.meta.url), 'utf8'));
+
+  assert.equal(sampleEnvironment.PORT, undefined);
 });
