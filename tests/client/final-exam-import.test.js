@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
 import { FinalExamImportFormatError, getFinalExamImportReadErrorMessage, parseDelimitedFinalExamFile, parseFinalExamImportRows } from '../../src/final-exam-import.ts';
 
@@ -110,4 +111,10 @@ test('import read errors show format guidance without exposing unexpected failur
 
   assert.equal(getFinalExamImportReadErrorMessage(formatError), formatError.message);
   assert.equal(getFinalExamImportReadErrorMessage(new Error('internal parser detail')), 'This spreadsheet could not be read. Check that the file is valid and try again.');
+});
+
+test('spreadsheet validation errors are announced when the preview appears', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-manage.tsx', import.meta.url), 'utf8');
+
+  assert.match(pageSource, /className="final-exam-import-issues"[^>]*role="alert"/);
 });
