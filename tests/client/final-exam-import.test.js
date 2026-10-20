@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseDelimitedFinalExamFile, parseFinalExamImportRows } from '../../src/final-exam-import.ts';
+import { FinalExamImportFormatError, getFinalExamImportReadErrorMessage, parseDelimitedFinalExamFile, parseFinalExamImportRows } from '../../src/final-exam-import.ts';
 
 test('CSV import preserves commas and escaped quotes before validating answer columns', () => {
   const rows = parseDelimitedFinalExamFile([
@@ -63,4 +63,51 @@ test('delimited imports reject an unclosed quoted cell', () => {
     () => parseDelimitedFinalExamFile('Question,Answer 1\n"unfinished,answer', ','),
     /quote that was not closed/,
   );
+});
+
+test('delimited imports stop before materializing more than 1,000 rows', () => {
+  const csv = `Question,Answer 1,Answer 2,Correct Answer\n${'\n'.repeat(1000)}`;
+
+  assert.throws(
+    () => parseDelimitedFinalExamFile(csv, ','),
+    (cause) => cause instanceof FinalExamImportFormatError
+      && cause.message === 'The spreadsheet has more than 1,000 rows. Remove extra blank rows and try again.',
+  );
+});
+
+test('workbook imports reject more than 1,000 rows before row validation', () => {
+  const rows = Array.from({ length: 1001 }, () => []);
+
+  assert.deepEqual(parseFinalExamImportRows(rows), {
+    questions: [],
+    errors: ['The spreadsheet has more than 1,000 rows. Remove extra blank rows and try again.'],
+    skippedRows: 0,
+  });
+});
+
+test('delimited imports stop after 100 columns', () => {
+  const csv = `${'Answer,'.repeat(100)}Answer`;
+
+  assert.throws(
+    () => parseDelimitedFinalExamFile(csv, ','),
+    (cause) => cause instanceof FinalExamImportFormatError
+      && cause.message === 'The spreadsheet has more than 100 columns. Remove unused columns and try again.',
+  );
+});
+
+test('workbook imports reject rows with more than 100 columns before validation', () => {
+  const rows = [Array.from({ length: 101 }, () => '')];
+
+  assert.deepEqual(parseFinalExamImportRows(rows), {
+    questions: [],
+    errors: ['The spreadsheet has more than 100 columns. Remove unused columns and try again.'],
+    skippedRows: 0,
+  });
+});
+
+test('import read errors show format guidance without exposing unexpected failures', () => {
+  const formatError = new FinalExamImportFormatError('Remove extra blank rows and try again.');
+
+  assert.equal(getFinalExamImportReadErrorMessage(formatError), formatError.message);
+  assert.equal(getFinalExamImportReadErrorMessage(new Error('internal parser detail')), 'This spreadsheet could not be read. Check that the file is valid and try again.');
 });

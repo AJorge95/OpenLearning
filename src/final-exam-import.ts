@@ -11,6 +11,22 @@ export type FinalExamImportPreview = {
 };
 
 const MAX_IMPORT_QUESTIONS = 100;
+const MAX_IMPORT_ROWS = 1000;
+const MAX_IMPORT_COLUMNS = 100;
+const TOO_MANY_IMPORT_ROWS = 'The spreadsheet has more than 1,000 rows. Remove extra blank rows and try again.';
+const TOO_MANY_IMPORT_COLUMNS = 'The spreadsheet has more than 100 columns. Remove unused columns and try again.';
+const UNREADABLE_IMPORT_MESSAGE = 'This spreadsheet could not be read. Check that the file is valid and try again.';
+
+export class FinalExamImportFormatError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FinalExamImportFormatError';
+  }
+}
+
+export function getFinalExamImportReadErrorMessage(cause: unknown) {
+  return cause instanceof FinalExamImportFormatError ? cause.message : UNREADABLE_IMPORT_MESSAGE;
+}
 
 function normalizeHeader(value: unknown) {
   return String(value ?? '').replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
@@ -30,6 +46,11 @@ function answerColumn(header: string): number | null {
 }
 
 export function parseFinalExamImportRows(rows: readonly (readonly unknown[])[]): FinalExamImportPreview {
+  // Apply the same row bound to workbook parser results before traversing them.
+  if (rows.length > MAX_IMPORT_ROWS) return { questions: [], errors: [TOO_MANY_IMPORT_ROWS], skippedRows: 0 };
+  // Imported exam questions use at most nine columns; allow extra notes without accepting huge rows.
+  if (rows.some((row) => row.length > MAX_IMPORT_COLUMNS)) return { questions: [], errors: [TOO_MANY_IMPORT_COLUMNS], skippedRows: 0 };
+
   const errors: string[] = [];
   const headerIndex = rows.findIndex((row) => row.some((cell) => cellText(cell) !== ''));
   if (headerIndex < 0) return { questions: [], errors: ['The spreadsheet is empty.'], skippedRows: 0 };
@@ -111,6 +132,18 @@ export function parseDelimitedFinalExamFile(text: string, delimiter: ',' | '\t')
   let row: string[] = [];
   let cell = '';
   let quoted = false;
+  const appendCell = () => {
+    if (row.length >= MAX_IMPORT_COLUMNS) throw new FinalExamImportFormatError(TOO_MANY_IMPORT_COLUMNS);
+    row.push(cell);
+    cell = '';
+  };
+  const appendRow = () => {
+    // A small CSV can still contain millions of short rows; bound allocations before adding each row.
+    if (rows.length >= MAX_IMPORT_ROWS) throw new FinalExamImportFormatError(TOO_MANY_IMPORT_ROWS);
+    appendCell();
+    rows.push(row);
+    row = [];
+  };
 
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index];
@@ -121,21 +154,15 @@ export function parseDelimitedFinalExamFile(text: string, delimiter: ',' | '\t')
       } else if (char === '"') quoted = false;
       else cell += char;
     } else if (char === '"' && cell.length === 0) quoted = true;
-    else if (char === delimiter) {
-      row.push(cell);
-      cell = '';
-    } else if (char === '\n' || char === '\r') {
+    else if (char === delimiter) appendCell();
+    else if (char === '\n' || char === '\r') {
       if (char === '\r' && text[index + 1] === '\n') index += 1;
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = '';
+      appendRow();
     } else cell += char;
   }
-  if (quoted) throw new Error('The CSV or TSV file has a quote that was not closed.');
+  if (quoted) throw new FinalExamImportFormatError('The CSV or TSV file has a quote that was not closed.');
   if (cell.length || row.length) {
-    row.push(cell);
-    rows.push(row);
+    appendRow();
   }
   return rows;
 }

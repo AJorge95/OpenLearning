@@ -35,7 +35,7 @@ import { COMPLETION_WINDOW_ERROR, COURSE_CATEGORY_REQUIRED_ERROR, COURSE_CATEGOR
 import { isCourseCoverDimensionAllowed, MAX_COURSE_COVER_DIMENSION } from './course-cover-validation';
 import { readImageDimensions } from './image-dimensions';
 import { firstQuizTextIssue, MAX_QUIZ_TITLE_LENGTH, QUIZ_TITLE_REQUIRED_ERROR, QUIZ_TITLE_TOO_LONG_ERROR, validateQuizTitle } from './quiz-validation';
-import { downloadFinalExamImportTemplate, parseDelimitedFinalExamFile, parseFinalExamImportRows } from './final-exam-import';
+import { downloadFinalExamImportTemplate, getFinalExamImportReadErrorMessage, parseDelimitedFinalExamFile, parseFinalExamImportRows } from './final-exam-import';
 import type { FinalExamImportPreview } from './final-exam-import';
 import { lessonResourceUrlError } from './resource-validation';
 import { clearPasswordConfirmationError, getPasswordConfirmationError, passwordConfirmationFieldProps } from './password-confirmation';
@@ -970,8 +970,8 @@ function CourseFinalExamEditor({ courseId, exam, onChanged, onError, onNotice }:
         ? await import('read-excel-file/universal').then(({ readSheet }) => readSheet(file))
         : parseDelimitedFinalExamFile(await file.text(), extension === 'tsv' ? '\t' : ',');
       setImportPreview(parseFinalExamImportRows(rows as readonly (readonly unknown[])[]));
-    } catch {
-      setImportError('This spreadsheet could not be read. Check that the file is valid and try again.');
+    } catch (cause) {
+      setImportError(getFinalExamImportReadErrorMessage(cause));
     } finally {
       setReadingImportFile(false);
       input.value = '';
