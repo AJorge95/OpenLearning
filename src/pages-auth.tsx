@@ -253,7 +253,8 @@ export function SetupPage() {
     <main id="main-content" tabIndex={-1} className="setup-page">
       <section className="setup-panel">
         <span className="setup-mark"><ImageWithFallback src={platformIcon} className="setup-mark-image" alt="Platform icon preview" fallback={<BookOpenMark />} /></span>
-        <div className="setup-step-label">Step {step} of 2</div>
+        {/* Announce setup progress as the wizard advances, alongside heading focus. */}
+        <div className="setup-step-label" role="status">Step {step} of 2</div>
         {step === 1 ? <>
           <h1 ref={stepHeadingRef} tabIndex={-1}>Set up your learning platform</h1>
           <p>Create the administrator account and choose a name for this installation.</p>
