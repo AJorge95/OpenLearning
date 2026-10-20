@@ -275,7 +275,10 @@ export function AdminBackupsPage() {
     <section className="backup-section" aria-labelledby="backup-restore-points-heading">
       <div className="backup-section-heading"><div><h2 id="backup-restore-points-heading">Restore from a full backup</h2><p>Choose any retained, verified full backup. Restoring creates a verified backup of the current installation first.</p></div></div>
       {restorableRuns.length ? <div className="backup-history-wrap" role="region" aria-label="Available full backup restore points" tabIndex={0}><p className="table-scroll-hint">Scroll horizontally to see all restore point columns.</p><table className="backup-history-table"><caption className="sr-only">Available full backup restore points</caption><thead><tr><th scope="col">Backup time</th><th scope="col">Job</th><th scope="col">Backup location</th><th scope="col">Action</th></tr></thead><tbody>{restorableRuns.map((run) => <tr key={run.id}>
-        <td>{formatTimestamp(run.finishedAt || run.createdAt)}</td><th scope="row">{run.jobName}</th><td className="backup-history-detail"><code>{run.backupPath}</code></td><td><button type="button" className="text-action" disabled={restoreBusy || isRunning} onClick={() => { setError(''); setSuccess(''); setPendingRestore(run); }}><RotateCcw size={14} aria-hidden="true" />Restore</button></td>
+        <td>{formatTimestamp(run.finishedAt || run.createdAt)}</td><th scope="row">{run.jobName}</th><td className="backup-history-detail"><code>{run.backupPath}</code></td><td>
+          {/* Name each restore action with its backup so button navigation distinguishes the restore point. */}
+          <button type="button" className="text-action" aria-label={`Restore full backup from ${run.jobName}, completed ${formatTimestamp(run.finishedAt || run.createdAt)}`} disabled={restoreBusy || isRunning} onClick={() => { setError(''); setSuccess(''); setPendingRestore(run); }}><RotateCcw size={14} aria-hidden="true" />Restore</button>
+        </td>
       </tr>)}</tbody></table></div> : dashboardLoaded && <div className="backup-empty-state">No retained full backups are available to restore. Database-only and course-media-only backups cannot restore the whole platform.</div>}
     </section>
     <section className="backup-section" aria-labelledby="backup-history-heading">
