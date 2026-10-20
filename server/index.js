@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import express from 'express';
 import session from 'express-session';
@@ -26,11 +27,14 @@ import { mountWebClient } from './web-client.js';
 import { recoverInterruptedBackupRestore } from './backup-restore.js';
 import { setStartupMediaCleanup } from './media-maintenance.js';
 import { listenWithDevelopmentPortFallback } from './development-port-fallback.js';
+import { trackActiveConnections } from './shutdown-diagnostics.js';
 
 await recoverInterruptedBackupRestore();
 
 const app = express();
 const server = createServer(app);
+const instanceId = randomUUID();
+const getActiveConnections = trackActiveConnections(server);
 let isShuttingDown = false;
 let finishStartupMediaCleanup;
 const startupMediaCleanup = new Promise((resolve) => { finishStartupMediaCleanup = resolve; });
@@ -133,7 +137,13 @@ function onServerListening(port) {
   }
   console.log(`Database: ${config.dbPath}`);
   console.log(`Course media: ${config.mediaRoot}`);
-  writeSystemLog('info', 'server', 'OpenLearning server started', { port, environment: config.nodeEnv, nodeVersion: process.versions.node });
+  writeSystemLog('info', 'server', 'OpenLearning server started', {
+    instanceId,
+    processId: process.pid,
+    port,
+    environment: config.nodeEnv,
+    nodeVersion: process.versions.node,
+  });
   setImmediate(cleanupOrphanedMedia);
 }
 
@@ -152,14 +162,28 @@ void listenWithDevelopmentPortFallback(server, {
 server.requestTimeout = config.requestTimeoutMs;
 startBackupScheduler({ shouldDefer: isPlatformResetActive });
 
-function shutdown() {
+function shutdown(signal) {
   if (isShuttingDown) return;
   isShuttingDown = true;
-  writeSystemLog('info', 'server', 'OpenLearning server is shutting down');
+  writeSystemLog('info', 'server', 'OpenLearning server is shutting down', {
+    instanceId,
+    processId: process.pid,
+    signal,
+  });
   const backupShutdown = stopBackupScheduler();
   const clientShutdown = webClient?.close();
   const shutdownDeadline = setTimeout(() => {
-    writeSystemLog('warn', 'server', 'Graceful shutdown exceeded 30 seconds; closing active connections');
+    const connections = getActiveConnections();
+    const loggedConnections = connections.slice(0, 20);
+    writeSystemLog('warn', 'server', 'Graceful shutdown exceeded 30 seconds; closing active connections', {
+      instanceId,
+      processId: process.pid,
+      signal,
+      connectionCount: connections.length,
+      activeRequestCount: connections.reduce((total, connection) => total + connection.activeRequests, 0),
+      connections: loggedConnections,
+      connectionsTruncated: connections.length > loggedConnections.length,
+    });
     server.closeAllConnections();
   }, 30_000);
   shutdownDeadline.unref?.();
@@ -172,5 +196,5 @@ function shutdown() {
     });
   });
 }
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
