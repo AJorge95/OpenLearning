@@ -58,8 +58,8 @@ test('competency page loading and retry states are announced and actionable', ()
 
 test('mapped course completion states are announced alongside each course title', () => {
   const source = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
-  const mappedCourses = source.match(/<ul>\{item\.courses\.map\(\(course\) => <li key=\{course\.id\}>.*?<\/ul>/s)?.[0] || '';
+  const mappedCourses = source.match(/<ul>\{item\.courses\.map\(\(course\) => \(\s*<li key=\{course\.id\}>[\s\S]*?<\/li>\s*\)\)\}<\/ul>/)?.[0] || '';
 
   assert.match(mappedCourses, /course\.completed \? <Check size=\{15\} aria-hidden="true" \/> : <BookOpen size=\{15\} aria-hidden="true" \/>/);
-  assert.match(mappedCourses, /<span>\{course\.title\}<span className="sr-only">, \{course\.completed \? 'completed' : 'not completed'\}<\/span><\/span>/);
+  assert.match(mappedCourses, /<Link className="competency-course-link" to=\{`\/courses\/\$\{course\.id\}`\}>\{course\.title\}<\/Link>\s*<span className="sr-only">, \{course\.completed \? 'completed' : 'not completed'\}<\/span>/);
 });

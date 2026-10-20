@@ -845,7 +845,14 @@ export function CompetenciesPage() {
     {error && <div className="error-notice-actionable" role="alert"><span>{error}</span><Button variant="secondary" disabled={loading} onClick={() => setReloadSequence((current) => current + 1)}>Try again</Button></div>}
     {loading ? <div className="page-loading" role="status">Loading competencies…</div> : error ? null : competencyTotal ? <>
       <div className="competency-summary"><span className="program-icon" aria-hidden="true"><CircleHelp size={18} /></span><div><strong>{achievedCompetencyTotal} of {competencyTotal} competencies achieved</strong><ProgressBar value={achievedCompetencyTotal / competencyTotal * 100} label="Competencies achieved" /></div></div>
-      <div className="competency-grid">{competencies.map((item) => <article className={`competency-card ${item.achieved ? 'achieved' : ''}`} key={item.id}><div className="competency-card-top"><span className="program-icon" aria-hidden="true"><CircleHelp size={18} /></span><span className={`program-status ${item.achieved ? 'published' : 'draft'}`}>{item.achieved ? 'Achieved' : 'In progress'}</span></div><h2>{item.title}</h2><p>{item.description || 'Complete a mapped course to achieve this competency.'}</p><strong>{item.completedCourses} of {item.courseCount} mapped courses complete</strong>{item.courses?.length ? <ul>{item.courses.map((course) => <li key={course.id}>{course.completed ? <Check size={15} aria-hidden="true" /> : <BookOpen size={15} aria-hidden="true" />}<span>{course.title}<span className="sr-only">, {course.completed ? 'completed' : 'not completed'}</span></span></li>)}</ul> : <small>No courses are currently mapped.</small>}</article>)}</div>
+      <div className="competency-grid">{competencies.map((item) => <article className={`competency-card ${item.achieved ? 'achieved' : ''}`} key={item.id}><div className="competency-card-top"><span className="program-icon" aria-hidden="true"><CircleHelp size={18} /></span><span className={`program-status ${item.achieved ? 'published' : 'draft'}`}>{item.achieved ? 'Achieved' : 'In progress'}</span></div><h2>{item.title}</h2><p>{item.description || 'Complete a mapped course to achieve this competency.'}</p><strong>{item.completedCourses} of {item.courseCount} mapped courses complete</strong>{item.courses?.length ? <ul>{item.courses.map((course) => (
+        <li key={course.id}>
+          {course.completed ? <Check size={15} aria-hidden="true" /> : <BookOpen size={15} aria-hidden="true" />}
+          {/* The API has already filtered out courses the learner cannot access. */}
+          <Link className="competency-course-link" to={`/courses/${course.id}`}>{course.title}</Link>
+          <span className="sr-only">, {course.completed ? 'completed' : 'not completed'}</span>
+        </li>
+      ))}</ul> : <small>No courses are currently mapped.</small>}</article>)}</div>
       {competencyTotal > competencyPageSize && (
         <div className="catalog-pagination competency-progress-pagination">
           <div className="competency-progress-status">
