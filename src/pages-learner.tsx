@@ -16,6 +16,7 @@ import { quizPriorPassNotice } from './quiz-prior-pass';
 import { addLessonCommentToPage, getNewLessonComments } from './lesson-comments';
 import { updatePendingRequestKeys } from './pending-request-keys';
 import { lessonCommentRemovalConfirmation } from './lesson-comment-confirmation';
+import { offsetPageHasDrift } from './offset-page-drift';
 import { tryToggleFullscreen } from './video-fullscreen';
 import { selectVideoCaptionTrack } from './video-captions';
 import { canRetryVideoWatchProgressLoad, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
@@ -36,10 +37,7 @@ function hasQuizAttemptBreakdown(attempt: QuizAttempt | QuizAttemptPreview): att
 }
 
 function coursePageHasDrift(currentCourses: Course[], response: CourseListResponse, expectedTotal: number, expectedPage: number) {
-  if (response.total !== undefined && response.total !== expectedTotal) return true;
-  if (response.page !== undefined && response.page !== expectedPage) return true;
-  const currentIds = new Set(currentCourses.map((course) => course.id));
-  return response.courses.some((course) => currentIds.has(course.id));
+  return offsetPageHasDrift(currentCourses, response.courses, expectedTotal, response.total, expectedPage, response.page);
 }
 
 const certificateHistoryDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' });
@@ -352,7 +350,7 @@ export function MyLearningPage() {
     try {
       const result = await api.get<CertificateListResponse>(`/api/my-learning/certificates?page=${requestedPage}`, { signal: requestController.signal });
       if (requestSequence !== certificateLoadSequenceRef.current) return;
-      if (result.total !== certificateTotal || result.page !== requestedPage) {
+      if (offsetPageHasDrift(certificates, result.certificates, certificateTotal, result.total, requestedPage, result.page)) {
         const refreshed = await api.get<CertificateListResponse>('/api/my-learning/certificates?page=1', { signal: requestController.signal });
         if (requestSequence === certificateLoadSequenceRef.current) {
           setCertificates(refreshed.certificates);
