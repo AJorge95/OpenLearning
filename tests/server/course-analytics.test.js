@@ -5180,6 +5180,55 @@ test('course revision submitters cannot approve or request changes on their own 
   }
 });
 
+test('course content cannot change while a revision is awaiting review', async () => {
+  const courseId = 'course-review-edit-lock';
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
+    VALUES ('reviewer-edit-lock', 'reviewer_edit_lock', 'reviewer-edit-lock@example.invalid', 'not-used', 'moderator', 0)`).run();
+  database.prepare(`INSERT INTO courses (id, title, status, created_by, updated_by)
+    VALUES (?, 'Review edit lock', 'published', 'admin-1', 'admin-1')`).run(courseId);
+  database.prepare(`INSERT INTO course_revisions (course_id, revision_course_id, author_id, review_status, submitted_by, submitted_at)
+    VALUES (?, ?, 'admin-1', 'in_review', 'admin-1', CURRENT_TIMESTAMP)`).run(courseId, courseId);
+
+  try {
+    const metadataResponse = await fetch(apiUrl(`/manage/courses/${courseId}`), {
+      method: 'PATCH',
+      headers: { ...userHeaders('admin-1'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Changed during review', status: 'draft' }),
+    });
+    assert.equal(metadataResponse.status, 409);
+    assert.deepEqual(await metadataResponse.json(), {
+      error: 'This revision is awaiting review. Course content is locked until the review is decided.',
+      code: 'review_pending',
+    });
+
+    const moduleResponse = await fetch(apiUrl(`/manage/courses/${courseId}/modules`), {
+      method: 'POST',
+      headers: { ...userHeaders('reviewer-edit-lock'), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Added during review' }),
+    });
+    assert.equal(moduleResponse.status, 409);
+    assert.deepEqual(await moduleResponse.json(), {
+      error: 'This revision is awaiting review. Course content is locked until the review is decided.',
+      code: 'review_pending',
+    });
+
+    const decisionResponse = await fetch(apiUrl(`/manage/courses/${courseId}/review/decision`), {
+      method: 'POST',
+      headers: { ...userHeaders('reviewer-edit-lock'), 'content-type': 'application/json' },
+      body: JSON.stringify({ decision: 'changes_requested', note: 'Please update the submitted revision.' }),
+    });
+    assert.equal(decisionResponse.status, 200);
+    assert.deepEqual(await decisionResponse.json(), { status: 'changes_requested' });
+    assert.equal(database.prepare('SELECT title FROM courses WHERE id = ?').get(courseId).title, 'Review edit lock');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM course_modules WHERE course_id = ?').get(courseId).count, 0);
+    assert.equal(database.prepare('SELECT review_status FROM course_revisions WHERE course_id = ?').get(courseId).review_status, 'changes_requested');
+  } finally {
+    database.prepare('DELETE FROM course_revisions WHERE course_id = ?').run(courseId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+    database.prepare("DELETE FROM users WHERE id = 'reviewer-edit-lock'").run();
+  }
+});
+
 test('course revision submission rejects a duplicate while review is pending', async () => {
   const courseId = 'course-review-submission-guard';
   const initialAuditCount = database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.revision_submitted' AND entity_id = ?").get(courseId).count;

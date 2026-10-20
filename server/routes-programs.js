@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
-import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireObjectBody, requireStaff } from './http.js';
+import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAdmin, requireAuth, requireCourseManager, requireEditableCourseManager, requireObjectBody, requireStaff } from './http.js';
 import { courseLearningDeadlineAt, courseSummaries, courseSummariesWithState, insertCourseLearningStates, prepareCourseLearnerSummaryData, prepareCourseSummaryData } from './course-service.js';
 import { courseVersionHistoryPage, logicalCourseId, logicalCourseIds, publishRevision, restoreCourseVersion } from './course-versioning.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
@@ -693,7 +693,7 @@ programsRouter.get('/manage/courses/:courseId/competencies', requireStaff, (req,
 
 programsRouter.put('/manage/courses/:courseId/competencies', requireStaff, (req, res) => {
   const update = db.transaction(() => {
-    requireCourseManager(req.params.courseId, req.currentUser);
+    requireEditableCourseManager(req.params.courseId, req.currentUser);
     const courseId = logicalCourseId(req.params.courseId) || req.params.courseId;
     const ids = req.body?.competencyIds;
     if (!Array.isArray(ids) || ids.length > COURSE_COMPETENCY_SELECTION_LIMIT || ids.some((id) => typeof id !== 'string')) fail(400, 'Choose a valid competency list.', 'validation_error');
@@ -788,7 +788,7 @@ programsRouter.post('/manage/courses/:courseId/review/decision', requireStaff, (
 
 programsRouter.post('/manage/courses/:courseId/versions/:versionId/restore', requireStaff, (req, res) => {
   const restore = db.transaction(() => {
-    const current = requireCourseManager(req.params.courseId, req.currentUser);
+    const current = requireEditableCourseManager(req.params.courseId, req.currentUser);
     const logicalId = current.logical_course_id || current.id;
     const source = db.prepare('SELECT id, version_number FROM course_versions WHERE id = ? AND course_id = ?')
       .get(req.params.versionId, logicalId);

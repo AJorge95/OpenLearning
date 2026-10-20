@@ -4,7 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { config } from './config.js';
-import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAuth, requireObjectBody, requireStaff, requireCourseManager, requireCourseViewer } from './http.js';
+import { createCourseAccessChecker, enumQuery, fail, pageQuery, requireAuth, requireObjectBody, requireStaff, requireCourseManager, requireEditableCourseManager, requireCourseViewer } from './http.js';
 import { assertPublishable, canLearnerAccess, courseFromLesson, courseSummaries, courseSummary, enrollLearner, getCoursePayload, isLessonUnlocked, moduleCourse, quizCourse } from './course-service.js';
 import { likeContains, textSearchPredicate } from './sql.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
@@ -78,6 +78,12 @@ function normalizedQuizQuestion(question, label = 'Final exam question') {
 
 function finalExamForManager(courseId, user) {
   const course = requireCourseManager(courseId, user);
+  const exam = db.prepare('SELECT * FROM quizzes WHERE course_id = ?').get(course.id);
+  return { course, exam };
+}
+
+function finalExamForEditor(courseId, user) {
+  const course = requireEditableCourseManager(courseId, user);
   const exam = db.prepare('SELECT * FROM quizzes WHERE course_id = ?').get(course.id);
   return { course, exam };
 }
@@ -986,6 +992,11 @@ courseRouter.patch('/manage/courses/:courseId', requireStaff, (req, res) => {
       fail(400, 'Completion time must be between 1 and 3,650 days, or left blank.', 'validation_error');
     }
     const logicalId = current.logical_course_id || current.id;
+    const revision = db.prepare('SELECT * FROM course_revisions WHERE course_id = ?').get(logicalId);
+    const reviewPending = revision?.review_status === 'in_review';
+    if (reviewPending && status !== 'published') {
+      fail(409, 'This revision is awaiting review. Course content is locked until the review is decided.', 'review_pending');
+    }
     const canonical = canonicalCourse(logicalId);
     if (!canonical) fail(404, 'Course not found.', 'not_found');
     if (visibility === 'private' && db.prepare(`SELECT 1 FROM learning_path_courses pc JOIN learning_paths p ON p.id = pc.path_id
@@ -994,9 +1005,14 @@ courseRouter.patch('/manage/courses/:courseId', requireStaff, (req, res) => {
     }
     if (status === 'published') {
       const changeNote = body.changeNote === undefined ? '' : textField(body.changeNote, 'Publication note', 500);
-      const revision = db.prepare('SELECT * FROM course_revisions WHERE course_id = ?').get(logicalId);
       if (revision?.review_status === 'in_review' && revision.submitted_by === req.currentUser.id) {
         fail(409, 'This revision is awaiting independent review. A different staff member must approve it.', 'review_pending');
+      }
+      const contentChangedDuringReview = title !== current.title || description !== current.description
+        || category !== current.category || visibility !== current.visibility
+        || completionWindowDays !== (current.completion_window_days ?? null);
+      if (reviewPending && contentChangedDuringReview) {
+        fail(409, 'This revision is awaiting review. Course content is locked until the review is decided.', 'review_pending');
       }
       db.prepare(`UPDATE courses SET title = ?, description = ?, category = ?, visibility = ?, completion_window_days = ?,
         updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
@@ -1073,7 +1089,7 @@ courseRouter.post('/manage/courses/:courseId/modules', requireStaff, (req, res) 
   const title = textField(req.body?.title, 'Module title', 160, { required: true });
   const id = randomUUID();
   const createModule = db.transaction(() => {
-    const course = requireCourseManager(req.params.courseId, req.currentUser);
+    const course = requireEditableCourseManager(req.params.courseId, req.currentUser);
     const position = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM course_modules WHERE course_id = ?').get(course.id).next;
     db.prepare('INSERT INTO course_modules (id, course_id, title, position) VALUES (?, ?, ?, ?)').run(id, course.id, title, position);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, course.id);
@@ -1089,12 +1105,12 @@ courseRouter.post('/manage/courses/:courseId/modules', requireStaff, (req, res) 
 courseRouter.patch('/manage/modules/:moduleId', requireStaff, (req, res) => {
   const module = moduleCourse(req.params.moduleId);
   if (!module) fail(404, 'Module not found.', 'not_found');
-  requireCourseManager(module.id, req.currentUser);
+  requireEditableCourseManager(module.id, req.currentUser);
   const title = textField(req.body?.title, 'Module title', 160, { required: true });
   const updateModule = db.transaction(() => {
     const current = moduleCourse(req.params.moduleId);
     if (!current) fail(404, 'Module not found.', 'not_found');
-    requireCourseManager(current.id, req.currentUser);
+    requireEditableCourseManager(current.id, req.currentUser);
     if (current.module_title === title) return null;
     db.prepare('UPDATE course_modules SET title = ? WHERE id = ?').run(title, current.module_id);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, current.id);
@@ -1111,7 +1127,7 @@ courseRouter.delete('/manage/modules/:moduleId', requireStaff, async (req, res) 
   const deleteModule = db.transaction(() => {
     const module = moduleCourse(req.params.moduleId);
     if (!module) fail(404, 'Module not found.', 'not_found');
-    requireCourseManager(module.id, req.currentUser);
+    requireEditableCourseManager(module.id, req.currentUser);
     const media = db.prepare(`SELECT mf.id, mf.file_name FROM media_files mf WHERE mf.course_id = ? AND mf.id IN (
       SELECT l.media_id FROM lessons l WHERE l.module_id = ? AND l.media_id IS NOT NULL
     )`).all(module.id, module.module_id);
@@ -1160,13 +1176,13 @@ courseRouter.delete('/manage/modules/:moduleId', requireStaff, async (req, res) 
 courseRouter.post('/manage/modules/:moduleId/lessons', requireStaff, (req, res) => {
   const module = moduleCourse(req.params.moduleId);
   if (!module) fail(404, 'Module not found.', 'not_found');
-  requireCourseManager(module.id, req.currentUser);
+  requireEditableCourseManager(module.id, req.currentUser);
   const title = textField(req.body?.title, 'Lesson title', 160, { required: true });
   const id = randomUUID();
   const createLesson = db.transaction(() => {
     const currentModule = moduleCourse(req.params.moduleId);
     if (!currentModule) fail(404, 'Module not found.', 'not_found');
-    requireCourseManager(currentModule.id, req.currentUser);
+    requireEditableCourseManager(currentModule.id, req.currentUser);
     const position = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM lessons WHERE module_id = ?').get(currentModule.module_id).next;
     db.prepare('INSERT INTO lessons (id, module_id, title, position) VALUES (?, ?, ?, ?)').run(id, currentModule.module_id, title, position);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, currentModule.id);
@@ -1183,14 +1199,14 @@ courseRouter.patch('/manage/lessons/:lessonId', requireStaff, (req, res) => {
   const body = requireObjectBody(req.body, 'Lesson changes');
   const lesson = courseFromLesson(req.params.lessonId);
   if (!lesson) fail(404, 'Lesson not found.', 'not_found');
-  requireCourseManager(lesson.id, req.currentUser);
+  requireEditableCourseManager(lesson.id, req.currentUser);
   const requestedTitle = body.title === undefined ? undefined : textField(body.title, 'Lesson title', 160, { required: true });
   const requestedDescription = body.description === undefined ? undefined : textField(body.description, 'Lesson description', 2000);
   const requestedTranscript = body.transcript === undefined ? undefined : textField(body.transcript, 'Lesson transcript', 50000);
   const updateLesson = db.transaction(() => {
     const current = courseFromLesson(req.params.lessonId);
     if (!current) fail(404, 'Lesson not found.', 'not_found');
-    requireCourseManager(current.id, req.currentUser);
+    requireEditableCourseManager(current.id, req.currentUser);
     const title = requestedTitle === undefined ? current.lesson_title : requestedTitle;
     const description = requestedDescription === undefined ? current.lesson_description : requestedDescription;
     const transcript = requestedTranscript === undefined ? current.lesson_transcript : requestedTranscript;
@@ -1214,7 +1230,7 @@ courseRouter.patch('/manage/lessons/:lessonId', requireStaff, (req, res) => {
 courseRouter.post('/manage/lessons/:lessonId/resources', requireStaff, (req, res) => {
   const lesson = courseFromLesson(req.params.lessonId);
   if (!lesson) fail(404, 'Lesson not found.', 'not_found');
-  requireCourseManager(lesson.id, req.currentUser);
+  requireEditableCourseManager(lesson.id, req.currentUser);
   const title = textField(req.body?.title, 'Resource title', 160, { required: true });
   const rawUrl = textField(req.body?.url, 'Link URL', 2048, { required: true });
   const urlValidation = validateLessonResourceUrl(rawUrl);
@@ -1224,7 +1240,7 @@ courseRouter.post('/manage/lessons/:lessonId/resources', requireStaff, (req, res
   const createResource = db.transaction(() => {
     const currentLesson = courseFromLesson(req.params.lessonId);
     if (!currentLesson) fail(404, 'Lesson not found.', 'not_found');
-    requireCourseManager(currentLesson.id, req.currentUser);
+    requireEditableCourseManager(currentLesson.id, req.currentUser);
     const position = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM lesson_resources WHERE lesson_id = ?').get(currentLesson.lesson_id).next;
     db.prepare(`INSERT INTO lesson_resources (id, lesson_id, resource_type, title, href, position)
       VALUES (?, ?, 'link', ?, ?, ?)`).run(id, currentLesson.lesson_id, title, url.href, position);
@@ -1242,7 +1258,7 @@ courseRouter.delete('/manage/lessons/:lessonId/resources/:resourceId', requireSt
   const removeResource = db.transaction(() => {
     const lesson = courseFromLesson(req.params.lessonId);
     if (!lesson) fail(404, 'Lesson not found.', 'not_found');
-    requireCourseManager(lesson.id, req.currentUser);
+    requireEditableCourseManager(lesson.id, req.currentUser);
     const resource = db.prepare('SELECT * FROM lesson_resources WHERE id = ? AND lesson_id = ?')
       .get(req.params.resourceId, lesson.lesson_id);
     if (!resource) fail(404, 'Lesson resource not found.', 'not_found');
@@ -1267,7 +1283,7 @@ courseRouter.delete('/manage/lessons/:lessonId', requireStaff, async (req, res) 
   const removeLesson = db.transaction(() => {
     const lesson = courseFromLesson(req.params.lessonId);
     if (!lesson) fail(404, 'Lesson not found.', 'not_found');
-    requireCourseManager(lesson.id, req.currentUser);
+    requireEditableCourseManager(lesson.id, req.currentUser);
     const media = lesson.media_id ? db.prepare('SELECT file_name FROM media_files WHERE id = ?').get(lesson.media_id) : null;
     const documents = db.prepare("SELECT id, file_name FROM lesson_resources WHERE lesson_id = ? AND resource_type = 'document'").all(lesson.lesson_id);
     const captions = db.prepare('SELECT id, file_name FROM lesson_captions WHERE lesson_id = ?').all(lesson.lesson_id);
@@ -1298,13 +1314,13 @@ courseRouter.delete('/manage/lessons/:lessonId', requireStaff, async (req, res) 
 courseRouter.post('/manage/modules/:moduleId/move', requireStaff, (req, res) => {
   const module = moduleCourse(req.params.moduleId);
   if (!module) fail(404, 'Module not found.', 'not_found');
-  requireCourseManager(module.id, req.currentUser);
+  requireEditableCourseManager(module.id, req.currentUser);
   const direction = req.body?.direction;
   if (!['up', 'down'].includes(direction)) fail(400, 'Choose up or down.', 'validation_error');
   const move = db.transaction(() => {
     const currentModule = moduleCourse(req.params.moduleId);
     if (!currentModule) fail(404, 'Module not found.', 'not_found');
-    requireCourseManager(currentModule.id, req.currentUser);
+    requireEditableCourseManager(currentModule.id, req.currentUser);
     const modules = db.prepare('SELECT id, position FROM course_modules WHERE course_id = ? ORDER BY position, id').all(currentModule.id);
     const index = modules.findIndex((item) => item.id === currentModule.module_id);
     if (index < 0) return false;
@@ -1328,13 +1344,13 @@ courseRouter.post('/manage/modules/:moduleId/move', requireStaff, (req, res) => 
 courseRouter.post('/manage/lessons/:lessonId/move', requireStaff, (req, res) => {
   const lesson = courseFromLesson(req.params.lessonId);
   if (!lesson) fail(404, 'Lesson not found.', 'not_found');
-  requireCourseManager(lesson.id, req.currentUser);
+  requireEditableCourseManager(lesson.id, req.currentUser);
   const direction = req.body?.direction;
   if (!['up', 'down'].includes(direction)) fail(400, 'Choose up or down.', 'validation_error');
   const move = db.transaction(() => {
     const currentLesson = courseFromLesson(req.params.lessonId);
     if (!currentLesson) fail(404, 'Lesson not found.', 'not_found');
-    requireCourseManager(currentLesson.id, req.currentUser);
+    requireEditableCourseManager(currentLesson.id, req.currentUser);
     const lessons = db.prepare('SELECT id, position FROM lessons WHERE module_id = ? ORDER BY position, id').all(currentLesson.module_id);
     const index = lessons.findIndex((item) => item.id === currentLesson.lesson_id);
     if (index < 0) return false;
@@ -1358,7 +1374,7 @@ courseRouter.post('/manage/lessons/:lessonId/move', requireStaff, (req, res) => 
 courseRouter.put('/manage/courses/:courseId/final-exam', requireStaff, (req, res) => {
   const body = requireObjectBody(req.body, 'Final exam settings');
   const saveExam = db.transaction(() => {
-    const course = requireCourseManager(req.params.courseId, req.currentUser);
+    const course = requireEditableCourseManager(req.params.courseId, req.currentUser);
     const existing = db.prepare('SELECT * FROM quizzes WHERE course_id = ?').get(course.id);
     const title = textField(body.title ?? existing?.title ?? 'Final exam', 'Final exam title', 160, { required: true });
     const passMark = body.passMark === undefined ? existing?.pass_mark ?? 70 : intField(body.passMark, 'Pass mark', 1, 100);
@@ -1393,7 +1409,7 @@ courseRouter.put('/manage/courses/:courseId/final-exam', requireStaff, (req, res
 
 courseRouter.delete('/manage/courses/:courseId/final-exam', requireStaff, (req, res) => {
   const removeExam = db.transaction(() => {
-    const course = requireCourseManager(req.params.courseId, req.currentUser);
+    const course = requireEditableCourseManager(req.params.courseId, req.currentUser);
     const exam = db.prepare('SELECT id FROM quizzes WHERE course_id = ?').get(course.id);
     if (!exam) return false;
     db.prepare('DELETE FROM quizzes WHERE id = ?').run(exam.id);
@@ -1450,7 +1466,7 @@ courseRouter.get('/manage/courses/:courseId/final-exam/questions', requireStaff,
 courseRouter.post('/manage/courses/:courseId/final-exam/questions', requireStaff, (req, res) => {
   const question = normalizedQuizQuestion(req.body);
   const createQuestion = db.transaction(() => {
-    const { course, exam } = finalExamForManager(req.params.courseId, req.currentUser);
+    const { course, exam } = finalExamForEditor(req.params.courseId, req.currentUser);
     if (!exam) fail(404, 'Final exam not found.', 'not_found');
     const id = randomUUID();
     const position = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM quiz_questions WHERE quiz_id = ?').get(exam.id).next;
@@ -1476,7 +1492,7 @@ courseRouter.post('/manage/courses/:courseId/final-exam/questions/import', requi
   }
   const questions = rows.map((question, index) => normalizedQuizQuestion(question, `Imported question ${index + 1}`));
   const importQuestions = db.transaction(() => {
-    const { course, exam } = finalExamForManager(req.params.courseId, req.currentUser);
+    const { course, exam } = finalExamForEditor(req.params.courseId, req.currentUser);
     if (!exam) fail(404, 'Final exam not found.', 'not_found');
     let position = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM quiz_questions WHERE quiz_id = ?').get(exam.id).next;
     const insertQuestion = db.prepare('INSERT INTO quiz_questions (id, quiz_id, prompt, explanation, position) VALUES (?, ?, ?, ?, ?)');
@@ -1501,7 +1517,7 @@ courseRouter.post('/manage/courses/:courseId/final-exam/questions/import', requi
 courseRouter.put('/manage/courses/:courseId/final-exam/questions/:questionId', requireStaff, (req, res) => {
   const question = normalizedQuizQuestion(req.body);
   const updateQuestion = db.transaction(() => {
-    const { course, exam } = finalExamForManager(req.params.courseId, req.currentUser);
+    const { course, exam } = finalExamForEditor(req.params.courseId, req.currentUser);
     if (!exam) fail(404, 'Final exam not found.', 'not_found');
     const existing = db.prepare('SELECT id, position FROM quiz_questions WHERE id = ? AND quiz_id = ?').get(req.params.questionId, exam.id);
     if (!existing) fail(404, 'Final exam question not found.', 'not_found');
@@ -1522,7 +1538,7 @@ courseRouter.put('/manage/courses/:courseId/final-exam/questions/:questionId', r
 
 courseRouter.delete('/manage/courses/:courseId/final-exam/questions/:questionId', requireStaff, (req, res) => {
   const deleteQuestion = db.transaction(() => {
-    const { course, exam } = finalExamForManager(req.params.courseId, req.currentUser);
+    const { course, exam } = finalExamForEditor(req.params.courseId, req.currentUser);
     if (!exam) fail(404, 'Final exam not found.', 'not_found');
     const question = db.prepare('SELECT id FROM quiz_questions WHERE id = ? AND quiz_id = ?').get(req.params.questionId, exam.id);
     if (!question) fail(404, 'Final exam question not found.', 'not_found');
@@ -1539,7 +1555,7 @@ courseRouter.delete('/manage/courses/:courseId/final-exam/questions/:questionId'
 courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
   const module = moduleCourse(req.params.moduleId);
   if (!module) fail(404, 'Module not found.', 'not_found');
-  requireCourseManager(module.id, req.currentUser);
+  requireEditableCourseManager(module.id, req.currentUser);
   const title = textField(req.body?.title ?? 'Module quiz', 'Quiz title', 160, { required: true });
   const passMark = intField(req.body?.passMark ?? 70, 'Pass mark', 1, 100);
   const questions = req.body?.questions;
@@ -1582,7 +1598,7 @@ courseRouter.put('/manage/modules/:moduleId/quiz', requireStaff, (req, res) => {
   const saveQuiz = db.transaction(() => {
     const currentModule = moduleCourse(req.params.moduleId);
     if (!currentModule) fail(404, 'Module not found.', 'not_found');
-    requireCourseManager(currentModule.id, req.currentUser);
+    requireEditableCourseManager(currentModule.id, req.currentUser);
     const existingQuiz = db.prepare('SELECT id, title, pass_mark FROM quizzes WHERE module_id = ?').get(currentModule.module_id);
     if (existingQuiz) {
       const savedQuestions = db.prepare('SELECT id, prompt, explanation, position FROM quiz_questions WHERE quiz_id = ? ORDER BY position, id').all(existingQuiz.id);
@@ -1638,7 +1654,7 @@ courseRouter.delete('/manage/modules/:moduleId/quiz', requireStaff, (req, res) =
   const deleteQuiz = db.transaction(() => {
     const module = moduleCourse(req.params.moduleId);
     if (!module) fail(404, 'Module not found.', 'not_found');
-    requireCourseManager(module.id, req.currentUser);
+    requireEditableCourseManager(module.id, req.currentUser);
     db.prepare('DELETE FROM quizzes WHERE module_id = ?').run(module.module_id);
     db.prepare('UPDATE courses SET updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.currentUser.id, module.id);
     const auditId = writeAuditLog({ actor: req.currentUser, action: 'course.quiz_deleted', entityType: 'module', entityId: module.module_id,

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import multer from 'multer';
 import { db } from './db.js';
 import { config } from './config.js';
-import { ApiError, fail, requireAuth, requireCourseManager, requireCourseViewer } from './http.js';
+import { ApiError, fail, requireAuth, requireCourseManager, requireEditableCourseManager, requireCourseViewer } from './http.js';
 import { courseById } from './http.js';
 import { courseFromLesson, isLessonUnlocked } from './course-service.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
@@ -393,7 +393,7 @@ function setUploadLimitBytes(bytes) {
 
 function authorizeManagerParam(req, _res, next) {
   try {
-    requireCourseManager(req.params.courseId, req.currentUser);
+    requireEditableCourseManager(req.params.courseId, req.currentUser);
     next();
   } catch (error) { next(error); }
 }
@@ -401,7 +401,7 @@ function authorizeManagerParam(req, _res, next) {
 function requireCurrentCourseManager(courseId, userId) {
   const user = db.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?').get(userId);
   if (!user || user.disabled) fail(403, 'You do not have permission to manage courses.', 'forbidden');
-  return requireCourseManager(courseId, user);
+  return requireEditableCourseManager(courseId, user);
 }
 
 function canonicalCaptionLanguage(value) {

@@ -24,7 +24,7 @@ test('course version history keeps the current version visible and collapses old
   assert.match(page, /setCurrentVersion\(result\.currentVersion\)/);
   assert.match(page, /versionTotal > 0 \|\| currentVersion/);
   assert.match(page, /aria-label=\{`Restore version \$\{version\.version_number\} as a new course version`\}/);
-  assert.match(page, /disabled=\{restoring\} aria-busy=\{restoring\}/);
+  assert.match(page, /disabled=\{restoring \|\| reviewPending\} aria-busy=\{restoring\}/);
   assert.match(page, /\{restoring \? 'Restoring version…' : 'Restore as new version'\}/);
   assert.match(page, /<nav className="course-version-pagination" aria-label="Course version history pages">/);
   assert.match(page, /role="status" aria-live="polite">Showing previous versions \{lastVersion\}–\{firstVersion\} of \{total\}/);

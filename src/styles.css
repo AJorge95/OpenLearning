@@ -885,6 +885,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .editor-actions .status { margin-right: 5px; }
 .course-editing-note { margin: 0 0 18px; padding: 10px 13px; color: #655114; background: #fff8e6; border: 1px solid #f3e3b9; font-size: 12px; }
 .editor-section { border: 1px solid var(--line); border-radius: 4px; margin: 0 0 22px; padding: 23px; }
+.course-review-locked-fields { width: 100%; min-width: 0; border: 0; margin: 0; padding: 0; }
 .editor-field-grid { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(190px, .42fr) minmax(225px, .5fr); gap: 19px 20px; }
 .editor-field-grid > label, .quiz-settings-row label, .quiz-settings-row .app-select-field { display: flex; flex-direction: column; gap: 8px; color: #292d3b; font-size: 13px; font-weight: 650; }
 .editor-field-grid .field-wide { grid-column: 1 / -1; }

@@ -323,6 +323,17 @@ export function requireCourseManager(courseId, user) {
   return editable;
 }
 
+export function requireEditableCourseManager(courseId, user) {
+  const course = requireCourseManager(courseId, user);
+  const logicalId = course.logical_course_id || course.id;
+  const revision = db.prepare('SELECT review_status FROM course_revisions WHERE course_id = ?').get(logicalId);
+  // Keep the reviewed revision stable until the reviewer approves or requests changes.
+  if (revision?.review_status === 'in_review') {
+    fail(409, 'This revision is awaiting review. Course content is locked until the review is decided.', 'review_pending');
+  }
+  return course;
+}
+
 export function requireCourseViewer(courseId, user) {
   const course = courseById(courseId);
   if (!course) fail(404, 'Course not found.', 'not_found');

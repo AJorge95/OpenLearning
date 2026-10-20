@@ -2377,8 +2377,9 @@ export function CourseEditorPage() {
   if (loading || (course && (!route.courseId || route.courseId !== course.id))) return <div className="page-loading" role="status" aria-live="polite">Loading course editor…</div>;
   if (!course) return <div className="management-page">{error && <Notice>{error}</Notice>}<Link className="back-link" to="/manage/courses"><ArrowLeft size={17} aria-hidden="true" />Back to courses</Link></div>;
 
+  const reviewPending = review?.status === 'in_review';
   return <div className="editor-page">
-    <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>{isNewCourseDraft ? 'Create course' : 'Edit course'}</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Link className="button button-secondary" to="/manage/course-groups"><UsersRound size={16} aria-hidden="true" />Groups</Link><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving || (review?.status === 'in_review' && review.submittedBy === editorUser?.id)} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
+    <div className="editor-topbar"><div><div className="breadcrumbs"><Link to="/manage/courses">Courses</Link><span>/</span><span>{isNewCourseDraft ? 'Create course' : 'Edit course'}</span></div><h1>{course.title || 'Edit course'}</h1></div><div className="editor-actions"><CourseStatus status={course.status} /><Link className="button button-secondary" to="/manage/course-groups"><UsersRound size={16} aria-hidden="true" />Groups</Link><Button type="button" variant="secondary" onClick={() => saveCourse('draft')} disabled={saving || reviewPending || (course.status === 'draft' && !courseDetailsChanged)} aria-busy={savingStatus === 'draft'}>{savingStatus === 'draft' ? 'Saving draft…' : course.status === 'draft' && !courseDetailsChanged ? 'Draft saved' : 'Save draft'}</Button><Button type="button" onClick={() => saveCourse('published')} disabled={saving || (reviewPending && (review?.submittedBy === editorUser?.id || courseDetailsChanged))} aria-busy={savingStatus === 'published'}>{savingStatus === 'published' ? 'Publishing…' : 'Publish course'}<span className="sr-only">{course.status === 'published' && !courseDetailsChanged ? ' (recheck course readiness)' : ''}</span></Button>{savingStatus && <span className="sr-only" role="status" aria-live="polite">{savingStatus === 'published' ? 'Publishing course…' : 'Saving draft…'}</span>}</div></div>
     {error && error !== COMPLETION_WINDOW_ERROR && error !== courseTitleError && error !== courseCategoryError && <Notice>{error}</Notice>}{notice && <Notice kind="success">{notice}</Notice>}
     {navigationBlocker.state === 'blocked' && <ConfirmationDialog
       title={saving ? 'Course save in progress' : 'Discard unsaved course details?'}
@@ -2392,8 +2393,12 @@ export function CourseEditorPage() {
     />}
     {/* Keep the live region mounted only while a reorder is in flight so settled editors expose no empty status. */}
     {movingCurriculumItems.size > 0 && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Updating course content order…</p>}
-    <p className="course-editing-note">{courseEditingNote(course.status, course.visibility)}</p>
+    <p className="course-editing-note" role={reviewPending ? 'status' : undefined}>{reviewPending
+      ? 'This revision is awaiting review. Course content is locked until the reviewer approves it or requests changes.'
+      : courseEditingNote(course.status, course.visibility)}</p>
     <section className="editor-section course-details-form" aria-label="Course details">
+      <fieldset className="course-review-locked-fields" disabled={reviewPending || saving}>
+        <legend className="sr-only">Course details</legend>
       {/* Keep the visual cue decorative so native required semantics remain the accessible source of truth. */}
       {/* A prior save or publication notice no longer describes the course after a detail edit. */}
       <div className="editor-field-grid"><label className="field-wide"><span className="form-label-row"><span>Course title</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={courseTitleInputRef} required value={title} maxLength={MAX_COURSE_TITLE_LENGTH} aria-invalid={courseTitleError ? true : undefined} aria-describedby={courseTitleError ? 'course-title-error' : undefined} onChange={(event) => { setNotice(''); setTitle(event.target.value); setCourseTitleError(''); setError((currentError) => currentError === courseTitleError ? '' : currentError); }} placeholder="Give your course a clear title" disabled={saving} />{courseTitleError && <small id="course-title-error" className="course-detail-field-error" role="alert">{courseTitleError}</small>}</label>
@@ -2418,6 +2423,7 @@ export function CourseEditorPage() {
         {coverProgress !== null && (coverProgress >= 100 ? <span className="upload-percent upload-progress-saving-compact" role="status">Saving cover…</span> : <span className="upload-percent" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverProgress} aria-label="Course cover upload progress">{coverProgress}%</span>)}
         {coverProgress !== null && coverProgress < 100 && <button type="button" className="text-action upload-cancel-action" aria-label="Cancel cover upload" onClick={() => cancelUpload('cover')}>Cancel upload</button>}
       </div>
+      </fieldset>
     </section>
     <section className="editor-section course-governance-section" aria-label="Course publication and learning settings" aria-busy={governanceLoading}>
       <div className="curriculum-editor-title"><div><h2>Publication and learning settings</h2><p>Choose how a new publication affects learners and manage its review history.</p></div></div>
@@ -2449,7 +2455,7 @@ export function CourseEditorPage() {
           </form>}
         </>}
       </div>}
-      {governanceReady && competencies.length > 0 && <fieldset className="course-competency-picker" disabled={savingCompetencyMapping} aria-busy={savingCompetencyMapping}><legend>Mapped competencies</legend><p>Any completed mapped course marks an active competency achieved for that learner.</p><label className="course-competency-filter">Search competencies<input type="search" maxLength={160} placeholder="Search by competency name" value={competencySearch} onChange={(event) => setCompetencySearch(event.target.value)} /></label><div>{visibleCompetencies.map((competency) => {
+      {governanceReady && competencies.length > 0 && <fieldset className="course-competency-picker" disabled={savingCompetencyMapping || reviewPending} aria-busy={savingCompetencyMapping}><legend>Mapped competencies</legend><p>Any completed mapped course marks an active competency achieved for that learner.</p><label className="course-competency-filter">Search competencies<input type="search" maxLength={160} placeholder="Search by competency name" value={competencySearch} onChange={(event) => setCompetencySearch(event.target.value)} /></label><div>{visibleCompetencies.map((competency) => {
         const selected = selectedCompetencyIds.has(competency.id);
         const addBlocked = !selected && selectedCompetencies.length >= competencySelectionLimit;
         return <label key={competency.id} className={addBlocked ? 'competency-selection-disabled' : undefined}><input type="checkbox" checked={selected} disabled={addBlocked} onChange={(event) => { setCompetencyMappingError(''); setCompetencyMappingNotice(''); setSelectedCompetencies((current) => updateCourseCompetencySelection(current, competency.id, event.target.checked, competencySelectionLimit)); }} /><span>{competency.title}{!competency.active && <small>Inactive · hidden from learners</small>}</span></label>;
@@ -2466,7 +2472,7 @@ export function CourseEditorPage() {
           const restoring = restoringVersionRequests.has(`${courseId}:${version.id}`);
           return <li key={version.id}>
         <div><strong>Version {version.version_number}</strong><small>{version.title} · Published {formatApiTimestamp(version.published_at, logTimestampFormatter)}{version.publisher ? ` by ${version.publisher}` : ''}</small>{version.change_note && <p>{version.change_note}</p>}</div>
-        <Button type="button" variant="secondary" aria-label={`Restore version ${version.version_number} as a new course version`} disabled={restoring} aria-busy={restoring} onClick={() => requestRestoreVersion(version)}>{restoring ? 'Restoring version…' : 'Restore as new version'}</Button>
+        <Button type="button" variant="secondary" aria-label={`Restore version ${version.version_number} as a new course version`} disabled={restoring || reviewPending} aria-busy={restoring} onClick={() => requestRestoreVersion(version)}>{restoring ? 'Restoring version…' : 'Restore as new version'}</Button>
       </li>;
           })}</ol>
           <CourseVersionPagination page={versionPage} pageSize={versionPageSize} total={versionTotal} versions={versions} loading={versionHistoryLoading} onChange={(nextPage) => void loadVersionHistory(nextPage)} />
@@ -2474,6 +2480,8 @@ export function CourseEditorPage() {
       </div>}
     </section>
     <section className="editor-section curriculum-editor-section">
+      <fieldset className="course-review-locked-fields" disabled={reviewPending || saving}>
+        <legend className="sr-only">Course curriculum</legend>
       {/* Curriculum labels and control names carry the meaning; these glyphs stay decorative. */}
       <div className="curriculum-editor-title"><div><h2>Course curriculum</h2><p>Organize lessons into modules and add a quiz when you are ready.</p></div><div className="curriculum-editor-actions"><Button ref={addModuleButtonRef} variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} disabled={Boolean(editingModuleTitle) || saving || deletingCourse || addingModuleBusy} onClick={(event) => { if (addingModule) setAddingModule(false); else { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); } }}><Plus size={17} aria-hidden="true" />Add module</Button></div></div>
       {addingModule && <form id="add-module-form" className="inline-add-form" onSubmit={addModule}><input autoFocus value={moduleTitle} onChange={(event) => setModuleTitle(event.target.value)} placeholder="Module title" aria-label="Module title" maxLength={160} disabled={addingModuleBusy} /><Button type="submit" disabled={!moduleTitle.trim() || addingModuleBusy}>{addingModuleBusy ? 'Adding module…' : 'Add module'}</Button><button type="button" className="text-action" disabled={addingModuleBusy} onClick={() => { setAddingModule(false); addModuleInvokerRef.current?.focus(); }}>Cancel</button></form>}
@@ -2524,6 +2532,7 @@ export function CourseEditorPage() {
         {!course.modules?.length && !course.finalExam && <EmptyState headingLevel={3} icon={<BookOpen size={22} />} title="Start with a module" detail="Modules organize the video lessons in your course. You can also create an exam-only certification practice course." action={<Button variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} onClick={(event) => { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); }}><Plus size={16} aria-hidden="true" />Add first module</Button>} />}
       </div>
       <CourseFinalExamEditor key={`${course.id}:${course.finalExam?.id ?? 'no-exam'}`} courseId={course.id} exam={course.finalExam} onChanged={() => load(course.id)} onError={(message) => { if (routeCourseIdRef.current === course.id) setError(message); }} onNotice={(message) => { if (routeCourseIdRef.current === course.id) setNotice(message); }} />
+      </fieldset>
     </section>
     {course.status === 'archived' && <div className="delete-course-row"><div><strong>Delete this course permanently</strong><span>This also removes its uploaded media and cannot be undone.</span></div><Button variant="danger" onClick={() => void deleteArchivedCourse()} disabled={saving || deletingCourse || Boolean(deletingCurriculumItem)} aria-busy={deletingCourse}><Trash2 size={16} aria-hidden="true" />{deletingCourse ? 'Deleting course…' : 'Delete course'}</Button></div>}
     {pendingDeleteCourseId === course.id && routeCourseIdRef.current === course.id && <ConfirmationDialog {...courseDeletionConfirmation(course.title)} confirmLabel="Delete course" onCancel={() => setPendingDeleteCourseId(null)} onConfirm={() => { const requestedCourseId = pendingDeleteCourseId; setPendingDeleteCourseId(null); if (requestedCourseId === course.id && routeCourseIdRef.current === course.id) void deleteArchivedCourse(true); }} />}
