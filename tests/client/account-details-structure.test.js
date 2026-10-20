@@ -58,7 +58,7 @@ test('account overview is a named level-two section heading', () => {
   const source = fs.readFileSync(pagePath, 'utf8');
   const styles = fs.readFileSync(path.join(sourceDirectory, 'styles.css'), 'utf8');
 
-  assert.match(source, /<article className="account-detail-card account-overview-card" aria-labelledby="account-overview-heading">[\s\S]*?<h2 id="account-overview-heading" className="account-overview-title">Account overview<\/h2>/);
+  assert.match(source, /<article className="account-detail-card account-overview-card" aria-labelledby="account-overview-heading">[\s\S]*?<h2 ref=\{accountOverviewHeadingRef\} id="account-overview-heading" className="account-overview-title" tabIndex=\{-1\}>Account overview<\/h2>/);
   assert.match(source, /<h3>Certificate name<\/h3>/);
   assert.match(styles, /\.account-detail-card-heading\s+\.account-overview-title\s*\{\s*margin:\s*0;[^}]*font-size:\s*11px;/);
 });

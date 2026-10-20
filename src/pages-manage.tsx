@@ -3083,8 +3083,9 @@ export function AdminUsersPage() {
     finally { markSaving(user.id, false); }
   }
 
-  async function approveRegistration(user: User) {
+  async function approveRegistration(user: User, trigger: HTMLButtonElement) {
     if (savingIdsRef.current.has(user.id)) return;
+    const shouldRestoreFocus = document.activeElement === trigger;
     markSaving(user.id, true); setError(''); setSuccess('');
     try {
       const response = await api.patch<{ user: User }>(`/api/admin/users/${user.id}/approval`, {});
@@ -3095,6 +3096,12 @@ export function AdminUsersPage() {
         : `${user.username}'s registration was approved. They can now sign in.`);
       const currentListState = userListStateRef.current;
       await load(currentListState.page, currentListState.query, currentListState.roleFilter, currentListState.approvalFilter);
+      if (shouldRestoreFocus) window.requestAnimationFrame(() => {
+        const searchInput = userListSearchInputRef.current;
+        const focusWasDropped = document.activeElement === document.body || document.activeElement === document.documentElement;
+        // Approval removes its action from the pending row; return keyboard focus to a persistent list control.
+        if (!trigger.isConnected && focusWasDropped && searchInput?.isConnected) searchInput.focus();
+      });
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Registration could not be approved.');
     } finally { markSaving(user.id, false); }
@@ -3130,7 +3137,7 @@ export function AdminUsersPage() {
         <td><AppSelect<Role> className="app-select--compact" ariaLabel={`Role for ${user.username}`} describedBy={user.isLastActiveAdmin ? lastAdminHelpId : undefined} value={user.role} disabled={savingIds.has(user.id) || user.isLastActiveAdmin} busy={savingIds.has(user.id)} onChange={(role) => updateUser(user, { role })} options={ADMIN_USER_ROLE_OPTIONS} /></td>
         <td><span className={`account-state ${user.registrationStatus === 'pending' ? 'account-pending' : user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.registrationStatus === 'pending' ? 'Pending approval' : user.disabled ? 'Disabled' : 'Active'}</span>{user.isLastActiveAdmin && <small className="last-active-admin-note" id={lastAdminHelpId}>This is the only active administrator. Add another administrator before changing this account’s role or status.</small>}</td>
         <td>{user.createdAt ? <DateText value={user.createdAt} /> : '—'}</td>
-        <td><div className="user-row-actions">{user.registrationStatus === 'pending' && <button type="button" className="text-action" aria-label={`Approve registration for ${user.username}`} aria-busy={savingIds.has(user.id) || undefined} disabled={savingIds.has(user.id)} onClick={() => approveRegistration(user)}>{savingIds.has(user.id) ? 'Approving…' : 'Approve'}</button>}<Link className="text-action" to={`/admin/users/${user.id}`} aria-label={`Details for ${user.username}`}>Details</Link><button type="button" className="text-action" aria-label={`Reset password for ${user.username}`} aria-busy={savingIds.has(user.id) || undefined} disabled={savingIds.has(user.id)} onClick={(event) => openPasswordReset(user, event.currentTarget)}>{savingIds.has(user.id) ? 'Resetting…' : 'Reset password'}</button><button type="button" className={user.disabled ? 'text-action' : 'text-action danger-text'} aria-label={savingIds.has(user.id) ? `Saving account changes for ${user.username}` : `${user.disabled ? 'Enable' : 'Disable'} account for ${user.username}`} aria-busy={savingIds.has(user.id) || undefined} aria-describedby={user.isLastActiveAdmin ? lastAdminHelpId : undefined} disabled={savingIds.has(user.id) || user.isLastActiveAdmin} onClick={() => updateUser(user, { disabled: !user.disabled })}>{savingIds.has(user.id) ? 'Saving…' : user.disabled ? 'Enable' : 'Disable'}</button></div></td>
+        <td><div className="user-row-actions">{user.registrationStatus === 'pending' && <button type="button" className="text-action" aria-label={`Approve registration for ${user.username}`} aria-busy={savingIds.has(user.id) || undefined} disabled={savingIds.has(user.id)} onClick={(event) => approveRegistration(user, event.currentTarget)}>{savingIds.has(user.id) ? 'Approving…' : 'Approve'}</button>}<Link className="text-action" to={`/admin/users/${user.id}`} aria-label={`Details for ${user.username}`}>Details</Link><button type="button" className="text-action" aria-label={`Reset password for ${user.username}`} aria-busy={savingIds.has(user.id) || undefined} disabled={savingIds.has(user.id)} onClick={(event) => openPasswordReset(user, event.currentTarget)}>{savingIds.has(user.id) ? 'Resetting…' : 'Reset password'}</button><button type="button" className={user.disabled ? 'text-action' : 'text-action danger-text'} aria-label={savingIds.has(user.id) ? `Saving account changes for ${user.username}` : `${user.disabled ? 'Enable' : 'Disable'} account for ${user.username}`} aria-busy={savingIds.has(user.id) || undefined} aria-describedby={user.isLastActiveAdmin ? lastAdminHelpId : undefined} disabled={savingIds.has(user.id) || user.isLastActiveAdmin} onClick={() => updateUser(user, { disabled: !user.disabled })}>{savingIds.has(user.id) ? 'Saving…' : user.disabled ? 'Enable' : 'Disable'}</button></div></td>
       </tr>;
     })}</tbody></table>{!users.length && <div className="access-empty user-list-empty"><p>{userListEmptyMessage(appliedQuery, roleFilter, approvalFilter)}</p></div>}</div>}
     {!loading && !failedRequest && total > 0 && <LogPagination ariaLabel="User accounts pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
@@ -3270,6 +3277,7 @@ export function AdminUserDetailsPage() {
   const certificateNameErrorId = `${passwordInputId}-certificate-name-error`;
   const accountEmailErrorId = `${passwordInputId}-account-email-error`;
   const routeUserIdRef = useRef(userId);
+  const accountOverviewHeadingRef = useRef<HTMLHeadingElement>(null);
   const actionSequenceRef = useRef(0);
   if (routeUserIdRef.current !== userId) {
     routeUserIdRef.current = userId;
@@ -3436,8 +3444,9 @@ export function AdminUserDetailsPage() {
     }, 'Certificate name was updated.');
   }
 
-  async function approveRegistration() {
+  async function approveRegistration(trigger: HTMLButtonElement) {
     if (!account || saving || account.user.registrationStatus !== 'pending') return;
+    const shouldRestoreFocus = document.activeElement === trigger;
     const requestedUserId = account.user.id;
     const actionSequence = ++actionSequenceRef.current;
     const isCurrentAction = () => actionSequenceRef.current === actionSequence && routeUserIdRef.current === requestedUserId;
@@ -3450,6 +3459,12 @@ export function AdminUserDetailsPage() {
       setSuccess(result.user.disabled
         ? `${result.user.username}'s registration was approved. The account is disabled, so enable it before they can sign in.`
         : `${result.user.username}'s registration was approved. They can now sign in.`);
+      if (shouldRestoreFocus) window.requestAnimationFrame(() => {
+        const heading = accountOverviewHeadingRef.current;
+        const focusWasDropped = document.activeElement === document.body || document.activeElement === document.documentElement;
+        // Approval removes its action once the status changes; return focus to the account context.
+        if (!trigger.isConnected && focusWasDropped && heading?.isConnected) heading.focus();
+      });
     } catch (cause) {
       if (isCurrentAction()) setError(cause instanceof ApiError ? cause.message : 'Registration could not be approved.');
     } finally { if (isCurrentAction()) setSavingAction(null); }
@@ -3492,7 +3507,7 @@ export function AdminUserDetailsPage() {
     <PageHeading title={user.username} subtitle="Account controls, enrolled courses, and learning activity." action={<Link className="button button-secondary" to="/admin/users"><ArrowLeft size={16} aria-hidden="true" />Back to users</Link>} />
     {error && <Notice id={passwordConfirmationErrorId}>{error}</Notice>}{success && <Notice kind="success">{success}</Notice>}
     <section className="account-detail-grid">
-      <article className="account-detail-card account-overview-card" aria-labelledby="account-overview-heading"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><h2 id="account-overview-heading" className="account-overview-title">Account overview</h2></div></div><span className={`account-state ${user.registrationStatus === 'pending' ? 'account-pending' : user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.registrationStatus === 'pending' ? 'Pending approval' : user.disabled ? 'Disabled' : 'Active'}</span></div>
+      <article className="account-detail-card account-overview-card" aria-labelledby="account-overview-heading"><div className="account-detail-card-heading"><div className="access-user"><UserInitial username={user.username} /><div><strong>{user.username}</strong><h2 ref={accountOverviewHeadingRef} id="account-overview-heading" className="account-overview-title" tabIndex={-1}>Account overview</h2></div></div><span className={`account-state ${user.registrationStatus === 'pending' ? 'account-pending' : user.disabled ? 'account-disabled' : 'account-active'}`}><span />{user.registrationStatus === 'pending' ? 'Pending approval' : user.disabled ? 'Disabled' : 'Active'}</span></div>
         <form className="account-profile-form account-email-form form-stack" onSubmit={saveAccountEmail} noValidate aria-busy={savingAction === 'account'}>
           {/* Keep required account-detail cues decorative so native validation remains the accessible source of truth. */}
           <label><span className="form-label-row"><span>Email address</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={accountEmailInputRef} name="email" type="email" required maxLength={254} autoComplete="email" aria-invalid={Boolean(accountEmailError) || undefined} aria-describedby={accountEmailError ? `${accountEmailHelpId} ${accountEmailErrorId}` : accountEmailHelpId} value={accountEmail} onChange={(event) => { setAccountEmail(event.target.value); setAccountEmailError(''); clearAccountActionFeedback(); }} disabled={saving} /></label>
@@ -3513,7 +3528,7 @@ export function AdminUserDetailsPage() {
         {registrationFields.length > 0 && <section className="account-registration-fields"><h3>Registration details</h3><dl>{registrationFields.map((field) => <div key={field.id}><dt>{field.label}</dt><dd>{typeof field.value === 'boolean' ? field.value ? 'Yes' : 'No' : field.value || 'Not provided'}</dd></div>)}</dl></section>}
         <div className="account-control-row" aria-busy={savingAction === 'account'}>
           <div className="account-role-control"><span id="account-platform-role-label">Platform role</span><div className="account-role-select-control"><AppSelect<Role> controlId="account-platform-role" ariaLabel="Platform role" ariaLabelledBy="account-platform-role-label" describedBy={user.isLastActiveAdmin ? lastAdminHelpId : undefined} value={user.role} disabled={saving || user.isLastActiveAdmin} busy={saving} onChange={(role) => updateAccount({ role })} options={ACCOUNT_ROLE_OPTIONS} matchTriggerWidth /></div></div>
-          {user.registrationStatus === 'pending' && <Button variant="secondary" onClick={approveRegistration} disabled={saving} aria-busy={savingAction === 'approval'}>{savingAction === 'approval' ? 'Approving registration…' : 'Approve registration'}</Button>}
+          {user.registrationStatus === 'pending' && <Button variant="secondary" onClick={(event) => approveRegistration(event.currentTarget)} disabled={saving} aria-busy={savingAction === 'approval'}>{savingAction === 'approval' ? 'Approving registration…' : 'Approve registration'}</Button>}
           <Button variant={user.disabled ? 'secondary' : 'danger'} onClick={() => updateAccount({ disabled: !user.disabled })} disabled={saving || user.isLastActiveAdmin} aria-describedby={user.isLastActiveAdmin ? lastAdminHelpId : undefined} aria-busy={savingAction === 'account'}>{savingAction === 'account' ? 'Saving account…' : user.disabled ? 'Enable account' : 'Disable account'}</Button>
           {savingAction && <span className="sr-only" role="status" aria-live="polite">{savingAction === 'approval' ? 'Approving registration…' : savingAction === 'account' ? 'Saving account settings…' : 'Resetting password…'}</span>}
         </div>

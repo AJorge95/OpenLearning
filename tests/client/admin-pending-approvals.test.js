@@ -45,7 +45,7 @@ test('the current Users link retries an unavailable pending count', () => {
 });
 
 test('approval success remains visible when the account-list refresh fails', () => {
-  const handlerStart = managementSource.indexOf('async function approveRegistration(user: User)');
+  const handlerStart = managementSource.indexOf('async function approveRegistration(user: User, trigger: HTMLButtonElement)');
   const handlerEnd = managementSource.indexOf('\n  return <div className="management-page users-page"', handlerStart);
   const handler = managementSource.slice(handlerStart, handlerEnd);
   const successNotice = handler.indexOf('setSuccess(response.user.disabled');
