@@ -165,6 +165,61 @@ restore_environment_config() {
   RESTORE_CONFIG_ON_FAILURE=false
 }
 
+restore_release_files() {
+  local current_link="$1"
+  local previous_release="$2"
+  local service_unit_file="$3"
+  local old_unit_present="$4"
+  local old_unit_fragment="$5"
+  local unit_snapshot="$6"
+  local service_name="$7"
+
+  if [[ -n "$previous_release" && -d "$previous_release" ]]; then
+    ln -sfn "$previous_release" "$current_link" || return 1
+  else
+    rm -f -- "$current_link" || return 1
+  fi
+
+  if [[ "$old_unit_present" == true ]]; then
+    if [[ "$old_unit_fragment" == "$service_unit_file" ]]; then
+      [[ -n "$unit_snapshot" && -f "$unit_snapshot/original-unit" ]] || return 1
+      cp -a -- "$unit_snapshot/original-unit" "$old_unit_fragment" || return 1
+    else
+      # Remove only our system-level override when the old unit came elsewhere.
+      rm -f -- "$service_unit_file" || return 1
+    fi
+  else
+    rm -f -- "$service_unit_file" || return 1
+    systemctl disable "$service_name.service" >/dev/null 2>&1 || true
+  fi
+
+  systemctl daemon-reload
+}
+
+restore_update_backup() {
+  local environment_file="$1"
+  local backup_path="$2"
+  local database_directory="$3"
+  local media_root="$4"
+  local database_path="$5"
+
+  ENV_FILE="$environment_file" BACKUP_PATH="$backup_path" node --input-type=module <<'NODE'
+import fs from 'node:fs';
+import path from 'node:path';
+import dotenv from 'dotenv';
+const values = dotenv.parse(fs.readFileSync(process.env.ENV_FILE));
+const dataDir = path.resolve(values.DATA_DIR || '/var/lib/openlearning');
+const dbPath = path.resolve(values.DB_PATH || path.join(dataDir, 'openlearning.sqlite'));
+const mediaRoot = path.resolve(values.MEDIA_ROOT || path.join(dataDir, 'course-media'));
+fs.copyFileSync(path.join(process.env.BACKUP_PATH, 'openlearning.sqlite'), dbPath);
+fs.rmSync(mediaRoot, { recursive: true, force: true });
+fs.cpSync(path.join(process.env.BACKUP_PATH, 'course-media'), mediaRoot, { recursive: true });
+NODE
+  chown openlearning:openlearning "$database_directory"
+  chown -R openlearning:openlearning "$media_root"
+  chown openlearning:openlearning "$database_path"
+}
+
 prepare_storage_access() {
   local storage_directory="$1"
   local parent_directory
@@ -246,6 +301,13 @@ CONFIG_SNAPSHOT_EXISTS=false
 RESTORE_CONFIG_ON_FAILURE=false
 NEW_RELEASE=""
 RELEASE_FINALIZED=false
+# Track partial activation so the exit trap can unwind failures before readiness.
+ACTIVATION_STARTED=false
+SERVICE_STOPPED_FOR_UPDATE=false
+SERVICE_START_ATTEMPTED=false
+WAS_ACTIVE=false
+PREVIOUS_RELEASE=""
+BACKUP_PATH=""
 if systemctl cat "$SERVICE_NAME.service" >/dev/null 2>&1; then
   OLD_UNIT_PRESENT=true
   OLD_UNIT_FRAGMENT="$(systemctl show --property=FragmentPath --value "$SERVICE_NAME.service" 2>/dev/null || true)"
@@ -319,8 +381,40 @@ if [[ "$OLD_UNIT_PRESENT" == true ]]; then
   cp -a "$OLD_UNIT_FRAGMENT" "$UNIT_SNAPSHOT/original-unit"
 fi
 cleanup() {
-  if [[ "$RESTORE_CONFIG_ON_FAILURE" == true ]] && ! restore_environment_config; then
-    log "WARNING: Could not restore the previous service configuration from $CONFIG_SNAPSHOT."
+  if [[ "$RELEASE_FINALIZED" != true ]]; then
+    local rollback_safe=true
+    if [[ "$ACTIVATION_STARTED" == true ]]; then
+      systemctl stop "$SERVICE_NAME.service" || true
+      if restore_release_files "$CURRENT_LINK" "$PREVIOUS_RELEASE" "/etc/systemd/system/$SERVICE_NAME.service" \
+        "$OLD_UNIT_PRESENT" "$OLD_UNIT_FRAGMENT" "$UNIT_SNAPSHOT" "$SERVICE_NAME"; then
+        ACTIVATION_STARTED=false
+      else
+        rollback_safe=false
+        log "WARNING: Could not restore the previous release link and service unit."
+      fi
+    fi
+    if [[ "$SERVICE_START_ATTEMPTED" == true && "$OLD_UNIT_PRESENT" == true \
+      && -n "$BACKUP_PATH" && -d "$BACKUP_PATH" ]]; then
+      if restore_update_backup "$ENV_FILE" "$BACKUP_PATH" "${STORAGE_PATHS[1]}" "${STORAGE_PATHS[2]}" "${STORAGE_PATHS[3]}"; then
+        SERVICE_START_ATTEMPTED=false
+      else
+        rollback_safe=false
+        log "WARNING: Could not restore the verified pre-update data backup at $BACKUP_PATH."
+      fi
+    fi
+    if [[ "$RESTORE_CONFIG_ON_FAILURE" == true ]] && ! restore_environment_config; then
+      rollback_safe=false
+      log "WARNING: Could not restore the previous service configuration from $CONFIG_SNAPSHOT."
+    fi
+    if [[ "$SERVICE_STOPPED_FOR_UPDATE" == true && "$WAS_ACTIVE" == true ]]; then
+      if [[ "$rollback_safe" == true ]] && systemctl start "$SERVICE_NAME.service"; then
+        SERVICE_STOPPED_FOR_UPDATE=false
+      elif [[ "$rollback_safe" != true ]]; then
+        log "WARNING: Leaving the previously active service stopped until rollback is complete."
+      else
+        log "WARNING: Could not restart the previously active service."
+      fi
+    fi
   fi
   rm -f "$ARCHIVE" "${NODE_SETUP_FILE:-}"
   rm -f "${CONFIG_SNAPSHOT:-}"
@@ -382,6 +476,7 @@ if [[ "$OLD_UNIT_PRESENT" == true ]]; then
   systemctl is-active --quiet "$SERVICE_NAME.service" && WAS_ACTIVE=true || true
   systemctl stop "$SERVICE_NAME.service" || true
   if systemctl is-active --quiet "$SERVICE_NAME.service"; then fail "Could not stop the existing service; refusing to back up or replace a running deployment."; fi
+  SERVICE_STOPPED_FOR_UPDATE=true
   log "Creating a verified pre-update database and media backup."
   BACKUP_PATH_FILE="$(mktemp /tmp/openlearning-backup-path.XXXXXX)"
   export BACKUP_PATH_FILE ENV_FILE BACKUP_ROOT
@@ -409,7 +504,9 @@ NODE
     if ! restore_environment_config; then
       log "WARNING: Could not restore the previous service configuration from $CONFIG_SNAPSHOT."
     fi
-    if [[ "$WAS_ACTIVE" == true ]]; then systemctl start "$SERVICE_NAME.service" || true; fi
+    if [[ "$WAS_ACTIVE" == true ]] && systemctl start "$SERVICE_NAME.service"; then
+      SERVICE_STOPPED_FOR_UPDATE=false
+    fi
     fail "Existing database was not found or a verified backup could not be created; refusing to update."
   fi
   BACKUP_PATH="$(cat "$BACKUP_PATH_FILE")"
@@ -452,6 +549,7 @@ if [[ -L "$CURRENT_LINK" ]]; then
   PREVIOUS_RELEASE="$(readlink -f "$CURRENT_LINK")"
 fi
 if [[ -e "$CURRENT_LINK" && ! -L "$CURRENT_LINK" ]]; then fail "The managed current-release path exists but is not a symlink: $CURRENT_LINK"; fi
+ACTIVATION_STARTED=true
 ln -sfn "$NEW_RELEASE" "$CURRENT_LINK"
 cat > "/etc/systemd/system/$SERVICE_NAME.service" <<EOF
 [Unit]
@@ -503,7 +601,10 @@ for storage_path in "${STORAGE_PATHS[0]}" "${STORAGE_PATHS[1]}" "${STORAGE_PATHS
   fi
 done
 STARTED=false
-if [[ "$STORAGE_ACCESS_OK" == true ]] && systemctl daemon-reload && systemctl enable "$SERVICE_NAME.service" && systemctl restart "$SERVICE_NAME.service"; then STARTED=true; fi
+if [[ "$STORAGE_ACCESS_OK" == true ]] && systemctl daemon-reload && systemctl enable "$SERVICE_NAME.service"; then
+  SERVICE_START_ATTEMPTED=true
+  if systemctl restart "$SERVICE_NAME.service"; then STARTED=true; fi
+fi
 
 READY=false
 SERVICE_PORT="$(configured_port "$ENV_FILE")"
@@ -526,46 +627,42 @@ if [[ "$READY" == true ]]; then
 fi
 if [[ "$READY" != true ]]; then
   log "Readiness check failed; restoring the previous release."
+  ROLLBACK_SAFE=true
   systemctl stop "$SERVICE_NAME.service" || true
-  if [[ -n "$PREVIOUS_RELEASE" && -d "$PREVIOUS_RELEASE" ]]; then
-    ln -sfn "$PREVIOUS_RELEASE" "$CURRENT_LINK"
+  if restore_release_files "$CURRENT_LINK" "$PREVIOUS_RELEASE" "/etc/systemd/system/$SERVICE_NAME.service" \
+    "$OLD_UNIT_PRESENT" "$OLD_UNIT_FRAGMENT" "$UNIT_SNAPSHOT" "$SERVICE_NAME"; then
+    ACTIVATION_STARTED=false
   else
-    rm -f "$CURRENT_LINK"
+    ROLLBACK_SAFE=false
+    log "WARNING: Could not restore the previous release link and service unit."
   fi
-  if [[ "$OLD_UNIT_PRESENT" == true ]]; then
-    if [[ "$OLD_UNIT_FRAGMENT" == "/etc/systemd/system/$SERVICE_NAME.service" ]]; then
-      cp -a "$UNIT_SNAPSHOT/original-unit" "$OLD_UNIT_FRAGMENT"
+  if [[ -n "${BACKUP_PATH:-}" && -d "$BACKUP_PATH" ]]; then
+    if restore_update_backup "$ENV_FILE" "$BACKUP_PATH" "${STORAGE_PATHS[1]}" "${STORAGE_PATHS[2]}" "${STORAGE_PATHS[3]}"; then
+      SERVICE_START_ATTEMPTED=false
     else
-      rm -f "/etc/systemd/system/$SERVICE_NAME.service"
+      ROLLBACK_SAFE=false
+      log "WARNING: Could not restore the verified pre-update data backup at $BACKUP_PATH."
     fi
   else
-    rm -f "/etc/systemd/system/$SERVICE_NAME.service"
-    systemctl disable "$SERVICE_NAME.service" >/dev/null 2>&1 || true
-  fi
-  systemctl daemon-reload
-  if [[ -n "${BACKUP_PATH:-}" && -d "$BACKUP_PATH" ]]; then
-    ENV_FILE="$ENV_FILE" BACKUP_PATH="$BACKUP_PATH" node --input-type=module <<'NODE'
-import fs from 'node:fs';
-import path from 'node:path';
-import dotenv from 'dotenv';
-const values = dotenv.parse(fs.readFileSync(process.env.ENV_FILE));
-const dataDir = path.resolve(values.DATA_DIR || '/var/lib/openlearning');
-const dbPath = path.resolve(values.DB_PATH || path.join(dataDir, 'openlearning.sqlite'));
-const mediaRoot = path.resolve(values.MEDIA_ROOT || path.join(dataDir, 'course-media'));
-fs.copyFileSync(path.join(process.env.BACKUP_PATH, 'openlearning.sqlite'), dbPath);
-fs.rmSync(mediaRoot, { recursive: true, force: true });
-fs.cpSync(path.join(process.env.BACKUP_PATH, 'course-media'), mediaRoot, { recursive: true });
-NODE
-    chown openlearning:openlearning "${STORAGE_PATHS[1]}"
-    chown -R openlearning:openlearning "${STORAGE_PATHS[2]}"
-    chown openlearning:openlearning "${STORAGE_PATHS[3]}"
+    SERVICE_START_ATTEMPTED=false
   fi
   # Restore data using the migrated absolute paths before restoring the old
   # environment, which can contain paths relative to the previous release.
   if ! restore_environment_config; then
+    ROLLBACK_SAFE=false
     log "WARNING: Could not restore the previous service configuration from $CONFIG_SNAPSHOT."
   fi
-  if [[ "$OLD_UNIT_PRESENT" == true && "$WAS_ACTIVE" == true ]]; then systemctl start "$SERVICE_NAME.service" || true; fi
+  if [[ "$OLD_UNIT_PRESENT" == true && "$WAS_ACTIVE" == true ]]; then
+    if [[ "$ROLLBACK_SAFE" == true ]] && systemctl start "$SERVICE_NAME.service"; then
+      SERVICE_STOPPED_FOR_UPDATE=false
+    elif [[ "$ROLLBACK_SAFE" != true ]]; then
+      log "WARNING: Leaving the previously active service stopped until rollback is complete."
+    else
+      log "WARNING: Could not restart the previously active service."
+    fi
+  else
+    SERVICE_STOPPED_FOR_UPDATE=false
+  fi
   journalctl -u "$SERVICE_NAME.service" -n 30 --no-pager >&2 || true
   fail "OpenLearning did not become ready. The prior code release has been restored; inspect the service logs."
 fi

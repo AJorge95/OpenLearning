@@ -162,6 +162,128 @@ test('updater creates verified backups and restores data when readiness fails', 
   assert.match(installer, /cp -a -- "\$CONFIG_SNAPSHOT" "\$ENV_FILE"/);
 });
 
+test('unexpected installer exits restore the previous release and unit before removing the candidate', (context) => {
+  const cleanup = installer.match(/cleanup\(\) \{[\s\S]*?\n\}/)?.[0];
+  const helper = installer.match(/restore_release_files\(\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(cleanup, 'expected the installer exit cleanup');
+  assert.ok(helper, 'expected the release rollback helper');
+  assert.match(cleanup, /if \[\[ "\$ACTIVATION_STARTED" == true \]\]; then/);
+  assert.ok(cleanup.indexOf('restore_release_files') < cleanup.indexOf('rm -rf -- "$NEW_RELEASE"'),
+    'restore the current link before deleting its candidate target');
+  assert.ok(cleanup.indexOf('restore_update_backup') < cleanup.indexOf('restore_environment_config'),
+    'restore data using the migrated paths before restoring the old environment');
+  assert.ok(cleanup.indexOf('restore_environment_config') < cleanup.indexOf('systemctl start'),
+    'restore configuration before restarting the old service');
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'openlearning-release-rollback-'));
+  const root = path.resolve(directory);
+  if (path.dirname(root) !== path.resolve(os.tmpdir()) || !path.basename(root).startsWith('openlearning-release-rollback-')) {
+    throw new Error('Refusing to use an unexpected temporary directory.');
+  }
+  const previousRelease = path.join(root, 'releases', 'previous');
+  const candidateRelease = path.join(root, 'releases', 'candidate');
+  const currentLink = path.join(root, 'current');
+  const serviceUnitFile = path.join(root, 'openlearning.service');
+  const unitSnapshot = path.join(root, 'unit-snapshot');
+  fs.mkdirSync(previousRelease, { recursive: true });
+  fs.mkdirSync(candidateRelease, { recursive: true });
+  fs.mkdirSync(unitSnapshot, { recursive: true });
+  fs.writeFileSync(path.join(previousRelease, 'release.txt'), 'previous');
+  fs.writeFileSync(path.join(candidateRelease, 'release.txt'), 'candidate');
+  fs.writeFileSync(serviceUnitFile, 'candidate unit');
+  fs.writeFileSync(path.join(unitSnapshot, 'original-unit'), 'previous unit');
+
+  try {
+    const callsFile = path.join(root, 'systemctl-calls.txt');
+    const result = spawnSync(bashPath, ['-c', `
+      set -eu
+      ${helper}
+      systemctl() { printf '%s\\n' "$*" >> "$MOCK_SYSTEMCTL_CALLS"; }
+      ln() { printf 'ln %s\\n' "$*" >> "$MOCK_SYSTEMCTL_CALLS"; }
+      to_shell_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s\\n' "$1"; fi; }
+      restore_release_files "$(to_shell_path "$MOCK_CURRENT_LINK")" "$(to_shell_path "$MOCK_PREVIOUS_RELEASE")" \\
+        "$(to_shell_path "$MOCK_UNIT_FILE")" true "$(to_shell_path "$MOCK_UNIT_FILE")" \\
+        "$(to_shell_path "$MOCK_UNIT_SNAPSHOT")" openlearning
+    `], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        MOCK_CURRENT_LINK: currentLink,
+        MOCK_PREVIOUS_RELEASE: previousRelease,
+        MOCK_UNIT_FILE: serviceUnitFile,
+        MOCK_UNIT_SNAPSHOT: unitSnapshot,
+        MOCK_SYSTEMCTL_CALLS: callsFile,
+      },
+    });
+    if (result.error?.code === 'ENOENT' || result.stderr?.includes('NtCreateDirectoryObject')) {
+      context.skip('Bash startup is unavailable on this test host.');
+      return;
+    }
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(serviceUnitFile, 'utf8'), 'previous unit');
+    const calls = fs.readFileSync(callsFile, 'utf8');
+    assert.match(calls, /^ln -sfn .+\/releases\/previous .+\/current$/m);
+    assert.match(calls, /daemon-reload/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('installer can restore the pre-update database and media after a failed activation', (context) => {
+  const helper = installer.match(/restore_update_backup\(\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(helper, 'expected the verified update-backup restore helper');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'openlearning-update-rollback-'));
+  const root = path.resolve(directory);
+  if (path.dirname(root) !== path.resolve(os.tmpdir()) || !path.basename(root).startsWith('openlearning-update-rollback-')) {
+    throw new Error('Refusing to use an unexpected temporary directory.');
+  }
+  const dataDirectory = path.join(root, 'data');
+  const databasePath = path.join(dataDirectory, 'openlearning.sqlite');
+  const mediaRoot = path.join(dataDirectory, 'course-media');
+  const backupPath = path.join(root, 'backup');
+  const environmentFile = path.join(root, '.env');
+  const chownLog = path.join(root, 'chown-calls.txt');
+  fs.mkdirSync(mediaRoot, { recursive: true });
+  fs.mkdirSync(path.join(backupPath, 'course-media'), { recursive: true });
+  fs.writeFileSync(databasePath, 'new database');
+  fs.writeFileSync(path.join(mediaRoot, 'new-media.txt'), 'new media');
+  fs.writeFileSync(path.join(backupPath, 'openlearning.sqlite'), 'previous database');
+  fs.writeFileSync(path.join(backupPath, 'course-media', 'previous-media.txt'), 'previous media');
+  fs.writeFileSync(environmentFile, `DATA_DIR=${dataDirectory}\n`);
+
+  try {
+    const result = spawnSync(bashPath, ['-c', `
+      set -eu
+      ${helper}
+      chown() { printf '%s\\n' "$*" >> "$MOCK_CHOWN_CALLS"; }
+      restore_update_backup "$MOCK_ENV_FILE" "$MOCK_BACKUP_PATH" "$MOCK_DATABASE_DIRECTORY" \\
+        "$MOCK_MEDIA_ROOT" "$MOCK_DATABASE_PATH"
+    `], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        MOCK_ENV_FILE: environmentFile,
+        MOCK_BACKUP_PATH: backupPath,
+        MOCK_DATABASE_DIRECTORY: dataDirectory,
+        MOCK_MEDIA_ROOT: mediaRoot,
+        MOCK_DATABASE_PATH: databasePath,
+        MOCK_CHOWN_CALLS: chownLog,
+      },
+    });
+    if (result.error?.code === 'ENOENT' || result.stderr?.includes('NtCreateDirectoryObject')) {
+      context.skip('Bash startup is unavailable on this test host.');
+      return;
+    }
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(databasePath, 'utf8'), 'previous database');
+    assert.equal(fs.readFileSync(path.join(mediaRoot, 'previous-media.txt'), 'utf8'), 'previous media');
+    assert.equal(fs.existsSync(path.join(mediaRoot, 'new-media.txt')), false);
+    assert.match(fs.readFileSync(chownLog, 'utf8'), /openlearning:openlearning/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('port migration rollback restores the prior private environment file', (context) => {
   const helper = installer.match(/restore_environment_config\(\) \{[\s\S]*?\n\}/)?.[0];
   assert.ok(helper, 'expected a service configuration rollback helper');
