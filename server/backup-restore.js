@@ -190,6 +190,11 @@ function restoreDatabaseFromStage(stagedDatabasePath, operationId) {
         db.exec(`DELETE FROM main.${quotedTable}`);
         db.exec(`INSERT INTO main.${quotedTable} (${quotedColumns}) SELECT ${quotedColumns} FROM restore_source.${quotedTable}`);
       }
+      // The restored snapshot has no matching in-memory queue to resume pending work.
+      db.prepare(`UPDATE main.backup_runs
+        SET status = 'failed', finished_at = ?, error_message = ?
+        WHERE status IN ('pending', 'running')`)
+        .run(new Date().toISOString(), 'This backup run could not resume after restoration.');
       db.exec('DELETE FROM main.sessions');
 
       const hasSequence = db.prepare("SELECT 1 FROM restore_source.sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'").get();
