@@ -1239,6 +1239,11 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .log-details-toggle:focus-visible { outline: 2px solid var(--purple); outline-offset: 3px; }
 .log-details-toggle svg { transition: transform .15s ease; }
 .log-details-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.log-table td:last-child { min-width: 190px; }
+.log-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; white-space: nowrap; }
+.log-copy-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 40px; border: 0; border-radius: 4px; padding: 0 6px; color: var(--purple); background: transparent; cursor: pointer; font: inherit; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.log-copy-button:hover { color: var(--purple-dark); }
+.log-copy-button:focus-visible { outline: 2px solid var(--purple); outline-offset: 3px; }
 .log-table .log-details-row > td { padding: 0 15px 15px; background: #fbfbfd; }
 .log-details-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; width: 100%; max-width: none; margin: 0; padding: 13px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
 .log-details-content > div { display: grid; gap: 4px; min-width: 0; padding: 10px; border: 1px solid #eaebf0; border-radius: 3px; background: #fbfbfd; }

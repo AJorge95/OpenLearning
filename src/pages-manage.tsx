@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Activity, AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, Download, FileText, Filter, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload, UsersRound } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, ChevronDown, CircleHelp, Copy, Download, FileText, Filter, Link2, LockKeyhole, MoreVertical, Pencil, Plus, Search, Settings2, Trash2, Upload, UsersRound } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useBeforeUnload, useBlocker, useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { BlockerFunction } from 'react-router-dom';
@@ -43,6 +43,7 @@ import { validateEmail } from './email-validation';
 import { userListEmptyMessage } from './user-list-empty-state';
 import { formatPercentage } from './percentage';
 import { buildAuditActionOptions } from './audit-log-filter';
+import { formatRedactedLogJson } from './log-export';
 import { readResetStatusAfterConflict, shouldClearResetConfirmationAfterFailure } from './platform-reset-status';
 import type { PlatformResetStatus } from './platform-reset-status';
 import type { UserApprovalFilter, UserRoleFilter } from './user-list-empty-state';
@@ -4080,6 +4081,8 @@ type SystemLogEntry = {
   details: Record<string, unknown>;
 };
 
+type LogEntryForCopy = AuditLogEntry | SystemLogEntry;
+
 function LogTimestamp({ value }: { value: string }) {
   const formatted = formatApiTimestamp(value, logTimestampFormatter, value);
   const date = parseApiTimestamp(value);
@@ -4087,13 +4090,24 @@ function LogTimestamp({ value }: { value: string }) {
   return <time dateTime={valid ? date.toISOString() : undefined}>{formatted}</time>;
 }
 
-function LogDetailsDisclosure({ details, label, columnCount, children }: { details: Record<string, unknown>; label: string; columnCount: number; children: (toggle: ReactNode) => ReactNode }) {
+function LogDetailsDisclosure({ details, entry, label, columnCount, children }: { details: Record<string, unknown>; entry: LogEntryForCopy; label: string; columnCount: number; children: (controls: ReactNode) => ReactNode }) {
   const [expanded, setExpanded] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
   const contentId = useId();
   const rows = Object.entries(details || {});
   const toggle = rows.length ? <button type="button" className="log-details-toggle" aria-expanded={expanded} aria-controls={contentId} aria-label={`${expanded ? 'Hide' : 'View'} details for ${(label.trim() || 'log entry').slice(0, 120)}`} onClick={() => setExpanded((current) => !current)}><ChevronDown size={14} aria-hidden="true" /><span>{expanded ? 'Hide details' : 'View details'}</span></button> : <span className="log-no-details">—</span>;
+  async function copyRedactedJson() {
+    setCopyStatus('idle');
+    try {
+      await navigator.clipboard.writeText(formatRedactedLogJson(entry));
+      setCopyStatus('copied');
+    } catch {
+      setCopyStatus('failed');
+    }
+  }
+  const controls = <div className="log-row-actions">{toggle}<button type="button" className="log-copy-button" title="Personal information and credentials are redacted." aria-label={`Copy redacted JSON for ${(label.trim() || 'log entry').slice(0, 120)}`} onClick={() => { void copyRedactedJson(); }}>{copyStatus === 'copied' ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}<span>{copyStatus === 'copied' ? 'Copied' : copyStatus === 'failed' ? 'Copy failed' : 'Copy JSON'}</span></button>{copyStatus !== 'idle' && <span className="sr-only" role="status" aria-live="polite">{copyStatus === 'copied' ? 'Redacted JSON copied to clipboard.' : 'Could not copy JSON to the clipboard.'}</span>}</div>;
   return <>
-    {children(toggle)}
+    {children(controls)}
     {rows.length > 0 && <tr className="log-details-row" hidden={!expanded}><td colSpan={columnCount}><dl id={contentId} className="log-details-content">{rows.map(([key, value]) => <div key={key}><dt>{key}</dt><dd><code>{typeof value === 'string' ? value : JSON.stringify(value)}</code></dd></div>)}</dl></td></tr>}
   </>;
 }
@@ -4182,7 +4196,7 @@ export function AdminAuditLogPage() {
     {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
     {hasEmptyResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyMessage}</p>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable audit log" tabIndex={0}><p className="table-scroll-hint">Scroll horizontally to see all audit log columns.</p><table className="log-table" aria-busy={loading}><caption className="sr-only">Audit log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Change</th><th scope="col">Details</th></tr></thead><tbody>
-      {failedRequest ? <tr><td colSpan={5} className="log-empty">Audit entries are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} details={entry.details} label={entry.summary} columnCount={5}>{(toggle) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td>{entry.actorUsername}</td><td><span className="log-action">{entry.action.replaceAll('_', ' ')}</span></td><th scope="row"><strong>{entry.summary}</strong><small>{entry.entityType}{entry.entityId ? ` · ${entry.entityId}` : ''}</small></th><td>{toggle}</td></tr>}</LogDetailsDisclosure>)}
+      {failedRequest ? <tr><td colSpan={5} className="log-empty">Audit entries are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} entry={entry} details={entry.details} label={entry.summary} columnCount={5}>{(controls) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td>{entry.actorUsername}</td><td><span className="log-action">{entry.action.replaceAll('_', ' ')}</span></td><th scope="row"><strong>{entry.summary}</strong><small>{entry.entityType}{entry.entityId ? ` · ${entry.entityId}` : ''}</small></th><td>{controls}</td></tr>}</LogDetailsDisclosure>)}
       {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty"><LogEmptyState message={emptyMessage} /></td></tr>}
     </tbody></table>{loading && <div className="log-loading" role="status" aria-live="polite">Loading audit entries…</div>}</div>
     {!failedRequest && total > 0 && <LogPagination ariaLabel="Audit log pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
@@ -4259,7 +4273,7 @@ export function AdminSystemLogPage() {
     {error && <div className="log-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => setRefreshVersion((current) => current + 1)}>Try again</Button></div>}
     {hasEmptyResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{emptyMessage}</p>}
     <div className="log-table-wrap" role="region" aria-label="Scrollable system log" tabIndex={0}><p className="table-scroll-hint">Scroll horizontally to see all system log columns.</p><table className="log-table" aria-busy={loading}><caption className="sr-only">System log entries</caption><thead><tr><th scope="col">When</th><th scope="col">Level</th><th scope="col">Source</th><th scope="col">Event</th><th scope="col">Details</th></tr></thead><tbody>
-      {failedRequest ? <tr><td colSpan={5} className="log-empty">System events are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} details={entry.details} label={entry.message} columnCount={5}>{(toggle) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td><span className={`log-level log-level-${entry.level}`}>{entry.level}</span></td><td>{entry.source}</td><th scope="row"><strong>{entry.message}</strong></th><td>{toggle}</td></tr>}</LogDetailsDisclosure>)}
+      {failedRequest ? <tr><td colSpan={5} className="log-empty">System events are unavailable until the request succeeds.</td></tr> : entries.map((entry) => <LogDetailsDisclosure key={entry.id} entry={entry} details={entry.details} label={entry.message} columnCount={5}>{(controls) => <tr><td><LogTimestamp value={entry.occurredAt} /></td><td><span className={`log-level log-level-${entry.level}`}>{entry.level}</span></td><td>{entry.source}</td><th scope="row"><strong>{entry.message}</strong></th><td>{controls}</td></tr>}</LogDetailsDisclosure>)}
       {!loading && !failedRequest && !entries.length && <tr><td colSpan={5} className="log-empty"><LogEmptyState message={emptyMessage} /></td></tr>}
     </tbody></table>{loading && <div className="log-loading" role="status" aria-live="polite">Loading system events…</div>}</div>
     {!failedRequest && total > 0 && <LogPagination ariaLabel="System log pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={setPage} />}
