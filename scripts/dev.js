@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
+// Resolve the same .env values as the child before deciding whether PORT was configured.
+import 'dotenv/config';
 import { devChildExitCode } from './dev-exit-code.js';
+import { chooseDevPort } from './dev-port.js';
 
 const backendWatchPaths = ['server', 'scripts', 'shared'];
 // Vite writes its dependency cache under node_modules/.vite during the first
@@ -8,6 +11,13 @@ const backendWatchPaths = ['server', 'scripts', 'shared'];
 const nodeArguments = process.platform === 'linux'
   ? ['--watch', 'scripts/start.js', '--dev']
   : [...backendWatchPaths.map((directory) => `--watch-path=${directory}`), 'scripts/start.js', '--dev'];
+
+// Keep explicit ports authoritative; only auto-select when the default is in use.
+const configuredPort = process.env.PORT?.trim() || '';
+process.env.PORT = await chooseDevPort(configuredPort);
+if (!configuredPort && process.env.PORT !== '5173') {
+  console.log(`Port 5173 is occupied; using ${process.env.PORT}. Set PORT to choose a specific port.`);
+}
 
 const child = spawn(process.execPath, nodeArguments, {
   env: process.env,
