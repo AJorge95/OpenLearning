@@ -677,7 +677,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .course-groups-list .program-card { gap: 13px; }
 .course-group-card { padding: 18px; }
 .course-groups-list .program-card h3 { overflow-wrap: anywhere; margin: 1px 0 5px; font-size: 16px; line-height: 1.3; }
-.course-groups-list .program-card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+/* Preserve multiline descriptions entered in the form or merged during legacy migration. */
+.course-groups-list .program-card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
 .course-group-created { display: flex; flex-wrap: wrap; gap: 5px; padding-top: 11px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 .course-group-search { display: grid; grid-template-columns: minmax(170px, .72fr) minmax(240px, 1.28fr) auto; align-items: end; gap: 12px; margin: 17px 0 14px; }
 .course-group-search label { display: grid; min-width: 0; gap: 7px; color: #303443; font-size: 12px; font-weight: 650; }
