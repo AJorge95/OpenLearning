@@ -187,3 +187,56 @@ test('course-group management is staff-only and preserves CRUD invariants', asyn
   assert.equal(finalListing.status, 200);
   assert.deepEqual((await finalListing.json()).groups[0].courses, []);
 });
+
+// Keep each group mutation atomic with its required audit entry.
+test('course-group mutations roll back when their audit entry cannot be saved', async () => {
+  const groupName = 'Transactional course group';
+  database.exec(`CREATE TRIGGER reject_course_group_created_audit BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'course.group.created' BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`);
+
+  try {
+    const failedCreate = await request('POST', '/manage/course-groups', 'group-admin', { name: groupName });
+    assert.equal(failedCreate.status, 500);
+    assert.equal((await failedCreate.json()).code, 'audit_unavailable');
+    assert.equal(database.prepare('SELECT 1 FROM course_groups WHERE name = ?').get(groupName), undefined);
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS reject_course_group_created_audit');
+  }
+
+  const createResponse = await request('POST', '/manage/course-groups', 'group-admin', { name: groupName });
+  assert.equal(createResponse.status, 201);
+  const { group } = await createResponse.json();
+  const addedAuditCount = () => database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.group.course_added'").get().count;
+  const initialAddedAuditCount = addedAuditCount();
+
+  database.exec(`CREATE TRIGGER reject_course_group_course_added_audit BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'course.group.course_added' BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`);
+  try {
+    const failedAdd = await request('PUT', `/manage/course-groups/${group.id}/courses/group-course-a`, 'group-admin');
+    assert.equal(failedAdd.status, 500);
+    assert.equal((await failedAdd.json()).code, 'audit_unavailable');
+    assert.equal(database.prepare('SELECT 1 FROM course_group_courses WHERE group_id = ? AND course_id = ?')
+      .get(group.id, 'group-course-a'), undefined);
+    assert.equal(addedAuditCount(), initialAddedAuditCount);
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS reject_course_group_course_added_audit');
+  }
+
+  const assignment = await request('PUT', `/manage/course-groups/${group.id}/courses/group-course-a`, 'group-admin');
+  assert.equal(assignment.status, 201);
+  const removedAuditCount = () => database.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'course.group.course_removed'").get().count;
+  const initialRemovedAuditCount = removedAuditCount();
+
+  database.exec(`CREATE TRIGGER reject_course_group_course_removed_audit BEFORE INSERT ON audit_logs
+    WHEN NEW.action = 'course.group.course_removed' BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`);
+  try {
+    const failedRemoval = await request('DELETE', `/manage/course-groups/${group.id}/courses/group-course-a`, 'group-admin');
+    assert.equal(failedRemoval.status, 500);
+    assert.equal((await failedRemoval.json()).code, 'audit_unavailable');
+    assert.ok(database.prepare('SELECT 1 FROM course_group_courses WHERE group_id = ? AND course_id = ?')
+      .get(group.id, 'group-course-a'));
+    assert.equal(removedAuditCount(), initialRemovedAuditCount);
+  } finally {
+    database.exec('DROP TRIGGER IF EXISTS reject_course_group_course_removed_audit');
+  }
+});
