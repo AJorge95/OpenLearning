@@ -3526,7 +3526,7 @@ export function AdminSettingsPage() {
   const [icon, setIcon] = useState<string | null>(platformIcon);
   const [iconEdited, setIconEdited] = useState(false);
   const [palette, setPalette] = useState<BrandingPalette>(themePalette);
-  const [protocol, setProtocol] = useState<ConnectionProtocol>(connectionProtocol);
+  const [protocol, setProtocolState] = useState<ConnectionProtocol>(connectionProtocol);
   const [allowRegistration, setAllowRegistration] = useState(registrationEnabled);
   const [requireRegistrationApproval, setRequireRegistrationApproval] = useState(registrationApprovalRequired);
   const [userLimitValue, setUserLimitValue] = useState(String(userLimit));
@@ -3556,7 +3556,15 @@ export function AdminSettingsPage() {
       });
     return () => controller.abort();
   }, []);
-  useEffect(() => { setName(platformName); setIcon(platformIcon); setIconEdited(false); setPalette(themePalette); setProtocol(connectionProtocol); setAllowRegistration(registrationEnabled); setRequireRegistrationApproval(registrationApprovalRequired); setUserLimitValue(String(userLimit)); setUserLimitError(''); }, [platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, userLimit]);
+  useEffect(() => { setName(platformName); setIcon(platformIcon); setIconEdited(false); setPalette(themePalette); setProtocolState(connectionProtocol); setAllowRegistration(registrationEnabled); setRequireRegistrationApproval(registrationApprovalRequired); setUserLimitValue(String(userLimit)); setUserLimitError(''); }, [platformName, platformIcon, themePalette, connectionProtocol, registrationEnabled, registrationApprovalRequired, userLimit]);
+  function clearSettingsSuccess() {
+    // A saved confirmation describes these values only until the next setting changes.
+    setSuccess('');
+  }
+  function setProtocol(nextProtocol: ConnectionProtocol) {
+    setProtocolState(nextProtocol);
+    clearSettingsSuccess();
+  }
   function refreshRegisteredUserCount() {
     // Reuse the existing request effect so refreshes share its abort and stale-response guards.
     setRegisteredUserCountRetryVersion((version) => version + 1);
@@ -3630,6 +3638,7 @@ export function AdminSettingsPage() {
   function choosePalette(nextPalette: BrandingPalette) {
     setPalette(nextPalette);
     document.documentElement.dataset.palette = nextPalette;
+    clearSettingsSuccess();
   }
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -3719,16 +3728,16 @@ export function AdminSettingsPage() {
     <form className="settings-card form-stack" onSubmit={submit} aria-busy={saving}>
       <fieldset className="settings-fields" aria-label="Platform settings" disabled={platformSettingsDisabled}>
       <div className="settings-card-heading"><span className="settings-icon" aria-hidden="true"><Settings2 size={19} /></span><div><h2>Platform identity</h2><p>Choose the brand learners see throughout the platform.</p></div></div>
-      <label><span className="form-label-row"><span>Platform name</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={platformNameInputRef} required minLength={MIN_PLATFORM_NAME_LENGTH} maxLength={MAX_PLATFORM_NAME_LENGTH} aria-invalid={platformNameError ? true : undefined} aria-describedby={platformNameError ? platformNameErrorId : undefined} value={name} onChange={(event) => { setName(event.target.value); setPlatformNameError(''); }} /></label>
+      <label><span className="form-label-row"><span>Platform name</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={platformNameInputRef} required minLength={MIN_PLATFORM_NAME_LENGTH} maxLength={MAX_PLATFORM_NAME_LENGTH} aria-invalid={platformNameError ? true : undefined} aria-describedby={platformNameError ? platformNameErrorId : undefined} value={name} onChange={(event) => { setName(event.target.value); setPlatformNameError(''); clearSettingsSuccess(); }} /></label>
       {platformNameError && <p id={platformNameErrorId} className="form-error" role="alert">{platformNameError}</p>}
-      <PlatformIconPicker value={icon} onChange={(nextIcon) => { setIcon(nextIcon); setIconEdited(true); }} />
+      <PlatformIconPicker value={icon} onChange={(nextIcon) => { setIcon(nextIcon); setIconEdited(true); clearSettingsSuccess(); }} />
       <div className="branding-choice-field"><span className="branding-choice-label">Color palette</span><small>Preview a palette and save to apply it for everyone.</small><PalettePicker value={palette} onChange={choosePalette} /></div>
       <div className="settings-section-divider"><span>Connection and accounts</span></div>
       <div className="app-select-field"><span>Public connection protocol</span><AppSelect<ConnectionProtocol> ariaLabel="Public connection protocol" describedBy="protocol-help" value={protocol} onChange={setProtocol} options={CONNECTION_PROTOCOL_OPTIONS} /></div>
       <p id="protocol-help" className="protocol-help">Session cookies use the Secure attribute when requests reach OpenLearning over HTTPS. HTTPS requires a TLS certificate on this server or a reverse proxy. For TLS behind a proxy, set <code>TRUST_PROXY=true</code>. HTTP sessions are not encrypted in transit.{connectionProtocol === 'https' && protocol === 'http' && <span className="protocol-session-warning">If you then open the site over HTTP, browsers will not send the existing secure session cookie, so you will need to sign in again.</span>}</p>
-      <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={allowRegistration} onChange={(event) => setAllowRegistration(event.target.checked)} /></label>
-      <label className="setup-toggle"><span><strong>Require admin approval for new registrations</strong><small>New learners must be approved by an administrator before they can sign in or use the platform.</small></span><input type="checkbox" checked={requireRegistrationApproval} onChange={(event) => setRequireRegistrationApproval(event.target.checked)} /></label>
-      <label><span className="form-label-row"><span>Maximum registered accounts</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={userLimitInputRef} className="user-limit-input" type="number" min={0} max={1000000} step={1} required aria-invalid={userLimitError ? true : undefined} aria-describedby={userLimitError ? userLimitErrorId : undefined} value={userLimitValue} onChange={(event) => { setUserLimitValue(event.target.value); setUserLimitError(''); }} /><small>0 means no limit. The cap includes administrators, moderators, and learners.</small></label>
+      <label className="setup-toggle"><span><strong>Allow new registrations</strong><small>Let people create learner accounts from the sign-in page.</small></span><input type="checkbox" checked={allowRegistration} onChange={(event) => { setAllowRegistration(event.target.checked); clearSettingsSuccess(); }} /></label>
+      <label className="setup-toggle"><span><strong>Require admin approval for new registrations</strong><small>New learners must be approved by an administrator before they can sign in or use the platform.</small></span><input type="checkbox" checked={requireRegistrationApproval} onChange={(event) => { setRequireRegistrationApproval(event.target.checked); clearSettingsSuccess(); }} /></label>
+      <label><span className="form-label-row"><span>Maximum registered accounts</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input ref={userLimitInputRef} className="user-limit-input" type="number" min={0} max={1000000} step={1} required aria-invalid={userLimitError ? true : undefined} aria-describedby={userLimitError ? userLimitErrorId : undefined} value={userLimitValue} onChange={(event) => { setUserLimitValue(event.target.value); setUserLimitError(''); clearSettingsSuccess(); }} /><small>0 means no limit. The cap includes administrators, moderators, and learners.</small></label>
       {userLimitError && <p id={userLimitErrorId} className="form-error" role="alert">{userLimitError}</p>}
       {registeredUserCountError
         ? <div className="registered-count-recovery"><Notice>{registeredUserCountError}</Notice><Button type="button" variant="secondary" onClick={() => setRegisteredUserCountRetryVersion((version) => version + 1)}>Retry account count</Button></div>
