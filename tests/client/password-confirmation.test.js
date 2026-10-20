@@ -57,7 +57,13 @@ test('all password confirmation forms clear a stale warning when either value ch
   };
 
   assert.equal(countErrorClears('pages-auth.tsx'), 6);
-  assert.equal(countErrorClears('pages-manage.tsx'), 6);
+  assert.equal(countErrorClears('pages-manage.tsx'), 4);
+  const manageSource = fs.readFileSync(path.join(sourceDirectory, 'pages-manage.tsx'), 'utf8');
+  const accountDetailsPage = manageSource.slice(
+    manageSource.indexOf('export function AdminUserDetailsPage()'),
+    manageSource.indexOf('\nexport function AdminAuditLogPage()'),
+  );
+  assert.equal(accountDetailsPage.match(/clearAccountActionFeedback\(\);/g)?.length ?? 0, 5);
 });
 
 test('all six confirmation fields link mismatch feedback to their rendered alert', () => {
