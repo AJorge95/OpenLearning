@@ -911,6 +911,36 @@ test('course list exposes the current review status for unpublished revisions', 
   }
 });
 
+test('draft course filter includes published revisions while published status remains available', async () => {
+  const titlePrefix = 'Status filter revision fixture';
+  const publishedId = 'course-status-filter-published';
+  const revisionId = 'course-status-filter-revision';
+  const draftId = 'course-status-filter-draft';
+  const insertCourse = database.prepare('INSERT INTO courses (id, title, status, created_by, updated_by) VALUES (?, ?, ?, ?, ?)');
+  try {
+    insertCourse.run(publishedId, `${titlePrefix} published`, 'published', 'admin-1', 'admin-1');
+    insertCourse.run(revisionId, `${titlePrefix} revised`, 'published', 'admin-1', 'admin-1');
+    insertCourse.run(draftId, `${titlePrefix} draft`, 'draft', 'admin-1', 'admin-1');
+    database.prepare(`INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+      VALUES ('version-status-filter-revision', ?, ?, 1, 'admin-1')`).run(revisionId, revisionId);
+    assert.ok(editableCourse(revisionId, { id: 'admin-1' }));
+
+    const search = encodeURIComponent(titlePrefix);
+    const draftsResponse = await fetch(apiUrl(`/manage/courses?status=draft&q=${search}`), { headers: userHeaders('admin-1') });
+    assert.equal(draftsResponse.status, 200);
+    const drafts = await draftsResponse.json();
+    // Unpublished revisions belong in Drafts without hiding their currently published course.
+    assert.deepEqual(drafts.courses.map((course) => course.id).sort(), [draftId, revisionId].sort());
+
+    const publishedResponse = await fetch(apiUrl(`/manage/courses?status=published&q=${search}`), { headers: userHeaders('admin-1') });
+    assert.equal(publishedResponse.status, 200);
+    const published = await publishedResponse.json();
+    assert.deepEqual(published.courses.map((course) => course.id).sort(), [publishedId, revisionId].sort());
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id IN (?, ?, ?)').run(publishedId, revisionId, draftId);
+  }
+});
+
 test('published course management list returns later pages for learning-path options', async () => {
   const titlePrefix = 'Path option pagination fixture';
   const courseIds = Array.from({ length: 51 }, (_, index) => `path-options-pagination-${index + 1}`);
