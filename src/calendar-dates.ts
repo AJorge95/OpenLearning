@@ -13,6 +13,11 @@ export function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+export function getCalendarDayRefreshDelay(now = new Date()) {
+  const nextLocalMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return Math.max(1, nextLocalMidnight.getTime() - now.getTime());
+}
+
 export function calendarMonthRequestRange(year: number, monthIndex: number) {
   return {
     from: localDateKey(new Date(year, monthIndex, 0)),

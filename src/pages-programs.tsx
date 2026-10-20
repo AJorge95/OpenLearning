@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArrowDown, ArrowUp, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Plus, RotateCcw, Search, UsersRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from './api';
-import { calendarMonthRequestRange, currentCalendarMonth, getCalendarDeadlineRefreshDelay, groupCalendarDeadlines, isSameCalendarMonth, localDateKey, markCalendarDeadlinesOverdue, shouldShowCalendarEmptyState } from './calendar-dates';
+import { calendarMonthRequestRange, currentCalendarMonth, getCalendarDayRefreshDelay, getCalendarDeadlineRefreshDelay, groupCalendarDeadlines, isSameCalendarMonth, localDateKey, markCalendarDeadlinesOverdue, shouldShowCalendarEmptyState } from './calendar-dates';
 import { pathAssignmentRemovalConfirmation } from './path-assignment-confirmation';
 import { pathArchiveConfirmation } from './path-archive-confirmation';
 import { AppSelect, Button, ConfirmationDialog, EmptyState, PageHeading, ProgressBar } from './components';
@@ -695,6 +695,7 @@ export function CalendarPage() {
   const [hasInvalidDeadlines, setHasInvalidDeadlines] = useState(false);
   const [reloadSequence, setReloadSequence] = useState(0);
   const [deadlineTimerRevision, setDeadlineTimerRevision] = useState(0);
+  const [calendarDayRevision, setCalendarDayRevision] = useState(0);
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
   const todayKey = localDateKey(new Date());
@@ -703,6 +704,14 @@ export function CalendarPage() {
   // Fetch a UTC-date buffer around the local month so deadlines near midnight
   // are still grouped into the correct month in the learner's timezone.
   const { from: dateFrom, to: dateTo } = calendarMonthRequestRange(year, monthIndex);
+  useEffect(() => {
+    // Re-render the local today marker at midnight using calendar-aware DST timing.
+    const timer = window.setTimeout(
+      () => setCalendarDayRevision((revision) => revision + 1),
+      getCalendarDayRefreshDelay(),
+    );
+    return () => window.clearTimeout(timer);
+  }, [calendarDayRevision]);
   useEffect(() => {
     let active = true;
     const controller = new AbortController();

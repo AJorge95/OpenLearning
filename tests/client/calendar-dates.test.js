@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { calendarMonthRequestRange, currentCalendarMonth, getCalendarDeadlineRefreshDelay, groupCalendarDeadlines, isSameCalendarMonth, markCalendarDeadlinesOverdue, shouldShowCalendarEmptyState } from '../../src/calendar-dates.ts';
+import { calendarMonthRequestRange, currentCalendarMonth, getCalendarDayRefreshDelay, getCalendarDeadlineRefreshDelay, groupCalendarDeadlines, isSameCalendarMonth, markCalendarDeadlinesOverdue, shouldShowCalendarEmptyState } from '../../src/calendar-dates.ts';
 
 const deadline = (dueAt, status = 'upcoming', completed = false) => ({
   courseId: 'course-1', title: 'Course', category: '', dueAt, status, completed, url: '/courses/course-1',
@@ -20,6 +20,21 @@ test('calendar month navigation recognizes the same local month across different
   assert.equal(isSameCalendarMonth(new Date(2026, 9, 1), new Date(2026, 9, 12)), true);
   assert.equal(isSameCalendarMonth(new Date(2026, 9, 1), new Date(2026, 10, 1)), false);
   assert.equal(isSameCalendarMonth(new Date(2025, 9, 1), new Date(2026, 9, 1)), false);
+});
+
+test('calendar day refresh targets the next local midnight across daylight-saving changes', () => {
+  const previousTimezone = process.env.TZ;
+  try {
+    process.env.TZ = 'America/Los_Angeles';
+    const beforeMidnight = new Date(2026, 2, 8, 0, 30);
+    const nextLocalMidnight = new Date(2026, 2, 9);
+
+    assert.equal(getCalendarDayRefreshDelay(beforeMidnight), nextLocalMidnight.getTime() - beforeMidnight.getTime());
+    assert.equal(getCalendarDayRefreshDelay(beforeMidnight), 22.5 * 60 * 60 * 1000);
+  } finally {
+    if (previousTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTimezone;
+  }
 });
 
 test('calendar ranges include UTC dates whose deadlines belong to an adjacent local month', () => {
@@ -103,6 +118,18 @@ test('calendar page schedules and clears its deadline status timer', () => {
   assert.match(componentSource, /setItems\(\(currentItems\) => markCalendarDeadlinesOverdue\(currentItems, now\)\)/);
   assert.match(componentSource, /return \(\) => window\.clearTimeout\(timer\)/);
   assert.match(componentSource, /\[monthItems, deadlineTimerRevision\]/);
+});
+
+test('calendar page refreshes its current-date marker at local midnight', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-programs.tsx', import.meta.url), 'utf8');
+  const componentStart = pageSource.indexOf('export function CalendarPage()');
+  const componentEnd = pageSource.indexOf('export function CompetenciesPage()', componentStart);
+  const componentSource = pageSource.slice(componentStart, componentEnd);
+
+  assert.match(componentSource, /const \[calendarDayRevision, setCalendarDayRevision\] = useState\(0\)/);
+  assert.match(componentSource, /setCalendarDayRevision\(\(revision\) => revision \+ 1\)[\s\S]*getCalendarDayRefreshDelay\(\)/);
+  assert.match(componentSource, /\[calendarDayRevision\]/);
+  assert.match(componentSource, /const todayKey = localDateKey\(new Date\(\)\)/);
 });
 
 test('calendar page uses the successful-empty-state guard', () => {
