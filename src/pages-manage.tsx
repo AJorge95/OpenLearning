@@ -2674,8 +2674,9 @@ export function CourseGroupsPage() {
         <section className="program-editor-card course-group-create" aria-labelledby="course-group-create-heading">
           <div className="program-card-heading"><div><span className="program-icon"><UsersRound size={20} aria-hidden="true" /></span><div><h2 id="course-group-create-heading">Create a group</h2><p>Give the group a name. You can add courses after creating it.</p></div></div></div>
           <form className="program-form-grid course-group-create-form" onSubmit={createGroup} aria-busy={saving}>
-            <label>Group name<input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required disabled={saving} placeholder="e.g. Core curriculum" /></label>
-            <label>Description (optional)<textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={1000} rows={2} disabled={saving} placeholder="What should learners know about this group?" /></label>
+            {/* A prior creation confirmation should not linger while the next group is being edited. */}
+            <label>Group name<input value={name} onChange={(event) => { setNotice(''); setName(event.target.value); }} maxLength={120} required disabled={saving} placeholder="e.g. Core curriculum" /></label>
+            <label>Description (optional)<textarea value={description} onChange={(event) => { setNotice(''); setDescription(event.target.value); }} maxLength={1000} rows={2} disabled={saving} placeholder="What should learners know about this group?" /></label>
             <div className="program-form-actions"><Button type="submit" disabled={saving}>{saving ? 'Creating group…' : 'Create group'}</Button></div>
           </form>
         </section>
