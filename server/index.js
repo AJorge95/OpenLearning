@@ -25,6 +25,7 @@ import { createSecurityHeaders } from './security-headers.js';
 import { mountWebClient } from './web-client.js';
 import { recoverInterruptedBackupRestore } from './backup-restore.js';
 import { setStartupMediaCleanup } from './media-maintenance.js';
+import { listenWithDevelopmentPortFallback } from './development-port-fallback.js';
 
 await recoverInterruptedBackupRestore();
 
@@ -123,17 +124,30 @@ function cleanupOrphanedMedia() {
   });
 }
 
-server.listen(config.port, config.host, () => {
-  console.log(`OpenLearning listening on ${config.host}:${config.port}`);
+function onServerListening(port) {
+  console.log(`OpenLearning listening on ${config.host}:${port}`);
   if (config.nodeEnv === 'production') {
-    console.log(`Use the server's reachable IPv4 address or DNS name on port ${config.port} from a browser on another computer.`);
+    console.log(`Use the server's reachable IPv4 address or DNS name on port ${port} from a browser on another computer.`);
   } else {
-    console.log(`Open OpenLearning at http://${config.host}:${config.port}`);
+    console.log(`Open OpenLearning at http://${config.host}:${port}`);
   }
   console.log(`Database: ${config.dbPath}`);
   console.log(`Course media: ${config.mediaRoot}`);
-  writeSystemLog('info', 'server', 'OpenLearning server started', { port: config.port, environment: config.nodeEnv, nodeVersion: process.versions.node });
+  writeSystemLog('info', 'server', 'OpenLearning server started', { port, environment: config.nodeEnv, nodeVersion: process.versions.node });
   setImmediate(cleanupOrphanedMedia);
+}
+
+const canFallbackFromDevelopmentPort = config.nodeEnv === 'development'
+  && process.env.OPENLEARNING_DEV_PORT_FALLBACK === 'true';
+void listenWithDevelopmentPortFallback(server, {
+  port: config.port,
+  host: config.host,
+  enabled: canFallbackFromDevelopmentPort,
+  onFallback: (occupiedPort, nextPort) => {
+    console.log(`Port ${occupiedPort} became occupied; using ${nextPort}. Set PORT to choose a specific port.`);
+  },
+}).then(onServerListening).catch((error) => {
+  process.nextTick(() => { throw error; });
 });
 server.requestTimeout = config.requestTimeoutMs;
 startBackupScheduler({ shouldDefer: isPlatformResetActive });
