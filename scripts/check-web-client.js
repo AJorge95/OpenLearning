@@ -19,19 +19,46 @@ export async function checkWebClient(baseUrl) {
   }
   const html = await page.text();
   // Production Vite HTML references same-origin, hashed JavaScript/CSS chunks.
-  const assets = [...new Set([...html.matchAll(/(?:src|href)=["'](\/assets\/[^"']+\.(?:js|css))["']/g)].map((match) => match[1]))];
-  if (!/id=["']root["']/.test(html) || !assets.some((asset) => asset.endsWith('.js'))) {
+  const assets = new Set([...html.matchAll(/(?:src|href)=["'](\/assets\/[^"']+\.(?:js|css))["']/g)].map((match) => match[1]));
+  if (!/id=["']root["']/.test(html) || ![...assets].some((asset) => asset.endsWith('.js'))) {
     throw new Error('The application page does not contain the built web client.');
   }
-  for (const asset of assets) {
+
+  // Check lazy page bundles and nested CSS imports as well as HTML entry assets.
+  const pendingAssets = [...assets];
+  const checkedAssets = new Set();
+  while (pendingAssets.length > 0) {
+    const asset = pendingAssets.pop();
+    if (checkedAssets.has(asset)) continue;
+    checkedAssets.add(asset);
+
     const response = await request(asset);
-    const expectedType = asset.endsWith('.css') ? /text\/css/i : /(?:text|application)\/javascript/i;
+    const assetPath = new URL(asset, base).pathname;
+    const isStylesheet = assetPath.endsWith('.css');
+    const expectedType = isStylesheet ? /text\/css/i : /(?:text|application)\/javascript/i;
     if (!expectedType.test(response.headers.get('content-type') || '')) {
       throw new Error(`${asset} has an invalid content type; the browser cannot load it.`);
     }
-    if (!(await response.text()).trim()) throw new Error(`${asset} is empty.`);
+    const body = await response.text();
+    if (!body.trim()) throw new Error(`${asset} is empty.`);
+
+    const references = new Set([...body.matchAll(/["']((?:\/assets\/|assets\/|\.{1,2}\/)[^"'?#\s]+\.(?:js|css)(?:\?[^"']*)?)["']/g)].map((match) => match[1]));
+    if (isStylesheet) {
+      for (const match of body.matchAll(/url\(\s*["']?((?:\/assets\/|assets\/|\.{1,2}\/)[^)"'\s]+\.(?:js|css)(?:\?[^)"'\s]*)?)["']?\s*\)/gi)) {
+        references.add(match[1]);
+      }
+    }
+    for (const reference of references) {
+      const dependency = reference.startsWith('assets/')
+        ? new URL(`/${reference}`, base)
+        : new URL(reference, new URL(asset, base));
+      if (dependency.origin !== base.origin || !dependency.pathname.startsWith('/assets/')) continue;
+      if (/\.(?:js|css)$/i.test(dependency.pathname)) {
+        pendingAssets.push(`${dependency.pathname}${dependency.search}`);
+      }
+    }
   }
-  return assets.length;
+  return checkedAssets.size;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

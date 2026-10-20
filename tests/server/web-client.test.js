@@ -81,6 +81,21 @@ test('installer web checks reject the former HTTP-to-HTTPS policy and missing ch
   await assert.rejects(checkWebClient(current.base), /app.js returned HTTP 404/);
 });
 
+test('installer web checks follow lazy JavaScript and nested stylesheet assets', async (t) => {
+  const current = await fixture(t);
+  fs.writeFileSync(path.join(current.directory, 'assets/app.js'), 'import("./pages.js");');
+  fs.writeFileSync(path.join(current.directory, 'assets/pages.js'), 'import "./shared.js";');
+  fs.writeFileSync(path.join(current.directory, 'assets/shared.js'), 'export const page = true;');
+  fs.writeFileSync(path.join(current.directory, 'assets/app.css'), '@import "./theme.css";');
+  fs.writeFileSync(path.join(current.directory, 'assets/theme.css'), 'body { background: url(./tokens.css); }');
+  fs.writeFileSync(path.join(current.directory, 'assets/tokens.css'), ':root { --surface: white; }');
+
+  assert.equal(await checkWebClient(current.base), 6);
+
+  fs.unlinkSync(path.join(current.directory, 'assets/shared.js'));
+  await assert.rejects(checkWebClient(current.base), /shared\.js returned HTTP 404/);
+});
+
 test('web-client checker explains its required base URL', async () => {
   const child = spawn(process.execPath, [checkWebClientScript], {
     cwd: projectRoot,
