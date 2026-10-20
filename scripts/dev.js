@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { devChildExitCode } from './dev-exit-code.js';
 
 const backendWatchPaths = ['server', 'scripts', 'shared'];
 // Vite writes its dependency cache under node_modules/.vite during the first
@@ -18,9 +19,5 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 
 child.on('exit', (code, signal) => {
-  if (signal) {
-    process.exitCode = 1;
-  } else {
-    process.exitCode = code ?? 1;
-  }
+  process.exitCode = devChildExitCode(code, signal);
 });
