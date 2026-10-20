@@ -3151,6 +3151,7 @@ export function AdminUsersPage() {
 
 export function AdminUserCreatePage() {
   const navigate = useNavigate();
+  const accountCreationCommittedRef = useRef(false);
   const roleHelpId = useId();
   const passwordConfirmationErrorId = useId();
   const accountNameErrorId = useId();
@@ -3174,6 +3175,24 @@ export function AdminUserCreatePage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  // Only entered account details count as a draft; the default learner role does not.
+  const hasUnsavedChanges = Boolean(email || firstName || lastName || username || password || confirmPassword || role !== 'learner');
+  const shouldBlockNavigation = useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => {
+    if (accountCreationCommittedRef.current) return false;
+    const locationChanged = currentLocation.pathname !== nextLocation.pathname
+      || currentLocation.search !== nextLocation.search
+      || currentLocation.hash !== nextLocation.hash;
+    return locationChanged && (hasUnsavedChanges || saving);
+  }, [hasUnsavedChanges, saving]);
+  const navigationBlocker = useBlocker(shouldBlockNavigation);
+  const navigationBlockerRef = useRef(navigationBlocker);
+  navigationBlockerRef.current = navigationBlocker;
+  const preventUnsavedAccountExit = useCallback((event: BeforeUnloadEvent) => {
+    if (accountCreationCommittedRef.current || (!hasUnsavedChanges && !saving)) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }, [hasUnsavedChanges, saving]);
+  useBeforeUnload(preventUnsavedAccountExit);
 
   async function createAccount(event: React.FormEvent) {
     event.preventDefault();
@@ -3212,7 +3231,11 @@ export function AdminUserCreatePage() {
         password,
         confirmPassword,
       });
-      navigate(`/admin/users/${response.user.id}`, { replace: true });
+      // The account is saved, so let the intended route complete without a discard prompt.
+      accountCreationCommittedRef.current = true;
+      const pendingNavigation = navigationBlockerRef.current;
+      if (pendingNavigation.state === 'blocked') pendingNavigation.proceed();
+      else navigate(`/admin/users/${response.user.id}`, { replace: true });
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === 'invalid_name') {
         // Keep server-side name validation attached to the matching creation field.
@@ -3251,6 +3274,16 @@ export function AdminUserCreatePage() {
       {error && <Notice id={passwordConfirmationErrorId}>{error}</Notice>}
       <div className="account-form-actions"><Button type="submit" disabled={saving}>{saving ? 'Creating account…' : 'Create account'}</Button><span>Manual accounts can be created while public registration is closed. The account limit still applies; no email invitation is sent.</span></div>
     </form></section>
+    {navigationBlocker.state === 'blocked' && <ConfirmationDialog
+      title={saving ? 'Account creation in progress' : 'Discard account draft?'}
+      description={saving ? 'Wait for account creation to finish before leaving this page.' : 'Your account details will be lost if you leave this page.'}
+      cancelLabel={saving ? 'Stay on page' : 'Keep editing'}
+      confirmLabel={saving ? 'Creating…' : 'Discard draft'}
+      confirmVariant={saving ? 'secondary' : 'danger'}
+      confirmDisabled={saving}
+      onCancel={navigationBlocker.reset}
+      onConfirm={navigationBlocker.proceed}
+    />}
   </div>;
 }
 
