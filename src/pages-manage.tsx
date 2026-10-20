@@ -3581,6 +3581,31 @@ export function AdminSettingsPage() {
   const [resetSuccess, setResetSuccess] = useState('');
   const [resetBusy, setResetBusy] = useState(false);
   const [resetStatusLoaded, setResetStatusLoaded] = useState(false);
+  // Compare only values persisted by Save settings; the platform reset flow is separate.
+  const hasUnsavedChanges = name !== platformName
+    || icon !== platformIcon
+    || palette !== themePalette
+    || protocol !== connectionProtocol
+    || allowRegistration !== registrationEnabled
+    || requireRegistrationApproval !== registrationApprovalRequired
+    || userLimitValue !== String(userLimit);
+  const shouldBlockNavigation = useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => {
+    const locationChanged = currentLocation.pathname !== nextLocation.pathname
+      || currentLocation.search !== nextLocation.search
+      || currentLocation.hash !== nextLocation.hash;
+    return locationChanged && (hasUnsavedChanges || saving);
+  }, [hasUnsavedChanges, saving]);
+  const navigationBlocker = useBlocker(shouldBlockNavigation);
+  const preventUnsavedSettingsExit = useCallback((event: BeforeUnloadEvent) => {
+    if (!hasUnsavedChanges && !saving) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }, [hasUnsavedChanges, saving]);
+  useBeforeUnload(preventUnsavedSettingsExit);
+  useEffect(() => {
+    // Save success refreshes the local baseline; continue a navigation that waited for it.
+    if (navigationBlocker.state === 'blocked' && !hasUnsavedChanges && !saving) navigationBlocker.proceed();
+  }, [navigationBlocker, hasUnsavedChanges, saving]);
   useEffect(() => {
     const controller = new AbortController();
     fetchAppVersion({ signal: controller.signal })
@@ -3818,6 +3843,16 @@ export function AdminSettingsPage() {
         {resetState.pending && resetState.phase === 'ready' && !resetState.confirmationId && <div className="platform-reset-pending" role="status"><strong>Another administrator has prepared a verified backup and can now confirm or cancel the reset.</strong><span>Platform requests remain paused until they confirm or cancel the reset.</span></div>}
       </div>
     </section>
+    {navigationBlocker.state === 'blocked' && <ConfirmationDialog
+      title={saving ? 'Platform settings save in progress' : 'Discard unsaved platform settings?'}
+      description={saving ? 'Wait for the current save to finish before leaving this page.' : 'Your unsaved platform settings will be lost if you leave this page.'}
+      cancelLabel={saving ? 'Stay on page' : 'Keep editing'}
+      confirmLabel={saving ? 'Saving…' : 'Discard changes'}
+      confirmVariant={saving ? 'secondary' : 'danger'}
+      confirmDisabled={saving}
+      onCancel={navigationBlocker.reset}
+      onConfirm={navigationBlocker.proceed}
+    />}
   </div>;
 }
 
