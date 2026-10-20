@@ -3372,6 +3372,31 @@ export function AdminUserDetailsPage() {
     setAccountEmailError(''); setCertificateNameError(''); setInvalidCertificateNameField(null); setPendingDisableAccountId(null);
   }, [userId]);
 
+  // Keep drafts scoped to the loaded account and include credentials that are only in memory.
+  const hasUnsavedChanges = account?.user.id === userId && (
+    (accountEmailUserId === userId && accountEmail.trim() !== (account.user.email || ''))
+    || (profileNamesUserId === userId && (normalizeAccountName(profileFirstName) !== (account.user.firstName || '')
+      || normalizeAccountName(profileLastName) !== (account.user.lastName || '')))
+    || Boolean(password || confirmPassword)
+  );
+  const shouldBlockNavigation = useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => {
+    const locationChanged = currentLocation.pathname !== nextLocation.pathname
+      || currentLocation.search !== nextLocation.search
+      || currentLocation.hash !== nextLocation.hash;
+    return locationChanged && (hasUnsavedChanges || saving);
+  }, [hasUnsavedChanges, saving]);
+  const navigationBlocker = useBlocker(shouldBlockNavigation);
+  const preventUnsavedAccountExit = useCallback((event: BeforeUnloadEvent) => {
+    if (!hasUnsavedChanges && !saving) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }, [hasUnsavedChanges, saving]);
+  useBeforeUnload(preventUnsavedAccountExit);
+  useEffect(() => {
+    // Continue a queued navigation after a successful save clears the draft and pending state.
+    if (navigationBlocker.state === 'blocked' && !hasUnsavedChanges && !saving) navigationBlocker.proceed();
+  }, [navigationBlocker, hasUnsavedChanges, saving]);
+
   function clearAccountActionFeedback() {
     // The shared banner reports the previous action, so edits start a new attempt.
     setError('');
@@ -3577,6 +3602,16 @@ export function AdminUserDetailsPage() {
       {account.total > 0 && <LogPagination ariaLabel="Course activity pages" page={account.page} pageSize={account.pageSize} total={account.total} loading={loading} onChange={setPage} />}
     </section>
     {pendingDisableAccountId === user.id && user.id === userId && <ConfirmationDialog {...accountDisableConfirmation(user.username)} confirmLabel="Disable account" onCancel={() => setPendingDisableAccountId(null)} onConfirm={() => { const requestedUserId = pendingDisableAccountId; setPendingDisableAccountId(null); if (requestedUserId === user.id) void updateAccount({ disabled: true }, `${user.username}'s account was disabled.`, true); }} />}
+    {navigationBlocker.state === 'blocked' && <ConfirmationDialog
+      title={saving ? 'Account update in progress' : 'Discard unsaved account changes?'}
+      description={saving ? 'Wait for the current account action to finish before leaving this page.' : 'Your unsaved email, certificate name, or entered password will be lost if you leave this page.'}
+      cancelLabel={saving ? 'Stay on page' : 'Keep editing'}
+      confirmLabel={saving ? 'Saving…' : 'Discard changes'}
+      confirmVariant={saving ? 'secondary' : 'danger'}
+      confirmDisabled={saving}
+      onCancel={navigationBlocker.reset}
+      onConfirm={navigationBlocker.proceed}
+    />}
   </div>;
 }
 
