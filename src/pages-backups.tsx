@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useBeforeUnload, useBlocker } from 'react-router-dom';
+import type { BlockerFunction } from 'react-router-dom';
 import { Check, Database, HardDrive, Pencil, Play, Plus, RefreshCw, RotateCcw, Trash2 } from 'lucide-react';
 import { api, ApiError } from './api';
 import { Button, ConfirmationDialog, PageHeading } from './components';
@@ -22,6 +23,10 @@ const scopeLabels: Record<BackupScope, string> = { full: 'Database and media', d
 
 function defaultJob(destinationPath: string): JobInput {
   return { name: '', scope: 'full', frequency: 'daily', weekday: 1, runTimeUtc: '02:00', destinationPath, retentionCount: 14, enabled: true };
+}
+
+function isJobInputDirty(value: JobInput, baseline: JobInput) {
+  return (Object.keys(baseline) as Array<keyof JobInput>).some((key) => value[key] !== baseline[key]);
 }
 
 function formatTimestamp(value: string | null | undefined, utc = false) {
@@ -49,14 +54,16 @@ function runStatusLabel(run: BackupRun | null) {
   return run.status === 'success' ? 'Verified' : run.status === 'failed' ? 'Failed' : run.status === 'running' ? 'Running' : 'Queued';
 }
 
-function JobEditor({ job, defaultDestinationPath, saving, onCancel, onSave }: {
+function JobEditor({ job, defaultDestinationPath, saving, onCancel, onSave, onDirtyChange }: {
   job: JobInput;
   defaultDestinationPath: string;
   saving: boolean;
   onCancel: () => void;
   onSave: (value: JobInput) => void;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
-  const [value, setValue] = useState<JobInput>({ ...job, destinationPath: job.destinationPath || defaultDestinationPath });
+  const [value, setValue] = useState<JobInput>(() => ({ ...job, destinationPath: job.destinationPath || defaultDestinationPath }));
+  const initialValueRef = useRef(value);
   const nameId = 'backup-job-name';
   const scopeId = 'backup-job-scope';
   const frequencyId = 'backup-job-frequency';
@@ -64,6 +71,9 @@ function JobEditor({ job, defaultDestinationPath, saving, onCancel, onSave }: {
   const timeId = 'backup-job-time';
   const destinationId = 'backup-job-destination';
   const retentionId = 'backup-job-retention';
+  useEffect(() => {
+    onDirtyChange(isJobInputDirty(value, initialValueRef.current));
+  }, [value, onDirtyChange]);
   return <form className="backup-job-form" onSubmit={(event) => { event.preventDefault(); onSave(value); }} aria-busy={saving}>
     <div className="backup-card-heading"><div><h2>{job.name ? 'Edit backup job' : 'New backup job'}</h2><p>Run times use UTC. Destinations must be existing writable folders on the server.</p></div></div>
     <div className="backup-form-grid">
@@ -94,6 +104,8 @@ export function AdminBackupsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [editor, setEditor] = useState<{ id: string | null; value: JobInput } | null>(null);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [pendingEditorDiscard, setPendingEditorDiscard] = useState(false);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<BackupJob | null>(null);
@@ -101,6 +113,25 @@ export function AdminBackupsPage() {
   const [restoringRunId, setRestoringRunId] = useState<string | null>(null);
   const requestActiveRef = useRef(false);
   const restoreActiveRef = useRef(false);
+  const backupJobsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const hasUnsavedChanges = Boolean(editor && editorDirty);
+  const shouldBlockNavigation = useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => {
+    const locationChanged = currentLocation.pathname !== nextLocation.pathname
+      || currentLocation.search !== nextLocation.search
+      || currentLocation.hash !== nextLocation.hash;
+    return locationChanged && (hasUnsavedChanges || saving);
+  }, [hasUnsavedChanges, saving]);
+  const navigationBlocker = useBlocker(shouldBlockNavigation);
+  const preventUnsavedBackupJobExit = useCallback((event: BeforeUnloadEvent) => {
+    if (!hasUnsavedChanges && !saving) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }, [hasUnsavedChanges, saving]);
+  useBeforeUnload(preventUnsavedBackupJobExit);
+  useEffect(() => {
+    // After a successful save clears the draft, continue any navigation already requested.
+    if (navigationBlocker.state === 'blocked' && !hasUnsavedChanges && !saving) navigationBlocker.proceed();
+  }, [navigationBlocker, hasUnsavedChanges, saving]);
   // Polling and action-triggered refreshes can overlap; only the newest response may replace the dashboard.
   const dashboardRevisionRef = useRef(0);
   const dashboardMountedRef = useRef(false);
@@ -176,10 +207,27 @@ export function AdminBackupsPage() {
     try {
       if (editor?.id) await api.put(`/api/admin/backups/jobs/${encodeURIComponent(editor.id)}`, value);
       else await api.post('/api/admin/backups/jobs', value);
-      setEditor(null); setSuccess(editor?.id ? 'Backup job updated.' : 'Backup job created.'); await reload();
+      setEditor(null); setEditorDirty(false); setSuccess(editor?.id ? 'Backup job updated.' : 'Backup job created.'); await reload();
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Backup job could not be saved.');
     } finally { setSaving(false); }
+  }
+
+  function cancelEditor() {
+    if (editorDirty) {
+      setPendingEditorDiscard(true);
+      return;
+    }
+    setEditor(null);
+    setEditorDirty(false);
+  }
+
+  function discardEditorDraft() {
+    setPendingEditorDiscard(false);
+    setEditor(null);
+    setEditorDirty(false);
+    // The discard removes its invoking Cancel button, so return focus to the section heading.
+    window.requestAnimationFrame(() => backupJobsHeadingRef.current?.focus());
   }
 
   async function runNow(job: BackupJob) {
@@ -248,9 +296,9 @@ export function AdminBackupsPage() {
     {success && <BackupNotice kind="success">{success}</BackupNotice>}
     {isRunning && <div className="backup-running-banner" role="status" aria-live="polite"><RefreshCw size={16} aria-hidden="true" /><span>{dashboard?.mediaWritesPaused ? 'A media backup is running. Changes and uploads that affect course media are temporarily paused; learners can continue viewing courses.' : 'A database backup is running or a backup job is queued.'}</span></div>}
     {restoringRunId && <div className="backup-running-banner" role="status" aria-live="polite"><RefreshCw size={16} aria-hidden="true" /><span>Restoring the selected full backup. OpenLearning is temporarily unavailable to users while the database and course media are validated and replaced.</span></div>}
-    <section className="backup-section" aria-labelledby="backup-jobs-heading">
-      <div className="backup-section-heading"><div><h2 id="backup-jobs-heading">Backup jobs</h2><p>Create independent schedules for the database, course media, or both.</p></div><Button type="button" onClick={() => { setError(''); setSuccess(''); setEditor({ id: null, value: defaultJob(dashboardDefaultPath) }); }} disabled={loading || Boolean(editor) || restoreBusy}><Plus size={16} aria-hidden="true" />New job</Button></div>
-      {editor && <JobEditor key={editor.id || 'new'} job={editor.value} defaultDestinationPath={dashboardDefaultPath} saving={saving} onCancel={() => setEditor(null)} onSave={(value) => void save(value)} />}
+     <section className="backup-section" aria-labelledby="backup-jobs-heading">
+       <div className="backup-section-heading"><div><h2 ref={backupJobsHeadingRef} id="backup-jobs-heading" tabIndex={-1}>Backup jobs</h2><p>Create independent schedules for the database, course media, or both.</p></div><Button type="button" onClick={() => { setError(''); setSuccess(''); setEditorDirty(false); setEditor({ id: null, value: defaultJob(dashboardDefaultPath) }); }} disabled={loading || Boolean(editor) || restoreBusy}><Plus size={16} aria-hidden="true" />New job</Button></div>
+       {editor && <JobEditor key={editor.id || 'new'} job={editor.value} defaultDestinationPath={dashboardDefaultPath} saving={saving} onCancel={cancelEditor} onSave={(value) => void save(value)} onDirtyChange={setEditorDirty} />}
       {loading && !dashboard ? <div className="backup-empty-state" role="status">Loading backup jobs…</div>
         : dashboard?.jobs.length
           ? <div className="backup-job-grid">{dashboard.jobs.map((job) => <article className={`backup-job-card${job.enabled ? '' : ' backup-job-disabled'}`} key={job.id}>
@@ -264,10 +312,10 @@ export function AdminBackupsPage() {
               <div><dt>Retention</dt><dd>Keep {job.retentionCount} successful backups</dd></div>
             </dl>
             <div className="backup-job-actions">
-              <Button type="button" variant="secondary" disabled={busyId === job.id || restoreBusy} onClick={() => void runNow(job)}><Play size={15} aria-hidden="true" />{busyId === job.id ? 'Queuing…' : 'Run now'}</Button>
-              <button type="button" className="text-action" disabled={busyId === job.id || restoreBusy} onClick={() => { setError(''); setSuccess(''); setEditor({ id: job.id, value: { name: job.name, scope: job.scope, frequency: job.frequency, weekday: job.weekday, runTimeUtc: job.runTimeUtc, destinationPath: job.destinationPath, retentionCount: job.retentionCount, enabled: job.enabled } }); }}><Pencil size={14} aria-hidden="true" />Edit</button>
-              <button type="button" className="text-action" disabled={busyId === job.id || restoreBusy} onClick={() => void toggleEnabled(job)}>{job.enabled ? 'Pause' : 'Enable'}</button>
-              <button type="button" className="text-action danger-text" disabled={busyId === job.id || restoreBusy} onClick={() => setPendingDelete(job)}><Trash2 size={14} aria-hidden="true" />Remove</button>
+              <Button type="button" variant="secondary" disabled={busyId === job.id || restoreBusy || Boolean(editor)} onClick={() => void runNow(job)}><Play size={15} aria-hidden="true" />{busyId === job.id ? 'Queuing…' : 'Run now'}</Button>
+              <button type="button" className="text-action" disabled={Boolean(editor) || busyId === job.id || restoreBusy} onClick={() => { setError(''); setSuccess(''); setEditorDirty(false); setEditor({ id: job.id, value: { name: job.name, scope: job.scope, frequency: job.frequency, weekday: job.weekday, runTimeUtc: job.runTimeUtc, destinationPath: job.destinationPath, retentionCount: job.retentionCount, enabled: job.enabled } }); }}><Pencil size={14} aria-hidden="true" />Edit</button>
+              <button type="button" className="text-action" disabled={Boolean(editor) || busyId === job.id || restoreBusy} onClick={() => void toggleEnabled(job)}>{job.enabled ? 'Pause' : 'Enable'}</button>
+              <button type="button" className="text-action danger-text" disabled={Boolean(editor) || busyId === job.id || restoreBusy} onClick={() => setPendingDelete(job)}><Trash2 size={14} aria-hidden="true" />Remove</button>
             </div>
           </article>)}</div>
           : dashboardLoaded && !editor && <div className="backup-empty-state"><strong>No backup jobs configured</strong><span>Add a job to schedule a database backup, course-media backup, or full backup.</span></div>}
@@ -277,7 +325,7 @@ export function AdminBackupsPage() {
       {restorableRuns.length ? <div className="backup-history-wrap" role="region" aria-label="Available full backup restore points" tabIndex={0}><p className="table-scroll-hint">Scroll horizontally to see all restore point columns.</p><table className="backup-history-table"><caption className="sr-only">Available full backup restore points</caption><thead><tr><th scope="col">Backup time</th><th scope="col">Job</th><th scope="col">Backup location</th><th scope="col">Action</th></tr></thead><tbody>{restorableRuns.map((run) => <tr key={run.id}>
         <td>{formatTimestamp(run.finishedAt || run.createdAt)}</td><th scope="row">{run.jobName}</th><td className="backup-history-detail"><code>{run.backupPath}</code></td><td>
           {/* Name each restore action with its backup so button navigation distinguishes the restore point. */}
-          <button type="button" className="text-action" aria-label={`Restore full backup from ${run.jobName}, completed ${formatTimestamp(run.finishedAt || run.createdAt)}`} disabled={restoreBusy || isRunning} onClick={() => { setError(''); setSuccess(''); setPendingRestore(run); }}><RotateCcw size={14} aria-hidden="true" />Restore</button>
+           <button type="button" className="text-action" aria-label={`Restore full backup from ${run.jobName}, completed ${formatTimestamp(run.finishedAt || run.createdAt)}`} disabled={restoreBusy || isRunning || Boolean(editor)} onClick={() => { setError(''); setSuccess(''); setPendingRestore(run); }}><RotateCcw size={14} aria-hidden="true" />Restore</button>
         </td>
       </tr>)}</tbody></table></div> : dashboardLoaded && <div className="backup-empty-state">No retained full backups are available to restore. Database-only and course-media-only backups cannot restore the whole platform.</div>}
     </section>
@@ -288,7 +336,18 @@ export function AdminBackupsPage() {
       </tr>)}</tbody></table></div> : dashboardLoaded && <div className="backup-empty-state">No backup runs yet. Scheduled runs and “Run now” requests will appear here.</div>}
       <p className="backup-safety-note">Media backups briefly pause changes and uploads while files are copied. Learners can continue viewing courses. Restoring temporarily makes OpenLearning unavailable while it replaces the database and course media. It creates a verified backup of the current installation first and clears all sessions. Sign in again with an account and password from the restored backup. A server restart does not trigger missed schedules; the next run waits for its normal time. Removing a job does not delete its existing backup files.</p>
     </section>
-    {pendingDelete && <ConfirmationDialog title={`Remove “${pendingDelete.name}”?`} description="This removes the schedule only. Existing backup files and run history will be kept." confirmLabel="Remove schedule" confirmDisabled={busyId === pendingDelete.id} onCancel={() => setPendingDelete(null)} onConfirm={() => void removeJob()} />}
+     {navigationBlocker.state === 'blocked' && <ConfirmationDialog
+       title={saving ? 'Backup schedule save in progress' : 'Discard unsaved backup schedule?'}
+       description={saving ? 'Wait for the backup schedule save to finish before leaving this page.' : 'Your unsaved backup schedule changes will be lost if you leave this page.'}
+       cancelLabel={saving ? 'Stay on page' : 'Keep editing'}
+       confirmLabel={saving ? 'Saving…' : 'Discard changes'}
+       confirmVariant={saving ? 'secondary' : 'danger'}
+       confirmDisabled={saving}
+       onCancel={navigationBlocker.reset}
+       onConfirm={navigationBlocker.proceed}
+     />}
+     {pendingEditorDiscard && <ConfirmationDialog title="Discard unsaved backup schedule?" description="Your unsaved backup schedule changes will be lost." confirmLabel="Discard changes" onCancel={() => setPendingEditorDiscard(false)} onConfirm={discardEditorDraft} />}
+     {pendingDelete && <ConfirmationDialog title={`Remove “${pendingDelete.name}”?`} description="This removes the schedule only. Existing backup files and run history will be kept." confirmLabel="Remove schedule" confirmDisabled={busyId === pendingDelete.id} onCancel={() => setPendingDelete(null)} onConfirm={() => void removeJob()} />}
     {pendingRestore && <ConfirmationDialog title={`Restore “${pendingRestore.jobName}”?`} description={`This temporarily makes OpenLearning unavailable and replaces its database and all course media with the verified full backup from ${formatTimestamp(pendingRestore.startedAt || pendingRestore.createdAt)}. A verified backup of the current installation will be created first. All sessions will be cleared, and you will need to sign in with credentials from the selected backup.`} confirmLabel="Restore full backup" confirmVariant="danger" confirmDisabled={restoreBusy} onCancel={() => setPendingRestore(null)} onConfirm={() => void restoreRun()} />}
   </div>;
 }
