@@ -15,9 +15,10 @@ test('My Learning loads courses and certificates independently with a first-page
   assert.match(pageSource, /\{loadingCertificates && <p className="page-loading" role="status" aria-live="polite">Loading certificates…<\/p>\}/);
   assert.match(pageSource, /certificateError && <ErrorNotice message=\{certificateError\} onRetry=\{certificatesHasMore && certificates\.length > 0 \? loadMoreCertificates : loadCertificatesFirstPage\}/);
   assert.match(pageSource, /const hasEmptyCourses = !loading && !error && courses\.length === 0/);
-  assert.match(pageSource, /hasEmptyCourses && !loadingCertificates && !certificateError && certificates\.length === 0/);
 });
 
-test('My Learning waits for certificate history before showing its combined empty state', () => {
-  assert.match(pageSource, /:\s*hasEmptyCourses && !loadingCertificates && !certificateError && certificates\.length === 0 \?\s*\(\s*<EmptyState/);
+test('My Learning keeps the course discovery empty state when certificate history fails', () => {
+  assert.match(pageSource, /const showLearningEmptyState = hasEmptyCourses && !loadingCertificates && certificates\.length === 0/);
+  assert.match(pageSource, /\) : showLearningEmptyState \?\s*\(\s*<EmptyState title=\{learningEmptyState\.title\} detail=\{learningEmptyState\.detail\} action=\{<Link className="button button-primary" to="\/courses">Browse courses<\/Link>\}/);
+  assert.match(pageSource, /certificateError && <ErrorNotice message=\{certificateError\} onRetry=\{certificatesHasMore && certificates\.length > 0 \? loadMoreCertificates : loadCertificatesFirstPage\}/);
 });

@@ -385,6 +385,8 @@ export function MyLearningPage() {
   }, []);
   const learningEmptyState = { title: 'Your learning starts here', detail: 'Open a course from the catalog to add it to your learning list.' };
   const hasEmptyCourses = !loading && !error && courses.length === 0;
+  // Wait for certificates to load, but keep course discovery available if that request fails.
+  const showLearningEmptyState = hasEmptyCourses && !loadingCertificates && certificates.length === 0;
   return <div className="catalog-page my-learning-page">
     <PageHeading title="My learning" subtitle="Start, continue, or review your courses." />
     {error && <ErrorNotice message={error} onRetry={courseLoadMoreFailed ? loadMore : load} />}
@@ -407,8 +409,7 @@ export function MyLearningPage() {
           </div>
         ))}
       </div>
-    // Wait for certificate history to settle before showing the combined empty state.
-    ) : hasEmptyCourses && !loadingCertificates && !certificateError && certificates.length === 0 ? (
+    ) : showLearningEmptyState ? (
       <EmptyState title={learningEmptyState.title} detail={learningEmptyState.detail} action={<Link className="button button-primary" to="/courses">Browse courses</Link>} />
     ) : null}
     {!loading && courses.length > 0 && <div className="catalog-pagination"><p ref={paginationStatusRef} tabIndex={-1} role="status" aria-live="polite">Showing {courses.length} of {formatCountLabel(total, 'course', 'courses')}</p>{loadingMore && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">Loading more courses…</p>}{hasMore && <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more courses…' : 'Load more courses'}</Button>}</div>}
