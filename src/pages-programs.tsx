@@ -246,6 +246,11 @@ export function LearningPathsPage() {
 
   const updatePathEditorDirty = useCallback((hasChanges: boolean) => {
     pathEditorDirtyRef.current = hasChanges;
+    if (hasChanges) {
+      // Page-level feedback describes the last action, not the path now being edited.
+      setError('');
+      setNotice('');
+    }
   }, []);
 
   function requestPathEdit(path: LearningPath, trigger: HTMLButtonElement) {
