@@ -17,6 +17,11 @@ test('course overview explains empty published courses instead of showing inert 
   assert.match(compactOverview, /const hasLearningActivities = Boolean\(course\.finalExam\) \|\| \(course\.modules \?\? \[\]\)\.some\(\(module\) => module\.lessons\.length > 0 \|\| Boolean\(module\.quiz\)\);/);
   assert.match(compactOverview, /: <EmptyState title="No learning activities yet" detail="This course does not have any lessons or quizzes available yet\." headingLevel=\{3\} \/>/);
   assert.match(compactOverview, /hasLearningActivities \|\| course\.completed \|\| course\.progress > 0 \? \( <div className="course-hero-actions">/);
-  assert.match(compactOverview, /nextActivity \? <Button onClick=\{startLearning\} disabled=\{starting\}>/);
-  assert.match(compactOverview, /nextActivity \? \( <div className="course-bottom-cta">.*?<Button onClick=\{startLearning\} disabled=\{starting\}>/);
+  assert.match(compactOverview, /nextActivity \? <Button onClick=\{startLearning\} disabled=\{starting\} aria-busy=\{starting\}>/);
+  assert.match(compactOverview, /nextActivity \? \( <div className="course-bottom-cta">.*?<Button onClick=\{startLearning\} disabled=\{starting\} aria-busy=\{starting\}>/);
+});
+
+test('course start actions expose and announce their pending enrollment state', () => {
+  assert.equal((overview.match(/<Button onClick=\{startLearning\} disabled=\{starting\} aria-busy=\{starting\}>/g) || []).length, 2);
+  assert.match(overview, /\{starting && <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">Starting course…<\/span>\}/);
 });

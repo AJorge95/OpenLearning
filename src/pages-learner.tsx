@@ -602,7 +602,9 @@ export function CourseOverviewPage() {
         <div className="course-hero-meta"><span><BookOpen size={17} aria-hidden="true" />{formatCountLabel(course.moduleCount, 'module', 'modules')}</span><span><Play size={15} aria-hidden="true" />{formatCountLabel(course.lessonCount, 'lesson', 'lessons')}</span></div>
         {hasLearningActivities || course.completed || course.progress > 0 ? (
           <div className="course-hero-actions">
-            {nextActivity ? <Button onClick={startLearning} disabled={starting}>{startButtonLabel}<ArrowRight size={17} aria-hidden="true" /></Button> : null}
+            {nextActivity ? <Button onClick={startLearning} disabled={starting} aria-busy={starting}>{startButtonLabel}<ArrowRight size={17} aria-hidden="true" /></Button> : null}
+            {/* One live announcement covers both start controls in the hero and footer. */}
+            {starting && <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">Starting course…</span>}
             {user?.role === 'learner' && course.completed ? user.firstName?.trim() && user.lastName?.trim() ? <Link className="button button-secondary" to={`/my-learning/certificates/${course.id}`}><Award size={17} aria-hidden="true" />View certificate</Link> : <Link className="button button-secondary" to="/account/security"><Award size={17} aria-hidden="true" />Add name for certificate</Link> : course.progress > 0 && <span className="progress-caption">{formatPercentage(course.progress)} complete</span>}
           </div>
         ) : null}
@@ -623,7 +625,7 @@ export function CourseOverviewPage() {
     {nextActivity ? (
       <div className="course-bottom-cta">
         <span>{user?.username ? `Ready when you are, ${user.username}.` : 'Ready when you are.'}</span>
-        <Button onClick={startLearning} disabled={starting}>{startButtonLabel}<ArrowRight size={17} aria-hidden="true" /></Button>
+        <Button onClick={startLearning} disabled={starting} aria-busy={starting}>{startButtonLabel}<ArrowRight size={17} aria-hidden="true" /></Button>
       </div>
     ) : null}
   </div>;
