@@ -593,6 +593,10 @@ export function LearningPathsPage() {
       setNotice(`${learner.username} is no longer assigned to “${path.title}”. Course progress was kept.`);
       setLearners((current) => current.map((item) => item.id === learner.id ? { ...item, enrolled: false, source: null } : item));
       await loadPathLearners(pending.pathId, assignmentAppliedSearch, assignmentPage);
+      if (assignmentPathRef.current === pending.pathId) {
+        // The removed action disappears with its row, so return focus to the panel's search.
+        window.requestAnimationFrame(() => assignmentSearchInputRef.current?.focus());
+      }
     } catch (cause) {
       if (requestSequence === assignmentRequestSequenceRef.current && assignmentPathRef.current === pending.pathId) setError(requestMessage(cause, 'Path assignment could not be removed.'));
     } finally {
