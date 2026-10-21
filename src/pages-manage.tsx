@@ -44,6 +44,7 @@ import { userListEmptyMessage } from './user-list-empty-state';
 import { formatPercentage } from './percentage';
 import { buildAuditActionOptions } from './audit-log-filter';
 import { formatRedactedLogJson } from './log-export';
+import { copyTextToClipboard } from './clipboard';
 import { readResetStatusAfterConflict, shouldClearResetConfirmationAfterFailure } from './platform-reset-status';
 import type { PlatformResetStatus } from './platform-reset-status';
 import type { UserApprovalFilter, UserRoleFilter } from './user-list-empty-state';
@@ -4099,7 +4100,7 @@ function LogDetailsDisclosure({ details, entry, label, columnCount, children }: 
   async function copyRedactedJson() {
     setCopyStatus('idle');
     try {
-      await navigator.clipboard.writeText(formatRedactedLogJson(entry));
+      await copyTextToClipboard(formatRedactedLogJson(entry));
       setCopyStatus('copied');
     } catch {
       setCopyStatus('failed');
