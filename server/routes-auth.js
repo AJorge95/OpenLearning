@@ -649,7 +649,7 @@ authRouter.post('/auth/login', async (req, res) => {
   const user = db.prepare('SELECT id, username, email, first_name, last_name, password_hash, role, disabled, registration_status FROM users WHERE username = ? COLLATE NOCASE').get(username);
   const valid = await verifyLoginPassword(password, user);
   if (!valid) {
-    writeSystemLog('warn', 'auth', 'Sign-in attempt failed');
+    writeSystemLog('warn', 'auth', 'Sign-in attempt failed', { username });
     fail(401, 'The username or password is incorrect.', 'login_failed');
   }
   if (user.registration_status !== 'approved') {
@@ -676,7 +676,7 @@ authRouter.post('/auth/login', async (req, res) => {
   }
   if (!currentUser) {
     await destroySession(req);
-    writeSystemLog('warn', 'auth', 'Sign-in attempt failed');
+    writeSystemLog('warn', 'auth', 'Sign-in attempt failed', { username });
     fail(401, 'The username or password is incorrect.', 'login_failed');
   }
   res.json({ user: publicUser(currentUser), ...getPlatformConfiguration() });
