@@ -26,6 +26,10 @@ test('Cancel confirms draft discard and returns focus to the backup section', ()
   assert.match(page, /window\.requestAnimationFrame\(\(\) => backupJobsHeadingRef\.current\?\.focus\(\)\)/);
 });
 
+test('opening the backup job editor focuses the job name field', () => {
+  assert.match(editor, /<input id=\{nameId\} autoFocus required/);
+});
+
 test('an open backup job draft disables actions that could replace or restore over it', () => {
   assert.match(page, /disabled=\{Boolean\(editor\) \|\| busyId === job\.id \|\| restoreBusy\}[^>]*>.*?Edit/);
   assert.match(page, /disabled=\{Boolean\(editor\) \|\| busyId === job\.id \|\| restoreBusy\}[^>]*>.*?Pause/);

@@ -78,7 +78,7 @@ function JobEditor({ job, defaultDestinationPath, saving, onCancel, onSave, onDi
     <div className="backup-card-heading"><div><h2>{job.name ? 'Edit backup job' : 'New backup job'}</h2><p>Run times use UTC. Destinations must be existing writable folders on the server.</p></div></div>
     <div className="backup-form-grid">
       {/* Keep visible required cues aligned with the native constraints and server validation. */}
-      <label htmlFor={nameId}><span className="form-label-row"><span>Job name</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input id={nameId} required maxLength={80} value={value.name} onChange={(event) => setValue((current) => ({ ...current, name: event.target.value }))} /></label>
+      <label htmlFor={nameId}><span className="form-label-row"><span>Job name</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input id={nameId} autoFocus required maxLength={80} value={value.name} onChange={(event) => setValue((current) => ({ ...current, name: event.target.value }))} /></label>
       <label htmlFor={scopeId}>Backup contents<select id={scopeId} value={value.scope} onChange={(event) => setValue((current) => ({ ...current, scope: event.target.value as BackupScope }))}>
         <option value="full">Full — database and course media</option><option value="database">Partial — database only</option><option value="media">Partial — course media only</option>
       </select></label>
