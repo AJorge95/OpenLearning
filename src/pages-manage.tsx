@@ -1523,7 +1523,7 @@ export function CourseEditorPage() {
   const [addingModuleBusy, setAddingModuleBusy] = useState(false);
   const addingModuleRequestRef = useRef(false);
   const addModuleButtonRef = useRef<HTMLButtonElement>(null);
-  const addModuleInvokerRef = useRef<HTMLButtonElement | null>(null);
+  const pendingAddModuleFocusRef = useRef(false);
   const [editingModuleTitle, setEditingModuleTitle] = useState<{ courseId: string; moduleId: string; title: string } | null>(null);
   const [savingModuleTitleId, setSavingModuleTitleId] = useState('');
   const moduleTitleSaveRequestRef = useRef(false);
@@ -1648,7 +1648,7 @@ export function CourseEditorPage() {
 
   useEffect(() => {
     let active = true;
-    setModuleTitle(''); setAddingModule(false); addModuleInvokerRef.current = null;
+    setModuleTitle(''); setAddingModule(false); pendingAddModuleFocusRef.current = false;
     pendingQuizTitleFocusRef.current = '';
     pendingQuizTriggerFocusRef.current = '';
     addingQuizModuleIdsRef.current = new Set(); setAddingQuizModuleIds(new Set());
@@ -1708,6 +1708,14 @@ export function CourseEditorPage() {
       });
     return () => { active = false; courseLoadSequenceRef.current += 1; abortGovernanceLoad(); courseLoadControllerRef.current?.abort(); abortActiveUploads(); };
   }, [route.courseId]);
+
+  useEffect(() => {
+    if (addingModuleBusy || !pendingAddModuleFocusRef.current) return;
+    const button = addModuleButtonRef.current;
+    if (!button || button.disabled) return;
+    pendingAddModuleFocusRef.current = false;
+    button.focus();
+  }, [addingModuleBusy, saving, deletingCourse, editingModuleTitle]);
 
   // Preserve the rename trigger as a focus target while the successful save reloads the course.
   useEffect(() => {
@@ -2100,7 +2108,9 @@ export function CourseEditorPage() {
       if (routeCourseIdRef.current !== requestedCourseId) return;
       await api.post(`/api/manage/courses/${requestedCourseId}/modules`, { title: moduleTitle.trim() });
       if (routeCourseIdRef.current !== requestedCourseId) return;
-      setModuleTitle(''); setAddingModule(false); addModuleButtonRef.current?.focus(); await load(requestedCourseId);
+      setModuleTitle(''); await load(requestedCourseId);
+      if (routeCourseIdRef.current !== requestedCourseId) return;
+      setAddingModule(false); pendingAddModuleFocusRef.current = true;
     } catch (cause) {
       if (routeCourseIdRef.current === requestedCourseId) setError(cause instanceof ApiError ? cause.message : 'Module could not be added.');
     }
@@ -2485,8 +2495,8 @@ export function CourseEditorPage() {
       <fieldset className="course-review-locked-fields" disabled={reviewPending || saving}>
         <legend className="sr-only">Course curriculum</legend>
       {/* Curriculum labels and control names carry the meaning; these glyphs stay decorative. */}
-      <div className="curriculum-editor-title"><div><h2>Course curriculum</h2><p>Organize lessons into modules and add a quiz when you are ready.</p></div><div className="curriculum-editor-actions"><Button ref={addModuleButtonRef} variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} disabled={Boolean(editingModuleTitle) || saving || deletingCourse || addingModuleBusy} onClick={(event) => { if (addingModule) setAddingModule(false); else { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); } }}><Plus size={17} aria-hidden="true" />Add module</Button></div></div>
-      {addingModule && <form id="add-module-form" className="inline-add-form" onSubmit={addModule}><input autoFocus value={moduleTitle} onChange={(event) => setModuleTitle(event.target.value)} placeholder="Module title" aria-label="Module title" maxLength={160} disabled={addingModuleBusy} /><Button type="submit" disabled={!moduleTitle.trim() || addingModuleBusy}>{addingModuleBusy ? 'Adding module…' : 'Add module'}</Button><button type="button" className="text-action" disabled={addingModuleBusy} onClick={() => { setAddingModule(false); addModuleInvokerRef.current?.focus(); }}>Cancel</button></form>}
+      <div className="curriculum-editor-title"><div><h2>Course curriculum</h2><p>Organize lessons into modules and add a quiz when you are ready.</p></div><div className="curriculum-editor-actions"><Button ref={addModuleButtonRef} variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} disabled={Boolean(editingModuleTitle) || saving || deletingCourse || addingModuleBusy} onClick={() => setAddingModule((current) => !current)}><Plus size={17} aria-hidden="true" />Add module</Button></div></div>
+      {addingModule && <form id="add-module-form" className="inline-add-form" onSubmit={addModule}><input autoFocus value={moduleTitle} onChange={(event) => setModuleTitle(event.target.value)} placeholder="Module title" aria-label="Module title" maxLength={160} disabled={addingModuleBusy} /><Button type="submit" disabled={!moduleTitle.trim() || addingModuleBusy}>{addingModuleBusy ? 'Adding module…' : 'Add module'}</Button><button type="button" className="text-action" disabled={addingModuleBusy} onClick={() => { setAddingModule(false); addModuleButtonRef.current?.focus(); }}>Cancel</button></form>}
       <div className="module-editor-list">
         {course.modules?.map((module, moduleIndex) => <div className="module-editor" key={module.id}>
           <div className={`module-editor-heading${editingModuleTitle?.courseId === course.id && editingModuleTitle.moduleId === module.id ? ' module-editor-heading-editing' : ''}`}>
@@ -2531,7 +2541,7 @@ export function CourseEditorPage() {
             }} onError={(message) => { if (routeCourseIdRef.current === course.id) setError(message); }} titleInputRef={(node) => { if (node) quizTitleInputRefs.current.set(module.id, node); else quizTitleInputRefs.current.delete(module.id); }} />}
           </div>}
         </div>)}
-        {!course.modules?.length && !course.finalExam && <EmptyState headingLevel={3} icon={<BookOpen size={22} />} title="Start with a module" detail="Modules organize the video lessons in your course. You can also create an exam-only certification practice course." action={<Button variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} onClick={(event) => { addModuleInvokerRef.current = event.currentTarget; setAddingModule(true); }}><Plus size={16} aria-hidden="true" />Add first module</Button>} />}
+        {!addingModule && !course.modules?.length && !course.finalExam && <EmptyState headingLevel={3} icon={<BookOpen size={22} />} title="Start with a module" detail="Modules organize the video lessons in your course. You can also create an exam-only certification practice course." action={<Button variant="secondary" aria-expanded={addingModule} aria-controls={addingModule ? 'add-module-form' : undefined} onClick={() => setAddingModule(true)}><Plus size={16} aria-hidden="true" />Add first module</Button>} />}
       </div>
       <CourseFinalExamEditor key={`${course.id}:${course.finalExam?.id ?? 'no-exam'}`} courseId={course.id} exam={course.finalExam} onChanged={() => load(course.id)} onError={(message) => { if (routeCourseIdRef.current === course.id) setError(message); }} onNotice={(message) => { if (routeCourseIdRef.current === course.id) setNotice(message); }} />
       </fieldset>

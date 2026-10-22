@@ -31,14 +31,18 @@ test('course details form is exposed as a named region', () => {
   assert.equal(jsxAttribute(sections[0], 'aria-label'), 'Course details');
 });
 
-test('the empty-course action distinguishes adding the first module', () => {
+test('the empty-course prompt disappears while its inline module form is open', () => {
   const source = fs.readFileSync(editorPath, 'utf8');
   const firstModuleAction = source.match(/title="Start with a module"[\s\S]*?<Button(?<props>[\s\S]*?)><Plus[\s\S]*?Add first module<\/Button>/)?.groups?.props || '';
 
   assert.match(source, /title="Start with a module"[\s\S]*?Add first module<\/Button>/);
+  assert.match(source, /\{!addingModule && !course\.modules\?\.length && !course\.finalExam && <EmptyState/);
   assert.match(source, /className="curriculum-editor-actions"[\s\S]*?aria-expanded=\{addingModule\}[\s\S]*?Add module<\/Button>/);
   assert.match(firstModuleAction, /aria-expanded=\{addingModule\}/);
   assert.match(firstModuleAction, /aria-controls=\{addingModule \? 'add-module-form' : undefined\}/);
+  assert.match(source, /setAddingModule\(false\); addModuleButtonRef\.current\?\.focus\(\);/);
+  assert.doesNotMatch(source, /addModuleInvokerRef/);
+  assert.match(source, /if \(addingModuleBusy \|\| !pendingAddModuleFocusRef\.current\) return;[\s\S]*?if \(!button \|\| button\.disabled\) return;[\s\S]*?button\.focus\(\);\s*\}, \[addingModuleBusy, saving, deletingCourse, editingModuleTitle\]\);/);
 });
 
 test('pending review identifies the staff member who submitted the revision', () => {

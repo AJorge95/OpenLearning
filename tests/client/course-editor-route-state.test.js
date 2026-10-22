@@ -117,7 +117,7 @@ test('lesson and curriculum actions keep late refreshes and errors on their sour
 
 test('course navigation clears the inline add-module draft and scopes late responses', () => {
   const source = fs.readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
-  assert.match(source, /useEffect\(\(\) => \{\s*let active = true;\s*setModuleTitle\(''\); setAddingModule\(false\); addModuleInvokerRef\.current = null;/);
+  assert.match(source, /useEffect\(\(\) => \{\s*let active = true;\s*setModuleTitle\(''\); setAddingModule\(false\); pendingAddModuleFocusRef\.current = false;/);
 
   const addStart = source.indexOf('async function addModule(event: React.FormEvent)');
   const addEnd = source.indexOf('\n\n  async function addLesson', addStart);
@@ -126,6 +126,7 @@ test('course navigation clears the inline add-module draft and scopes late respo
   assert.match(addSource, /const requestedCourseId = courseId/);
   assert.match(addSource, /if \(routeCourseIdRef\.current !== requestedCourseId\) return;\s*await api\.post/);
   assert.match(addSource, /await api\.post[\s\S]*?if \(routeCourseIdRef\.current !== requestedCourseId\) return;\s*setModuleTitle\(''\)/);
+  assert.match(addSource, /await load\(requestedCourseId\);[\s\S]*?setAddingModule\(false\); pendingAddModuleFocusRef\.current = true;/);
   assert.match(addSource, /if \(routeCourseIdRef\.current === requestedCourseId\) setError\(/);
   assert.match(source, /aria-expanded=\{addingModule\}[\s\S]*?disabled=\{Boolean\(editingModuleTitle\) \|\| saving \|\| deletingCourse \|\| addingModuleBusy\}/);
 });
