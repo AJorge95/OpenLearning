@@ -23,6 +23,11 @@ const previousConfig = new Map(Object.keys(isolatedConfig).map((key) => [key, pr
 let fixtureDirectory;
 let database;
 let server;
+const raceUser = {
+  id: 'auth-failed-login-race-user',
+  username: 'race_login_user',
+  password: 'Isolated-Race-Login-Password-2026',
+};
 
 function createFixtureDirectory() {
   const tempBase = path.resolve(os.tmpdir());
@@ -62,10 +67,13 @@ before(async () => {
   });
 
   ({ db: database } = await import('../../server/db.js'));
-  const [{ authRouter }, { errorHandler }] = await Promise.all([
+  const [{ authRouter }, { errorHandler }, { hashPassword }] = await Promise.all([
     import('../../server/routes-auth.js'),
     import('../../server/http.js'),
+    import('../../server/auth.js'),
   ]);
+  database.prepare("INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, 'admin')")
+    .run(raceUser.id, raceUser.username, await hashPassword(raceUser.password));
   const app = express();
   app.use(express.json());
   app.use(session({
@@ -74,6 +82,17 @@ before(async () => {
     resave: false,
     saveUninitialized: false,
   }));
+  app.use((req, _res, next) => {
+    const regenerate = req.session.regenerate.bind(req.session);
+    req.session.regenerate = (callback) => regenerate((error) => {
+      // Simulate an administrator disabling the account after password verification.
+      if (!error && req.get('x-test-disable-account-after-password-check') === 'true') {
+        database.prepare('UPDATE users SET disabled = 1 WHERE id = ?').run(raceUser.id);
+      }
+      callback(error);
+    });
+    next();
+  });
   app.use('/api', authRouter);
   app.use(errorHandler);
   server = createServer(app);
@@ -121,4 +140,34 @@ test('failed sign-in log identifies the attempted username without credentials',
     details: { username: 'issue8_missing_user' },
   });
   assert.doesNotMatch(log.details_json, /NeverPersistThisPassword-2026/);
+});
+
+test('failed sign-in log identifies an account disabled during session establishment', async () => {
+  const response = await fetch(apiUrl('/auth/login'), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-test-disable-account-after-password-check': 'true',
+      connection: 'close',
+    },
+    body: JSON.stringify({ username: raceUser.username, password: raceUser.password }),
+  });
+
+  assert.equal(response.status, 401);
+  assert.equal(database.prepare('SELECT disabled FROM users WHERE id = ?').get(raceUser.id).disabled, 1);
+  const log = database.prepare(`SELECT level, source, message, details_json
+    FROM system_logs WHERE source = 'auth' AND message = 'Sign-in attempt failed'
+    ORDER BY id DESC LIMIT 1`).get();
+  assert.deepEqual(log && {
+    level: log.level,
+    source: log.source,
+    message: log.message,
+    details: JSON.parse(log.details_json),
+  }, {
+    level: 'warn',
+    source: 'auth',
+    message: 'Sign-in attempt failed',
+    details: { username: raceUser.username },
+  });
+  assert.doesNotMatch(log.details_json, new RegExp(raceUser.password));
 });
