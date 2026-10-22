@@ -2,7 +2,19 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import dotenv from 'dotenv';
-import { chooseDevPort } from '../../scripts/dev-port.js';
+import { chooseDevPort, readDevPortArgument } from '../../scripts/dev-port.js';
+
+test('development command reads a port from either supported CLI form', () => {
+  assert.equal(readDevPortArgument(['--port', '7443']), '7443');
+  assert.equal(readDevPortArgument(['--port=7444']), '7444');
+  assert.equal(readDevPortArgument(['--host', '127.0.0.1']), '');
+});
+
+test('development command reports a missing CLI port value', () => {
+  assert.throws(() => readDevPortArgument(['--port']), /Use --port <number>/);
+  assert.throws(() => readDevPortArgument(['--port', '--host']), /Use --port <number>/);
+  assert.throws(() => readDevPortArgument(['--port=']), /Use --port <number>/);
+});
 
 test('dev port selection preserves an explicitly configured port', async () => {
   let probed = false;

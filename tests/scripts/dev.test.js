@@ -11,4 +11,5 @@ test('development command uses explicit source watch paths outside Linux', () =>
   assert.match(devScript, /backendWatchPaths\.map\(\(directory\) => `--watch-path=\$\{directory\}`\)/);
   assert.match(devScript, /process\.platform === 'linux'/);
   assert.match(devScript, /\['--watch', 'scripts\/start\.js', '--dev'\]/);
+  assert.match(devScript, /readDevPortArgument\(process\.argv\.slice\(2\)\) \|\| process\.env\.PORT/);
 });

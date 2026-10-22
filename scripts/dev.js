@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 // Resolve the same .env values as the child before deciding whether PORT was configured.
 import 'dotenv/config';
 import { devChildExitCode } from './dev-exit-code.js';
-import { chooseDevPort } from './dev-port.js';
+import { chooseDevPort, readDevPortArgument } from './dev-port.js';
 
 const backendWatchPaths = ['server', 'scripts', 'shared'];
 // Vite writes its dependency cache under node_modules/.vite during the first
@@ -12,8 +12,8 @@ const nodeArguments = process.platform === 'linux'
   ? ['--watch', 'scripts/start.js', '--dev']
   : [...backendWatchPaths.map((directory) => `--watch-path=${directory}`), 'scripts/start.js', '--dev'];
 
-// Keep explicit ports authoritative; only auto-select when the default is in use.
-const configuredPort = process.env.PORT?.trim() || '';
+// Keep an explicit CLI or environment port authoritative; only auto-select otherwise.
+const configuredPort = readDevPortArgument(process.argv.slice(2)) || process.env.PORT?.trim() || '';
 process.env.PORT = await chooseDevPort(configuredPort);
 if (configuredPort) {
   delete process.env.OPENLEARNING_DEV_PORT_FALLBACK;
