@@ -43,9 +43,11 @@ test('table scroll hints follow the width of each scroll region', () => {
   }));
   // The course table can overflow at the desktop breakpoint because its action
   // columns need more room than the 1280px staff content area provides.
+  // The account table can overflow at the narrower admin layout because its
+  // last-administrator guidance keeps a readable minimum width.
   const expectedContainerQueries = [
     ['course-table', 960, '.course-table-wrap'],
-    ['user-table', 690, '.user-table-wrap'],
+    ['user-table', 990, '.user-table-wrap'],
     ['analytics-table', 780, '.analytics-table-wrap:not(.analytics-learners-table-wrap)'],
     ['analytics-table', 940, '.analytics-learners-table-wrap'],
     ['log-table', 850, '.log-table-wrap'],

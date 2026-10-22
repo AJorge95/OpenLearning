@@ -254,10 +254,11 @@ test('user list explains and disables inline changes for the last active adminis
   assert.match(typeSource, /isLastActiveAdmin\?: boolean/);
   assert.match(pageSource, /describedBy=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\} value=\{user\.role\} disabled=\{savingIds\.has\(user\.id\) \|\| user\.isLastActiveAdmin\}/);
   assert.match(pageSource, /aria-describedby=\{user\.isLastActiveAdmin \? lastAdminHelpId : undefined\} disabled=\{savingIds\.has\(user\.id\) \|\| user\.isLastActiveAdmin\} onClick=\{\(\) => updateUser\(user, \{ disabled: !user\.disabled \}\)\}/);
-  assert.match(pageSource, /className="last-active-admin-note" id=\{lastAdminHelpId\}>This is the only active administrator\./);
+  assert.match(pageSource, /className="last-active-admin-note" id=\{lastAdminHelpId\}>Only active administrator\. Add another admin to change role or status\./);
   assert.match(pageSource, /changes\.role !== undefined \|\| \(changes\.disabled !== undefined && user\.role === 'admin'\)/);
   assert.match(pageSource, /cause instanceof ApiError && cause\.code === 'last_admin'[\s\S]*?await load\(currentListState\.page, currentListState\.query, currentListState\.roleFilter, currentListState\.approvalFilter\)\) setError\(cause\.message\)/);
-  assert.match(styles, /\.last-active-admin-note\s*\{[^}]*white-space:\s*normal;/);
+  assert.match(styles, /\.last-active-admin-note\s*\{[^}]*min-width:\s*160px;[^}]*max-width:\s*230px;[^}]*white-space:\s*normal;/);
+  assert.match(styles, /@container user-table \(max-width:\s*990px\)\s*\{\s*\.user-table-wrap > \.table-scroll-hint \{\s*display:\s*flex;/);
 });
 
 test('AppSelect disables its trigger and popup when no enabled options remain', () => {

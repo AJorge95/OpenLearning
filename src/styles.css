@@ -606,7 +606,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 @container course-table (max-width: 960px) {
   .course-table-wrap > .table-scroll-hint { display: flex; }
 }
-@container user-table (max-width: 690px) {
+/* The protected-admin note needs room to wrap; keep the scroll cue visible when it extends the table. */
+@container user-table (max-width: 990px) {
   .user-table-wrap > .table-scroll-hint { display: flex; }
 }
 @container analytics-table (max-width: 780px) {
@@ -1130,7 +1131,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .user-table .app-select-trigger { min-height: 40px; padding: 7px 9px; border-color: var(--line); color: #383d4c; font-size: 12px; }
 .account-state { display: inline-flex; align-items: center; gap: 7px; color: #656b7b; font-size: 12px; }
 .account-state > span { width: 7px; height: 7px; border-radius: 50%; background: #28a45d; }
-.last-active-admin-note { display: block; max-width: 230px; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.4; white-space: normal; }
+.last-active-admin-note { display: block; min-width: 160px; max-width: 230px; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.4; white-space: normal; }
 .account-disabled > span { background: #9ea3ae; }
 .account-pending { color: #8b5700; font-weight: 650; }
 .account-pending > span { background: #d28a12; }
