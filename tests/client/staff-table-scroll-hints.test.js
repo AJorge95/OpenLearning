@@ -28,6 +28,13 @@ test('wide staff tables explain horizontal scrolling inside their named regions'
   }
 });
 
+test('the account-list scroll hint is omitted when filters return no accounts', () => {
+  const pageStart = source.indexOf('export function AdminUsersPage()');
+  const pageEnd = source.indexOf('\nexport function AdminUserCreatePage()', pageStart);
+  const usersPage = source.slice(pageStart, pageEnd);
+  assert.match(usersPage, /users\.length > 0 && <p className="table-scroll-hint">Scroll horizontally to see all account columns\.<\/p>/);
+});
+
 test('table scroll hints follow the width of each scroll region', () => {
   assert.match(styles, /\.table-scroll-hint\s*\{[^}]*display:\s*none;[^}]*min-height:\s*34px;/);
   assert.match(styles, /\.course-table-wrap\s*\{\s*container-type:\s*inline-size;\s*container-name:\s*course-table;\s*\}/);
