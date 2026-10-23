@@ -156,6 +156,7 @@ test('the first feedback page reads its total alongside the comments', async () 
 
   assert.equal(commentQueries, 1);
   assert.equal(result.total, 1);
+  assert.equal(result.paginationStable, true);
   assert.deepEqual(result.comments.map(({ id }) => id), ['comment-public']);
 });
 
@@ -166,6 +167,42 @@ test('feedback clamps an out-of-range page to the last available page', async ()
   assert.equal(result.page, 1);
   assert.equal(result.total, 1);
   assert.deepEqual(result.comments.map(({ id }) => id), ['comment-public']);
+});
+
+test('feedback detects a same-count change that moves the loaded page boundary', async () => {
+  const lessonId = 'lesson-pagination-drift';
+  database.prepare('INSERT INTO lessons (id, module_id, title, position) VALUES (?, ?, ?, ?)')
+    .run(lessonId, 'module-public', 'Pagination drift lesson', 1);
+  const insertComment = database.prepare(`INSERT INTO lesson_comments (id, lesson_id, user_id, body, created_at)
+    VALUES (?, ?, ?, ?, ?)`);
+  for (let index = 1; index <= 41; index += 1) {
+    const createdAt = new Date(Date.UTC(2026, 9, 23, 14, 0, index)).toISOString().slice(0, 19).replace('T', ' ');
+    insertComment.run(`comment-${String(index).padStart(3, '0')}`, lessonId, 'learner-1', `Comment ${index}`, createdAt);
+  }
+
+  try {
+    const firstPageResponse = await fetch(apiUrl(`/lessons/${lessonId}/feedback`), { headers: userHeaders('learner-1') });
+    assert.equal(firstPageResponse.status, 200);
+    const firstPage = await firstPageResponse.json();
+    assert.equal(firstPage.total, 41);
+    assert.equal(firstPage.comments.at(-1).id, 'comment-022');
+
+    database.prepare('DELETE FROM lesson_comments WHERE id = ?').run('comment-030');
+    insertComment.run('comment-new', lessonId, 'learner-2', 'A newer response sorted after page one', '2026-10-23 13:59:59');
+
+    const nextPageResponse = await fetch(apiUrl(`/lessons/${lessonId}/feedback?page=2&anchorId=comment-022`), {
+      headers: userHeaders('learner-1'),
+    });
+    assert.equal(nextPageResponse.status, 200);
+    const nextPage = await nextPageResponse.json();
+    assert.equal(nextPage.total, firstPage.total);
+    assert.equal(nextPage.paginationStable, false);
+    assert.equal(nextPage.comments[0].id, 'comment-020');
+    assert.equal(nextPage.comments.some(({ id }) => id === 'comment-022'), false);
+  } finally {
+    database.prepare('DELETE FROM lesson_comments WHERE lesson_id = ?').run(lessonId);
+    database.prepare('DELETE FROM lessons WHERE id = ?').run(lessonId);
+  }
 });
 
 test('learner feedback reads aggregate reaction counts and the learner reaction in one query', async () => {

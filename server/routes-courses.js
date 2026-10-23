@@ -1771,6 +1771,18 @@ courseRouter.get('/lessons/:lessonId/feedback', (req, res) => {
     : { reaction: null, counts: { like: 0, dislike: 0 } };
   const requestedPage = pageQuery(req.query.page);
   const pageSize = 20;
+  const anchorId = req.query.anchorId;
+  if (anchorId !== undefined && (typeof anchorId !== 'string' || !anchorId || anchorId.length > 120)) {
+    fail(400, 'Choose a valid comment page anchor.', 'validation_error');
+  }
+  let paginationStable = true;
+  // A matching total can hide inserts and removals that move an offset page.
+  if (anchorId !== undefined && requestedPage > 1) {
+    const expectedAnchor = db.prepare(`SELECT id FROM lesson_comments WHERE lesson_id = ?
+      ORDER BY created_at DESC, id DESC LIMIT 1 OFFSET ?`)
+      .get(lesson.lesson_id, (requestedPage - 1) * pageSize - 1)?.id;
+    paginationStable = expectedAnchor === anchorId;
+  }
   const selectComments = db.prepare(`SELECT c.id, c.body, c.created_at, u.username, COUNT(*) OVER () AS total
     FROM lesson_comments c JOIN users u ON u.id = c.user_id
     WHERE c.lesson_id = ? ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?`);
@@ -1790,6 +1802,7 @@ courseRouter.get('/lessons/:lessonId/feedback', (req, res) => {
     total,
     page,
     pageSize,
+    paginationStable,
   });
 });
 

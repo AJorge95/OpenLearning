@@ -36,6 +36,13 @@ test('lesson feedback reloads when any requested page overlaps loaded comments',
   assert.match(source, /newComments\.length !== response\.comments\.length/);
 });
 
+test('lesson feedback reloads when a same-count change moves the loaded page boundary', () => {
+  const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /anchorId=\$\{encodeURIComponent\(anchorId\)\}/);
+  assert.match(source, /!response\.paginationStable/);
+});
+
 test('loading another comment page announces progress to assistive technology', () => {
   const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.meta.url), 'utf8');
 

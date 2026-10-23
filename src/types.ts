@@ -125,6 +125,7 @@ export interface LessonFeedback {
   total: number;
   page: number;
   pageSize: number;
+  paginationStable: boolean;
 }
 
 export interface Lesson {

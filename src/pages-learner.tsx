@@ -1102,6 +1102,11 @@ export function CoursePlayerPage() {
     const requestedCourseId = courseId;
     const requestedLessonId = lessonId;
     const nextPage = feedback.page + 1;
+    const anchorId = feedback.comments.at(-1)?.id;
+    if (!anchorId) {
+      setFeedbackRefreshVersion((version) => version + 1);
+      return;
+    }
     commentPageControllerRef.current?.abort();
     const controller = new AbortController();
     commentPageControllerRef.current = controller;
@@ -1110,10 +1115,10 @@ export function CoursePlayerPage() {
       && routeCourseIdRef.current === requestedCourseId && routeLessonIdRef.current === requestedLessonId;
     setCommentsLoading(true); setFeedbackError(null);
     try {
-      const response = await api.get<LessonFeedback>(`/api/lessons/${requestedLessonId}/feedback?page=${nextPage}`, { signal: controller.signal });
+      const response = await api.get<LessonFeedback>(`/api/lessons/${requestedLessonId}/feedback?page=${nextPage}&anchorId=${encodeURIComponent(anchorId)}`, { signal: controller.signal });
       if (isCurrentRequest()) {
         const newComments = getNewLessonComments(feedback.comments, response.comments);
-        if (response.page < nextPage || response.total !== feedback.total || newComments.length !== response.comments.length || (!newComments.length && feedback.comments.length < response.total)) {
+        if (!response.paginationStable || response.page < nextPage || response.total !== feedback.total || newComments.length !== response.comments.length || (!newComments.length && feedback.comments.length < response.total)) {
           commentPageSequenceRef.current += 1;
           setCommentsLoading(false);
           setFeedbackRefreshVersion((version) => version + 1);
