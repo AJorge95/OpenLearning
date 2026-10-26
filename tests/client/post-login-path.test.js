@@ -52,5 +52,5 @@ test('login guidance is associated with the autofocus username field', () => {
   const authSource = fs.readFileSync(path.join(sourceDirectory, 'pages-auth.tsx'), 'utf8');
 
   assert.match(authSource, /<p id="login-description" className="auth-description">/);
-  assert.match(authSource, /<input name="username" aria-describedby=\{error \? `login-description \$\{loginErrorId\}` : 'login-description'\} required maxLength=\{32\} autoComplete="username" autoCapitalize="none" spellCheck=\{false\} autoFocus/);
+  assert.match(authSource, /<input name="username" aria-describedby=\{error \? `login-description \$\{loginErrorId\}` : 'login-description'\} required maxLength=\{254\} autoComplete="username" autoCapitalize="none" spellCheck=\{false\} autoFocus/);
 });

@@ -24,7 +24,7 @@ interface AuthContextValue {
   startupError: string | null;
   retryStartup: () => Promise<void>;
   refresh: () => Promise<void>;
-  signIn: (username: string, password: string) => Promise<void>;
+  signIn: (identifier: string, password: string) => Promise<void>;
   signUp: (email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, registrationFieldValues: RegistrationFieldValues) => Promise<{ approvalRequired: boolean }>;
   completeSetup: (platformName: string, email: string, firstName: string, lastName: string, username: string, password: string, confirmPassword: string, setupToken: string, configuration: Pick<PlatformConfiguration, 'themePalette' | 'platformIcon' | 'connectionProtocol' | 'registrationEnabled' | 'userLimit'>) => Promise<void>;
   signOut: () => Promise<void>;
@@ -158,8 +158,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [retryStartup]);
 
-  const signIn = useCallback(async (username: string, password: string) => {
-    const result = await api.post<{ user: User } & PlatformConfiguration>('/api/auth/login', { username, password });
+  const signIn = useCallback(async (identifier: string, password: string) => {
+    // Keep the established request field so older clients continue to use the same login endpoint.
+    const result = await api.post<{ user: User } & PlatformConfiguration>('/api/auth/login', { username: identifier, password });
     authStateRevision.current += 1;
     api.clearCsrf();
     setUser(result.user);

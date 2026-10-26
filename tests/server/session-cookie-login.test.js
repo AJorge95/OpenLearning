@@ -35,8 +35,8 @@ before(async () => {
   http = await import('../../server/http.js');
   ({ SQLiteSessionStore } = await import('../../server/session-store.js'));
   const { hashPassword } = await import('../../server/auth.js');
-  database.prepare("INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, 'admin')")
-    .run('cookie-admin', 'cookie_admin', await hashPassword(password));
+  database.prepare("INSERT INTO users (id, username, email, password_hash, role) VALUES (?, ?, ?, ?, 'admin')")
+    .run('cookie-admin', 'cookie_admin', 'cookie-admin@example.test', await hashPassword(password));
 });
 
 after(() => {
@@ -53,7 +53,7 @@ after(() => {
   }
 });
 
-async function exerciseLogin({ protocol, trustProxy = false, forwardedProtocol, expectedSecure }) {
+async function exerciseLogin({ protocol, trustProxy = false, forwardedProtocol, expectedSecure, identifier = 'cookie_admin' }) {
   settings.setSetting('connection_protocol', protocol);
   const store = new SQLiteSessionStore(database);
   const app = express();
@@ -80,7 +80,7 @@ async function exerciseLogin({ protocol, trustProxy = false, forwardedProtocol, 
     const csrf = await csrfResponse.json();
     const login = await fetch(`${base}/api/auth/login`, {
       method: 'POST', headers: { ...headers, 'content-type': 'application/json', 'x-csrf-token': csrf.token },
-      body: JSON.stringify({ username: 'cookie_admin', password }),
+      body: JSON.stringify({ username: identifier, password }),
     });
     assert.equal(login.status, 200);
     assert.equal((await login.json()).user.id, 'cookie-admin');
@@ -110,3 +110,6 @@ test('HTTP admin login persists with the saved HTTPS setting', () => exerciseLog
 test('HTTP admin login persists with the saved HTTP setting', () => exerciseLogin({ protocol: 'http', expectedSecure: false }));
 test('trusted forwarded HTTPS issues a Secure session cookie', () => exerciseLogin({ protocol: 'https', trustProxy: true, forwardedProtocol: 'https', expectedSecure: true }));
 test('untrusted forwarded HTTPS cannot change cookie transport detection', () => exerciseLogin({ protocol: 'https', forwardedProtocol: 'https', expectedSecure: false }));
+test('email sign-in trims the identifier and matches email case-insensitively', () => exerciseLogin({
+  protocol: 'http', expectedSecure: false, identifier: '  Cookie-Admin@Example.Test  ',
+}));

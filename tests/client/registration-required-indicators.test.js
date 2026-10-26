@@ -31,10 +31,10 @@ test('administrator registration-field editors mark schema-required inputs visib
   assert.match(manageSource, /<label className="registration-options-field"><span className="form-label-row"><span>Options<\/span><small className="form-required-indicator" aria-hidden="true">Required<\/small><\/span><textarea id=\{`registration-field-editor-\$\{field\.id\}-options`\} required/);
 });
 
-test('sign-in visibly marks the username field as required', () => {
+test('sign-in visibly marks the username or email field as required', () => {
   const loginPage = authSource.slice(authSource.indexOf('export function LoginPage'), authSource.indexOf('export function RegisterPage'));
 
-  assert.match(loginPage, /<label><span className="form-label-row"><span>Username<\/span><small className="form-required-indicator" aria-hidden="true">Required<\/small><\/span><input[^>]*name="username"[^>]*required/);
+  assert.match(loginPage, /<label><span className="form-label-row"><span>Username or email<\/span><small className="form-required-indicator" aria-hidden="true">Required<\/small><\/span><input[^>]*name="username"[^>]*required/);
 });
 
 test('password fields mark native required state without changing their accessible name', () => {

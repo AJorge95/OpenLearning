@@ -323,7 +323,7 @@ export function LoginPage() {
   const loginErrorId = useId();
   const postLoginPath = getPostLoginPath(location.state?.from);
   const hasRequestedDestination = postLoginPath !== '/courses';
-  const [username, setUsername] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -335,7 +335,7 @@ export function LoginPage() {
     event.preventDefault();
     if (!acquireSubmissionLock(submissionInFlightRef)) return;
     setError(''); setSaving(true);
-    try { await signIn(username, password); navigate(postLoginPath, { replace: true }); }
+    try { await signIn(identifier, password); navigate(postLoginPath, { replace: true }); }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Sign in failed. Try again.'); }
     finally { releaseSubmissionLock(submissionInFlightRef); setSaving(false); }
   }
@@ -345,7 +345,7 @@ export function LoginPage() {
       {/* Match PasswordField's visual cue while keeping required native for validation and assistive technology. */}
       {/* Clear stale sign-in feedback as either credential changes so the alert reflects the current attempt. */}
       {/* Keep the general authentication failure connected to both fields when users review the form after an alert. */}
-      <label><span className="form-label-row"><span>Username</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input name="username" aria-describedby={error ? `login-description ${loginErrorId}` : 'login-description'} required maxLength={32} autoComplete="username" autoCapitalize="none" spellCheck={false} autoFocus value={username} onChange={(event) => { setUsername(event.target.value); setError(''); }} disabled={saving} /></label>
+      <label><span className="form-label-row"><span>Username or email</span><small className="form-required-indicator" aria-hidden="true">Required</small></span><input name="username" aria-describedby={error ? `login-description ${loginErrorId}` : 'login-description'} required maxLength={254} autoComplete="username" autoCapitalize="none" spellCheck={false} autoFocus value={identifier} onChange={(event) => { setIdentifier(event.target.value); setError(''); }} disabled={saving} /></label>
       <PasswordField label="Password" name="password" aria-describedby={error ? loginErrorId : undefined} required maxLength={256} autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value); setError(''); }} disabled={saving} />
       {error && <p id={loginErrorId} className="form-error" role="alert">{error}</p>}
       <Button type="submit" disabled={saving}>{saving ? 'Signing in…' : 'Sign in'}</Button>

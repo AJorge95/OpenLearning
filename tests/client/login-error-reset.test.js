@@ -9,6 +9,6 @@ const loginPage = authSource.slice(
 );
 
 test('login clears stale feedback when either credential changes', () => {
-  assert.match(loginPage, /value=\{username\} onChange=\{\(event\) => \{ setUsername\(event\.target\.value\); setError\(''\); \}\}/);
+  assert.match(loginPage, /value=\{identifier\} onChange=\{\(event\) => \{ setIdentifier\(event\.target\.value\); setError\(''\); \}\}/);
   assert.match(loginPage, /value=\{password\} onChange=\{\(event\) => \{ setPassword\(event\.target\.value\); setError\(''\); \}\}/);
 });

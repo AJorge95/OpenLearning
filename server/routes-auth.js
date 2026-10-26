@@ -643,14 +643,17 @@ authRouter.post('/auth/register', async (req, res) => {
 });
 
 authRouter.post('/auth/login', async (req, res) => {
-  const username = normalizeUsername(req.body?.username);
+  const identifier = normalizeUsername(req.body?.username);
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
-  if (username.length > 32 || password.length > 256) fail(400, 'Enter a valid username and password.', 'invalid_credentials');
-  const user = db.prepare('SELECT id, username, email, first_name, last_name, password_hash, role, disabled, registration_status FROM users WHERE username = ? COLLATE NOCASE').get(username);
+  if (identifier.length > 254 || password.length > 256) fail(400, 'Enter a valid username or email and password.', 'invalid_credentials');
+  const selectUserByUsername = db.prepare('SELECT id, username, email, first_name, last_name, password_hash, role, disabled, registration_status FROM users WHERE username = ? COLLATE NOCASE');
+  const selectUserByEmail = db.prepare('SELECT id, username, email, first_name, last_name, password_hash, role, disabled, registration_status FROM users WHERE email = ? COLLATE NOCASE');
+  // Preserve username precedence for existing accounts if legacy data has a cross-column identifier collision.
+  const user = selectUserByUsername.get(identifier) ?? selectUserByEmail.get(identifier);
   const valid = await verifyLoginPassword(password, user);
   if (!valid) {
-    writeSystemLog('warn', 'auth', 'Sign-in attempt failed', { username });
-    fail(401, 'The username or password is incorrect.', 'login_failed');
+    writeSystemLog('warn', 'auth', 'Sign-in attempt failed', { username: identifier });
+    fail(401, 'The username/email or password is incorrect.', 'login_failed');
   }
   if (user.registration_status !== 'approved') {
     fail(403, 'Your registration is awaiting administrator approval. You can sign in after it is approved.', 'registration_pending');
@@ -676,8 +679,8 @@ authRouter.post('/auth/login', async (req, res) => {
   }
   if (!currentUser) {
     await destroySession(req);
-    writeSystemLog('warn', 'auth', 'Sign-in attempt failed', { username });
-    fail(401, 'The username or password is incorrect.', 'login_failed');
+    writeSystemLog('warn', 'auth', 'Sign-in attempt failed', { username: identifier });
+    fail(401, 'The username/email or password is incorrect.', 'login_failed');
   }
   res.json({ user: publicUser(currentUser), ...getPlatformConfiguration() });
 });
