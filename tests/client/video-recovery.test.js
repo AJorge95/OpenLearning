@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { canRetryVideoWatchProgressLoad, getRejectedWatchProgressRecovery, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from '../../src/video-recovery.ts';
+import { canRetryVideoWatchProgressLoad, getRejectedWatchProgressRecovery, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoStallRecoveryPlan, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from '../../src/video-recovery.ts';
 
 const emptyProgress = {
   lessonId: '',
@@ -120,11 +120,27 @@ test('video recovery status copy reflects whether watch tracking applies', () =>
   assert.equal(getVideoRecoveryStatusMessage('reconnecting', true), 'Playback stalled. Reconnecting from the last server-verified position…');
 });
 
-test('automatic video recovery can retry after playback advances beyond the resumed point', () => {
-  const recovery = { lessonId: 'lesson-1', recoveryLessonId: 'lesson-1', resumePositionSeconds: 42 };
+test('stall recovery steps backward and stops after three automatic retries', () => {
+  assert.deepEqual(getVideoStallRecoveryPlan({ attempts: 0, lastPositionSeconds: 100 }), {
+    kind: 'retry', attempt: 1, rewindSeconds: 5, targetPositionSeconds: 95,
+  });
+  assert.deepEqual(getVideoStallRecoveryPlan({ attempts: 1, lastPositionSeconds: 95 }), {
+    kind: 'retry', attempt: 2, rewindSeconds: 10, targetPositionSeconds: 85,
+  });
+  assert.deepEqual(getVideoStallRecoveryPlan({ attempts: 2, lastPositionSeconds: 85 }), {
+    kind: 'retry', attempt: 3, rewindSeconds: 15, targetPositionSeconds: 70,
+  });
+  assert.deepEqual(getVideoStallRecoveryPlan({ attempts: 3, lastPositionSeconds: 70 }), { kind: 'manual' });
+  assert.deepEqual(getVideoStallRecoveryPlan({ attempts: 0, lastPositionSeconds: 4 }), {
+    kind: 'retry', attempt: 1, rewindSeconds: 4, targetPositionSeconds: 0,
+  });
+});
 
-  assert.equal(videoRecoveryMadeProgress({ ...recovery, positionSeconds: 44 }), false);
-  assert.equal(videoRecoveryMadeProgress({ ...recovery, positionSeconds: 44.01 }), true);
-  assert.equal(videoRecoveryMadeProgress({ ...recovery, lessonId: 'lesson-2', positionSeconds: 50 }), false);
-  assert.equal(videoRecoveryMadeProgress({ ...recovery, recoveryLessonId: null, positionSeconds: 50 }), false);
+test('recovery attempts reset only after playback clears the original stuck point', () => {
+  const recovery = { lessonId: 'lesson-1', recoveryLessonId: 'lesson-1', recoveryCheckpointSeconds: 42 };
+
+  assert.equal(videoRecoveryMadeProgress({ ...recovery, positionSeconds: 52 }), false);
+  assert.equal(videoRecoveryMadeProgress({ ...recovery, positionSeconds: 52.01 }), true);
+  assert.equal(videoRecoveryMadeProgress({ ...recovery, lessonId: 'lesson-2', positionSeconds: 60 }), false);
+  assert.equal(videoRecoveryMadeProgress({ ...recovery, recoveryLessonId: null, positionSeconds: 60 }), false);
 });

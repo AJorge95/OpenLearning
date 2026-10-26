@@ -22,18 +22,37 @@ export function getRejectedWatchProgressRecovery({ paused, ended }: { paused: bo
   return paused ? 'stay-paused' : 'seek-and-resume';
 }
 
+const videoStallRecoveryRewindSteps = [5, 10, 15] as const;
+
+export function getVideoStallRecoveryPlan({ attempts, lastPositionSeconds }: {
+  attempts: number;
+  lastPositionSeconds: number;
+}) {
+  if (!Number.isInteger(attempts) || attempts < 0 || attempts >= videoStallRecoveryRewindSteps.length
+    || !Number.isFinite(lastPositionSeconds) || lastPositionSeconds < 0) return { kind: 'manual' as const };
+
+  const rewindSeconds = Math.min(videoStallRecoveryRewindSteps[attempts], lastPositionSeconds);
+  return {
+    kind: 'retry' as const,
+    attempt: attempts + 1,
+    rewindSeconds,
+    targetPositionSeconds: Math.max(0, lastPositionSeconds - rewindSeconds),
+  };
+}
+
 export function videoRecoveryMadeProgress({
   lessonId,
   recoveryLessonId,
   positionSeconds,
-  resumePositionSeconds,
+  recoveryCheckpointSeconds,
 }: {
   lessonId: string;
   recoveryLessonId: string | null;
   positionSeconds: number;
-  resumePositionSeconds: number;
+  recoveryCheckpointSeconds: number;
 }) {
-  return recoveryLessonId === lessonId && positionSeconds > resumePositionSeconds + 2;
+  return recoveryLessonId === lessonId && Number.isFinite(recoveryCheckpointSeconds)
+    && positionSeconds > recoveryCheckpointSeconds + 10;
 }
 
 export function getVideoWatchProgressDisplay({

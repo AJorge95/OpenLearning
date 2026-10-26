@@ -224,6 +224,37 @@ test('authorized rewinds preserve the high-water mark without crediting replayed
   });
 });
 
+test('successive stall-recovery rewinds preserve the verified watch credit', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  const watchedSeconds = () => database.prepare(`SELECT watched_seconds FROM lesson_watch_telemetry
+    WHERE user_id = ? AND lesson_id = ?`).get(learner.id, 'watch-lesson').watched_seconds;
+
+  withFakeClock(2_900_000, (advance) => {
+    lessonWatch.beginLessonWatch(learner, 'watch-lesson', 100);
+    for (const position of [8, 16, 24, 32, 40]) {
+      advance(8_000);
+      assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', position).watchedUntilSeconds, position);
+    }
+    assert.equal(watchedSeconds(), 40);
+
+    for (const position of [35, 25, 10]) {
+      const rewound = lessonWatch.rewindLessonWatch(learner, 'watch-lesson', position);
+      assert.equal(rewound.lastPositionSeconds, position);
+      assert.equal(rewound.watchedUntilSeconds, 40);
+      assert.equal(watchedSeconds(), 40);
+    }
+
+    for (const position of [18, 26, 34, 40]) {
+      advance(8_000);
+      assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', position).watchedUntilSeconds, 40);
+      assert.equal(watchedSeconds(), 40);
+    }
+    advance(1_000);
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 41).watchedUntilSeconds, 41);
+    assert.equal(watchedSeconds(), 41);
+  });
+});
+
 test('watch progress rejects fast forward jumps and retains the watched high-water mark', () => {
   const learner = { id: 'watch-learner', role: 'learner' };
   withFakeClock(1_000_000, (advance) => {

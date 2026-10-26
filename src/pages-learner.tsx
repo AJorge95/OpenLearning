@@ -19,7 +19,7 @@ import { lessonCommentRemovalConfirmation } from './lesson-comment-confirmation'
 import { offsetPageHasDrift } from './offset-page-drift';
 import { tryToggleFullscreen } from './video-fullscreen';
 import { selectVideoCaptionTrack } from './video-captions';
-import { canRetryVideoWatchProgressLoad, getRejectedWatchProgressRecovery, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
+import { canRetryVideoWatchProgressLoad, getRejectedWatchProgressRecovery, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoStallRecoveryPlan, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
 import type { PendingVideoResume } from './video-recovery';
 import { useAuth } from './auth-context';
 import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt, QuizAttemptPreview, QuizQuestion } from './types';
@@ -700,7 +700,8 @@ export function CoursePlayerPage() {
   const pendingVideoResumeRef = useRef<PendingVideoResume | null>(null);
   const videoStallTimerRef = useRef<number | null>(null);
   const videoRecoveryTimerRef = useRef<number | null>(null);
-  const autoVideoRecoveryLessonRef = useRef<string | null>(null);
+  const videoRecoveryStateRef = useRef<{ lessonId: string; checkpointSeconds: number; attempts: number; inFlight: boolean } | null>(null);
+  const observedVideoPositionRef = useRef<{ lessonId: string; positionSeconds: number } | null>(null);
   const watchStartedLessonRef = useRef<string | null>(null);
   const pendingVisibilityResumeLessonRef = useRef<{ lessonId: string; positionSeconds: number } | null>(null);
   const reportVideoProgressRef = useRef<(force?: boolean, positionOverride?: number) => void>(() => {});
@@ -910,7 +911,8 @@ export function CoursePlayerPage() {
     videoReloadingRef.current = false;
     pendingVideoResumeRef.current = null;
     pendingVisibilityResumeLessonRef.current = null;
-    autoVideoRecoveryLessonRef.current = null;
+    videoRecoveryStateRef.current = null;
+    observedVideoPositionRef.current = null;
     if (videoStallTimerRef.current !== null) window.clearTimeout(videoStallTimerRef.current);
     videoStallTimerRef.current = null;
     if (videoRecoveryTimerRef.current !== null) window.clearTimeout(videoRecoveryTimerRef.current);
@@ -1170,7 +1172,7 @@ export function CoursePlayerPage() {
     setCommentSavingLessonIds(nextSaving);
   }
 
-  function retryVideo(resumePlayback = true, verifiedResume = false) {
+  function retryVideo(resumePlayback = true, verifiedResume = false, resumePositionOverride?: number) {
     const video = videoRef.current;
     if (!video) return;
     const requestedLessonId = lessonId;
@@ -1182,27 +1184,38 @@ export function CoursePlayerPage() {
       startedLessonId: watchStartedLessonRef.current,
       verifiedResume,
     });
-    const verifiedPosition = watchRequired && watchStartedLessonRef.current === requestedLessonId
+    const verifiedPosition = resumePositionOverride ?? (watchRequired && watchStartedLessonRef.current === requestedLessonId
       ? playbackPositionRef.current
-      : video.currentTime;
+      : video.currentTime);
     pendingVideoResumeRef.current = { lessonId: requestedLessonId, position: verifiedPosition, resumePlayback: shouldResumePlayback };
     videoReloadingRef.current = true;
+    setVideoError(false);
     if (videoRecoveryTimerRef.current !== null) window.clearTimeout(videoRecoveryTimerRef.current);
     videoRecoveryTimerRef.current = window.setTimeout(() => {
       videoRecoveryTimerRef.current = null;
-      if (routeLessonIdRef.current !== requestedLessonId || !pendingVideoResumeRef.current
-        || pendingVideoResumeRef.current.lessonId !== requestedLessonId) return;
+      if (routeLessonIdRef.current !== requestedLessonId || !videoReloadingRef.current) return;
       pendingVideoResumeRef.current = null;
       videoReloadingRef.current = false;
       setVideoRecovering(false);
-      setVideoStalled(true);
+      void startAutomaticVideoRecovery(requestedLessonId);
     }, 15_000);
+    if (videoStallTimerRef.current !== null) window.clearTimeout(videoStallTimerRef.current);
+    videoStallTimerRef.current = null;
     setVideoBuffering(false);
     setVideoRecovering(true);
     setVideoStalled(false);
     setVideoError(false);
     video.pause();
     video.load();
+  }
+
+  function retryVideoManually() {
+    videoRecoveryStateRef.current = null;
+    setVideoStalled(false);
+    setVideoRecovering(false);
+    setVideoError(false);
+    setWatchError('');
+    retryVideo(true);
   }
 
   function clearVideoStallState() {
@@ -1212,27 +1225,103 @@ export function CoursePlayerPage() {
     setVideoStalled(false);
   }
 
-  function scheduleVideoStallRecovery() {
+  function startAutomaticVideoRecovery(requestedLessonId: string) {
+    const video = videoRef.current;
+    if (!video || routeLessonIdRef.current !== requestedLessonId || videoReloadingRef.current) return;
+
+    let recoveryState = videoRecoveryStateRef.current;
+    if (!recoveryState || recoveryState.lessonId !== requestedLessonId) {
+      recoveryState = {
+        lessonId: requestedLessonId,
+        checkpointSeconds: watchRequired && watchStartedLessonRef.current === requestedLessonId
+          ? playbackPositionRef.current
+          : video.currentTime,
+        attempts: 0,
+        inFlight: false,
+      };
+      videoRecoveryStateRef.current = recoveryState;
+    }
+    if (recoveryState.inFlight) return;
+
+    const lastPositionSeconds = watchRequired && watchStartedLessonRef.current === requestedLessonId
+      ? playbackPositionRef.current
+      : video.currentTime;
+    const plan = getVideoStallRecoveryPlan({ attempts: recoveryState.attempts, lastPositionSeconds });
+    if (plan.kind === 'manual') {
+      setVideoBuffering(false);
+      setVideoRecovering(false);
+      setVideoStalled(true);
+      setWatchError('Playback did not recover after three automatic attempts. Retry playback or rewind 30 seconds.');
+      return;
+    }
+
+    recoveryState.attempts = plan.attempt;
+    recoveryState.inFlight = true;
+    setVideoBuffering(false);
+    setVideoStalled(false);
+    setVideoRecovering(true);
+    progressReportChainRef.current = progressReportChainRef.current.catch(() => undefined).then(async () => {
+      if (routeLessonIdRef.current !== requestedLessonId || videoRecoveryStateRef.current !== recoveryState) return;
+
+      let resumePosition = plan.targetPositionSeconds;
+      const watchWasStarted = watchStartedLessonRef.current === requestedLessonId;
+      if (watchRequired && watchWasStarted && plan.rewindSeconds > 0) {
+        const result = await api.post<Omit<LessonWatchProgress, 'lessonId' | 'ready' | 'started'>>(
+          `/api/lessons/${requestedLessonId}/watch-progress/rewind`, { positionSeconds: plan.targetPositionSeconds },
+        );
+        if (routeLessonIdRef.current !== requestedLessonId || videoRecoveryStateRef.current !== recoveryState) return;
+        playbackPositionRef.current = result.lastPositionSeconds;
+        lastProgressReportAtRef.current = Date.now();
+        setWatchProgress((previousProgress) => previousProgress.lessonId === requestedLessonId
+          ? { ...previousProgress, ...result, started: true, ready: true }
+          : previousProgress);
+        resumePosition = result.lastPositionSeconds;
+      } else if (watchRequired && watchWasStarted) {
+        resumePosition = playbackPositionRef.current;
+      }
+
+      if (routeLessonIdRef.current !== requestedLessonId || videoRecoveryStateRef.current !== recoveryState) return;
+      recoveryState.inFlight = false;
+      setWatchError('');
+      retryVideo(true, watchRequired && watchWasStarted, resumePosition);
+    }).catch((cause) => {
+      recoveryState.inFlight = false;
+      if (routeLessonIdRef.current === requestedLessonId && videoRecoveryStateRef.current === recoveryState) {
+        setVideoRecovering(false);
+        setVideoStalled(true);
+        setWatchError(cause instanceof ApiError
+          ? cause.message
+          : 'Playback could not recover automatically. Retry playback from your saved position.');
+      }
+    });
+  }
+
+  function scheduleVideoStallRecovery(showBuffering = true) {
     const requestedLessonId = lessonId;
     const video = videoRef.current;
-    if (!video || video.paused || video.ended) return;
-    setVideoBuffering(true);
-    if (videoStallTimerRef.current !== null) return;
+    if (!video || video.paused || videoReloadingRef.current) return;
+    if (showBuffering) setVideoBuffering(true);
+    if (videoStallTimerRef.current !== null) window.clearTimeout(videoStallTimerRef.current);
+    const observedPositionSeconds = video.currentTime;
     videoStallTimerRef.current = window.setTimeout(() => {
       videoStallTimerRef.current = null;
       const activeVideo = videoRef.current;
-      if (routeLessonIdRef.current !== requestedLessonId || !activeVideo) return;
-      if (activeVideo.paused || activeVideo.ended || activeVideo.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      if (routeLessonIdRef.current !== requestedLessonId || !activeVideo
+        || activeVideo.paused || videoReloadingRef.current) return;
+      if (activeVideo.ended) {
         setVideoBuffering(false);
+        reportVideoProgressRef.current(true);
+        return;
+      }
+      if (activeVideo.currentTime > observedPositionSeconds + 0.5) {
+        observedVideoPositionRef.current = { lessonId: requestedLessonId, positionSeconds: activeVideo.currentTime };
+        setVideoBuffering(false);
+        scheduleVideoStallRecovery(false);
         return;
       }
       setVideoBuffering(false);
-      setVideoStalled(true);
-      if (autoVideoRecoveryLessonRef.current !== requestedLessonId) {
-        autoVideoRecoveryLessonRef.current = requestedLessonId;
-        retryVideo(true);
-      }
-    }, 10_000);
+      startAutomaticVideoRecovery(requestedLessonId);
+    }, 8_000);
   }
 
   useEffect(() => () => {
@@ -1246,6 +1335,9 @@ export function CoursePlayerPage() {
     setWatchError('');
     try {
       if (video.paused) {
+        videoRecoveryStateRef.current = null;
+        setVideoStalled(false);
+        setVideoRecovering(false);
         if (pendingVisibilityResumeLessonRef.current?.lessonId === lessonId) {
           const requestedLessonId = lessonId;
           // A backgrounded tab can pause or reset its media clock while the
@@ -1359,7 +1451,7 @@ export function CoursePlayerPage() {
           if (recovery === 'reload-and-resume') {
             setWatchError('Playback was resynced to your last verified position.');
             setVideoPosition(result.lastPositionSeconds);
-            retryVideo(true, true);
+            startAutomaticVideoRecovery(requestedLessonId);
           } else {
             const resumeAfterSync = recovery === 'seek-and-resume';
             videoReloadingRef.current = resumeAfterSync;
@@ -1408,12 +1500,21 @@ export function CoursePlayerPage() {
     if (!video) return;
     const position = Math.min(video.currentTime, Number.isFinite(video.duration) ? video.duration : video.currentTime);
     setVideoPosition(position);
-    if (videoRecoveryMadeProgress({
+    const recoveryState = videoRecoveryStateRef.current;
+    if (recoveryState && videoRecoveryMadeProgress({
       lessonId,
-      recoveryLessonId: autoVideoRecoveryLessonRef.current,
+      recoveryLessonId: recoveryState.lessonId,
       positionSeconds: position,
-      resumePositionSeconds: playbackPositionRef.current,
-    })) autoVideoRecoveryLessonRef.current = null;
+      recoveryCheckpointSeconds: recoveryState.checkpointSeconds,
+    })) videoRecoveryStateRef.current = null;
+    const observedPosition = observedVideoPositionRef.current;
+    if (!video.paused && !video.ended && (!observedPosition || observedPosition.lessonId !== lessonId
+      || position > observedPosition.positionSeconds + 0.5)) {
+      observedVideoPositionRef.current = { lessonId, positionSeconds: position };
+      setVideoBuffering(false);
+      setVideoStalled(false);
+      scheduleVideoStallRecovery(false);
+    }
     if (!watchRequired) {
       setVideoDuration(Number.isFinite(video.duration) ? video.duration : 0);
       return;
@@ -1448,6 +1549,9 @@ export function CoursePlayerPage() {
     const requestedLessonId = lessonId;
     if (!video || !watchReadyForCurrent || !watchProgress.started || rewindSaving
       || watchStartedLessonRef.current !== requestedLessonId || video.currentTime <= 0) return;
+    videoRecoveryStateRef.current = null;
+    setVideoStalled(false);
+    setVideoRecovering(false);
     setWatchError('');
     setRewindSaving(true);
     video.pause();
@@ -1541,8 +1645,6 @@ export function CoursePlayerPage() {
               setVideoPosition(resumeTarget.position);
               if (resumeTarget.kind === 'retry') {
                 pendingVideoResumeRef.current = null;
-                if (videoRecoveryTimerRef.current !== null) window.clearTimeout(videoRecoveryTimerRef.current);
-                videoRecoveryTimerRef.current = null;
                 if (resumeTarget.resumePlayback) {
                   void video.play().catch(() => {
                     videoReloadingRef.current = false;
@@ -1550,6 +1652,8 @@ export function CoursePlayerPage() {
                     setVideoError(true);
                   });
                 } else {
+                  if (videoRecoveryTimerRef.current !== null) window.clearTimeout(videoRecoveryTimerRef.current);
+                  videoRecoveryTimerRef.current = null;
                   videoReloadingRef.current = false;
                   setVideoRecovering(false);
                 }
@@ -1559,8 +1663,12 @@ export function CoursePlayerPage() {
           onTimeUpdate={updateVideoPosition}
           onSeeking={guardVideoSeek}
           onRateChange={enforceNormalPlaybackRate}
-          onPlay={() => setVideoPlaying(true)}
-          onPlaying={() => {
+          onPlay={(event) => {
+            setVideoPlaying(true);
+            observedVideoPositionRef.current = { lessonId, positionSeconds: event.currentTarget.currentTime };
+            scheduleVideoStallRecovery(false);
+          }}
+          onPlaying={(event) => {
             if (pendingVisibilityResumeLessonRef.current?.lessonId === lessonId) {
               pendingVisibilityResumeLessonRef.current = null;
             }
@@ -1571,10 +1679,12 @@ export function CoursePlayerPage() {
             clearVideoStallState();
             setVideoRecovering(false);
             setVideoPlaying(true);
+            observedVideoPositionRef.current = { lessonId, positionSeconds: event.currentTarget.currentTime };
+            scheduleVideoStallRecovery(false);
           }}
           onCanPlay={(event) => { if (!event.currentTarget.paused) setVideoBuffering(false); }}
-          onWaiting={scheduleVideoStallRecovery}
-          onStalled={scheduleVideoStallRecovery}
+          onWaiting={() => scheduleVideoStallRecovery()}
+          onStalled={() => scheduleVideoStallRecovery()}
           onPause={() => {
             setVideoPlaying(false);
             if (!videoReloadingRef.current) clearVideoStallState();
@@ -1587,12 +1697,19 @@ export function CoursePlayerPage() {
             if (watchRequired && ['ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', '+', '-', '='].includes(event.key)) event.preventDefault();
           }}
           onError={() => {
+            const wasRecovering = Boolean(videoRecoveryStateRef.current) || videoReloadingRef.current;
             videoReloadingRef.current = false;
             pendingVideoResumeRef.current = null;
             if (videoRecoveryTimerRef.current !== null) window.clearTimeout(videoRecoveryTimerRef.current);
             videoRecoveryTimerRef.current = null;
             setVideoRecovering(false);
-            setVideoError(true);
+            clearVideoStallState();
+            if (wasRecovering) {
+              setVideoError(false);
+              void startAutomaticVideoRecovery(lessonId);
+            } else {
+              setVideoError(true);
+            }
           }}>
           {current.captions.map((caption) => <track key={caption.id} data-caption-id={caption.id} kind="captions" src={caption.url} srcLang={caption.language} label={caption.label} />)}
         </video> : <div className="video-missing"><Play size={36} aria-hidden="true" /><span>Video not available</span></div>}
@@ -1615,8 +1732,8 @@ export function CoursePlayerPage() {
       {watchRequired && current.hasVideo && <p className={`video-watch-guidance ${watchedForCurrent || current.completed ? 'is-watched' : ''}`} role="status" aria-live="polite">{watchGuidance}</p>}
       {videoBuffering && <p className="video-watch-guidance" role="status" aria-live="polite">{getVideoRecoveryStatusMessage('buffering', watchRequired)}</p>}
       {videoRecovering && <p className="video-watch-guidance" role="status" aria-live="polite">{getVideoRecoveryStatusMessage('reconnecting', watchRequired)}</p>}
-      {videoStalled && !videoRecovering && !videoError && <div className="player-video-error" role="alert"><p>Playback is still waiting for video data. Retry from your saved position.</p><Button type="button" variant="secondary" onClick={() => retryVideo(true)}>Retry playback</Button></div>}
-      {videoError && <div className="player-video-error" role="alert"><p>The video could not be loaded. Retry, or contact your course administrator if it still will not play.</p><Button type="button" variant="secondary" onClick={() => retryVideo(true)}>Retry video</Button></div>}
+      {videoStalled && !videoRecovering && !videoError && <div className="player-video-error" role="alert"><p>Playback did not advance. Retry from your saved position.</p><Button type="button" variant="secondary" onClick={retryVideoManually}>Retry playback</Button></div>}
+      {videoError && <div className="player-video-error" role="alert"><p>The video could not be loaded. Retry, or contact your course administrator if it still will not play.</p><Button type="button" variant="secondary" onClick={retryVideoManually}>Retry video</Button></div>}
       {watchError && <div className="player-video-error" role="alert"><p>{watchError}</p>{canRetryWatchProgressLoad && <Button type="button" variant="secondary" disabled={retryingWatchProgressLoad} aria-busy={retryingWatchProgressLoad} onClick={retryWatchProgressLoad}>{retryingWatchProgressLoad ? 'Checking video…' : 'Retry video check'}</Button>}</div>}
       <div className="player-controls-row">
         {/* Visible navigation labels name these controls; direction and completion glyphs are decorative. */}
