@@ -19,7 +19,7 @@ import { lessonCommentRemovalConfirmation } from './lesson-comment-confirmation'
 import { offsetPageHasDrift } from './offset-page-drift';
 import { tryToggleFullscreen } from './video-fullscreen';
 import { selectVideoCaptionTrack } from './video-captions';
-import { canRetryVideoWatchProgressLoad, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeAfterRejectedWatchProgress, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
+import { canRetryVideoWatchProgressLoad, getRejectedWatchProgressRecovery, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
 import type { PendingVideoResume } from './video-recovery';
 import { useAuth } from './auth-context';
 import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt, QuizAttemptPreview, QuizQuestion } from './types';
@@ -1350,25 +1350,32 @@ export function CoursePlayerPage() {
         playbackPositionRef.current = result.lastPositionSeconds;
       } else {
         const videoElement = videoRef.current;
-        const resumeAfterSync = Boolean(videoElement && shouldResumeAfterRejectedWatchProgress({
+        const recovery = videoElement ? getRejectedWatchProgressRecovery({
           paused: videoElement.paused,
           ended: videoElement.ended,
-        }));
+        }) : 'stay-paused';
         playbackPositionRef.current = result.lastPositionSeconds;
         if (videoElement && Math.abs(videoElement.currentTime - result.lastPositionSeconds) > 0.15) {
-          videoReloadingRef.current = resumeAfterSync;
-          videoElement.pause();
-          videoElement.currentTime = result.lastPositionSeconds;
-          setVideoPosition(result.lastPositionSeconds);
-          setVideoPlaying(false);
-          if (resumeAfterSync) {
+          if (recovery === 'reload-and-resume') {
             setWatchError('Playback was resynced to your last verified position.');
-            void videoElement.play().catch(() => {
-              videoReloadingRef.current = false;
-              setWatchError('Playback was resynced to your last verified position. Select Play to continue.');
-            });
+            setVideoPosition(result.lastPositionSeconds);
+            retryVideo(true, true);
           } else {
-            setWatchError('Manual seeking or accelerated playback was rejected. Continue from the last server-verified position.');
+            const resumeAfterSync = recovery === 'seek-and-resume';
+            videoReloadingRef.current = resumeAfterSync;
+            videoElement.pause();
+            videoElement.currentTime = result.lastPositionSeconds;
+            setVideoPosition(result.lastPositionSeconds);
+            setVideoPlaying(false);
+            if (resumeAfterSync) {
+              setWatchError('Playback was resynced to your last verified position.');
+              void videoElement.play().catch(() => {
+                videoReloadingRef.current = false;
+                setWatchError('Playback was resynced to your last verified position. Select Play to continue.');
+              });
+            } else {
+              setWatchError('Manual seeking or accelerated playback was rejected. Continue from the last server-verified position.');
+            }
           }
         }
       }
@@ -1557,6 +1564,7 @@ export function CoursePlayerPage() {
             if (pendingVisibilityResumeLessonRef.current?.lessonId === lessonId) {
               pendingVisibilityResumeLessonRef.current = null;
             }
+            setWatchError((previous) => previous.startsWith('Playback was resynced to your last verified position') ? '' : previous);
             videoReloadingRef.current = false;
             if (videoRecoveryTimerRef.current !== null) window.clearTimeout(videoRecoveryTimerRef.current);
             videoRecoveryTimerRef.current = null;

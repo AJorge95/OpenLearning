@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { canRetryVideoWatchProgressLoad, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, shouldResumeAfterRejectedWatchProgress, videoRecoveryMadeProgress } from '../../src/video-recovery.ts';
+import { canRetryVideoWatchProgressLoad, getRejectedWatchProgressRecovery, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from '../../src/video-recovery.ts';
 
 const emptyProgress = {
   lessonId: '',
@@ -71,10 +71,10 @@ test('a server-verified visibility resume survives stale watch state but still n
   assert.equal(shouldResumeVideoPlayback({ ...staleWatchState, requested: false, verifiedResume: true }), false);
 });
 
-test('rejected end-of-video progress resumes from the last verified checkpoint', () => {
-  assert.equal(shouldResumeAfterRejectedWatchProgress({ paused: true, ended: true }), true);
-  assert.equal(shouldResumeAfterRejectedWatchProgress({ paused: false, ended: false }), true);
-  assert.equal(shouldResumeAfterRejectedWatchProgress({ paused: true, ended: false }), false);
+test('rejected ended-video progress reloads before resuming from the verified checkpoint', () => {
+  assert.equal(getRejectedWatchProgressRecovery({ paused: true, ended: true }), 'reload-and-resume');
+  assert.equal(getRejectedWatchProgressRecovery({ paused: false, ended: false }), 'seek-and-resume');
+  assert.equal(getRejectedWatchProgressRecovery({ paused: true, ended: false }), 'stay-paused');
 });
 
 test('watch-progress resume ignores stale lessons and restores the correct position', () => {
