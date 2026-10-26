@@ -19,7 +19,7 @@ import { lessonCommentRemovalConfirmation } from './lesson-comment-confirmation'
 import { offsetPageHasDrift } from './offset-page-drift';
 import { tryToggleFullscreen } from './video-fullscreen';
 import { selectVideoCaptionTrack } from './video-captions';
-import { canRetryVideoWatchProgressLoad, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
+import { canRetryVideoWatchProgressLoad, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoWatchProgressDisplay, shouldResumeAfterRejectedWatchProgress, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from './video-recovery';
 import type { PendingVideoResume } from './video-recovery';
 import { useAuth } from './auth-context';
 import type { Course, CourseCertificate, CourseModule, LessonComment, LessonFeedback, LessonReaction, QuizAttempt, QuizAttemptPreview, QuizQuestion } from './types';
@@ -1350,7 +1350,10 @@ export function CoursePlayerPage() {
         playbackPositionRef.current = result.lastPositionSeconds;
       } else {
         const videoElement = videoRef.current;
-        const resumeAfterSync = Boolean(videoElement && !videoElement.paused && !videoElement.ended);
+        const resumeAfterSync = Boolean(videoElement && shouldResumeAfterRejectedWatchProgress({
+          paused: videoElement.paused,
+          ended: videoElement.ended,
+        }));
         playbackPositionRef.current = result.lastPositionSeconds;
         if (videoElement && Math.abs(videoElement.currentTime - result.lastPositionSeconds) > 0.15) {
           videoReloadingRef.current = resumeAfterSync;

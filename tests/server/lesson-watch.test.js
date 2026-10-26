@@ -258,6 +258,33 @@ test('watch progress rejects fast forward jumps and retains the watched high-wat
   });
 });
 
+test('an end-of-file report cannot complete a video from a mid-video checkpoint', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  const duration = 4_724.544;
+  const checkpoint = 2_010.99373;
+
+  withFakeClock(5_000_000, (advance) => {
+    lessonWatch.beginLessonWatch(learner, 'watch-lesson', duration);
+    let position = 0;
+    while (position + 8 < checkpoint) {
+      advance(8_000);
+      position += 8;
+      assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', position).accepted, true);
+    }
+    advance((checkpoint - position) * 1_000);
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', checkpoint).accepted, true);
+
+    advance(1_000);
+    const endedEarly = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', duration);
+    assert.equal(endedEarly.accepted, false);
+    assert.equal(endedEarly.anomaly, 'forward_seek');
+    assert.equal(endedEarly.reportedPositionSeconds, duration);
+    assert.ok(Math.abs(endedEarly.lastAcceptedPositionSeconds - checkpoint) < 1e-9);
+    assert.ok(Math.abs(endedEarly.watchedSeconds - checkpoint) < 1e-9);
+    assert.equal(endedEarly.durationSeconds, duration);
+  });
+});
+
 test('watch telemetry counts credible playback and rate-limits rejected seek alerts', () => {
   const learner = { id: 'watch-learner', role: 'learner' };
   withFakeClock(3_000_000, (advance) => {

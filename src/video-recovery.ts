@@ -17,6 +17,10 @@ export function canRetryVideoWatchProgressLoad(status: number, code?: string) {
   return status === 503 && code === 'video_duration_read_unavailable';
 }
 
+export function shouldResumeAfterRejectedWatchProgress({ paused, ended }: { paused: boolean; ended: boolean }) {
+  return ended || !paused;
+}
+
 export function videoRecoveryMadeProgress({
   lessonId,
   recoveryLessonId,
