@@ -167,6 +167,28 @@ In **Settings → System logs**, correlate entries by `mediaId` and `lessonId`. 
 
 For a failure at a repeatable timestamp, test the original MP4 past that timestamp in an ordinary player and compare the original and stored file sizes and hashes. A full decode check can reveal damage that a duration probe misses. Record the running `/api/version`, browser/device, failing timestamp, relevant playback logs, and video request status/`Content-Range` before retrying. Rewind and retry restore a verified checkpoint without granting watch credit for the unwatched remainder; a persistently damaged media file needs repair or replacement.
 
+### External instances without access to the video
+
+A video copy is not required for the first assessment. Ask the external operator or affected learner for the following evidence from one failure:
+
+1. Record the instance's `/api/version`, browser/version and operating system, the video timestamp, and the failure's local time with time zone. The playback diagnostics above are available starting with version `0.173`; if the operator has installed that version, reopen the lesson so an older tab does not keep running the previous player.
+2. In **Settings → System logs**, copy the first relevant `lesson-watch` warning and the next recovery/error entries for the same lesson and time. Include `appVersion`, classification, saved/reported positions, `clientPlayback`, and any `media-playback` read error. Remove learner names and identifiers that are not needed to correlate these entries.
+3. In the affected browser's Network panel, record the video request's status or failure code, numeric `Range`, `Content-Range`, and `Content-Length` values, and whether the response finished, failed, or was cancelled. Record the failure before selecting Retry, because reloading the source normally cancels the previous request. A `206` response should describe the requested byte range; a `200` response is valid when a full response was requested or the server ignored a range. Neither status alone proves that all bytes arrived.
+4. In Chrome, open **DevTools → More tools → Media**, select the lesson player, and record the error and nearby events from **Messages** and **Events**. These can identify a decoder or fetch failure without downloading the video. Share the selected fields rather than a complete network/player export containing URLs or credentials. See the [Chrome Media panel documentation](https://developer.chrome.com/docs/devtools/media-panel).
+5. If practical, try the same lesson from its saved checkpoint in another browser and report whether it fails at the same video time. This comparison uses normal playback and does not require a video download or a change to completion rules.
+
+Use the earliest failure evidence to choose the next investigation; recovery-generated pauses and cancellations are not necessarily the initiating fault:
+
+| Evidence | What it establishes | Next check |
+| --- | --- | --- |
+| Browser `mediaErrorCode: network` (numeric code 2), or a failed/incomplete video response | The browser could not continue fetching usable media. It does not identify which network hop failed. | External operator checks the corresponding request and proxy/server logs. |
+| Browser `mediaErrorCode: decode` (numeric code 3) or a decoder/demuxer error | The browser could not decode media it had considered usable. Corrupt data and unsupported media features remain possible. | Compare another browser; the operator can check or repair its media locally without sharing it. |
+| Server file-read error or short-read entry | Reading the requested bytes failed inside the application server. | Operator checks the identified media and storage; compare declared and actual sizes. |
+| `unverified_end_position`, with no error or delivery evidence | Only the browser/server position mismatch is established. It does not confirm seeking, file corruption, or a proxy failure. | Collect the event-time snapshot and Media/Network evidence above. |
+| `play-request-rejected` after recovery | The browser rejected restarting playback; the general diagnostic event does not identify why. | Record the browser's accompanying message and retry with the learner's Play action. |
+
+The browser media error categories follow the [HTML media error definitions](https://html.spec.whatwg.org/dev/media.html#error-codes). Missing file-read errors do not prove delivery succeeded: the server may have read bytes successfully before a proxy or client connection failed. An operator on an older version can still collect browser Media/Network evidence; the legacy `forward_seek` warning alone cannot identify the initiating fault. Do not reset saved progress or loosen watch verification to diagnose a playback failure.
+
 Run the automated checks with:
 
 ```sh
