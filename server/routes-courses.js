@@ -497,6 +497,7 @@ courseRouter.put('/lessons/:lessonId/watch-progress', (req, res) => {
   delete response.reportedPositionSeconds;
   delete response.lastAcceptedPositionSeconds;
   delete response.maximumCrediblePositionSeconds;
+  delete response.availableCreditSeconds;
   delete response.rejectedAttemptCount;
   delete response.watchedSeconds;
   delete response.heartbeatAgeSeconds;

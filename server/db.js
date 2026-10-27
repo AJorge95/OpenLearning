@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { unicodeContains } from './sql.js';
 import { sessionUserIdFromJson } from './session-data.js';
 
-const latestSchemaVersion = 42;
+const latestSchemaVersion = 43;
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 fs.mkdirSync(config.mediaRoot, { recursive: true });
@@ -1115,6 +1115,17 @@ export function migrateDatabase(database = db) {
     migration();
   }
 
+  if (current < 43) {
+    const migration = database.transaction(() => {
+      const columns = database.prepare('PRAGMA table_info(lesson_watch_progress)').all();
+      if (columns.length && !columns.some(({ name }) => name === 'pending_credit_seconds')) {
+        database.exec(`ALTER TABLE lesson_watch_progress ADD COLUMN pending_credit_seconds REAL NOT NULL DEFAULT 0
+          CHECK (pending_credit_seconds >= 0 AND pending_credit_seconds <= 8)`);
+      }
+      database.prepare('INSERT INTO schema_migrations (version) VALUES (43)').run();
+    });
+    migration();
+  }
 }
 
 export function setting(key) {

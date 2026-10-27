@@ -6,7 +6,7 @@ import test, { after, before } from 'node:test';
 import Database from 'better-sqlite3';
 
 const fixturePrefix = 'openlearning-database-migrations-';
-const expectedLatestMigrationVersion = 42;
+const expectedLatestMigrationVersion = 43;
 const configEnvironment = {
   NODE_ENV: 'test',
   DATA_DIR: '',
@@ -270,6 +270,30 @@ test('the course-group migration coalesces legacy rows and recreates association
     assert.deepEqual(new Set(legacyDatabase.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'course_group_courses'").all().map(({ name }) => name)), new Set(['course_group_courses_course', 'sqlite_autoindex_course_group_courses_1']));
     assert.equal(legacyDatabase.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, expectedLatestMigrationVersion);
     assert.deepEqual(legacyDatabase.pragma('foreign_key_check'), []);
+  } finally {
+    legacyDatabase.close();
+  }
+});
+test('watch timing migration preserves existing learner checkpoints', () => {
+  const legacyDatabase = new Database(':memory:');
+  try {
+    legacyDatabase.exec(`
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      INSERT INTO schema_migrations (version) VALUES (42);
+      CREATE TABLE lesson_watch_progress (
+        user_id TEXT NOT NULL, lesson_id TEXT NOT NULL, watched_until_seconds REAL NOT NULL,
+        duration_seconds REAL NOT NULL, last_position_seconds REAL NOT NULL, last_heartbeat_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, lesson_id)
+      );
+      INSERT INTO lesson_watch_progress VALUES ('learner', 'lesson', 2011, 4724.544, 1981, 12345);
+    `);
+    migrateDatabase(legacyDatabase);
+    migrateDatabase(legacyDatabase);
+    assert.deepEqual(legacyDatabase.prepare('SELECT * FROM lesson_watch_progress').get(), {
+      user_id: 'learner', lesson_id: 'lesson', watched_until_seconds: 2011,
+      duration_seconds: 4724.544, last_position_seconds: 1981, last_heartbeat_at: 12345, pending_credit_seconds: 0,
+    });
+    assert.throws(() => legacyDatabase.exec('UPDATE lesson_watch_progress SET pending_credit_seconds = 9'), /CHECK constraint/);
   } finally {
     legacyDatabase.close();
   }

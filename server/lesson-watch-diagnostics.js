@@ -1,6 +1,7 @@
 const playbackEvents = new Set(['timeupdate', 'pause', 'ended', 'seeking', 'visibility-hidden',
   'media-error', 'recovery-attempt', 'recovery-exhausted', 'recovery-failed', 'reload-timeout', 'play-request-rejected']);
 export const playbackDiagnosticMessages = new Map([
+  ['seeking', 'Browser reported a video seek; playback restored to the verified checkpoint'],
   ['media-error', 'Browser reported a video playback error'],
   ['recovery-attempt', 'Automatic video recovery started'],
   ['recovery-exhausted', 'Automatic video recovery stopped after three attempts'],
@@ -69,6 +70,7 @@ export function rejectedVideoProgressLog(progress, playback) {
       positionGapSeconds: progress.reportedPositionSeconds - progress.lastAcceptedPositionSeconds,
       heartbeatAgeSeconds: progress.heartbeatAgeSeconds,
       creditedElapsedSeconds: progress.creditedElapsedSeconds,
+      availableCreditSeconds: progress.availableCreditSeconds,
       rejectedAttemptCount: progress.rejectedAttemptCount,
       watchedSeconds: progress.watchedSeconds,
       durationSeconds: progress.durationSeconds,

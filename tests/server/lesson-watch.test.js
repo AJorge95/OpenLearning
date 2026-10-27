@@ -378,6 +378,42 @@ test('small media-clock leads are accepted without accumulating extra watched ti
   });
 });
 
+test('variable heartbeat delivery does not reject normally watched video completion', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  withFakeClock(1_800_000, (advance) => {
+    lessonWatch.beginLessonWatch(learner, 'watch-lesson', 12);
+    advance(4_000);
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 4).accepted, true);
+    // A delayed response holds the next captured checkpoint in the client queue.
+    advance(6_000);
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 8).accepted, true);
+    advance(2_000);
+    const ended = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 12);
+    assert.equal(ended.accepted, true);
+    assert.equal(ended.complete, true);
+    assert.equal(ended.watchedUntilSeconds, 12);
+  });
+});
+
+test('unused heartbeat time is bounded and is cleared by an authorized rewind', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  withFakeClock(1_900_000, (advance) => {
+    lessonWatch.beginLessonWatch(learner, 'watch-lesson', 100);
+    for (let index = 0; index < 3; index += 1) {
+      advance(60_000);
+      assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 0).accepted, true);
+    }
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 9).accepted, false);
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 4).accepted, true);
+    lessonWatch.rewindLessonWatch(learner, 'watch-lesson', 0);
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 2).accepted, false);
+    assert.equal(lessonWatch.getLessonWatchProgress(learner, 'watch-lesson').watchedUntilSeconds, 4);
+    advance(4_000);
+    assert.equal(lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 4).accepted, true);
+    assert.equal(database.prepare('SELECT watched_seconds FROM lesson_watch_telemetry').get().watched_seconds, 4);
+  });
+});
+
 test('near-complete playback unlocks lesson completion and saved completion remains recognized', () => {
   const learner = { id: 'watch-learner', role: 'learner' };
   withFakeClock(2_000_000, (advance) => {

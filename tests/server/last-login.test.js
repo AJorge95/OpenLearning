@@ -25,7 +25,7 @@ const isolatedConfig = {
 };
 const lastLoginAdminUsername = 'admin_last_login';
 const lastLoginAdminPassword = 'LastLoginPassphrase-2026';
-const expectedLatestMigrationVersion = 42;
+const expectedLatestMigrationVersion = 43;
 const previousConfig = new Map(Object.keys(isolatedConfig).map((key) => [key, process.env[key]]));
 let fixtureDirectory;
 let database;
@@ -409,6 +409,7 @@ test('historical migrations preserve account history, course versions, captions,
     assert.deepEqual(migrationDb.prepare("SELECT name FROM pragma_table_info('lesson_watch_progress') ORDER BY cid").all(), [
       { name: 'user_id' }, { name: 'lesson_id' }, { name: 'watched_until_seconds' },
       { name: 'duration_seconds' }, { name: 'last_position_seconds' }, { name: 'last_heartbeat_at' }, { name: 'updated_at' },
+      { name: 'pending_credit_seconds' },
     ]);
     assert.equal(migrationDb.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'lesson_watch_progress_lesson'").get().count, 1);
     assert.deepEqual(migrationDb.prepare("SELECT name FROM pragma_table_info('lesson_watch_telemetry') ORDER BY cid").all(), [

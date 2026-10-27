@@ -10,7 +10,7 @@ const suspiciousWatchLogIntervalMs = 60_000;
 const readLessonCompletionStatement = db.prepare('SELECT 1 FROM lesson_progress WHERE user_id = ? AND lesson_id = ?');
 const readWatchRecordStatement = db.prepare(`SELECT progress.watched_until_seconds,
     COALESCE(telemetry.watched_seconds, progress.watched_until_seconds) AS watched_seconds,
-    progress.duration_seconds, progress.last_position_seconds, progress.last_heartbeat_at,
+    progress.duration_seconds, progress.last_position_seconds, progress.last_heartbeat_at, progress.pending_credit_seconds,
     COALESCE(telemetry.rejected_seek_count, 0) AS rejected_seek_count,
     telemetry.last_rejected_position_seconds, COALESCE(telemetry.last_rejected_at, 0) AS last_rejected_at,
     COALESCE(telemetry.last_alerted_at, 0) AS last_alerted_at,
@@ -28,6 +28,7 @@ const beginWatchStatement = db.prepare(`INSERT INTO lesson_watch_progress
       OR lesson_watch_progress.watched_until_seconds >= lesson_watch_progress.duration_seconds - 0.5
       THEN 0 ELSE lesson_watch_progress.watched_until_seconds END,
     duration_seconds = excluded.duration_seconds,
+    pending_credit_seconds = 0,
     last_heartbeat_at = excluded.last_heartbeat_at,
     updated_at = CURRENT_TIMESTAMP`);
 const upsertWatchedSecondsStatement = db.prepare(`INSERT INTO lesson_watch_telemetry (user_id, lesson_id, watched_seconds)
@@ -51,10 +52,10 @@ const rejectWatchPositionStatement = db.prepare(`INSERT INTO lesson_watch_teleme
 const markWatchAnomalyAlertedStatement = db.prepare(`UPDATE lesson_watch_telemetry SET last_alerted_at = ?, updated_at = CURRENT_TIMESTAMP
   WHERE user_id = ? AND lesson_id = ?`);
 const updateWatchProgressStatement = db.prepare(`UPDATE lesson_watch_progress SET watched_until_seconds = ?, duration_seconds = ?,
-  last_position_seconds = ?, last_heartbeat_at = ?, updated_at = CURRENT_TIMESTAMP
+  last_position_seconds = ?, last_heartbeat_at = ?, pending_credit_seconds = ?, updated_at = CURRENT_TIMESTAMP
   WHERE user_id = ? AND lesson_id = ?`);
 const rewindWatchProgressStatement = db.prepare(`UPDATE lesson_watch_progress SET last_position_seconds = ?,
-  last_heartbeat_at = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND lesson_id = ?`);
+  last_heartbeat_at = ?, pending_credit_seconds = 0, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND lesson_id = ?`);
 const beginWatchTransaction = db.transaction((userId, lessonId, durationSeconds, now, watchedUntilSeconds) => {
   beginWatchStatement.run(userId, lessonId, durationSeconds, now);
   upsertWatchedSecondsStatement.run(userId, lessonId, watchedUntilSeconds);
@@ -63,8 +64,8 @@ const recordRejectedPositionTransaction = db.transaction((userId, lessonId, posi
   rejectWatchPositionStatement.run(userId, lessonId, position, now);
   if (shouldLogAnomaly) markWatchAnomalyAlertedStatement.run(now, userId, lessonId);
 });
-const recordAcceptedProgressTransaction = db.transaction((watchedUntil, durationSeconds, position, now, userId, lessonId, watchedSeconds) => {
-  updateWatchProgressStatement.run(watchedUntil, durationSeconds, position, now, userId, lessonId);
+const recordAcceptedProgressTransaction = db.transaction((watchedUntil, durationSeconds, position, now, pendingCredit, userId, lessonId, watchedSeconds) => {
+  updateWatchProgressStatement.run(watchedUntil, durationSeconds, position, now, pendingCredit, userId, lessonId);
   setWatchedSecondsStatement.run(userId, lessonId, watchedSeconds);
 });
 
@@ -120,7 +121,11 @@ export function recordLessonWatchProgress(user, lessonId, position) {
   // count as watched. Position credit is capped at real server elapsed time;
   // the allowance only absorbs delayed heartbeats from a busy/background tab.
   const elapsed = Math.max(0, Math.min(maximumHeartbeatCreditSeconds, (now - row.last_heartbeat_at) / 1000));
-  const maximumPosition = row.last_position_seconds + elapsed;
+  // A captured checkpoint can arrive late while a previous response is delayed.
+  // Keep its unused server time for the next checkpoint, within the same eight
+  // second ceiling. Nothing is credited until the media position advances.
+  const availableCredit = Math.min(maximumHeartbeatCreditSeconds, elapsed + row.pending_credit_seconds);
+  const maximumPosition = row.last_position_seconds + availableCredit;
   const movedBackward = position < row.last_position_seconds - progressClockToleranceSeconds;
   const movedTooFarForward = position > maximumPosition + progressClockToleranceSeconds;
   if (movedBackward || movedTooFarForward) {
@@ -144,6 +149,7 @@ export function recordLessonWatchProgress(user, lessonId, position) {
       maximumCrediblePositionSeconds: maximumPosition,
       heartbeatAgeSeconds: Math.max(0, (now - row.last_heartbeat_at) / 1000),
       creditedElapsedSeconds: elapsed,
+      availableCreditSeconds: availableCredit,
       rejectedAttemptCount: attempts.rejected_seek_count,
       watchedSeconds: attempts.watched_seconds,
     };
@@ -153,12 +159,13 @@ export function recordLessonWatchProgress(user, lessonId, position) {
   // valid playback. Credit only the elapsed server time so this tolerance cannot
   // accumulate into extra watched progress across heartbeats.
   const acceptedPosition = Math.max(row.last_position_seconds, Math.min(position, maximumPosition, row.duration_seconds));
+  const pendingCredit = Math.max(0, availableCredit - (acceptedPosition - row.last_position_seconds));
   const watchedUntil = Math.max(row.watched_until_seconds, acceptedPosition);
   // Replaying already watched content after an authorized rewind does not add
   // watch credit. Credit resumes only after reaching the previous high-water mark.
   const watchedSeconds = Math.min(row.duration_seconds, row.watched_seconds
     + Math.max(0, acceptedPosition - Math.max(row.last_position_seconds, row.watched_until_seconds)));
-  recordAcceptedProgressTransaction(watchedUntil, row.duration_seconds, acceptedPosition, now, user.id, lessonId, watchedSeconds);
+  recordAcceptedProgressTransaction(watchedUntil, row.duration_seconds, acceptedPosition, now, pendingCredit, user.id, lessonId, watchedSeconds);
   const updated = {
     ...row,
     watched_until_seconds: watchedUntil,

@@ -108,8 +108,8 @@ async function refreshCsrf(options: Pick<RequestInit, 'signal'> = {}): Promise<s
   }
 }
 
-async function ensureCsrf(): Promise<string> {
-  return csrfToken ?? refreshCsrf();
+async function ensureCsrf(options: Pick<RequestInit, 'signal'> = {}): Promise<string> {
+  return csrfToken ?? refreshCsrf(options);
 }
 
 function requestAbortError() {
@@ -139,12 +139,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const requiresCsrf = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
   const headers = new Headers(options.headers || {});
   if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
-  if (requiresCsrf) headers.set('X-CSRF-Token', await ensureCsrf());
+  if (requiresCsrf) headers.set('X-CSRF-Token', await ensureCsrf({ signal: options.signal }));
   let response = await fetchResponse(path, { ...options, method, headers, credentials: 'same-origin' });
   if (!response.ok) {
     const error = await errorFromResponse(response);
     if (requiresCsrf && isCsrfRejection(error.code)) {
-      headers.set('X-CSRF-Token', await refreshCsrf());
+      headers.set('X-CSRF-Token', await refreshCsrf({ signal: options.signal }));
       response = await fetchResponse(path, { ...options, method, headers, credentials: 'same-origin' });
     } else {
       throw error;
@@ -167,8 +167,8 @@ const json = (method: string, body?: unknown): RequestInit => ({
 
 export const api = {
   get: <T>(path: string, options: Pick<RequestInit, 'signal'> = {}) => request<T>(path, options),
-  post: <T>(path: string, body?: unknown) => request<T>(path, json('POST', body)),
-  put: <T>(path: string, body?: unknown) => request<T>(path, json('PUT', body)),
+  post: <T>(path: string, body?: unknown, options: Pick<RequestInit, 'signal'> = {}) => request<T>(path, { ...json('POST', body), ...options }),
+  put: <T>(path: string, body?: unknown, options: Pick<RequestInit, 'signal'> = {}) => request<T>(path, { ...json('PUT', body), ...options }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, json('PATCH', body)),
   delete: <T = void>(path: string) => request<T>(path, { method: 'DELETE' }),
   refreshCsrf: (options: Pick<RequestInit, 'signal'> = {}) => refreshCsrf(options),

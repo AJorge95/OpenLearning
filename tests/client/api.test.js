@@ -18,6 +18,22 @@ function restoreFetch(t) {
   });
 }
 
+test('watch write cancellation reaches CSRF and the mutation request', async (t) => {
+  restoreFetch(t);
+  const controller = new AbortController();
+  const requests = [];
+  globalThis.fetch = async (input, options) => {
+    requests.push({ path: String(input), signal: options.signal });
+    return jsonResponse(String(input) === '/api/csrf' ? { token: 'test-token' } : { accepted: true });
+  };
+  await api.post('/api/lessons/lesson/watch-progress/start', {}, { signal: controller.signal });
+  await api.put('/api/lessons/lesson/watch-progress', { positionSeconds: 4 }, { signal: controller.signal });
+  assert.deepEqual(requests.map(({ path }) => path), [
+    '/api/csrf', '/api/lessons/lesson/watch-progress/start', '/api/lessons/lesson/watch-progress',
+  ]);
+  assert.ok(requests.every(({ signal }) => signal === controller.signal));
+});
+
 function installFakeXhr(t, onSend) {
   const originalXhr = globalThis.XMLHttpRequest;
   const requests = [];

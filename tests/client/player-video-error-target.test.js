@@ -6,7 +6,7 @@ const source = fs.readFileSync(new URL('../../src/pages-learner.tsx', import.met
 const styles = fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
 
 test('learner playback recovery actions keep a reliable target', () => {
-  assert.match(source, /<div className="player-video-error" role="alert"><p>Playback did not advance\./);
+  assert.match(source, /<div className="player-video-error" role="alert"><p>Playback is paused\. Your verified progress is saved\./);
   assert.match(source, /<Button type="button" variant="secondary" onClick=\{retryVideoManually\}>Retry playback<\/Button>/);
   assert.match(source, /<Button type="button" variant="secondary" onClick=\{retryVideoManually\}>Retry video<\/Button>/);
   assert.match(source, /<Button type="button" variant="secondary" disabled=\{retryingWatchProgressLoad\} aria-busy=\{retryingWatchProgressLoad\} onClick=\{retryWatchProgressLoad\}>\{retryingWatchProgressLoad \? 'Checking video…' : 'Retry video check'\}<\/Button>/);

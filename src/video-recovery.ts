@@ -14,12 +14,16 @@ export type PendingVideoResume = {
 };
 
 export function canRetryVideoWatchProgressLoad(status: number, code?: string) {
-  return status === 503 && code === 'video_duration_read_unavailable';
+  return status === 0 || status === 408 || status === 429 || status >= 500
+    || code === 'video_duration_read_unavailable';
 }
 
-export function getRejectedWatchProgressRecovery({ paused, ended }: { paused: boolean; ended: boolean }) {
+export function getRejectedWatchProgressRecovery({ paused, ended, requested = !paused || ended }: {
+  paused: boolean; ended: boolean; requested?: boolean;
+}) {
+  if (!requested) return 'stay-paused';
   if (ended) return 'reload-and-resume';
-  return paused ? 'stay-paused' : 'seek-and-resume';
+  return 'seek-and-resume';
 }
 
 const videoStallRecoveryRewindSteps = [5, 10, 15] as const;

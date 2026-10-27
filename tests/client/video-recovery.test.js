@@ -11,10 +11,13 @@ const emptyProgress = {
   lastPositionSeconds: 0,
 };
 
-test('watch progress offers retry only for temporary video file read failures', () => {
+test('watch progress can retry temporary file, network, and server failures', () => {
   assert.equal(canRetryVideoWatchProgressLoad(503, 'video_duration_read_unavailable'), true);
   assert.equal(canRetryVideoWatchProgressLoad(422, 'video_duration_unavailable'), false);
-  assert.equal(canRetryVideoWatchProgressLoad(500, 'internal_error'), false);
+  for (const status of [0, 408, 429, 500, 502, 503, 504]) {
+    assert.equal(canRetryVideoWatchProgressLoad(status), true);
+  }
+  for (const status of [401, 403, 404]) assert.equal(canRetryVideoWatchProgressLoad(status), false);
 });
 
 test('ordinary video retries resume from their captured position', () => {
@@ -75,6 +78,11 @@ test('rejected ended-video progress reloads before resuming from the verified ch
   assert.equal(getRejectedWatchProgressRecovery({ paused: true, ended: true }), 'reload-and-resume');
   assert.equal(getRejectedWatchProgressRecovery({ paused: false, ended: false }), 'seek-and-resume');
   assert.equal(getRejectedWatchProgressRecovery({ paused: true, ended: false }), 'stay-paused');
+});
+
+test('browser pauses do not override the learner playback choice during recovery', () => {
+  assert.equal(getRejectedWatchProgressRecovery({ paused: true, ended: false, requested: true }), 'seek-and-resume');
+  assert.equal(getRejectedWatchProgressRecovery({ paused: true, ended: true, requested: false }), 'stay-paused');
 });
 
 test('watch-progress resume ignores stale lessons and restores the correct position', () => {
