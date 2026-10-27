@@ -157,6 +157,16 @@ docker compose up -d openlearning
 
 Scheduled backup jobs default to retaining 14 successful backup artifacts; missed schedules are not replayed after downtime.
 
+## Assess a stuck lesson video
+
+A rejected watch-progress report describes a difference between the browser's clock and the saved checkpoint. It does not establish that the learner sought forward. `unverified_end_position` means the browser reported the end before enough playback was verified. `causeConfirmed: false` records that the underlying cause is still unknown. The MP4 duration check reads container timing metadata; it does not prove that the entire video is decodable.
+
+In **Settings → System logs**, correlate entries by `mediaId` and `lessonId`. Watch-progress warnings include the app version, elapsed server time, position gap, and an event-time browser snapshot when available. `clientPlayback` is browser-reported context: `mediaErrorCode` distinguishes network, decode, and unsupported-source errors; `buffered` and `seekable` show the reported time ranges. Recovery attempts and failures are recorded separately, limited to twelve diagnostic events per learner per minute. Progress rejection warnings remain limited to one per learner/lesson per minute.
+
+`media-playback` errors identify server file-read failures or short reads and include the requested byte range, expected bytes, actual bytes read, and file sizes. Normal browser cancellation of a media request is not treated as a file-read failure. If these errors are absent, inspect the browser's Network panel for failed video requests, incomplete responses, or proxy errors; their absence from server logs does not rule out a delivery problem.
+
+For a failure at a repeatable timestamp, test the original MP4 past that timestamp in an ordinary player and compare the original and stored file sizes and hashes. A full decode check can reveal damage that a duration probe misses. Record the running `/api/version`, browser/device, failing timestamp, relevant playback logs, and video request status/`Content-Range` before retrying. Rewind and retry restore a verified checkpoint without granting watch credit for the unwatched remainder; a persistently damaged media file needs repair or replacement.
+
 Run the automated checks with:
 
 ```sh

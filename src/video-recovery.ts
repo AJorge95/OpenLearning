@@ -24,6 +24,10 @@ export function getRejectedWatchProgressRecovery({ paused, ended }: { paused: bo
 
 const videoStallRecoveryRewindSteps = [5, 10, 15] as const;
 
+export function getVideoRewindTarget(verifiedPositionSeconds: number) {
+  return Math.max(0, verifiedPositionSeconds - 30);
+}
+
 export function getVideoStallRecoveryPlan({ attempts, lastPositionSeconds }: {
   attempts: number;
   lastPositionSeconds: number;
@@ -44,15 +48,18 @@ export function videoRecoveryMadeProgress({
   lessonId,
   recoveryLessonId,
   positionSeconds,
+  verifiedPositionSeconds,
   recoveryCheckpointSeconds,
 }: {
   lessonId: string;
   recoveryLessonId: string | null;
   positionSeconds: number;
+  verifiedPositionSeconds: number;
   recoveryCheckpointSeconds: number;
 }) {
   return recoveryLessonId === lessonId && Number.isFinite(recoveryCheckpointSeconds)
-    && positionSeconds > recoveryCheckpointSeconds + 10;
+    && Number.isFinite(positionSeconds) && Number.isFinite(verifiedPositionSeconds)
+    && Math.min(positionSeconds, verifiedPositionSeconds) > recoveryCheckpointSeconds + 10;
 }
 
 export function getVideoWatchProgressDisplay({

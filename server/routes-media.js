@@ -72,6 +72,28 @@ function streamProtectedMediaFile(filePath, response, next, notFoundMessage, opt
   }, options);
 }
 
+function streamLessonMedia(filePath, response, next, media, fileSize, options) {
+  const stream = streamProtectedMediaFile(filePath, response, next, 'Media not found.', options);
+  if (media.media_kind !== 'video') return stream;
+  const start = options?.start ?? 0;
+  const end = options?.end ?? fileSize - 1;
+  const details = () => ({ mediaId: media.id, courseId: media.course_id,
+    declaredFileBytes: media.byte_size, actualFileBytes: fileSize,
+    rangeStart: start, rangeEnd: end, expectedBytes: end - start + 1,
+    bytesRead: Number.isFinite(stream.bytesRead) ? stream.bytesRead : 0 });
+  stream.once('error', (error) => {
+    writeSystemLog('error', 'media-playback', 'Video file read failed', {
+      ...details(), errorCode: typeof error?.code === 'string' ? error.code.slice(0, 80) : 'unknown',
+    });
+  });
+  stream.once('end', () => {
+    if (Number.isFinite(stream.bytesRead) && stream.bytesRead !== end - start + 1) {
+      writeSystemLog('error', 'media-playback', 'Video file ended before all requested bytes were read', details());
+    }
+  });
+  return stream;
+}
+
 function fileMatchesKind(file, kind) {
   const ext = originalExtension(file.originalname);
   if (kind === 'video') return ext === '.mp4' && file.mimetype === 'video/mp4';
@@ -762,7 +784,12 @@ protectedMediaRouter.get('/:mediaId', requireAuth, (req, res, next) => {
   const filePath = path.resolve(base, media.file_name);
   if (!filePath.startsWith(`${base}${path.sep}`)) return res.status(404).json({ error: 'Media not found.', code: 'not_found' });
   fs.stat(filePath, (statError, stats) => {
-    if (statError || !stats.isFile()) return res.status(404).json({ error: 'Media not found.', code: 'not_found' });
+    if (statError || !stats.isFile()) {
+      if (media.media_kind === 'video') writeSystemLog('error', 'media-playback', 'Video file is unavailable', {
+        mediaId: media.id, courseId: media.course_id, errorCode: statError?.code || 'not_regular_file',
+      });
+      return res.status(404).json({ error: 'Media not found.', code: 'not_found' });
+    }
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Content-Type', media.mime_type);
     res.setHeader('Accept-Ranges', 'bytes');
@@ -777,7 +804,7 @@ protectedMediaRouter.get('/:mediaId', requireAuth, (req, res, next) => {
       res.status(200);
       res.setHeader('Content-Length', stats.size);
       if (req.method === 'HEAD') return res.end();
-      return streamProtectedMediaFile(filePath, res, next, 'Media not found.');
+      return streamLessonMedia(filePath, res, next, media, stats.size);
     }
     let start = match[1] ? Number(match[1]) : null;
     let end = match[2] ? Number(match[2]) : null;
@@ -796,6 +823,6 @@ protectedMediaRouter.get('/:mediaId', requireAuth, (req, res, next) => {
     res.setHeader('Content-Range', `bytes ${start}-${end}/${stats.size}`);
     res.setHeader('Content-Length', end - start + 1);
     if (req.method === 'HEAD') return res.end();
-    return streamProtectedMediaFile(filePath, res, next, 'Media not found.', { start, end });
+    return streamLessonMedia(filePath, res, next, media, stats.size, { start, end });
   });
 });

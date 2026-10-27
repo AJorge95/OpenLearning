@@ -48,6 +48,16 @@ export const learnerReactionLimiter = rateLimit({
   }),
 });
 
+// Playback diagnostics are best effort and must never block the player.
+export const learnerPlaybackDiagnosticLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 12,
+  standardHeaders: false,
+  legacyHeaders: false,
+  keyGenerator: (req) => `user:${req.currentUser.id}`,
+  handler: (_req, res) => res.status(204).end(),
+});
+
 export const quizAttemptLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 30,

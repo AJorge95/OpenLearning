@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { canRetryVideoWatchProgressLoad, getRejectedWatchProgressRecovery, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoStallRecoveryPlan, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from '../../src/video-recovery.ts';
+import { canRetryVideoWatchProgressLoad, getRejectedWatchProgressRecovery, getVideoRecoveryStatusMessage, getVideoResumeTarget, getVideoRewindTarget, getVideoStallRecoveryPlan, getVideoWatchProgressDisplay, shouldResumeVideoPlayback, videoRecoveryMadeProgress } from '../../src/video-recovery.ts';
 
 const emptyProgress = {
   lessonId: '',
@@ -137,10 +137,23 @@ test('stall recovery steps backward and stops after three automatic retries', ()
 });
 
 test('recovery attempts reset only after playback clears the original stuck point', () => {
-  const recovery = { lessonId: 'lesson-1', recoveryLessonId: 'lesson-1', recoveryCheckpointSeconds: 42 };
+  const recovery = { lessonId: 'lesson-1', recoveryLessonId: 'lesson-1', recoveryCheckpointSeconds: 42, verifiedPositionSeconds: 52.01 };
 
   assert.equal(videoRecoveryMadeProgress({ ...recovery, positionSeconds: 52 }), false);
   assert.equal(videoRecoveryMadeProgress({ ...recovery, positionSeconds: 52.01 }), true);
   assert.equal(videoRecoveryMadeProgress({ ...recovery, lessonId: 'lesson-2', positionSeconds: 60 }), false);
   assert.equal(videoRecoveryMadeProgress({ ...recovery, recoveryLessonId: null, positionSeconds: 60 }), false);
+});
+
+test('a false end-position jump cannot reset the recovery budget', () => {
+  const recovery = { lessonId: 'lesson-1', recoveryLessonId: 'lesson-1', recoveryCheckpointSeconds: 2010.255372 };
+  assert.equal(videoRecoveryMadeProgress({ ...recovery, positionSeconds: 4724.544, verifiedPositionSeconds: 2010.255372 }), false);
+  assert.equal(videoRecoveryMadeProgress({ ...recovery, positionSeconds: 2021, verifiedPositionSeconds: 2018 }), false);
+  assert.equal(videoRecoveryMadeProgress({ ...recovery, positionSeconds: 2021, verifiedPositionSeconds: 2021 }), true);
+});
+
+test('manual recovery rewinds from the verified checkpoint when the browser clock is wrong', () => {
+  assert.equal(getVideoRewindTarget(2010.255372), 1980.255372);
+  assert.equal(getVideoRewindTarget(12), 0);
+  assert.equal(getVideoRewindTarget(0), 0);
 });

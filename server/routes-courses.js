@@ -9,7 +9,7 @@ import { assertPublishable, canLearnerAccess, courseFromLesson, courseSummaries,
 import { likeContains, textSearchPredicate } from './sql.js';
 import { writeAuditLog, writeSystemLog } from './log-store.js';
 import { validateLessonResourceUrl } from '../shared/resource-url-validation.js';
-import { learnerCommentLimiter, learnerReactionLimiter, quizAttemptLimiter } from './rate-limits.js';
+import { learnerCommentLimiter, learnerReactionLimiter, learnerPlaybackDiagnosticLimiter, quizAttemptLimiter } from './rate-limits.js';
 import { canonicalCourse, logicalCourseId, publishRevision, publishedVersion } from './course-versioning.js';
 import { certificatePayload, findCourseCertificate, issueCertificateIfComplete } from './certificate-service.js';
 import { syncUnlockedPathStates } from './routes-programs.js';
@@ -17,6 +17,8 @@ import { beginLessonWatch, getLessonWatchProgress, lessonVideoWasWatched, record
 import { readMp4Duration } from './mp4-duration.js';
 import { createVideoDurationReader } from './video-duration-reader.js';
 import { selectRandomQuizQuestions } from './quiz-question-selection.js';
+import { appVersion } from './app-version.js';
+import { normalizeVideoPlaybackDiagnostics, playbackDiagnosticMessages, rejectedVideoProgressLog } from './lesson-watch-diagnostics.js';
 
 export const courseRouter = Router();
 courseRouter.use(requireAuth);
@@ -454,23 +456,39 @@ courseRouter.post('/lessons/:lessonId/watch-progress/rewind', (req, res) => {
   res.json(rewindLessonWatch(req.currentUser, lesson.lesson_id, req.body?.positionSeconds));
 });
 
+courseRouter.post('/lessons/:lessonId/playback-diagnostics', learnerPlaybackDiagnosticLimiter, (req, res) => {
+  const lesson = requireWatchableLesson(req.params.lessonId, req.currentUser);
+  const playback = normalizeVideoPlaybackDiagnostics(req.body?.playback);
+  if (!playbackDiagnosticMessages.has(playback?.event)) fail(400, 'Playback event is invalid.', 'invalid_playback_event');
+  const progress = getLessonWatchProgress(req.currentUser, lesson.lesson_id);
+  writeSystemLog(playback.event === 'recovery-attempt' ? 'info' : 'warn', 'lesson-watch', playbackDiagnosticMessages.get(playback.event), {
+    userId: req.currentUser.id,
+    courseId: lesson.id,
+    lessonId: lesson.lesson_id,
+    mediaId: lesson.media_id,
+    appVersion,
+    lastAcceptedPositionSeconds: progress.lastPositionSeconds,
+    watchedUntilSeconds: progress.watchedUntilSeconds,
+    verifiedDurationSeconds: progress.durationSeconds,
+    clientPlayback: playback,
+  });
+  res.status(204).end();
+});
+
 courseRouter.put('/lessons/:lessonId/watch-progress', (req, res) => {
   const lesson = requireWatchableLesson(req.params.lessonId, req.currentUser);
   const progress = recordLessonWatchProgress(req.currentUser, lesson.lesson_id, req.body?.positionSeconds);
   if (progress.shouldLogAnomaly) {
-    writeSystemLog('warn', 'lesson-watch', 'Rejected implausible video progress', {
+    const diagnostic = rejectedVideoProgressLog(progress, req.body?.playback);
+    writeSystemLog('warn', 'lesson-watch', diagnostic.message, {
       userId: req.currentUser.id,
       username: req.currentUser.username,
       role: req.currentUser.role,
       courseId: lesson.id,
       lessonId: lesson.lesson_id,
-      anomaly: progress.anomaly,
-      reportedPositionSeconds: progress.reportedPositionSeconds,
-      lastAcceptedPositionSeconds: progress.lastAcceptedPositionSeconds,
-      maximumCrediblePositionSeconds: progress.maximumCrediblePositionSeconds,
-      rejectedAttemptCount: progress.rejectedAttemptCount,
-      watchedSeconds: progress.watchedSeconds,
-      durationSeconds: progress.durationSeconds,
+      mediaId: lesson.media_id,
+      appVersion,
+      ...diagnostic.details,
     });
   }
   const response = { ...progress };
@@ -481,6 +499,8 @@ courseRouter.put('/lessons/:lessonId/watch-progress', (req, res) => {
   delete response.maximumCrediblePositionSeconds;
   delete response.rejectedAttemptCount;
   delete response.watchedSeconds;
+  delete response.heartbeatAgeSeconds;
+  delete response.creditedElapsedSeconds;
   res.json(response);
 });
 

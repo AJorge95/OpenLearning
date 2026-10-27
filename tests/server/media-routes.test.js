@@ -470,6 +470,51 @@ test('returns a not-found response if protected media disappears before the stre
   }
 });
 
+test('video read failures log the media and requested byte range without filesystem paths', async () => {
+  const originalCreateReadStream = fsSync.createReadStream;
+  fsSync.createReadStream = () => {
+    const stream = new Readable({ read() {} });
+    stream.bytesRead = 0;
+    process.nextTick(() => stream.destroy(Object.assign(new Error('Injected video read failure.'), { code: 'EIO' })));
+    return stream;
+  };
+  try {
+    const response = await fetch(mediaUrl('/media-range-tests'), {
+      headers: { 'x-test-user': 'admin-media', range: 'bytes=2-5', connection: 'close' },
+    });
+    assert.equal(response.status, 500);
+    await response.json();
+    const log = database.prepare("SELECT details_json FROM system_logs WHERE source = 'media-playback' AND message = 'Video file read failed' ORDER BY id DESC LIMIT 1").get();
+    assert.deepEqual(JSON.parse(log.details_json), { mediaId: 'media-range-tests', courseId: 'course-range-tests',
+      declaredFileBytes: 10, actualFileBytes: 10, rangeStart: 2, rangeEnd: 5, expectedBytes: 4, bytesRead: 0, errorCode: 'EIO' });
+    assert.equal(log.details_json.includes(fixtureDirectory), false);
+  } finally {
+    fsSync.createReadStream = originalCreateReadStream;
+  }
+});
+
+test('video short reads produce delivery diagnostics even without a filesystem error', async () => {
+  const originalCreateReadStream = fsSync.createReadStream;
+  fsSync.createReadStream = () => {
+    const stream = Readable.from([Buffer.from('23')]);
+    stream.bytesRead = 2;
+    return stream;
+  };
+  try {
+    const response = await fetch(mediaUrl('/media-range-tests'), {
+      headers: { 'x-test-user': 'admin-media', range: 'bytes=2-5', connection: 'close' },
+    });
+    await assert.rejects(response.arrayBuffer());
+    const log = database.prepare("SELECT details_json FROM system_logs WHERE source = 'media-playback' AND message = 'Video file ended before all requested bytes were read' ORDER BY id DESC LIMIT 1").get();
+    const details = JSON.parse(log.details_json);
+    assert.equal(details.expectedBytes, 4);
+    assert.equal(details.bytesRead, 2);
+    assert.equal(details.rangeStart, 2);
+  } finally {
+    fsSync.createReadStream = originalCreateReadStream;
+  }
+});
+
 test('falls back to full protected video responses for unsupported ranges and ranged HEAD requests', async () => {
   for (const range of ['bytes=0-1,3-4', 'items=0-1', 'bytes=not-a-range', 'bytes=-']) {
     const response = await fetch(mediaUrl('/media-range-tests'), {

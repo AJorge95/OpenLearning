@@ -142,6 +142,8 @@ export function recordLessonWatchProgress(user, lessonId, position) {
       reportedPositionSeconds: position,
       lastAcceptedPositionSeconds: row.last_position_seconds,
       maximumCrediblePositionSeconds: maximumPosition,
+      heartbeatAgeSeconds: Math.max(0, (now - row.last_heartbeat_at) / 1000),
+      creditedElapsedSeconds: elapsed,
       rejectedAttemptCount: attempts.rejected_seek_count,
       watchedSeconds: attempts.watched_seconds,
     };
