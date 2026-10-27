@@ -564,6 +564,98 @@ test('analytics count each eligible learner once and report course-wide completi
   assert.equal(unassignedDetailsResponse.status, 404, 'details are limited to course members');
 });
 
+test('republished courses keep historical completion visible in staff progress reports', async () => {
+  const courseId = 'progress-compatibility';
+  database.exec(`
+    INSERT INTO courses (id, title, status, visibility, created_by, updated_by, logical_course_id) VALUES
+      ('${courseId}', 'Preserved course progress', 'published', 'public', 'admin-1', 'admin-1', NULL),
+      ('${courseId}-v2', 'Preserved course progress', 'published', 'public', 'admin-1', 'admin-1', '${courseId}'),
+      ('${courseId}-unrelated', 'Unrelated course', 'published', 'public', 'admin-1', 'admin-1', NULL);
+    INSERT INTO course_modules (id, course_id, title, position) VALUES
+      ('${courseId}-old-module', '${courseId}', 'Module', 0),
+      ('${courseId}-new-module', '${courseId}-v2', 'Module', 0),
+      ('${courseId}-other-module', '${courseId}-unrelated', 'Other module', 0);
+    INSERT INTO lessons (id, module_id, title, position, stable_id) VALUES
+      ('${courseId}-old-a', '${courseId}-old-module', 'First lesson', 0, '${courseId}-a'),
+      ('${courseId}-old-b', '${courseId}-old-module', 'Second lesson', 1, '${courseId}-b'),
+      ('${courseId}-new-a', '${courseId}-new-module', 'First lesson', 0, '${courseId}-a'),
+      ('${courseId}-new-b', '${courseId}-new-module', 'Second lesson', 1, '${courseId}-b'),
+      ('${courseId}-other-b', '${courseId}-other-module', 'Unrelated lesson', 0, '${courseId}-b');
+    INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by) VALUES
+      ('${courseId}-version-1', '${courseId}', '${courseId}', 1, 'admin-1'),
+      ('${courseId}-version-2', '${courseId}', '${courseId}-v2', 2, 'admin-1');
+    INSERT INTO course_learning_state (user_id, course_id, target_version_id)
+      VALUES ('learner-active', '${courseId}', '${courseId}-version-1');
+    INSERT INTO enrollments (id, course_id, user_id) VALUES
+      ('${courseId}-active', '${courseId}', 'learner-active'),
+      ('${courseId}-disabled', '${courseId}', 'learner-disabled');
+    INSERT INTO lesson_progress (user_id, lesson_id, completed_at) VALUES
+      ('learner-active', '${courseId}-old-a', '2026-10-01 10:00:00'),
+      ('learner-active', '${courseId}-old-b', '2026-10-01 11:00:00'),
+      ('learner-active', '${courseId}-new-a', '2026-10-02 10:00:00'),
+      ('learner-disabled', '${courseId}-other-b', '2026-10-02 10:00:00'),
+      ('learner-disabled', '${courseId}-old-a', '2026-10-01 12:00:00');
+    INSERT INTO quizzes (id, module_id, course_id, title, stable_id) VALUES
+      ('${courseId}-old-quiz', '${courseId}-old-module', NULL, 'Module quiz', '${courseId}-quiz'),
+      ('${courseId}-new-quiz', '${courseId}-new-module', NULL, 'Module quiz', '${courseId}-quiz'),
+      ('${courseId}-old-exam', NULL, '${courseId}', 'Final exam', '${courseId}-exam'),
+      ('${courseId}-new-exam', NULL, '${courseId}-v2', 'Final exam', '${courseId}-exam');
+    INSERT INTO quizzes (id, module_id, title, stable_id)
+      VALUES ('${courseId}-other-quiz', '${courseId}-other-module', 'Unrelated quiz', '${courseId}-quiz');
+    INSERT INTO quiz_attempts (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json, submitted_at) VALUES
+      ('${courseId}-attempt-1', '${courseId}-old-quiz', 'learner-active', 100, 1, '{}', '[]', '2026-10-01 12:00:00'),
+      ('${courseId}-attempt-2', '${courseId}-new-quiz', 'learner-active', 60, 0, '{}', '[]', '2026-10-02 12:00:00'),
+      ('${courseId}-attempt-3', '${courseId}-old-exam', 'learner-active', 80, 1, '{}', '[]', '2026-10-03 12:00:00'),
+      ('${courseId}-attempt-4', '${courseId}-old-exam', 'learner-disabled', 100, 1, '{}', '[]', '2026-10-03 13:00:00'),
+      ('${courseId}-attempt-5', '${courseId}-other-quiz', 'learner-disabled', 100, 1, '{}', '[]', '2026-10-03 13:00:00');
+  `);
+  try {
+    const learnerResponse = await fetch(apiUrl(`/courses/${courseId}`), { headers: userHeaders('learner-active') });
+    assert.equal((await learnerResponse.json()).course.progress, 100);
+    const response = await fetch(apiUrl(`/manage/courses/${courseId}/analytics`), { headers: userHeaders('admin-1') });
+    const result = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(result.learners.find(row => row.id === 'learner-active').progress, 100);
+    assert.equal(result.learners.find(row => row.id === 'learner-disabled').progress, 50);
+    assert.equal(result.summary.averageProgress, 75);
+    assert.equal(result.summary.completedLearnerCount, 1);
+    assert.deepEqual(result.lessonMetrics.map(row => row.completedCount), [2, 1]);
+    assert.deepEqual(result.quizMetrics.map(row => [row.attempts, row.learnersPassed, row.averageScore]), [[2, 1, 80], [2, 2, 90]]);
+    const detailsResponse = await fetch(apiUrl(`/manage/courses/${courseId}/analytics/learners/learner-active`), { headers: userHeaders('admin-1') });
+    const details = await detailsResponse.json();
+    assert.deepEqual(details.lessonProgress.map(row => row.completed), [true, true]);
+    assert.equal(details.lessonProgress[0].completedAt, '2026-10-02 10:00:00');
+    assert.equal(details.quizProgress[0].passed, true, 'a later failed retry does not erase a prior pass');
+    assert.equal(details.quizProgress[0].latestScore, 60);
+    assert.equal(details.quizProgress[0].latestPassed, false);
+    assert.equal(details.quizProgress[0].attempts, 2);
+    assert.equal(details.quizProgress[1].passed, true, 'course-level exams retain their history too');
+
+    database.prepare('UPDATE course_learning_state SET target_version_id = ? WHERE user_id = ? AND course_id = ?')
+      .run(`${courseId}-version-2`, 'learner-active', courseId);
+    const resetResponse = await fetch(apiUrl(`/manage/courses/${courseId}/analytics`), { headers: userHeaders('admin-1') });
+    const reset = await resetResponse.json();
+    const resetLearner = reset.learners.find(row => row.id === 'learner-active');
+    assert.equal(resetLearner.progress, 25, 'intentional recompletion credits only the current version');
+    assert.equal(reset.summary.completedLearnerCount, 0);
+    assert.deepEqual(reset.lessonMetrics.map(row => row.completedCount), [2, 0]);
+    assert.deepEqual(reset.quizMetrics.map(row => [row.attempts, row.learnersPassed]), [[1, 0], [1, 1]]);
+    const resetDetailsResponse = await fetch(apiUrl(`/manage/courses/${courseId}/analytics/learners/learner-active`), { headers: userHeaders('admin-1') });
+    const resetDetails = await resetDetailsResponse.json();
+    assert.deepEqual(resetDetails.lessonProgress.map(row => row.completed), [true, false]);
+    assert.equal(resetDetails.quizProgress[0].passed, false);
+    assert.equal(resetDetails.quizProgress[0].attempts, 1);
+    assert.equal(resetDetails.quizProgress[1].attempts, 0);
+    const resetLearnerResponse = await fetch(apiUrl(`/courses/${courseId}`), { headers: userHeaders('learner-active') });
+    assert.equal((await resetLearnerResponse.json()).course.progress, resetLearner.progress);
+    assert.equal(database.prepare('SELECT COUNT(*) AS n FROM lesson_progress WHERE lesson_id LIKE ?').get(`${courseId}-%`).n, 5);
+    assert.equal(database.prepare('SELECT COUNT(*) AS n FROM quiz_attempts WHERE quiz_id LIKE ?').get(`${courseId}-%`).n, 5);
+  } finally {
+    database.prepare('DELETE FROM courses WHERE id = ?').run(courseId);
+    database.prepare('DELETE FROM courses WHERE id = ?').run(`${courseId}-unrelated`);
+  }
+});
+
 test('learner-only analytics pages skip course-wide aggregate queries', async () => {
   const fullResponse = await fetch(apiUrl('/manage/courses/course-analytics/analytics?page=1'), {
     headers: userHeaders('admin-1'),

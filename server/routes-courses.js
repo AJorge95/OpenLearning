@@ -510,34 +510,75 @@ courseRouter.get('/manage/courses/:courseId', requireStaff, (req, res) => {
   res.json({ course: getCoursePayload(course, req.currentUser, { includeAnswers: true }) });
 });
 
-function courseAnalyticsLearners(course, learnerRows, lessons, quizzes) {
+// Match learner summaries: carry history across versions by stable identity,
+// scoped to this logical course. Only an explicit target for the current version
+// requires fresh completion; group lessons so repeats never inflate percentages.
+function courseAnalyticsHistory(context, eligibleSql, eligibleParameters) {
+  return {
+    parameters: [...eligibleParameters, context.course.id, context.courseId, context.version?.id ?? null],
+    sql: `WITH eligible AS (${eligibleSql}),
+      analytics_scope AS (SELECT ? AS content_id, ? AS logical_id, ? AS version_id),
+      active_lessons AS (
+        SELECT l.id, COALESCE(l.stable_id, l.id) AS stable_id
+        FROM lessons l JOIN course_modules m ON m.id = l.module_id
+        WHERE m.course_id = (SELECT content_id FROM analytics_scope)
+      ),
+      active_quizzes AS (
+        SELECT q.id, COALESCE(q.stable_id, q.id) AS stable_id, q.required_for_completion
+        FROM quizzes q LEFT JOIN course_modules m ON m.id = q.module_id
+        WHERE COALESCE(m.course_id, q.course_id) = (SELECT content_id FROM analytics_scope)
+      ),
+      lesson_history AS (
+        SELECT lp.user_id, active.id AS lesson_id, MAX(lp.completed_at) AS completed_at
+        FROM eligible e JOIN lesson_progress lp ON lp.user_id = e.id
+        JOIN lessons previous ON previous.id = lp.lesson_id
+        JOIN course_modules m ON m.id = previous.module_id JOIN courses c ON c.id = m.course_id
+        JOIN active_lessons active ON active.stable_id = COALESCE(previous.stable_id, previous.id)
+        CROSS JOIN analytics_scope scope
+        LEFT JOIN course_learning_state state ON state.user_id = lp.user_id AND state.course_id = scope.logical_id
+        WHERE (c.id = scope.logical_id OR c.logical_course_id = scope.logical_id)
+          AND (scope.version_id IS NULL OR state.target_version_id IS NOT scope.version_id OR previous.id = active.id)
+        GROUP BY lp.user_id, active.id
+      ),
+      quiz_history AS (
+        SELECT a.user_id, active.id AS quiz_id, a.score, a.passed, a.submitted_at,
+          a.rowid AS attempt_order, active.required_for_completion
+        FROM eligible e JOIN quiz_attempts a ON a.user_id = e.id
+        JOIN quizzes previous ON previous.id = a.quiz_id
+        LEFT JOIN course_modules m ON m.id = previous.module_id JOIN courses c ON c.id = COALESCE(m.course_id, previous.course_id)
+        JOIN active_quizzes active ON active.stable_id = COALESCE(previous.stable_id, previous.id)
+        CROSS JOIN analytics_scope scope
+        LEFT JOIN course_learning_state state ON state.user_id = a.user_id AND state.course_id = scope.logical_id
+        WHERE (c.id = scope.logical_id OR c.logical_course_id = scope.logical_id)
+          AND (scope.version_id IS NULL OR state.target_version_id IS NOT scope.version_id OR previous.id = active.id)
+      )`,
+  };
+}
+
+function courseAnalyticsLearners(context, learnerRows, lessons, quizzes) {
   const progressByUser = new Map();
   const learnerIds = learnerRows.map((learner) => learner.id);
-  if (learnerIds.length) for (const row of db.prepare(`
-    SELECT lp.user_id, lp.lesson_id, lp.completed_at
-    FROM lesson_progress lp JOIN lessons l ON l.id = lp.lesson_id
-    JOIN course_modules m ON m.id = l.module_id
-    WHERE m.course_id = ? AND lp.user_id IN (${learnerIds.map(() => '?').join(',')})
-  `).all(course.id, ...learnerIds)) {
+  if (!learnerIds.length) return [];
+  const history = courseAnalyticsHistory(context,
+    `SELECT id FROM users WHERE id IN (${learnerIds.map(() => '?').join(',')})`, learnerIds);
+  for (const row of db.prepare(`${history.sql}
+    SELECT user_id, lesson_id, completed_at FROM lesson_history
+  `).all(...history.parameters)) {
     const entries = progressByUser.get(row.user_id) ?? new Map();
     entries.set(row.lesson_id, row.completed_at);
     progressByUser.set(row.user_id, entries);
   }
 
   const quizResultsByUser = new Map();
-  if (learnerIds.length) for (const row of db.prepare(`
-    SELECT a.user_id, a.quiz_id, COUNT(*) AS attempts, MAX(a.score) AS highest_score,
-      MAX(a.passed) AS passed,
-      (SELECT latest.score FROM quiz_attempts latest WHERE latest.user_id = a.user_id AND latest.quiz_id = a.quiz_id
-        ORDER BY latest.submitted_at DESC, latest.rowid DESC LIMIT 1) AS latest_score,
-      (SELECT latest.passed FROM quiz_attempts latest WHERE latest.user_id = a.user_id AND latest.quiz_id = a.quiz_id
-        ORDER BY latest.submitted_at DESC, latest.rowid DESC LIMIT 1) AS latest_passed,
-      MAX(a.submitted_at) AS latest_submitted_at
-    FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-    LEFT JOIN course_modules m ON m.id = q.module_id
-    WHERE COALESCE(m.course_id, q.course_id) = ? AND a.user_id IN (${learnerIds.map(() => '?').join(',')})
-    GROUP BY a.user_id, a.quiz_id
-  `).all(course.id, ...learnerIds)) {
+  for (const row of db.prepare(`${history.sql}, ranked_attempts AS (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY user_id, quiz_id ORDER BY submitted_at DESC, attempt_order DESC) AS recency
+      FROM quiz_history
+    )
+    SELECT user_id, quiz_id, COUNT(*) AS attempts, MAX(score) AS highest_score, MAX(passed) AS passed,
+      MAX(CASE WHEN recency = 1 THEN score END) AS latest_score,
+      MAX(CASE WHEN recency = 1 THEN passed END) AS latest_passed, MAX(submitted_at) AS latest_submitted_at
+    FROM ranked_attempts GROUP BY user_id, quiz_id
+  `).all(...history.parameters)) {
     const entries = quizResultsByUser.get(row.user_id) ?? new Map();
     entries.set(row.quiz_id, row);
     quizResultsByUser.set(row.user_id, entries);
@@ -599,34 +640,27 @@ function courseAnalyticsLearners(course, learnerRows, lessons, quizzes) {
   });
 }
 
-function courseAnalyticsLearnerSummaries(course, learnerRows, lessons, quizzes) {
+function courseAnalyticsLearnerSummaries(context, learnerRows, lessons, quizzes) {
   const learnerIds = learnerRows.map((learner) => learner.id);
   const lessonTotalsByUser = new Map();
   const quizTotalsByUser = new Map();
   if (learnerIds.length) {
     const learnerPlaceholders = learnerIds.map(() => '?').join(',');
-    for (const row of db.prepare(`
-      SELECT lp.user_id, COUNT(*) AS completed_lessons, MAX(lp.completed_at) AS latest_completed_at
-      FROM lesson_progress lp JOIN lessons l ON l.id = lp.lesson_id
-      JOIN course_modules m ON m.id = l.module_id
-      WHERE m.course_id = ? AND lp.user_id IN (${learnerPlaceholders})
-      GROUP BY lp.user_id
-    `).all(course.id, ...learnerIds)) lessonTotalsByUser.set(row.user_id, row);
-    for (const row of db.prepare(`
-      WITH quiz_by_user AS (
-        SELECT a.user_id, a.quiz_id, COUNT(*) AS attempts, MAX(a.passed) AS passed,
-          MAX(q.required_for_completion) AS required_for_completion,
-          MAX(a.submitted_at) AS latest_submitted_at
-        FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-        LEFT JOIN course_modules m ON m.id = q.module_id
-        WHERE COALESCE(m.course_id, q.course_id) = ? AND a.user_id IN (${learnerPlaceholders})
-        GROUP BY a.user_id, a.quiz_id
+    const history = courseAnalyticsHistory(context, `SELECT id FROM users WHERE id IN (${learnerPlaceholders})`, learnerIds);
+    for (const row of db.prepare(`${history.sql}
+      SELECT user_id, COUNT(*) AS completed_lessons, MAX(completed_at) AS latest_completed_at
+      FROM lesson_history GROUP BY user_id
+    `).all(...history.parameters)) lessonTotalsByUser.set(row.user_id, row);
+    for (const row of db.prepare(`${history.sql}, quiz_by_user AS (
+        SELECT user_id, quiz_id, COUNT(*) AS attempts, MAX(passed) AS passed,
+          MAX(required_for_completion) AS required_for_completion, MAX(submitted_at) AS latest_submitted_at
+        FROM quiz_history GROUP BY user_id, quiz_id
       )
       SELECT user_id, SUM(attempts) AS attempts,
         SUM(CASE WHEN required_for_completion = 1 THEN passed ELSE 0 END) AS passed_quizzes,
         MAX(latest_submitted_at) AS latest_submitted_at
       FROM quiz_by_user GROUP BY user_id
-    `).all(course.id, ...learnerIds)) quizTotalsByUser.set(row.user_id, row);
+    `).all(...history.parameters)) quizTotalsByUser.set(row.user_id, row);
   }
 
   const requiredItems = lessons.length + quizzes.filter((quiz) => quiz.required_for_completion).length;
@@ -665,7 +699,7 @@ function courseAnalyticsContext(courseParam) {
   const course = latestPublishedVersion
     ? db.prepare('SELECT * FROM courses WHERE id = ?').get(latestPublishedVersion.storage_course_id)
     : catalogCourse;
-  return { courseId, catalogCourse, course };
+  return { courseId, catalogCourse, course, version: latestPublishedVersion };
 }
 
 function courseAnalyticsContent(courseId) {
@@ -685,7 +719,8 @@ function courseAnalyticsContent(courseId) {
 }
 
 courseRouter.get('/manage/courses/:courseId/analytics/learners/:learnerId', requireStaff, (req, res) => {
-  const { courseId, course } = courseAnalyticsContext(req.params.courseId);
+  const context = courseAnalyticsContext(req.params.courseId);
+  const { courseId, course } = context;
   const learner = db.prepare(`
     SELECT u.id, u.username, u.disabled, e.enrolled_at, g.granted_at
     FROM users u
@@ -695,7 +730,7 @@ courseRouter.get('/manage/courses/:courseId/analytics/learners/:learnerId', requ
   `).get(courseId, courseId, req.params.learnerId);
   if (!learner) fail(404, 'Learner activity not found.', 'not_found');
   const { lessons, quizzes } = courseAnalyticsContent(course.id);
-  const [learnerDetails] = courseAnalyticsLearners(course, [learner], lessons, quizzes);
+  const [learnerDetails] = courseAnalyticsLearners(context, [learner], lessons, quizzes);
   res.json({ lessonProgress: learnerDetails.lessonProgress, quizProgress: learnerDetails.quizProgress });
 });
 
@@ -704,7 +739,8 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
     fail(400, 'Learner-only analytics requests must set learnersOnly=1.', 'validation_error');
   }
   const learnersOnly = req.query.learnersOnly === '1';
-  const { courseId, catalogCourse, course } = courseAnalyticsContext(req.params.courseId);
+  const context = courseAnalyticsContext(req.params.courseId);
+  const { courseId, catalogCourse, course } = context;
   const pageSize = 50;
   const eligibleLearners = `SELECT u.id, u.username, u.disabled FROM (
     SELECT user_id AS id FROM enrollments WHERE course_id = ?
@@ -722,7 +758,7 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
     ORDER BY eligible.username COLLATE NOCASE, eligible.id ASC LIMIT ? OFFSET ?
   `).all(courseId, courseId, courseId, courseId, responsePageSize, offset);
   const { lessons, quizzes } = courseAnalyticsContent(course.id);
-  const learners = courseAnalyticsLearnerSummaries(course, learnerRows, lessons, quizzes);
+  const learners = courseAnalyticsLearnerSummaries(context, learnerRows, lessons, quizzes);
 
   // Page changes need learner details only; avoid recalculating course-wide metrics.
   if (learnersOnly) {
@@ -736,22 +772,16 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
   }
 
   const requiredItemCount = lessons.length + quizzes.filter((quiz) => quiz.required_for_completion).length;
-  const globalProgress = db.prepare(`
-    WITH eligible AS (
-      ${eligibleLearners}
-    ),
+  const history = courseAnalyticsHistory(context, eligibleLearners, [courseId, courseId]);
+  const globalProgress = db.prepare(`${history.sql},
     lesson_by_user AS (
       SELECT lp.user_id, COUNT(*) AS lesson_completions
-      FROM lesson_progress lp JOIN lessons l ON l.id = lp.lesson_id
-      JOIN course_modules m ON m.id = l.module_id JOIN eligible e ON e.id = lp.user_id
-      WHERE m.course_id = ? GROUP BY lp.user_id
+      FROM lesson_history lp GROUP BY lp.user_id
     ),
     quiz_by_user AS (
       SELECT a.user_id, a.quiz_id, COUNT(*) AS attempts, MAX(a.passed) AS passed,
-        MAX(q.required_for_completion) AS required_for_completion
-      FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
-      LEFT JOIN course_modules m ON m.id = q.module_id JOIN eligible e ON e.id = a.user_id
-      WHERE COALESCE(m.course_id, q.course_id) = ? GROUP BY a.user_id, a.quiz_id
+        MAX(a.required_for_completion) AS required_for_completion
+      FROM quiz_history a GROUP BY a.user_id, a.quiz_id
     ),
     quiz_totals_by_user AS (
       SELECT user_id, SUM(CASE WHEN required_for_completion = 1 THEN passed ELSE 0 END) AS passed_quizzes,
@@ -774,40 +804,27 @@ courseRouter.get('/manage/courses/:courseId/analytics', requireStaff, (req, res)
       COALESCE(SUM(lesson_completions), 0) AS lesson_completions,
       COALESCE(SUM(quiz_attempts), 0) AS quiz_attempts
     FROM learner_progress
-  `).get(courseId, courseId, course.id, course.id,
+  `).get(...history.parameters,
     requiredItemCount, requiredItemCount, requiredItemCount, requiredItemCount);
 
-  const lessonCompletionCounts = db.prepare(`
-    WITH eligible AS (
-      ${eligibleLearners}
-    )
+  const lessonCompletionCounts = db.prepare(`${history.sql}
     SELECT l.id, COUNT(lp.user_id) AS completed_count
-    FROM lessons l JOIN course_modules m ON m.id = l.module_id
-    LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id
-    LEFT JOIN eligible e ON e.id = lp.user_id
-    WHERE m.course_id = ? AND (lp.user_id IS NULL OR e.id IS NOT NULL)
+    FROM active_lessons l LEFT JOIN lesson_history lp ON lp.lesson_id = l.id
     GROUP BY l.id
-  `).all(courseId, courseId, course.id);
+  `).all(...history.parameters);
   const lessonCompletionById = new Map(lessonCompletionCounts.map((row) => [row.id, row.completed_count]));
-  const quizTotals = db.prepare(`
-    WITH eligible AS (
-      ${eligibleLearners}
-    ),
+  const quizTotals = db.prepare(`${history.sql},
     learner_quiz AS (
       SELECT a.quiz_id, a.user_id, COUNT(*) AS attempts, MAX(a.passed) AS passed, AVG(a.score) AS average_score
-      FROM quiz_attempts a JOIN quizzes aq ON aq.id = a.quiz_id
-      LEFT JOIN course_modules am ON am.id = aq.module_id JOIN eligible e ON e.id = a.user_id
-      WHERE COALESCE(am.course_id, aq.course_id) = ? GROUP BY a.quiz_id, a.user_id
+      FROM quiz_history a GROUP BY a.quiz_id, a.user_id
     )
     SELECT q.id,
       COALESCE(SUM(lq.attempts), 0) AS attempts,
       COUNT(lq.user_id) AS learners_attempted,
       COALESCE(SUM(lq.passed), 0) AS learners_passed,
       CASE WHEN SUM(lq.attempts) > 0 THEN ROUND(SUM(lq.average_score * lq.attempts) / SUM(lq.attempts)) ELSE NULL END AS average_score
-    FROM quizzes q LEFT JOIN course_modules m ON m.id = q.module_id
-    LEFT JOIN learner_quiz lq ON lq.quiz_id = q.id
-    WHERE COALESCE(m.course_id, q.course_id) = ? GROUP BY q.id
-  `).all(courseId, courseId, course.id, course.id);
+    FROM active_quizzes q LEFT JOIN learner_quiz lq ON lq.quiz_id = q.id GROUP BY q.id
+  `).all(...history.parameters);
   const quizTotalsById = new Map(quizTotals.map((row) => [row.id, row]));
 
   const lessonMetrics = lessons.map((lesson) => {

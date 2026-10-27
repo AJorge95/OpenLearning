@@ -274,7 +274,60 @@ test('the course-group migration coalesces legacy rows and recreates association
     legacyDatabase.close();
   }
 });
-test('watch timing migration preserves existing learner checkpoints', () => {
+test('watch timing migration preserves completed lessons, quiz passes, certificates, and learner checkpoints', async () => {
+  // The previous release differs only by the new advisory watch-credit column.
+  // Build a populated schema-42 snapshot so cascading data loss is observable.
+  const snapshotPath = path.join(fixtureDirectory, 'populated-schema-42.sqlite');
+  await database.backup(snapshotPath);
+  const populatedDatabase = new Database(snapshotPath);
+  populatedDatabase.pragma('foreign_keys = ON');
+  try {
+    populatedDatabase.exec(`
+      ALTER TABLE lesson_watch_progress DROP COLUMN pending_credit_seconds;
+      DELETE FROM schema_migrations WHERE version = 43;
+      INSERT INTO users (id, username, email, password_hash, role) VALUES
+        ('compat-admin', 'compat_admin', 'admin@example.invalid', 'unused', 'admin'),
+        ('compat-learner', 'compat_learner', 'learner@example.invalid', 'unused', 'learner');
+      INSERT INTO courses (id, title, status, created_by, updated_by)
+        VALUES ('compat-course', 'Existing course', 'published', 'compat-admin', 'compat-admin');
+      INSERT INTO course_modules (id, course_id, title) VALUES ('compat-module', 'compat-course', 'Module');
+      INSERT INTO lessons (id, module_id, title, stable_id, position) VALUES
+        ('compat-lesson', 'compat-module', 'Completed lesson', 'compat-lesson', 0),
+        ('compat-video', 'compat-module', 'Partially watched video', 'compat-video', 1);
+      INSERT INTO course_versions (id, course_id, storage_course_id, version_number, published_by)
+        VALUES ('compat-version', 'compat-course', 'compat-course', 1, 'compat-admin');
+      INSERT INTO enrollments (id, course_id, user_id) VALUES ('compat-enrollment', 'compat-course', 'compat-learner');
+      INSERT INTO lesson_progress (user_id, lesson_id, completed_at)
+        VALUES ('compat-learner', 'compat-lesson', '2026-10-01 10:00:00');
+      INSERT INTO quizzes (id, module_id, title, stable_id) VALUES ('compat-quiz', 'compat-module', 'Passed quiz', 'compat-quiz');
+      INSERT INTO quiz_attempts (id, quiz_id, user_id, score, passed, answers_json, question_snapshot_json, submitted_at)
+        VALUES ('compat-attempt', 'compat-quiz', 'compat-learner', 100, 1, '{}', '[]', '2026-10-01 11:00:00');
+      INSERT INTO course_learning_state (user_id, course_id, deadline_at)
+        VALUES ('compat-learner', 'compat-course', '2026-11-01 00:00:00');
+      INSERT INTO course_certificates
+        (id, certificate_code, user_id, course_id, course_version_id, recipient_name, course_title, platform_name, issued_at)
+        VALUES ('compat-certificate', 'COMPAT-001', 'compat-learner', 'compat-course', 'compat-version',
+          'Existing learner', 'Existing course', 'OpenLearning', '2026-10-01 12:00:00');
+      INSERT INTO lesson_watch_progress
+        (user_id, lesson_id, watched_until_seconds, duration_seconds, last_position_seconds, last_heartbeat_at)
+        VALUES ('compat-learner', 'compat-video', 2011, 4724.544, 1981, 12345);
+    `);
+    const preservedTables = ['users', 'courses', 'course_versions', 'enrollments', 'lessons', 'lesson_progress',
+      'quiz_attempts', 'course_learning_state', 'course_certificates'];
+    const before = preservedTables.map(table => populatedDatabase.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all());
+    migrateDatabase(populatedDatabase);
+    migrateDatabase(populatedDatabase);
+    assert.deepEqual(preservedTables.map(table => populatedDatabase.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()), before);
+    assert.deepEqual(populatedDatabase.pragma('foreign_key_check'), []);
+    assert.equal(populatedDatabase.pragma('quick_check', { simple: true }), 'ok');
+    assert.equal(populatedDatabase.prepare('SELECT watched_until_seconds FROM lesson_watch_progress').get().watched_until_seconds, 2011);
+    assert.equal(populatedDatabase.prepare('SELECT pending_credit_seconds FROM lesson_watch_progress').get().pending_credit_seconds, 0);
+  } finally {
+    populatedDatabase.close();
+  }
+});
+
+test('watch timing migration preserves sparse historical learner checkpoints', () => {
   const legacyDatabase = new Database(':memory:');
   try {
     legacyDatabase.exec(`
