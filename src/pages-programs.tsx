@@ -1001,13 +1001,14 @@ export function AdminCompetenciesPage() {
     </form>
     {loading ? <div className="page-loading" role="status">Loading competencies…</div> : loadError ? null : items.length ? <>
       <div className="competency-admin-list">{items.map((item) => <article key={item.id} className="competency-admin-row"><div><h2>{item.title}</h2><p>{item.description || 'No description'}</p></div><span className={`program-status ${item.active ? 'published' : 'archived'}`}>{item.active ? 'Active' : 'Inactive'}</span><Button variant="secondary" disabled={saving || savingId !== null} aria-busy={savingId === item.id} aria-label={savingId === item.id ? `Saving ${item.title}` : `${item.active ? 'Deactivate' : 'Reactivate'} ${item.title}`} onClick={() => void toggle(item)}>{savingId === item.id ? 'Saving…' : item.active ? 'Deactivate' : 'Reactivate'}</Button></article>)}</div>
-      <CompetencyAdminPagination page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => void load(nextPage)} />
+      {/* Mutation responses may reposition an item; prevent paging until that response is applied. */}
+      <CompetencyAdminPagination page={page} pageSize={pageSize} total={total} busy={loading || saving || savingId !== null} onChange={(nextPage) => void load(nextPage)} />
     </> : appliedQuery ? <EmptyState title="No competencies match" detail="Try a different competency name or description, or clear your search." action={<Button type="button" variant="secondary" onClick={clearSearch}>Clear search</Button>} /> : <EmptyState title="No competencies yet" detail="Add competencies before mapping courses to them." />}
   </div>;
 }
 
-function CompetencyAdminPagination({ page, pageSize, total, loading, onChange }: {
-  page: number; pageSize: number; total: number; loading: boolean; onChange: (page: number) => void;
+function CompetencyAdminPagination({ page, pageSize, total, busy, onChange }: {
+  page: number; pageSize: number; total: number; busy: boolean; onChange: (page: number) => void;
 }) {
   if (total <= pageSize) return null;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -1016,9 +1017,9 @@ function CompetencyAdminPagination({ page, pageSize, total, loading, onChange }:
   return <nav className="competency-admin-pagination" aria-label="Competency pages">
     <span role="status" aria-live="polite">Showing {firstItem}–{lastItem} of {total} competencies</span>
     <div>
-      <Button variant="secondary" disabled={loading || page <= 1} onClick={() => onChange(page - 1)}>Previous</Button>
+      <Button variant="secondary" disabled={busy || page <= 1} onClick={() => onChange(page - 1)}>Previous</Button>
       <span>Page {page} of {pageCount}</span>
-      <Button variant="secondary" disabled={loading || page >= pageCount} onClick={() => onChange(page + 1)}>Next</Button>
+      <Button variant="secondary" disabled={busy || page >= pageCount} onClick={() => onChange(page + 1)}>Next</Button>
     </div>
   </nav>;
 }
