@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import { FinalExamImportFormatError, getFinalExamImportReadErrorMessage, parseDelimitedFinalExamFile, parseFinalExamImportRows } from '../../src/final-exam-import.ts';
+import { formatCountLabel } from '../../src/count-label.ts';
 
 test('CSV import preserves commas and escaped quotes before validating answer columns', () => {
   const rows = parseDelimitedFinalExamFile([
@@ -117,4 +118,14 @@ test('spreadsheet validation errors are announced when the preview appears', () 
   const pageSource = fs.readFileSync(new URL('../../src/pages-manage.tsx', import.meta.url), 'utf8');
 
   assert.match(pageSource, /className="final-exam-import-issues"[^>]*role="alert"/);
+});
+
+test('final exam import preview labels use singular or plural counts', () => {
+  const pageSource = fs.readFileSync(new URL('../../src/pages-manage.tsx', import.meta.url), 'utf8');
+
+  assert.match(pageSource, /Add \$\{formatCountLabel\(importPreview\.questions\.length, 'question', 'questions'\)\} to bank/, 'the import button should use a count-aware label');
+  assert.match(pageSource, /And \{formatCountLabel\(importPreview\.errors\.length - 8, 'additional issue', 'additional issues'\)\}\./, 'the remaining-issues hint should use a count-aware label');
+  assert.equal(formatCountLabel(1, 'question', 'questions'), '1 question');
+  assert.equal(formatCountLabel(2, 'question', 'questions'), '2 questions');
+  assert.equal(formatCountLabel(1, 'additional issue', 'additional issues'), '1 additional issue');
 });
