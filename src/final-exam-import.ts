@@ -75,7 +75,7 @@ export function parseFinalExamImportRows(rows: readonly (readonly unknown[])[]):
   if (choiceColumns.length < 2) errors.push('Add at least two answer columns, such as “Answer 1” and “Answer 2”.');
   const duplicateChoiceNumber = choiceColumns.find((choice, index) => choiceColumns[index - 1]?.number === choice.number);
   if (duplicateChoiceNumber) errors.push(`There is more than one answer column for answer ${duplicateChoiceNumber.number}.`);
-  if (headers.some((header) => /^(?:answer|choice|option)\s*(?:[7-9]\d*|[g-z])$/.test(header))) {
+  if (headers.some((header) => /^(?:answer|choice|option)\s*(?:0|[7-9]|\d{2,}|[g-z])$/.test(header))) {
     errors.push('Final exam questions can have at most six answer columns.');
   }
   if (errors.length) return { questions: [], errors, skippedRows: 0 };

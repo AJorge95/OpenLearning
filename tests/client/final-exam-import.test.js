@@ -60,6 +60,16 @@ test('question imports are capped at 100 valid rows', () => {
   assert.deepEqual(preview.errors, ['This import has 101 valid questions. Import up to 100 questions at a time.']);
 });
 
+test('question imports reject unsupported two-digit answer columns', () => {
+  const preview = parseFinalExamImportRows([
+    ['Question', 'Answer 1', 'Answer 2', 'Answer 10', 'Correct Answer'],
+    ['Question with an extra answer column', 'Yes', 'No', 'Maybe', '1'],
+  ]);
+
+  assert.deepEqual(preview.questions, []);
+  assert.deepEqual(preview.errors, ['Final exam questions can have at most six answer columns.']);
+});
+
 test('delimited imports reject an unclosed quoted cell', () => {
   assert.throws(
     () => parseDelimitedFinalExamFile('Question,Answer 1\n"unfinished,answer', ','),
