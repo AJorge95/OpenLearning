@@ -370,7 +370,7 @@ export function LearningPathsPage() {
   }
 
   function changePathPage(page: number) {
-    if (loading || assignmentBusy || page < 1) return;
+    if (loading || saving || assignmentBusy || page < 1) return;
     setPendingPathArchive(null);
     clearAssignmentPanel();
     void load(page);
@@ -676,9 +676,9 @@ export function LearningPathsPage() {
       </div>
       {pathTotal > pathPageSize && <nav className="log-pagination path-list-pagination" aria-label="Learning path pages" aria-busy={loading}>
         <p role="status" aria-live="polite" aria-atomic="true">Showing {(pathPage - 1) * pathPageSize + 1}–{Math.min(pathPage * pathPageSize, pathTotal)} of {pathTotal} learning paths</p>
-        <div><Button variant="secondary" disabled={pathPage <= 1 || loading || assignmentBusy} onClick={() => changePathPage(pathPage - 1)}>Previous</Button>
+        <div><Button variant="secondary" disabled={pathPage <= 1 || loading || saving || assignmentBusy} onClick={() => changePathPage(pathPage - 1)}>Previous</Button>
           <span>Page {pathPage} of {Math.max(1, Math.ceil(pathTotal / pathPageSize))}</span>
-          <Button variant="secondary" disabled={!pathHasMore || loading || assignmentBusy} onClick={() => changePathPage(pathPage + 1)}>Next</Button></div>
+          <Button variant="secondary" disabled={!pathHasMore || loading || saving || assignmentBusy} onClick={() => changePathPage(pathPage + 1)}>Next</Button></div>
       </nav>}
     </> : loadFailed ? null : <EmptyState title={emptyPathState.title} detail={emptyPathState.detail} action={emptyPathAction} />}
     {pendingAssignmentRemoval && assignmentPath === pendingAssignmentRemoval.pathId && pendingRemovalPath && pendingRemovalLearner && <ConfirmationDialog {...pathAssignmentRemovalConfirmation(pendingAssignmentRemoval.learnerUsername, pendingAssignmentRemoval.pathTitle)} confirmLabel="Remove assignment" onCancel={() => setPendingAssignmentRemoval(null)} onConfirm={() => void confirmAssignmentRemoval()} />}

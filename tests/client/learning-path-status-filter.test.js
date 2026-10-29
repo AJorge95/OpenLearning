@@ -36,3 +36,11 @@ test('same-filter pagination keeps the current learning-path results visible whi
   assert.match(changePathPage, /void load\(page\);/);
   assert.doesNotMatch(changePathPage, /setPaths\(\[\]\)|setPathTotal\(0\)|setPathHasMore\(false\)/);
 });
+
+test('learning-path pagination stays disabled while a path mutation is pending', () => {
+  const changePathPage = handlers.get('changePathPage');
+  assert.ok(changePathPage, 'expected the learning-path page handler');
+  assert.match(changePathPage, /if \(loading \|\| saving \|\| assignmentBusy \|\| page < 1\) return/);
+  assert.match(source, /disabled=\{pathPage <= 1 \|\| loading \|\| saving \|\| assignmentBusy\}/);
+  assert.match(source, /disabled=\{!pathHasMore \|\| loading \|\| saving \|\| assignmentBusy\}/);
+});
