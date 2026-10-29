@@ -3,7 +3,7 @@ import test from 'node:test';
 import { summarizeCourseProgress } from '../../src/course-progress.ts';
 
 const lesson = (id, completed) => ({ id, completed });
-const quiz = (id, passed) => ({ id, passed });
+const quiz = (id, passed, requiredForCompletion = true) => ({ id, passed, requiredForCompletion });
 
 test('course progress counts completed lessons and passed quizzes as activities', () => {
   const modules = [
@@ -25,6 +25,24 @@ test('course progress reaches completion only when every lesson and quiz is comp
     completedLessons: 1,
     progress: 100,
     completed: true,
+  });
+});
+
+test('optional module quizzes do not affect course progress or completion', () => {
+  assert.deepEqual(summarizeCourseProgress([
+    { lessons: [lesson('lesson-1', true)], quiz: quiz('practice-quiz', false, false) },
+  ]), {
+    completedLessons: 1,
+    progress: 100,
+    completed: true,
+  });
+
+  assert.deepEqual(summarizeCourseProgress([
+    { lessons: [], quiz: quiz('practice-quiz', false, false) },
+  ]), {
+    completedLessons: 0,
+    progress: 0,
+    completed: false,
   });
 });
 
