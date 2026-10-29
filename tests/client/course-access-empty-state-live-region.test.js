@@ -9,7 +9,7 @@ const pageEnd = source.indexOf('\nexport function AdminUsersPage()', pageStart);
 const page = source.slice(pageStart, pageEnd);
 
 test('course-access empty results are announced without duplicating the visible recovery content', () => {
-  assert.match(page, /const hasEmptyAccessResult = !failedRequest && users\.length === 0;/);
+  assert.match(page, /const hasEmptyAccessResult = !loading && !failedRequest && users\.length === 0;/);
   assert.match(page, /\{hasEmptyAccessResult && <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">\{appliedQuery \? 'No learners match that search\.' : 'No learner accounts are available\.'\}<\/p>\}/);
-  assert.match(page, /!failedRequest && <div className="access-empty">/);
+  assert.match(page, /!failedRequest && !loading && <div className="access-empty">/);
 });

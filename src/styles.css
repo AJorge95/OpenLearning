@@ -112,6 +112,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .quiz-editor .text-action:hover:not(:disabled), .quiz-editor .text-action:focus-visible { color: HighlightText; background: Highlight; outline-color: Highlight; }
   .quiz-editor .text-action:disabled { color: GrayText; }
   .app-select-option.selected .app-select-option-indicator { color: HighlightText; border: 1px solid HighlightText; background: Highlight; }
+  .access-row-actions .text-action[aria-disabled="true"], .log-pagination .button[aria-disabled="true"] { color: GrayText; opacity: 1; }
 }
 a { color: inherit; text-decoration: none; }
 img { display: block; max-width: 100%; }
@@ -1097,6 +1098,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .access-page .page-heading p { font-size: 14px; margin-top: 8px; }
 .access-search { display: flex; gap: 10px; align-items: center; max-width: 680px; height: 48px; padding: 0 9px 0 14px; border: 1px solid var(--line-strong); border-radius: 4px; margin-bottom: 20px; color: #666b7b; }
 .access-search input { font-size: 14px; }
+.access-refresh-status { margin: -8px 0 12px; color: var(--muted); font-size: 12px; }
 .access-list { border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
 .access-rows { padding: 0; margin: 0; list-style: none; }
 .access-list-head, .access-row { display: grid; grid-template-columns: minmax(200px, 1.5fr) minmax(140px, .7fr) minmax(130px, .6fr); align-items: center; gap: 18px; padding: 0 18px; }
@@ -1109,6 +1111,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .access-user strong { font-size: 13px; font-weight: 630; }
 .access-user small { color: var(--muted); font-size: 11px; }
 .access-row-actions { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 4px; }
+.access-row-actions .text-action[aria-disabled="true"] { cursor: progress; opacity: .55; }
 .account-detail-card-heading .account-overview-title { margin: 0; color: var(--muted); font-size: 11px; font-weight: 450; line-height: 1.4; overflow-wrap: anywhere; }
 .access-state { color: var(--muted); font-size: 12px; }
 .access-state-granted { color: var(--green); font-weight: 650; }
@@ -1260,6 +1263,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .log-pagination > div { display: flex; align-items: center; gap: 12px; }
 /* Keep shared staff result paging easy to activate in dense and narrow layouts. */
 .log-pagination .button { min-height: 40px; padding: 0 12px; font-size: 12px; }
+.log-pagination .button[aria-disabled="true"] { cursor: progress; opacity: .55; }
 
 @media (max-width: 720px) {
   .log-filters { grid-template-columns: 1fr; }

@@ -37,9 +37,12 @@ test('the course access row keeps disabled state and exposes only its valid acti
 
   assert.ok(start >= 0 && end > start, 'expected the course access learner row');
   assert.match(row, /learner\.disabled && <span className="muted">Account disabled<\/span>/);
-  assert.match(row, /assignmentAction && <button[\s\S]*?disabled=\{savingIds\.has\(learner\.id\)\}/);
+  assert.match(row, /assignmentAction && <button[\s\S]*?aria-disabled=\{savingIds\.has\(learner\.id\)\}/);
+  assert.match(row, /onClick=\{\(\) => toggle\(learner\)\}/);
   assert.match(row, /aria-label=\{`\$\{actionLabel\} for \$\{learner\.username\} on \$\{course\?\.title \|\| 'this course'\}`\}/);
   assert.match(row, /courseAccessStatusLabel\(course \|\| \{ visibility: 'public' \}, learner\)/);
   assert.match(row, /courseAccessActionLabel\(assignmentAction, learner\.accessViaPath\)/);
   assert.match(styles, /\.access-row-actions\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/);
+  assert.match(styles, /\.access-row-actions \.text-action\[aria-disabled="true"\]\s*\{[^}]*cursor:\s*progress;[^}]*opacity:\s*\.55;/);
+  assert.match(styles, /\.access-row-actions \.text-action\[aria-disabled="true"\], \.log-pagination \.button\[aria-disabled="true"\]\s*\{[^}]*color:\s*GrayText;[^}]*opacity:\s*1;/);
 });
