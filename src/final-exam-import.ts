@@ -132,10 +132,12 @@ export function parseDelimitedFinalExamFile(text: string, delimiter: ',' | '\t')
   let row: string[] = [];
   let cell = '';
   let quoted = false;
+  let afterQuote = false;
   const appendCell = () => {
     if (row.length >= MAX_IMPORT_COLUMNS) throw new FinalExamImportFormatError(TOO_MANY_IMPORT_COLUMNS);
     row.push(cell);
     cell = '';
+    afterQuote = false;
   };
   const appendRow = () => {
     // A small CSV can still contain millions of short rows; bound allocations before adding each row.
@@ -151,9 +153,20 @@ export function parseDelimitedFinalExamFile(text: string, delimiter: ',' | '\t')
       if (char === '"' && text[index + 1] === '"') {
         cell += '"';
         index += 1;
-      } else if (char === '"') quoted = false;
-      else cell += char;
+      } else if (char === '"') {
+        quoted = false;
+        afterQuote = true;
+      } else cell += char;
+    } else if (afterQuote) {
+      if (char === delimiter) appendCell();
+      else if (char === '\n' || char === '\r') {
+        if (char === '\r' && text[index + 1] === '\n') index += 1;
+        appendRow();
+      } else if (char !== ' ') {
+        throw new FinalExamImportFormatError('The CSV or TSV file has unexpected characters after a quoted cell.');
+      }
     } else if (char === '"' && cell.length === 0) quoted = true;
+    else if (char === '"') throw new FinalExamImportFormatError('The CSV or TSV file has a quote inside an unquoted cell.');
     else if (char === delimiter) appendCell();
     else if (char === '\n' || char === '\r') {
       if (char === '\r' && text[index + 1] === '\n') index += 1;

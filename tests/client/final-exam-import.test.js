@@ -67,6 +67,22 @@ test('delimited imports reject an unclosed quoted cell', () => {
   );
 });
 
+test('delimited imports reject text after a quoted cell instead of merging it into the value', () => {
+  assert.throws(
+    () => parseDelimitedFinalExamFile('Question,Answer 1,Answer 2,Correct Answer\n"What?" typo,Yes,No,1', ','),
+    (cause) => cause instanceof FinalExamImportFormatError
+      && cause.message === 'The CSV or TSV file has unexpected characters after a quoted cell.',
+  );
+});
+
+test('delimited imports reject quotes embedded in an unquoted cell', () => {
+  assert.throws(
+    () => parseDelimitedFinalExamFile('Question,Answer 1,Answer 2,Correct Answer\nWhat" now?,Yes,No,1', ','),
+    (cause) => cause instanceof FinalExamImportFormatError
+      && cause.message === 'The CSV or TSV file has a quote inside an unquoted cell.',
+  );
+});
+
 test('delimited imports stop before materializing more than 1,000 rows', () => {
   const csv = `Question,Answer 1,Answer 2,Correct Answer\n${'\n'.repeat(1000)}`;
 
