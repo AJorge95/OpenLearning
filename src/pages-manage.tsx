@@ -291,11 +291,13 @@ export function CourseManagementPage() {
   }
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (Object.keys(busyActionsRef.current).length > 0) return;
     const nextQuery = query.trim();
     setAppliedQuery(nextQuery);
     void load(1, { query: nextQuery, status });
   }
   function changeCourseStatusFilter(nextStatus: string) {
+    if (Object.keys(busyActionsRef.current).length > 0) return;
     const nextQuery = query.trim();
     const searchChanged = nextQuery !== appliedQuery;
     setQuery(nextQuery);
@@ -310,6 +312,7 @@ export function CourseManagementPage() {
   }
   // The empty-state action disappears after clearing, so return keyboard focus to the persistent input.
   function clearCourseSearch() {
+    if (Object.keys(busyActionsRef.current).length > 0) return;
     setQuery('');
     setAppliedQuery('');
     setPage(1);
@@ -369,15 +372,17 @@ export function CourseManagementPage() {
           ? { title: 'No archived courses', detail: 'Courses you archive will appear here.' }
           : { title: 'Your course catalog is ready', detail: 'Create a course, add modules and video lessons, then publish it for learners.' };
   const hasEmptyCourseResult = !loading && !failedRequest && courses.length === 0;
+  // Row mutations reload the page and filters they started from, so keep list navigation steady until they finish.
+  const hasPendingCourseAction = Object.keys(busyActions).length > 0;
   const emptyCourseAction = appliedQuery
-    ? <Button type="button" variant="secondary" onClick={clearCourseSearch}>Clear search</Button>
+    ? <Button type="button" variant="secondary" onClick={clearCourseSearch} disabled={hasPendingCourseAction}>Clear search</Button>
     : status === 'all' && <Link className="button button-primary" to="/manage/courses/new"><Plus size={17} aria-hidden="true" />Create first course</Link>;
   return <div className="management-page">
     <PageHeading title="Courses" action={<div className="analytics-heading-actions"><Link className="button button-secondary" to="/manage/course-groups"><UsersRound size={16} aria-hidden="true" />Course groups</Link><Link className="button button-primary" to="/manage/courses/new"><Plus size={18} aria-hidden="true" />Create course</Link></div>} />
     <div className="management-tabs" role="group" aria-label="Filter courses by status">
-      {tabs.map((tab) => <button type="button" key={tab.value} aria-pressed={status === tab.value} className={status === tab.value ? 'active' : ''} onClick={() => changeCourseStatusFilter(tab.value)}>{tab.label}</button>)}
+      {tabs.map((tab) => <button type="button" key={tab.value} aria-pressed={status === tab.value} className={status === tab.value ? 'active' : ''} onClick={() => changeCourseStatusFilter(tab.value)} disabled={hasPendingCourseAction}>{tab.label}</button>)}
     </div>
-    <form role="search" aria-label="Search courses" className="management-search" onSubmit={submitSearch}><Search size={19} aria-hidden="true" /><input ref={courseSearchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses" aria-label="Search courses" maxLength={120} /><button type="submit">Search</button></form>
+    <form role="search" aria-label="Search courses" className="management-search" onSubmit={submitSearch}><Search size={19} aria-hidden="true" /><input ref={courseSearchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses" aria-label="Search courses" maxLength={120} disabled={hasPendingCourseAction} /><button type="submit" disabled={hasPendingCourseAction}>Search</button></form>
     {error && (failedRequest
       ? <div className="course-list-error"><Notice>{error}</Notice><Button type="button" variant="secondary" onClick={() => { void load(failedRequest.page, failedRequest); }}>Try again</Button></div>
       : <Notice>{error}</Notice>)}
@@ -395,7 +400,7 @@ export function CourseManagementPage() {
         </tr>;
       })}
     </tbody></table></div> : <EmptyState title={emptyCourseState.title} detail={emptyCourseState.detail} action={emptyCourseAction} />}
-    {!loading && !failedRequest && total > 0 && <LogPagination ariaLabel="Course list pages" page={page} pageSize={pageSize} total={total} loading={loading} onChange={(nextPage) => load(nextPage)} />}
+    {!loading && !failedRequest && total > 0 && <LogPagination ariaLabel="Course list pages" page={page} pageSize={pageSize} total={total} loading={loading || hasPendingCourseAction} onChange={(nextPage) => { if (Object.keys(busyActionsRef.current).length === 0) void load(nextPage); }} />}
     {pendingDeleteCourse && <ConfirmationDialog {...courseDeletionConfirmation(pendingDeleteCourse.title)} confirmLabel="Delete course" onCancel={() => setPendingDeleteCourse(null)} onConfirm={() => { const courseToDelete = pendingDeleteCourse; setPendingDeleteCourse(null); if (courseToDelete) void deleteCourse(courseToDelete, true); }} />}
   </div>;
 }
