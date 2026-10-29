@@ -111,7 +111,6 @@ export function AdminBackupsPage() {
   const [pendingDelete, setPendingDelete] = useState<BackupJob | null>(null);
   const [pendingRestore, setPendingRestore] = useState<BackupRun | null>(null);
   const [restoringRunId, setRestoringRunId] = useState<string | null>(null);
-  const requestActiveRef = useRef(false);
   const restoreActiveRef = useRef(false);
   const backupJobsHeadingRef = useRef<HTMLHeadingElement>(null);
   const hasUnsavedChanges = Boolean(editor && editorDirty);
@@ -138,6 +137,8 @@ export function AdminBackupsPage() {
 
   useEffect(() => {
     let active = true;
+    // Keep this gate with the effect instance: StrictMode replays effects after cleanup while preserving refs.
+    let requestActive = false;
     dashboardMountedRef.current = true;
     const controllers = new Set<AbortController>();
     const isVisible = () => document.visibilityState === 'visible';
@@ -145,8 +146,8 @@ export function AdminBackupsPage() {
       // A hidden settings tab cannot show a fresh result; resume with one read when it returns.
       if (!active || !isVisible()) return;
       if (restoreActiveRef.current) return;
-      if (requestActiveRef.current) return;
-      requestActiveRef.current = true;
+      if (requestActive) return;
+      requestActive = true;
       const requestRevision = dashboardRevisionRef.current + 1;
       dashboardRevisionRef.current = requestRevision;
       const controller = new AbortController();
@@ -165,7 +166,7 @@ export function AdminBackupsPage() {
           setLoading(false);
         }
       } finally {
-        requestActiveRef.current = false;
+        requestActive = false;
         controllers.delete(controller);
       }
     };
