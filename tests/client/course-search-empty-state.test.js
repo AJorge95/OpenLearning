@@ -19,10 +19,10 @@ test('filtered empty course searches can be cleared and reload the selected stat
   const page = courseManagementPage();
 
   assert.match(page, /const courseSearchInputRef = useRef<HTMLInputElement>\(null\)/);
-  assert.match(page, /function clearCourseSearch\(\) \{\s*setQuery\(''\);\s*setAppliedQuery\(''\);\s*setPage\(1\);\s*void load\(1, \{ query: '', status \}\);\s*courseSearchInputRef\.current\?\.focus\(\);\s*\}/);
+  assert.match(page, /function clearCourseSearch\(\) \{\s*if \(Object\.keys\(busyActionsRef\.current\)\.length > 0\) return;\s*setQuery\(''\);\s*setAppliedQuery\(''\);\s*setPage\(1\);\s*void load\(1, \{ query: '', status \}\);\s*courseSearchInputRef\.current\?\.focus\(\);\s*\}/);
   assert.match(page, /<input ref=\{courseSearchInputRef\} type="search" value=\{query\}/);
   assert.match(page, /aria-label="Search courses" maxLength=\{120\}/);
-  assert.match(page, /const emptyCourseAction = appliedQuery\s*\?\s*<Button type="button" variant="secondary" onClick=\{clearCourseSearch\}>Clear search<\/Button>/);
+  assert.match(page, /const emptyCourseAction = appliedQuery\s*\?\s*<Button type="button" variant="secondary" onClick=\{clearCourseSearch\} disabled=\{hasPendingCourseAction\}>Clear search<\/Button>/);
   assert.match(page, /<EmptyState title=\{emptyCourseState\.title\} detail=\{emptyCourseState\.detail\} action=\{emptyCourseAction\} \/>/);
 });
 
@@ -37,6 +37,6 @@ test('the empty catalog action identifies the first course while the page action
   const page = courseManagementPage();
   const compactPage = page.replace(/\s+/g, ' ');
 
-  assert.match(compactPage, /const emptyCourseAction = appliedQuery \? <Button type="button" variant="secondary" onClick=\{clearCourseSearch\}>Clear search<\/Button> : status === 'all' && <Link className="button button-primary" to="\/manage\/courses\/new"><Plus size=\{17\} aria-hidden="true" \/>Create first course<\/Link>;/);
+  assert.match(compactPage, /const emptyCourseAction = appliedQuery \? <Button type="button" variant="secondary" onClick=\{clearCourseSearch\} disabled=\{hasPendingCourseAction\}>Clear search<\/Button> : status === 'all' && <Link className="button button-primary" to="\/manage\/courses\/new"><Plus size=\{17\} aria-hidden="true" \/>Create first course<\/Link>;/);
   assert.match(compactPage, /<PageHeading title="Courses" action=\{<div className="analytics-heading-actions">.*<Link className="button button-primary" to="\/manage\/courses\/new"><Plus size=\{18\} aria-hidden="true" \/>Create course<\/Link><\/div>\} \/>/);
 });
