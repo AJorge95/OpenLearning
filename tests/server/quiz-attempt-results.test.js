@@ -465,3 +465,42 @@ test('quiz submission returns aggregate results only and requires an answer for 
   assert.equal(passedAttempt.passed, true);
   assert.equal(Object.hasOwn(passedAttempt, 'questions'), false);
 });
+
+test('quiz submission rejects questions without exactly one correct answer', async () => {
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const baseUrl = `http://127.0.0.1:${address.port}/api`;
+  const headers = { 'x-test-user': 'learner-2', connection: 'close', 'content-type': 'application/json' };
+  const countAttempts = () => database.prepare('SELECT COUNT(*) AS count FROM quiz_attempts WHERE user_id = ?')
+    .get('learner-2').count;
+  const initialAttemptCount = countAttempts();
+  const submit = () => fetch(`${baseUrl}/quizzes/quiz-1/attempts`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ answers: { 'question-1': 'choice-1' } }),
+  });
+
+  try {
+    database.prepare('UPDATE quiz_choices SET is_correct = 0 WHERE id = ?').run('choice-1');
+    const noCorrectAnswer = await submit();
+    assert.equal(noCorrectAnswer.status, 409);
+    assert.deepEqual(await noCorrectAnswer.json(), {
+      error: 'The quiz contains an incomplete question.',
+      code: 'quiz_incomplete',
+    });
+    assert.equal(countAttempts(), initialAttemptCount);
+
+    database.prepare('UPDATE quiz_choices SET is_correct = 1 WHERE id = ?').run('choice-1');
+    database.prepare('UPDATE quiz_choices SET is_correct = 1 WHERE id = ?').run('choice-2');
+    const multipleCorrectAnswers = await submit();
+    assert.equal(multipleCorrectAnswers.status, 409);
+    assert.deepEqual(await multipleCorrectAnswers.json(), {
+      error: 'The quiz contains an incomplete question.',
+      code: 'quiz_incomplete',
+    });
+    assert.equal(countAttempts(), initialAttemptCount);
+  } finally {
+    database.prepare('UPDATE quiz_choices SET is_correct = 1 WHERE id = ?').run('choice-1');
+    database.prepare('UPDATE quiz_choices SET is_correct = 0 WHERE id = ?').run('choice-2');
+  }
+});

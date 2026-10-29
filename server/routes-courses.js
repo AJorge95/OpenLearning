@@ -2191,6 +2191,9 @@ courseRouter.post('/quizzes/:quizId/attempts', quizAttemptLimiter, (req, res) =>
     const snapshot = [];
     for (const question of questions) {
       const choices = choicesByQuestion.get(question.id) ?? [];
+      if (choices.length < 2 || choices.filter((choice) => choice.is_correct).length !== 1) {
+        fail(409, 'The quiz contains an incomplete question.', 'quiz_incomplete');
+      }
       const answerId = answers[question.id];
       const selected = choices.find((choice) => choice.id === answerId);
       if (!selected) fail(400, 'One of the selected answers is invalid.', 'invalid_answer');
