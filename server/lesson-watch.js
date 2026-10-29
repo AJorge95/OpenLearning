@@ -25,7 +25,8 @@ const beginWatchStatement = db.prepare(`INSERT INTO lesson_watch_progress
   ON CONFLICT(user_id, lesson_id) DO UPDATE SET
     last_position_seconds = CASE WHEN EXISTS (SELECT 1 FROM lesson_progress
       WHERE user_id = lesson_watch_progress.user_id AND lesson_id = lesson_watch_progress.lesson_id)
-      OR lesson_watch_progress.watched_until_seconds >= lesson_watch_progress.duration_seconds - 0.5
+      OR (lesson_watch_progress.watched_until_seconds > 0
+        AND lesson_watch_progress.watched_until_seconds >= lesson_watch_progress.duration_seconds - 0.5)
       THEN 0 ELSE lesson_watch_progress.watched_until_seconds END,
     duration_seconds = excluded.duration_seconds,
     pending_credit_seconds = 0,
@@ -77,6 +78,11 @@ function watchRecord(userId, lessonId) {
   return readWatchRecordStatement.get(userId, lessonId);
 }
 
+function videoWatchIsComplete(watchedUntilSeconds, durationSeconds) {
+  return durationSeconds > 0 && watchedUntilSeconds > 0
+    && watchedUntilSeconds >= durationSeconds - completionToleranceSeconds;
+}
+
 function responseFor(user, lessonId, row = watchRecord(user.id, lessonId), knownDuration = 0) {
   const completed = row ? Boolean(row.completed) : readLessonCompletion(user.id, lessonId);
   return {
@@ -84,8 +90,7 @@ function responseFor(user, lessonId, row = watchRecord(user.id, lessonId), known
     watchedUntilSeconds: row?.watched_until_seconds ?? 0,
     lastPositionSeconds: row?.last_position_seconds ?? 0,
     durationSeconds: row?.duration_seconds || knownDuration,
-    complete: completed || Boolean(row && row.duration_seconds > 0
-      && row.watched_until_seconds >= row.duration_seconds - completionToleranceSeconds),
+    complete: completed || Boolean(row && videoWatchIsComplete(row.watched_until_seconds, row.duration_seconds)),
   };
 }
 
@@ -198,6 +203,5 @@ export function rewindLessonWatch(user, lessonId, position) {
 export function lessonVideoWasWatched(userId, lessonId) {
   const row = watchRecord(userId, lessonId);
   const completed = row ? Boolean(row.completed) : readLessonCompletion(userId, lessonId);
-  return completed || Boolean(row && row.duration_seconds > 0
-    && row.watched_until_seconds >= row.duration_seconds - completionToleranceSeconds);
+  return completed || Boolean(row && videoWatchIsComplete(row.watched_until_seconds, row.duration_seconds));
 }

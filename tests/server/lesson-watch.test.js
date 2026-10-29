@@ -436,6 +436,21 @@ test('near-complete playback unlocks lesson completion and saved completion rema
   assert.equal(lessonWatch.lessonVideoWasWatched(learner.id, 'watch-lesson'), true);
 });
 
+test('a short video needs non-zero verified playback before completion', () => {
+  const learner = { id: 'watch-learner', role: 'learner' };
+  withFakeClock(2_100_000, (advance) => {
+    const started = lessonWatch.beginLessonWatch(learner, 'watch-lesson', 0.25);
+    assert.equal(started.complete, false);
+    assert.equal(lessonWatch.lessonVideoWasWatched(learner.id, 'watch-lesson'), false);
+
+    advance(250);
+    const watched = lessonWatch.recordLessonWatchProgress(learner, 'watch-lesson', 0.25);
+    assert.equal(watched.accepted, true);
+    assert.equal(watched.complete, true);
+    assert.equal(lessonWatch.lessonVideoWasWatched(learner.id, 'watch-lesson'), true);
+  });
+});
+
 test('replaying a completed video starts at zero and keeps the watched high-water mark', () => {
   const learner = { id: 'watch-learner', role: 'learner' };
   withFakeClock(3_000_000, (advance) => {
