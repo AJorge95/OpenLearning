@@ -2005,6 +2005,26 @@ function finalExamAttemptQuestions(snapshot) {
   return snapshot.map(({ correctChoiceId, explanation, ...question }) => question);
 }
 
+function isValidFinalExamAttemptSnapshot(snapshot) {
+  if (!Array.isArray(snapshot) || snapshot.length === 0) return false;
+  const questionIds = new Set();
+  return snapshot.every((question) => {
+    if (!question || typeof question !== 'object' || Array.isArray(question)
+      || typeof question.id !== 'string' || !question.id || questionIds.has(question.id)
+      || typeof question.prompt !== 'string' || !Array.isArray(question.choices) || question.choices.length < 2
+      || typeof question.correctChoiceId !== 'string') return false;
+    questionIds.add(question.id);
+    const choiceIds = new Set();
+    for (const choice of question.choices) {
+      if (!choice || typeof choice !== 'object' || Array.isArray(choice)
+        || typeof choice.id !== 'string' || !choice.id || choiceIds.has(choice.id)
+        || typeof choice.text !== 'string') return false;
+      choiceIds.add(choice.id);
+    }
+    return choiceIds.has(question.correctChoiceId);
+  });
+}
+
 courseRouter.post('/quizzes/:quizId/attempts/start', quizAttemptLimiter, (req, res) => {
   const startAttempt = db.transaction(() => {
     const quiz = quizCourse(req.params.quizId);
@@ -2014,8 +2034,19 @@ courseRouter.post('/quizzes/:quizId/attempts/start', quizAttemptLimiter, (req, r
     const active = db.prepare(`SELECT id, question_snapshot_json FROM quiz_attempt_sessions
       WHERE quiz_id = ? AND user_id = ? AND completed_at IS NULL`).get(quiz.quiz_id, req.currentUser.id);
     if (active) {
-      const snapshot = JSON.parse(active.question_snapshot_json);
-      return { attemptSessionId: active.id, questions: finalExamAttemptQuestions(snapshot) };
+      try {
+        const snapshot = JSON.parse(active.question_snapshot_json);
+        if (!isValidFinalExamAttemptSnapshot(snapshot)) throw new TypeError('Invalid exam attempt snapshot.');
+        return { attemptSessionId: active.id, questions: finalExamAttemptQuestions(snapshot) };
+      } catch (error) {
+        writeSystemLog('error', 'quiz-attempt', 'Saved final exam attempt session data is invalid.', {
+          attemptId: active.id,
+          quizId: quiz.quiz_id,
+          errorName: String(error?.name || 'Error').slice(0, 100),
+        });
+        db.prepare(`UPDATE quiz_attempt_sessions SET completed_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND completed_at IS NULL`).run(active.id);
+      }
     }
     if (req.body?.resumeOnly === true) return null;
     const questionRows = db.prepare('SELECT id, prompt, explanation FROM quiz_questions WHERE quiz_id = ? ORDER BY position, id').all(quiz.quiz_id);

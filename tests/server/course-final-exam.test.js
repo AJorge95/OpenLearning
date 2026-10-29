@@ -307,3 +307,40 @@ test('a practice final exam is excluded from course completion and does not issu
   assert.equal(analytics.data.quizMetrics[0].learnersPassed, 1);
   assert.equal(analytics.data.quizMetrics[0].requiredForCompletion, false);
 });
+
+test('malformed active final exam snapshots are logged and released so learners can restart', async () => {
+  for (const [malformedSnapshot, errorName] of [['not-json', 'SyntaxError'], ['[null]', 'TypeError']]) {
+    const started = await request('/quizzes/practice-final-exam/attempts/start', {
+      user: 'exam-outsider', method: 'POST', body: {},
+    });
+    assert.equal(started.response.status, 201);
+    database.prepare('UPDATE quiz_attempt_sessions SET question_snapshot_json = ? WHERE id = ?')
+      .run(malformedSnapshot, started.data.attemptSessionId);
+
+    const resumed = await request('/quizzes/practice-final-exam/attempts/start', {
+      user: 'exam-outsider', method: 'POST', body: { resumeOnly: true },
+    });
+    assert.equal(resumed.response.status, 200);
+    assert.deepEqual(resumed.data, { attemptSessionId: null, questions: [] });
+    assert.ok(database.prepare('SELECT completed_at FROM quiz_attempt_sessions WHERE id = ?')
+      .get(started.data.attemptSessionId).completed_at);
+
+    const log = database.prepare(`SELECT level, source, message, details_json FROM system_logs
+      WHERE source = 'quiz-attempt' ORDER BY id DESC LIMIT 1`).get();
+    assert.equal(log.level, 'error');
+    assert.equal(log.message, 'Saved final exam attempt session data is invalid.');
+    assert.deepEqual(JSON.parse(log.details_json), {
+      attemptId: started.data.attemptSessionId,
+      quizId: 'practice-final-exam',
+      errorName,
+    });
+
+    const replacement = await request('/quizzes/practice-final-exam/attempts/start', {
+      user: 'exam-outsider', method: 'POST', body: {},
+    });
+    assert.equal(replacement.response.status, 201);
+    assert.notEqual(replacement.data.attemptSessionId, started.data.attemptSessionId);
+    database.prepare('UPDATE quiz_attempt_sessions SET completed_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(replacement.data.attemptSessionId);
+  }
+});
