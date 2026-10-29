@@ -564,6 +564,33 @@ test('analytics count each eligible learner once and report course-wide completi
   assert.equal(unassignedDetailsResponse.status, 404, 'details are limited to course members');
 });
 
+test('analytics counts partial video watch activity as learning started', async () => {
+  database.prepare(`INSERT INTO users (id, username, email, password_hash, role, disabled)
+    VALUES ('learner-video-only', 'learner_video_only', 'video-only@example.invalid', 'not-used', 'learner', 0)`).run();
+  database.prepare(`INSERT INTO enrollments (id, course_id, user_id, enrolled_at)
+    VALUES ('enrollment-video-only', 'course-analytics', 'learner-video-only', '2026-10-04 09:00:00')`).run();
+  database.prepare(`INSERT INTO lesson_watch_progress
+    (user_id, lesson_id, watched_until_seconds, duration_seconds, last_position_seconds, last_heartbeat_at, updated_at)
+    VALUES ('learner-video-only', 'lesson-analytics', 45, 300, 45, 1, '2026-10-04 10:00:00')`).run();
+
+  try {
+    const response = await fetch(apiUrl('/manage/courses/course-analytics/analytics'), {
+      headers: userHeaders('admin-1'),
+    });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    const videoOnlyLearner = result.learners.find((learner) => learner.id === 'learner-video-only');
+
+    assert.equal(result.summary.startedLearnerCount, 3);
+    assert.equal(videoOnlyLearner.started, true);
+    assert.equal(videoOnlyLearner.progress, 0);
+    assert.equal(videoOnlyLearner.completed, false);
+    assert.equal(videoOnlyLearner.lastActivityAt, '2026-10-04 10:00:00');
+  } finally {
+    database.prepare('DELETE FROM users WHERE id = ?').run('learner-video-only');
+  }
+});
+
 test('republished courses keep historical completion visible in staff progress reports', async () => {
   const courseId = 'progress-compatibility';
   database.exec(`
