@@ -344,3 +344,37 @@ test('malformed active final exam snapshots are logged and released so learners 
       .run(replacement.data.attemptSessionId);
   }
 });
+
+test('final exam submission refuses a corrupted answer key instead of storing a false score', async () => {
+  const started = await request('/quizzes/practice-final-exam/attempts/start', {
+    user: 'exam-outsider', method: 'POST', body: {},
+  });
+  assert.equal(started.response.status, 201);
+
+  const session = database.prepare('SELECT question_snapshot_json FROM quiz_attempt_sessions WHERE id = ?')
+    .get(started.data.attemptSessionId);
+  const snapshot = JSON.parse(session.question_snapshot_json);
+  snapshot[0].correctChoiceId = 'missing-choice';
+  database.prepare('UPDATE quiz_attempt_sessions SET question_snapshot_json = ? WHERE id = ?')
+    .run(JSON.stringify(snapshot), started.data.attemptSessionId);
+
+  const attemptsBefore = database.prepare('SELECT COUNT(*) AS count FROM quiz_attempts WHERE user_id = ? AND quiz_id = ?')
+    .get('exam-outsider', 'practice-final-exam').count;
+  const answers = Object.fromEntries(started.data.questions.map((question) => [question.id, 'practice-correct']));
+  const submitted = await request('/quizzes/practice-final-exam/attempts', {
+    user: 'exam-outsider', method: 'POST',
+    body: { attemptSessionId: started.data.attemptSessionId, answers },
+  });
+  assert.equal(submitted.response.status, 500);
+  assert.equal(submitted.data.code, 'attempt_unavailable');
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM quiz_attempts WHERE user_id = ? AND quiz_id = ?')
+    .get('exam-outsider', 'practice-final-exam').count, attemptsBefore);
+
+  const replacement = await request('/quizzes/practice-final-exam/attempts/start', {
+    user: 'exam-outsider', method: 'POST', body: {},
+  });
+  assert.equal(replacement.response.status, 201);
+  assert.notEqual(replacement.data.attemptSessionId, started.data.attemptSessionId);
+  database.prepare('UPDATE quiz_attempt_sessions SET completed_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(replacement.data.attemptSessionId);
+});

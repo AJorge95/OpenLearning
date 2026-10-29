@@ -2105,7 +2105,7 @@ courseRouter.post('/quizzes/:quizId/attempts', quizAttemptLimiter, (req, res) =>
       let sessionSnapshot;
       try {
         sessionSnapshot = JSON.parse(session.question_snapshot_json);
-        if (!Array.isArray(sessionSnapshot) || !sessionSnapshot.length) throw new TypeError('Invalid exam attempt snapshot.');
+        if (!isValidFinalExamAttemptSnapshot(sessionSnapshot)) throw new TypeError('Invalid exam attempt snapshot.');
       } catch {
         fail(500, 'The saved final exam attempt is unavailable.', 'attempt_unavailable');
       }
