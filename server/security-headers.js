@@ -7,7 +7,8 @@ export function createSecurityHeaders(nodeEnv) {
         defaultSrc: ["'self'"],
         baseUri: ["'self'"],
         fontSrc: ["'self'", 'data:'],
-        imgSrc: ["'self'", 'data:'],
+        // The course editor decodes a selected cover through a local object URL before upload.
+        imgSrc: ["'self'", 'data:', 'blob:'],
         mediaSrc: ["'self'", 'blob:'],
         objectSrc: ["'none'"],
         scriptSrc: ["'self'"],

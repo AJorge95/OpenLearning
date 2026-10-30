@@ -60,6 +60,7 @@ test('production HTTP serves the page, assets, API and client routes on the same
   const policy = page.headers.get('content-security-policy');
   assert.doesNotMatch(policy, /upgrade-insecure-requests/);
   assert.match(policy, /script-src 'self'/);
+  assert.match(policy, /img-src 'self' data: blob:/);
   assert.match(policy, /object-src 'none'/);
   assert.match(policy, /frame-ancestors 'none'/);
   assert.equal(page.headers.get('x-content-type-options'), 'nosniff');
