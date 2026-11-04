@@ -13,6 +13,7 @@ const credentialLogFieldPattern = /password|secret|token|cookie|session|authoriz
 const credentialLogTextPattern = /((?:"|')?(?:password|secret|token|cookie|session|authorization|api[_-]?key|private[_-]?key|credential)(?:"|')?\s*[=:]\s*)(?:(?:Bearer|Basic)\s+)?("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;]+)/gi;
 const emailLogTextPattern = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const ipv4LogTextPattern = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
+const ipv6LogTextPattern = /(?<![\p{L}\p{N}_])(?:[0-9a-f]{0,4}:){2,7}(?:[0-9a-f]{0,4}|(?:\d{1,3}\.){3}\d{1,3})(?:%[\w.-]+)?(?![\p{L}\p{N}_])/giu;
 
 function normalizedFieldName(key: string) {
   return key.replace(/[^a-z0-9]/gi, '').toLowerCase();
@@ -54,6 +55,16 @@ function escapeRegExp(value: string) {
 function redactText(value: string, personalValues: Set<string>) {
   let redacted = value
     .replace(emailLogTextPattern, '[redacted]')
+    .replace(ipv6LogTextPattern, (address) => {
+      const addressWithoutZone = address.replace(/%[\w.-]+$/, '');
+      try {
+        new URL(`http://[${addressWithoutZone}]/`);
+        return '[redacted]';
+      } catch {
+        // Ignore colon-separated values such as times that are not IPv6 literals.
+        return address;
+      }
+    })
     .replace(ipv4LogTextPattern, '[redacted]')
     .replace(credentialLogTextPattern, (_match, prefix: string, credential: string) => {
       const replacement = credential.startsWith('"') ? '"[redacted]"' : credential.startsWith("'") ? "'[redacted]'" : '[redacted]';

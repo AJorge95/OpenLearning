@@ -48,6 +48,18 @@ test('redacted audit JSON masks contact and credential values embedded in log te
   assert.match(serialized, /Account update completed/);
 });
 
+test('redacted audit JSON masks IPv6 literals without hiding time-like values', () => {
+  const serialized = formatRedactedLogJson({
+    summary: 'Clients [2001:db8:85a3::8a2e:370:7334], fe80::1%eth0, and ::ffff:192.0.2.128; retry at 12:34:56.',
+  });
+
+  for (const value of ['2001:db8:85a3::8a2e:370:7334', 'fe80::1%eth0', '::ffff:192.0.2.128']) {
+    assert.equal(serialized.includes(value), false, `${value} should not be copied`);
+  }
+  assert.equal(serialized.includes('::ffff:'), false, 'mapped addresses should be redacted as a whole');
+  assert.match(serialized, /retry at 12:34:56/);
+});
+
 test('redacting an audit entry leaves the source object unchanged', () => {
   const entry = {
     actorUsername: 'admin.operator',
